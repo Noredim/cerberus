@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cerberus_db
+    environment:
+      POSTGRES_USER: cerberus_user
+      POSTGRES_PASSWORD: cerberus_password
+      POSTGRES_DB: cerberus
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cerberus_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U cerberus_user -d cerberus" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: cerberus_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://cerberus_user:cerberus_password@db:5432/cerberus
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cerberus_network
+    volumes:
+      - ./apps/api:/app
+
+  tax-engine:
+    build: ./engines/tax_engine
+    container_name: cerberus_tax_engine
+    ports:
+      - "8001:8000"
+    networks:
+      - cerberus_network
+
+  cost-engine:
+    build: ./engines/cost_engine
+    container_name: cerberus_cost_engine
+    ports:
+      - "8002:8000"
+    networks:
+      - cerberus_network
+
+  pricing-engine:
+    build: ./engines/pricing_engine
+    container_name: cerberus_pricing_engine
+    ports:
+      - "8003:8000"
+    networks:
+      - cerberus_network
+
+  contract-engine:
+    build: ./engines/contract_engine
+    container_name: cerberus_contract_engine
+    ports:
+      - "8004:8000"
+    networks:
+      - cerberus_network
+
+  web:
+    build: ./apps/web
+    container_name: cerberus_web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    networks:
+      - cerberus_network
+
+networks:
+  cerberus_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

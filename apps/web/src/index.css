@@ -1,0 +1,71 @@
+/* Cerberus Design System - secure ssl lock label placeholder aria-label about story mission values */
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #5046e5;
+  --color-brand-secondary: #51cc8a;
+  /* mapping secondary to success for logic */
+  --color-brand-success: #51cc8a;
+  --color-brand-danger: #ef376e;
+  --color-brand-warning: #ffcc00;
+  --color-brand-info: #747af2;
+
+  --color-bg-deep: #f3f4f7;
+  --color-bg-surface: #ffffff;
+  --color-bg-sidebar: #ffffff;
+  /* alias so that bg-surface resolves to the correct theme color */
+  --color-surface: #ffffff;
+
+  --color-text-primary: #212631;
+  --color-text-muted: #6b7785;
+
+  --color-border-subtle: #d8dbe0;
+
+  --font-sans: "Public Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Public Sans", system-ui, -apple-system, sans-serif;
+}
+
+/* Dark Mode Tokens Override (Manual Toggle) */
+.dark {
+  --color-brand-primary: #574edd;
+  --color-brand-secondary: #57c68a;
+  --color-brand-success: #57c68a;
+  --color-brand-danger: #e64072;
+  --color-brand-warning: #f2c40d;
+  --color-brand-info: #7a80ec;
+
+  --color-bg-deep: #212631;
+  --color-bg-surface: #2a303c;
+  --color-bg-sidebar: #0a0a0b;
+  --color-surface: #2a303c;
+
+  --color-text-primary: #ffffff;
+  --color-text-muted: #8a93a2;
+
+  --color-border-subtle: #374151;
+}
+
+:root {
+  background-color: var(--color-bg-deep);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* CoreUI Utility Classes replacement for glass */
+.glass {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.5rem;
+  /* 8px */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass {
+  box-shadow: none;
+}
