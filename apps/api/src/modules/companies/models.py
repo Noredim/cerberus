@@ -140,6 +140,7 @@ class CompanySalesParameter(Base):
     iss = Column(Numeric(5, 2), default=0.00)
     icms_interno = Column(Numeric(5, 2), default=0.00)
     icms_externo = Column(Numeric(5, 2), default=0.00)
+    frete_venda_padrao = Column(Numeric(5, 2), default=0.00)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

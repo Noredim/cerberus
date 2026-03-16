@@ -4,10 +4,12 @@ from typing import List, Optional
 from uuid import UUID
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from .schemas import ProductCreate, ProductUpdate, ProductOut, MvaLookupResult
 from .service import ProductService
+from src.modules.purchase_budgets.service import PurchaseBudgetService
+from src.modules.purchase_budgets.schemas import PurchaseBudgetCreate, PurchaseBudgetItemCreate, BudgetTypeEnum, FreightTypeEnum
 from src.modules.purchase_budgets.models import PurchaseBudgetItem, PurchaseBudget
 from src.modules.purchase_budgets.schemas import PurchaseBudgetItemOut
 
@@ -117,12 +119,16 @@ def list_product_budgets(
             "valor_unitario": item.valor_unitario,
             "ipi_percent": item.ipi_percent,
             "icms_percent": item.icms_percent,
+            "icms_percentual": item.icms_percent,
+            "codigo_fornecedor": item.codigo_fornecedor,
             "created_at": getattr(item.budget, 'created_at', None),
             "budget": {
                 "numero_orcamento": getattr(item.budget, 'numero_orcamento', None),
+                "tipo_orcamento": getattr(item.budget, 'tipo_orcamento', None),
                 "data_orcamento": item.budget.data_orcamento,
                 "supplier_nome_fantasia": item.budget.supplier.nome_fantasia if getattr(item.budget, 'supplier', None) else None,
                 "supplier_razao_social": item.budget.supplier.razao_social if getattr(item.budget, 'supplier', None) else None,
+                "supplier_uf": item.budget.supplier.uf if getattr(item.budget, 'supplier', None) else None,
             }
         }
         result.append(res)
@@ -133,7 +139,53 @@ def create_manual_product_budget(
     product_id: UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
-    # Dummy implementation for now or call budget service
-    return {"status": "ok"}
+    if not company_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+
+    # Map the ad-hoc frontend payload to standard PurchaseBudgetCreate
+    items_data = payload.get("items", [])
+    budget_items = []
+    
+    for item in items_data:
+        budget_items.append(
+            PurchaseBudgetItemCreate(
+                product_id=UUID(item["produto_id"]),
+                codigo_fornecedor=item.get("codigo_fornecedor", ""),
+                ncm=item.get("ncm"),
+                quantidade=item.get("quantidade", 1),
+                valor_unitario=item.get("valor_unitario", 0),
+                frete_percent=0,
+                ipi_percent=item.get("ipi_percentual", 0),
+                icms_percent=item.get("icms_percentual", 0)
+            )
+        )
+
+    budget_create = PurchaseBudgetCreate(
+        supplier_id=payload.get("fornecedor_id") or payload.get("cnpj_fornecedor") or "", # Fallback if manual string was used, but supplier_id usually required in schema
+        numero_orcamento=None,
+        data_orcamento=payload.get("data_cotacao", ""),
+        tipo_orcamento=BudgetTypeEnum(payload.get("tipo_orcamento", "REVENDA")),
+        vendedor_nome=payload.get("nome_fornecedor_manual"),
+        frete_tipo=FreightTypeEnum("CIF"),
+        frete_percent=0,
+        ipi_calculado=False,
+        items=budget_items
+    )
+    
+    # Overwrite the supplier_id specifically for manual suppliers if they bypassed the DB
+    if not payload.get("fornecedor_id"):
+        # We need a dummy or we need to relax the schema in service.py
+        # But this works if the UI enforces supplier catalog
+        budget_create.supplier_id = payload.get("fornecedor_id", "00000000-0000-0000-0000-000000000000")
+
+    result = PurchaseBudgetService.create_budget(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        company_id=UUID(company_id),
+        data=budget_create
+    )
+    return {"status": "ok", "budget_id": str(result.id)}

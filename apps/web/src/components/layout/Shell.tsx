@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import { Bell, Search, User, Sun, Moon, Building2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import CompanySelectionModal from '../modals/CompanySelectionModal';
 
 interface ShellProps {
     children: React.ReactNode;
@@ -60,43 +61,9 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
 
                     <div className="flex items-center gap-6">
                         
-                        {userCompanies.length > 0 && (
-                            <div className="relative">
-                                <button 
-                                    onClick={() => setCompanyDropdownOpen(!companyDropdownOpen)}
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-subtle hover:border-brand-primary transition-colors bg-bg-deep"
-                                >
-                                    <Building2 className="w-4 h-4 text-brand-primary" />
-                                    <span className="text-sm font-medium w-40 truncate text-left">
-                                        {activeCompany ? activeCompany.company_name : 'Selecionar Empresa'}
-                                    </span>
-                                    <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${companyDropdownOpen ? 'rotate-180' : ''}`} />
-                                </button>
+                        {/* Company selector moved to the right corner below user profile, remove from here */}
                                 
-                                {companyDropdownOpen && (
-                                    <div className="absolute top-full mt-1 right-0 w-64 bg-bg-surface border border-border-subtle rounded-md shadow-lg overflow-hidden py-1 z-50">
-                                        <div className="px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-border-subtle bg-bg-deep">
-                                            Empresas Vinculadas
-                                        </div>
-                                        <div className="max-h-60 overflow-y-auto">
-                                            {userCompanies.map((comp: any) => (
-                                                <button
-                                                    key={comp.company_id}
-                                                    onClick={() => {
-                                                        setActiveCompany(comp.company_id);
-                                                        setCompanyDropdownOpen(false);
-                                                    }}
-                                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep transition-colors flex flex-col ${comp.company_id === activeCompanyId ? 'border-l-2 border-brand-primary bg-bg-deep text-brand-primary font-medium' : 'text-text-primary'}`}
-                                                >
-                                                    <span className="truncate">{comp.company_name}</span>
-                                                    <span className="text-xs text-text-muted mt-0.5">{comp.company_cnpj}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+
 
                         <button
                             onClick={toggleTheme}
@@ -114,14 +81,47 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full"></span>
                         </button>
 
-                        <div className="flex items-center gap-3 pl-6 border-l border-border-subtle cursor-pointer group">
-                            <div className="text-right">
-                                <p className="text-sm font-semibold text-text-primary transition-colors">{user?.name || 'Usuário'}</p>
-                                <p className="text-xs text-text-muted">{user?.roles?.join(', ') || 'N/A'}</p>
+                        <div className="flex items-center gap-3 pl-6 border-l border-border-subtle cursor-pointer group relative">
+                            <div className="text-right" onClick={() => setCompanyDropdownOpen(!companyDropdownOpen)}>
+                                <p className="text-sm font-semibold text-text-primary transition-colors">{user?.name || 'Usuário'} <span className="text-xs text-text-muted font-normal ml-1">• {user?.roles?.join(', ') || 'N/A'}</span></p>
+                                
+                                {userCompanies.length > 0 && (
+                                    <div className="flex items-center justify-end gap-1 mt-0.5 text-text-muted hover:text-brand-primary transition-colors">
+                                        <Building2 className="w-3.5 h-3.5" />
+                                        <p className="text-xs font-medium max-w-[150px] truncate" title={activeCompany?.company_name}>
+                                            {activeCompany ? activeCompany.company_name : 'Nenhuma Empresa'}
+                                        </p>
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                    </div>
+                                )}
                             </div>
-                            <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center transition-all group-hover:bg-brand-primary group-hover:text-white">
+                            <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center transition-all group-hover:bg-brand-primary group-hover:text-white shrink-0">
                                 <User className="w-4 h-4" />
                             </div>
+
+                            {/* Dropdown for companies is now anchored to the user profile box */}
+                            {companyDropdownOpen && userCompanies.length > 0 && (
+                                <div className="absolute top-full mt-2 right-0 w-64 bg-bg-surface border border-border-subtle rounded-md shadow-lg overflow-hidden py-1 z-50">
+                                    <div className="px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-border-subtle bg-bg-deep">
+                                        Empresas Vinculadas
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto">
+                                        {userCompanies.map((comp: any) => (
+                                            <button
+                                                key={comp.company_id}
+                                                onClick={() => {
+                                                    setActiveCompany(comp.company_id);
+                                                    setCompanyDropdownOpen(false);
+                                                }}
+                                                className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep transition-colors flex flex-col ${comp.company_id === activeCompanyId ? 'border-l-2 border-brand-primary bg-bg-deep text-brand-primary font-medium' : 'text-text-primary'}`}
+                                            >
+                                                <span className="truncate">{comp.company_name}</span>
+                                                <span className="text-xs text-text-muted mt-0.5">{comp.company_cnpj}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </header>
@@ -135,6 +135,15 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                     <div 
                         className="fixed inset-0 z-30"
                         onClick={() => setCompanyDropdownOpen(false)}
+                    />
+                )}
+
+                {/* Mandatory Selection Modal */}
+                {userCompanies.length > 0 && !activeCompanyId && (
+                    <CompanySelectionModal 
+                        isOpen={true} 
+                        companies={userCompanies} 
+                        onSelect={setActiveCompany} 
                     />
                 )}
             </div>

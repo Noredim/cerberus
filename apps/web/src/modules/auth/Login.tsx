@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
-import { Shield, Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Login: React.FC = () => {
@@ -66,13 +66,12 @@ const Login: React.FC = () => {
             >
                 {/* Logo & Header */}
                 <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-brand-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-brand-primary ring-1 ring-brand-primary/20 shadow-sm">
-                        <Shield className="w-8 h-8" />
-                    </div>
-                    <h1 className="text-4xl font-display font-bold text-text-primary tracking-tight mb-2">
-                        Cerberus
-                    </h1>
-                    <p className="text-text-muted">Sales Engine & Inteligência Tributária</p>
+                    <img
+                        src="/cerberus-logo.png"
+                        alt="Cerberus Logo"
+                        className="w-48 h-auto mx-auto mb-4"
+                    />
+                    <p className="text-text-muted">Motor de Venda & Inteligência Tributária</p>
                 </div>
 
                 {/* Login Card */}
@@ -137,9 +136,13 @@ const Login: React.FC = () => {
                     </form>
                 </div>
 
-                <p className="text-center text-text-muted text-sm mt-8">
-                    &copy; 2026 Cerberus System. Todos os direitos reservados.
-                </p>
+                <div className="text-center text-text-muted text-sm mt-8 space-y-2">
+                    <div className="flex items-center justify-center gap-1.5">
+                        <span className="text-xs">Powered by</span>
+                        <img src="/warslab-logo.png" alt="Wars Lab" className="h-4 w-auto" />
+                    </div>
+                    <p>&copy; 2026 Cerberus System. Todos os direitos reservados.</p>
+                </div>
             </motion.div>
         </div>
     );

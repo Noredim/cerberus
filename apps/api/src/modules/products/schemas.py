@@ -86,6 +86,16 @@ class ProductOut(ProductBase):
     codigo: str
     created_at: datetime
     updated_at: datetime
+    
+    # Reference Prices
+    vlr_referencia_revenda: Optional[float] = None
+    vlr_referencia_uso_consumo: Optional[float] = None
+    orcamento_referencia_revenda_id: Optional[UUID] = None
+    orcamento_referencia_uso_consumo_id: Optional[UUID] = None
+    data_atualizacao_revenda: Optional[datetime] = None
+    data_atualizacao_uso_consumo: Optional[datetime] = None
+    origem_valor_uso_consumo: Optional[str] = None
+    
     tax_benefits: List[TaxBenefitOut] = []
     suppliers: List[ProductSupplierOut] = []
 

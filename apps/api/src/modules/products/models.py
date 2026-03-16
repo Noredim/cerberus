@@ -37,6 +37,15 @@ class Product(Base):
     data_ultimo_preco = Column(DateTime(timezone=True), nullable=True)
     fornecedor_ultimo_preco_id = Column(String, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
     
+    # Reference Prices (from purchase budgets)
+    vlr_referencia_revenda = Column(Numeric(18, 2), nullable=True)
+    vlr_referencia_uso_consumo = Column(Numeric(18, 2), nullable=True)
+    orcamento_referencia_revenda_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
+    orcamento_referencia_uso_consumo_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
+    data_atualizacao_revenda = Column(DateTime(timezone=True), nullable=True)
+    data_atualizacao_uso_consumo = Column(DateTime(timezone=True), nullable=True)
+    origem_valor_uso_consumo = Column(String(50), nullable=True) # DERIVADO_REVENDA, ORCAMENTO_USO_CONSUMO
+    
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

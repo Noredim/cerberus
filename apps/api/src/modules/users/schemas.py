@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     tenant_id: str
     is_active: bool
     roles: List[str]
+    companies: List[str] = []
 
     class Config:
         from_attributes = True
@@ -18,12 +19,14 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str
+    companies: Optional[List[str]] = []
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     roles: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    companies: Optional[List[str]] = None
 
 class UserCompanyResponse(BaseModel):
     id: str

@@ -24,6 +24,8 @@ import CustomerList from './modules/customers/CustomerList';
 import CustomerForm from './modules/customers/CustomerForm';
 import { BudgetsList } from './modules/purchase_budgets/BudgetsList';
 import { BudgetForm } from './modules/purchase_budgets/BudgetForm';
+import { SalesBudgetList } from './modules/sales_budgets/SalesBudgetList';
+import { SalesBudgetForm } from './modules/sales_budgets/SalesBudgetForm';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -128,6 +130,11 @@ function App() {
             <Route path="/orcamentos-compras" element={<BudgetsList />} />
             <Route path="/orcamentos-compras/novo" element={<BudgetForm />} />
             <Route path="/orcamentos-compras/:id" element={<BudgetForm />} />
+
+            {/* Sales Budgets */}
+            <Route path="/orcamentos-vendas" element={<SalesBudgetList />} />
+            <Route path="/orcamentos-vendas/novo" element={<SalesBudgetForm />} />
+            <Route path="/orcamentos-vendas/:id" element={<SalesBudgetForm />} />
 
           </Route>
         </Routes>

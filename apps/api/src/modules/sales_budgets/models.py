@@ -1,0 +1,121 @@
+import uuid
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Numeric, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from src.core.base import Base
+
+
+class SalesBudget(Base):
+    __tablename__ = "sales_budgets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    numero_orcamento = Column(String(50), nullable=True)
+    titulo = Column(String(255), nullable=False)
+    observacoes = Column(Text, nullable=True)
+    data_orcamento = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    status = Column(String(20), nullable=False, default="RASCUNHO")  # RASCUNHO, APROVADO, ARQUIVADO
+
+    # Pricing defaults (inherited from CompanySalesParameter on create)
+    markup_padrao = Column(Numeric(10, 4), nullable=False, default=1.0)
+    perc_despesa_adm = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_comissao = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_frete_venda = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_pis = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_cofins = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_csll = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_irpj = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_iss = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_icms_interno = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_icms_externo = Column(Numeric(5, 4), nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Relationships
+    company = relationship("Company")
+    customer = relationship("Customer")
+    items = relationship("SalesBudgetItem", back_populates="budget", cascade="all, delete-orphan")
+    responsaveis = relationship("SalesBudgetResponsavel", back_populates="budget", cascade="all, delete-orphan")
+
+
+class SalesBudgetResponsavel(Base):
+    __tablename__ = "sales_budget_responsaveis"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    budget = relationship("SalesBudget", back_populates="responsaveis")
+    user = relationship("User")
+
+
+class SalesBudgetItem(Base):
+    __tablename__ = "sales_budget_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    tipo_item = Column(String(30), nullable=False)  # MERCADORIA, SERVICO_INSTALACAO, SERVICO_MANUTENCAO
+    descricao_servico = Column(String(255), nullable=True)
+    usa_parametros_padrao = Column(Boolean, nullable=False, default=True)
+
+    # Cost & sale
+    custo_unit_base = Column(Numeric(15, 4), nullable=False, default=0)
+    markup = Column(Numeric(10, 4), nullable=False, default=1.0)
+    venda_unit = Column(Numeric(15, 4), nullable=False, default=0)
+
+    # Freight
+    perc_frete_venda = Column(Numeric(5, 4), nullable=False, default=0)
+    frete_venda_unit = Column(Numeric(15, 4), nullable=False, default=0)
+
+    # Federal taxes
+    perc_pis = Column(Numeric(5, 4), nullable=False, default=0)
+    pis_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    perc_cofins = Column(Numeric(5, 4), nullable=False, default=0)
+    cofins_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    perc_csll = Column(Numeric(5, 4), nullable=False, default=0)
+    csll_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    perc_irpj = Column(Numeric(5, 4), nullable=False, default=0)
+    irpj_unit = Column(Numeric(15, 4), nullable=False, default=0)
+
+    # ICMS (merchandise only)
+    perc_icms = Column(Numeric(5, 4), nullable=False, default=0)
+    icms_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    tem_st = Column(Boolean, nullable=False, default=False)
+
+    # ISS (services only)
+    perc_iss = Column(Numeric(5, 4), nullable=False, default=0)
+    iss_unit = Column(Numeric(15, 4), nullable=False, default=0)
+
+    # Administrative & commission
+    perc_despesa_adm = Column(Numeric(5, 4), nullable=False, default=0)
+    despesa_adm_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    perc_comissao = Column(Numeric(5, 4), nullable=False, default=0)
+    comissao_unit = Column(Numeric(15, 4), nullable=False, default=0)
+
+    # Result
+    lucro_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    margem_unit = Column(Numeric(10, 4), nullable=False, default=0)
+    quantidade = Column(Numeric(15, 4), nullable=False, default=1)
+    total_venda = Column(Numeric(15, 4), nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Relationships
+    budget = relationship("SalesBudget", back_populates="items")
+    product = relationship("Product")
+
+    @property
+    def product_nome(self):
+        return self.product.nome if self.product else self.descricao_servico
+
+    @property
+    def product_codigo(self):
+        return self.product.codigo if self.product else None

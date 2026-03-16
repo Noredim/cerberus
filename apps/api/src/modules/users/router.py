@@ -25,7 +25,7 @@ def list_users(
             User.name.ilike(filter_term) | User.email.ilike(filter_term)
         )
 
-    users = query.order_by(User.name).all()
+    users = query.options(joinedload(User.companies)).order_by(User.name).all()
 
     return [
         {
@@ -35,6 +35,7 @@ def list_users(
             "tenant_id": u.tenant_id,
             "is_active": u.is_active,
             "roles": [r.role.value for r in u.roles],
+            "companies": [str(c.company_id) for c in u.companies] if hasattr(u, "companies") else [],
         }
         for u in users
     ]
@@ -84,6 +85,15 @@ def create_user(
     user_role = UserRole(user_id=new_user.id, role=role_enum)
     db.add(user_role)
     db.commit()
+
+    if getattr(payload, "companies", None):
+        is_first = True
+        for comp_id in payload.companies:
+            new_uc = UserCompany(user_id=new_user.id, company_id=comp_id, is_default=is_first)
+            db.add(new_uc)
+            is_first = False
+        db.commit()
+
     db.refresh(new_user)
 
     return format_user_response(new_user)
@@ -119,6 +129,13 @@ def update_user(
             except ValueError:
                 pass # Skip invalid roles
                 
+    if payload.companies is not None:
+        db.query(UserCompany).filter(UserCompany.user_id == user.id).delete()
+        is_first = True
+        for comp_id in payload.companies:
+            db.add(UserCompany(user_id=user.id, company_id=comp_id, is_default=is_first))
+            is_first = False
+
     db.commit()
     db.refresh(user)
     return format_user_response(user)
@@ -149,6 +166,7 @@ def format_user_response(u: User):
         "tenant_id": u.tenant_id,
         "is_active": u.is_active,
         "roles": [r.role.value for r in u.roles] if u.roles else [],
+        "companies": [str(c.company_id) for c in getattr(u, "companies", [])],
     }
 
 from src.modules.users.schemas import UserCompanyResponse, UserCompanyAssign

@@ -11,7 +11,8 @@ import {
     Building2,
     ChevronDown,
     ChevronRight,
-    FileText
+    FileText,
+    Receipt
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -59,6 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             ]
         },
         { icon: FileText, label: 'Orç. Compras', path: '/orcamentos-compras' },
+        { icon: Receipt, label: 'Orç. Vendas', path: '/orcamentos-vendas' },
 
         { icon: BarChart3, label: 'Relatórios', path: '/dashboards' },
         { icon: Shield, label: 'Segurança', path: '/security' },
@@ -72,10 +74,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             className="bg-surface h-screen sticky top-0 flex flex-col transition-all duration-300 z-50 border-r border-border-subtle shadow-sm overflow-hidden"
         >
             <div className="h-16 flex items-center justify-between px-4 bg-brand-primary text-white shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 flex items-center justify-center">
-                        <Shield className="w-6 h-6" />
-                    </div>
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <img src="/cerberus-logo.png" alt="Cerberus" className="w-8 h-8 object-contain rounded bg-white/10 p-0.5 shrink-0" />
                     {isOpen && (
                         <motion.span
                             initial={{ opacity: 0 }}
@@ -86,6 +86,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                         </motion.span>
                     )}
                 </div>
+                <button
+                    onClick={toggle}
+                    className="p-1.5 rounded-md hover:bg-white/15 transition-colors cursor-pointer shrink-0"
+                >
+                    {isOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
             </div>
 
             <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
@@ -168,14 +174,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 </button>
             </div>
 
-            <div className="p-3 border-t border-border-subtle shrink-0">
-                <button
-                    onClick={toggle}
-                    className="w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-deep text-text-muted transition-colors cursor-pointer"
-                >
-                    {isOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                </button>
-            </div>
+            {isOpen && (
+                <div className="p-3 border-t border-border-subtle shrink-0">
+                    <div className="flex items-center justify-center gap-1.5 opacity-50">
+                        <span className="text-[10px] text-text-muted whitespace-nowrap">Powered by</span>
+                        <img src="/warslab-logo.png" alt="Wars Lab" className="h-3.5 w-auto" />
+                    </div>
+                </div>
+            )}
         </motion.aside>
     );
 };

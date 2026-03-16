@@ -70,6 +70,7 @@ class PurchaseBudgetItem(Base):
     
     codigo_fornecedor = Column(String(100), nullable=True)
     ncm = Column(String(20), nullable=True)
+    quantidade = Column(Numeric(15, 4), nullable=False, default=1)
     valor_unitario = Column(Numeric(15, 4), nullable=False, default=0)
     
     frete_percent = Column(Numeric(10, 4), nullable=False, default=0)
@@ -90,6 +91,10 @@ class PurchaseBudgetItem(Base):
     @property
     def product_nome(self):
         return self.product.nome if self.product else None
+
+    @property
+    def product_codigo(self):
+        return self.product.codigo if self.product else None
 
 
 class PurchaseBudgetNegotiation(Base):

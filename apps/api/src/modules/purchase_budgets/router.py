@@ -43,6 +43,18 @@ def create_budget(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     return PurchaseBudgetService.create_budget(db, current_user.tenant_id, company_id, data)
 
+@router.put("/{budget_id}", response_model=schemas.PurchaseBudgetOut)
+def update_budget(
+    budget_id: UUID,
+    data: schemas.PurchaseBudgetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    return PurchaseBudgetService.update_budget(db, current_user.tenant_id, UUID(company_id), budget_id, data)
+
 @router.post("/{budget_id}/negotiations", response_model=schemas.PurchaseBudgetNegotiationOut)
 def add_negotiation(
     budget_id: UUID,

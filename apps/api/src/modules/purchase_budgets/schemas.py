@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
@@ -39,6 +39,7 @@ class PurchaseBudgetItemBase(BaseModel):
     product_id: UUID
     codigo_fornecedor: Optional[str] = None
     ncm: Optional[str] = None
+    quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
     valor_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
     
     # Se omitido no frontend, deverá herdar do cabeçalho
@@ -47,7 +48,7 @@ class PurchaseBudgetItemBase(BaseModel):
     icms_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
 
 class PurchaseBudgetItemCreate(PurchaseBudgetItemBase):
-    pass
+    model_config = ConfigDict(extra='ignore')
 
 class PurchaseBudgetItemOut(PurchaseBudgetItemBase):
     id: UUID
@@ -57,6 +58,8 @@ class PurchaseBudgetItemOut(PurchaseBudgetItemBase):
     total_item: Decimal
     frete_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
     product_nome: Optional[str] = None
+    product_codigo: Optional[str] = None
+    quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
 
     class Config:
         from_attributes = True
@@ -98,6 +101,7 @@ class PurchaseBudgetNegotiationOut(PurchaseBudgetNegotiationBase):
 
 # --- Budgets ---
 class PurchaseBudgetBase(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     supplier_id: str
     payment_condition_id: Optional[UUID] = None
     numero_orcamento: Optional[str] = None
@@ -112,6 +116,9 @@ class PurchaseBudgetBase(BaseModel):
     ipi_calculado: bool = False
 
 class PurchaseBudgetCreate(PurchaseBudgetBase):
+    items: List[PurchaseBudgetItemCreate]
+
+class PurchaseBudgetUpdate(PurchaseBudgetBase):
     items: List[PurchaseBudgetItemCreate]
 
 class PurchaseBudgetOut(PurchaseBudgetBase):

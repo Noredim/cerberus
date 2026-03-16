@@ -25,6 +25,11 @@ import type { MvaLookupResult, ProductSupplier, ProductFormData } from './types'
 
 import { ProductPriceFormation } from './components/ProductPriceFormation';
 
+const formatCurrency = (value: number | undefined | null) => {
+    if (value === undefined || value === null) return '-';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+};
+
 const ProductForm: React.FC = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -68,7 +73,12 @@ const ProductForm: React.FC = () => {
         cest_codigo: '',
         cmt_codigo: '',
         ativo: true,
-        suppliers: []
+        suppliers: [],
+        vlr_referencia_revenda: null,
+        vlr_referencia_uso_consumo: null,
+        data_atualizacao_revenda: null,
+        data_atualizacao_uso_consumo: null,
+        origem_valor_uso_consumo: null
     });
 
     const [sku, setSku] = useState<string>('');
@@ -111,7 +121,12 @@ const ProductForm: React.FC = () => {
                         cest_codigo: product.cest_codigo || '',
                         cmt_codigo: product.cmt_codigo || '',
                         ativo: product.ativo,
-                        suppliers: product.suppliers || []
+                        suppliers: product.suppliers || [],
+                        vlr_referencia_revenda: product.vlr_referencia_revenda,
+                        vlr_referencia_uso_consumo: product.vlr_referencia_uso_consumo,
+                        data_atualizacao_revenda: product.data_atualizacao_revenda,
+                        data_atualizacao_uso_consumo: product.data_atualizacao_uso_consumo,
+                        origem_valor_uso_consumo: product.origem_valor_uso_consumo,
                     });
                     setSku(product.codigo);
 
@@ -131,11 +146,12 @@ const ProductForm: React.FC = () => {
                             created_at: b.created_at,
                             budget: {
                                 numero_orcamento: b.budget?.numero_orcamento,
+                                tipo_orcamento: b.budget?.tipo_orcamento,
                                 data_cotacao: b.budget?.data_orcamento,
                                 supplier: {
                                     nome_fantasia: b.budget?.supplier_nome_fantasia || 'Fornecedor',
                                     razao_social: b.budget?.supplier_razao_social || 'Fornecedor',
-                                    uf: 'SP'
+                                    uf: b.budget?.supplier_uf || 'SP'
                                 }
                             }
                         }));
@@ -303,6 +319,23 @@ const ProductForm: React.FC = () => {
                                 {id ? `SKU: ${sku}` : 'Criação de novo item no inventário'}
                             </p>
                         </div>
+
+                        {id && (
+                            <div className="flex items-center gap-6 ml-8 pl-8 border-l border-border-subtle">
+                                <div>
+                                    <p className="text-[10px] uppercase font-bold text-text-muted tracking-widest mb-0.5">VLR Revenda</p>
+                                    <p className="text-xl font-black text-text-primary tracking-tight">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(formData.vlr_referencia_revenda) || 0)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase font-bold text-text-muted tracking-widest mb-0.5">VLR Uso/Consumo</p>
+                                    <p className="text-xl font-black text-brand-primary tracking-tight">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(formData.vlr_referencia_uso_consumo) || 0)}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {!isReadOnly && (
@@ -478,6 +511,47 @@ const ProductForm: React.FC = () => {
                                         />
                                     </div>
                                 </div>
+                                
+                                {/* REFERENCE METRICS SECTION (Read-Only) */}
+                                {isEditMode && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle bg-bg-deep/30 rounded-lg p-5">
+                                        <div className="md:col-span-2">
+                                            <h4 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-4">
+                                                <Activity className="w-4 h-4 text-brand-primary" />
+                                                Métricas de Referência (Automáticas via Orçamento)
+                                            </h4>
+                                        </div>
+                                        <div className="space-y-1.5 p-4 rounded-xl border border-border-subtle bg-surface shadow-sm">
+                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Custo Ref. Revenda</label>
+                                            <div className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono">
+                                                {formatCurrency(formData.vlr_referencia_revenda)}
+                                            </div>
+                                            {formData.data_atualizacao_revenda && (
+                                                <p className="text-[10px] text-text-muted mt-2">
+                                                    Última Atualização: <span className="font-semibold text-text-primary">{new Date(formData.data_atualizacao_revenda).toLocaleDateString()}</span>
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="space-y-1.5 p-4 rounded-xl border border-border-subtle bg-surface shadow-sm">
+                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Custo Ref. Uso/Consumo</label>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                                                    {formatCurrency(formData.vlr_referencia_uso_consumo)}
+                                                </div>
+                                                {formData.origem_valor_uso_consumo && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 mt-1 uppercase">
+                                                        {formData.origem_valor_uso_consumo.replace('_', ' ')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {formData.data_atualizacao_uso_consumo && (
+                                                <p className="text-[10px] text-text-muted mt-2">
+                                                    Última Atualização: <span className="font-semibold text-text-primary">{new Date(formData.data_atualizacao_uso_consumo).toLocaleDateString()}</span>
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

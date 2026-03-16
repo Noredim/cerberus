@@ -3,6 +3,7 @@ import { X, Save, Loader2, Package } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '../../services/api';
 import { productApi } from '../../modules/products/api/productApi';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface QuickProductCreateModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export function QuickProductCreateModal({
   onSuccess,
   initialData
 }: QuickProductCreateModalProps) {
+  const { activeCompanyId } = useAuth();
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +42,7 @@ export function QuickProductCreateModal({
   useEffect(() => {
     if (isOpen) {
       setFormData({
-        company_id: '',
+        company_id: activeCompanyId || '',
         nome: initialData?.nome || initialData?.descricao || '',
         ncm_codigo: initialData?.ncm || '',
         descricao: initialData?.descricao || '',
@@ -58,8 +60,12 @@ export function QuickProductCreateModal({
     try {
       const cmpRes = await api.get('/companies');
       setCompanies(cmpRes.data);
-      if (cmpRes.data.length > 0 && !formData.company_id) {
-        setFormData(prev => ({ ...prev, company_id: cmpRes.data[0].id }));
+      // Fallback only if no activeCompanyId is set and we have companies
+      if (cmpRes.data.length > 0 && !activeCompanyId) {
+        setFormData(prev => ({ 
+          ...prev, 
+          company_id: cmpRes.data[0].id 
+        }));
       }
     } catch (err) {
       console.error('Error fetching companies', err);

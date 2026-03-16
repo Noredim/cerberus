@@ -17,6 +17,11 @@ export interface ProductFormData {
     cmt_codigo?: string;
     ativo: boolean;
     suppliers: ProductSupplier[];
+    vlr_referencia_revenda?: number | null;
+    vlr_referencia_uso_consumo?: number | null;
+    data_atualizacao_revenda?: string | null;
+    data_atualizacao_uso_consumo?: string | null;
+    origem_valor_uso_consumo?: string | null;
 }
 
 export interface ProductSupplier {
@@ -48,6 +53,11 @@ export interface Product {
     created_at: string;
     updated_at: string;
     suppliers?: ProductSupplier[];
+    vlr_referencia_revenda?: number | null;
+    vlr_referencia_uso_consumo?: number | null;
+    data_atualizacao_revenda?: string | null;
+    data_atualizacao_uso_consumo?: string | null;
+    origem_valor_uso_consumo?: string | null;
 }
 
 export interface ProductCreate {

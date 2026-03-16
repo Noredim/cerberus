@@ -82,10 +82,13 @@ export function QuickSupplierCreateModal({
     setLoading(true);
     
     try {
-      const payload = {
+      const payload: Record<string, any> = {
           ...formData,
           active: true
       };
+
+      if (!payload.municipality_id) delete payload.municipality_id;
+      if (!payload.state_id) delete payload.state_id;
 
       const res = await api.post('/cadastro/fornecedores', payload);
       onSuccess(res.data);

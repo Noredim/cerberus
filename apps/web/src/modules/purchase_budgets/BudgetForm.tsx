@@ -83,6 +83,7 @@ export function BudgetForm() {
         setItems(b.items.map((item: any) => ({
           ...item,
           product_id: item.product_id,
+          quantidade: Number(item.quantidade) || 1,
           valor_unitario: Number(item.valor_unitario),
           frete_percent: Number(item.frete_percent),
           ipi_percent: Number(item.ipi_percent),
@@ -102,32 +103,48 @@ export function BudgetForm() {
 
   const handleSave = async () => {
     setSaving(true);
+    const round4 = (v: number) => Math.round(v * 10000) / 10000;
+    const cleanItems = items.map(item => ({
+      product_id: item.product_id,
+      codigo_fornecedor: item.codigo_fornecedor || '',
+      ncm: item.ncm || '',
+      quantidade: round4(item.quantidade || 1),
+      valor_unitario: round4(item.valor_unitario || 0),
+      frete_percent: round4(item.frete_percent || 0),
+      ipi_percent: round4(item.ipi_percent || 0),
+      icms_percent: round4(item.icms_percent || 0),
+    }));
+    const payload = {
+      numero_orcamento: numeroOrcamento,
+      data_orcamento: dataOrcamento,
+      vendedor_nome: vendedorNome,
+      vendedor_telefone: vendedorTelefone,
+      vendedor_email: vendedorEmail,
+      tipo_orcamento: tipoOrcamento,
+      supplier_id: supplierId || null,
+      payment_condition_id: null,
+      frete_tipo: freteTipo,
+      frete_percent: round4(fretePercent),
+      ipi_calculado: ipiCalculado,
+      items: cleanItems
+    };
+    console.log('Saving payload:', JSON.stringify(payload, null, 2));
     try {
-      const payload = {
-        numero_orcamento: numeroOrcamento,
-        data_orcamento: dataOrcamento,
-        vendedor_nome: vendedorNome,
-        vendedor_telefone: vendedorTelefone,
-        vendedor_email: vendedorEmail,
-        tipo_orcamento: tipoOrcamento,
-        supplier_id: supplierId || null,
-        payment_condition_id: null,
-        frete_tipo: freteTipo,
-        frete_percent: fretePercent,
-        ipi_calculado: ipiCalculado,
-        criar_cenario_difal: criarCenarioDifal,
-        items
-      };
-
-      if (isEditing) {
-         // PUT wait
+      if (isEditing && id) {
+        await api.put(`/purchase-budgets/${id}`, payload);
       } else {
         await api.post('/purchase-budgets', payload);
       }
       navigate('/orcamentos-compras');
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao salvar orcamento');
+    } catch (error: any) {
+      console.error('Save error:', error);
+      console.error('Response data:', error?.response?.data);
+      const detail = error?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        alert('Erro de validação:\n' + detail.map((d: any) => `${d.loc?.join('.')} - ${d.msg}`).join('\n'));
+      } else {
+        alert('Erro ao salvar orcamento: ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
+      }
     } finally {
       setSaving(false);
     }
@@ -141,8 +158,10 @@ export function BudgetForm() {
     const mapped = safeFoundItems.map(item => ({
        product_id: item.product.id,
        product_nome: item.product.nome,
+       product_codigo: item.product.codigo || '',
        codigo_fornecedor: item.codigo_fornecedor || '',
        ncm: item.ncm || item.product.ncm || '',
+       quantidade: item.quantidade || 1,
        valor_unitario: item.valor_unitario || 0,
        frete_percent: item.frete_percent || 0,
        ipi_percent: item.ipi_percent || 0,
@@ -161,8 +180,10 @@ export function BudgetForm() {
     const mapped = {
        product_id: resolvedItem.product.id,
        product_nome: resolvedItem.product.nome,
+       product_codigo: resolvedItem.product.codigo || '',
        codigo_fornecedor: resolvedItem.codigo_fornecedor || '',
        ncm: resolvedItem.product.ncm_codigo || '',
+       quantidade: resolvedItem.quantidade || 1,
        valor_unitario: resolvedItem.valor_unitario || 0,
        frete_percent: resolvedItem.frete_percent || 0,
        ipi_percent: resolvedItem.ipi_percent || 0,

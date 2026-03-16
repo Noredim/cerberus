@@ -16,8 +16,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { productApi } from './api/productApi';
-import type { Product } from './types';
 import { useAuth } from '../../contexts/AuthContext';
+
+const formatCurrency = (value: number | undefined | null) => {
+    if (value === undefined || value === null) return '-';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+};
 
 const ProductList: React.FC = () => {
     const navigate = useNavigate();
@@ -121,6 +125,8 @@ const ProductList: React.FC = () => {
                                 <th className="px-6 py-4">Produto</th>
                                 <th className="px-6 py-4">SKU / Código</th>
                                 <th className="px-6 py-4">Finalidade</th>
+                                <th className="px-6 py-4">VLR Revenda</th>
+                                <th className="px-6 py-4">VLR Uso/Consumo</th>
                                 <th className="px-6 py-4">Fiscal (NCM/CMT)</th>
                                 <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4"></th>
@@ -137,7 +143,7 @@ const ProductList: React.FC = () => {
                                     </tr>
                                 ) : products.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-text-muted">
+                                        <td colSpan={8} className="px-6 py-12 text-center text-text-muted">
                                             Nenhum produto cadastrado.
                                         </td>
                                     </tr>
@@ -177,6 +183,20 @@ const ProductList: React.FC = () => {
                                                 <Briefcase className="w-3 h-3" />
                                                 {product.finalidade}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <span className="font-semibold text-text-primary text-sm">
+                                                    {formatCurrency(product.vlr_referencia_revenda)}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <span className="font-semibold text-text-primary text-sm">
+                                                    {formatCurrency(product.vlr_referencia_uso_consumo)}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">
                                             {product.tipo === 'EQUIPAMENTO' ? (

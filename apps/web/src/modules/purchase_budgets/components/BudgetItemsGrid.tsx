@@ -1,12 +1,14 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Trash2 } from 'lucide-react';
+import { ProductSearchModal } from '../../products/components/ProductSearchModal';
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 export interface BudgetItem {
   id?: string;
   product_id?: string;
+  quantidade?: number;
   codigo_fornecedor: string;
   ncm: string;
   valor_unitario: number;
@@ -17,6 +19,7 @@ export interface BudgetItem {
   ipi_valor?: number;
   total_item?: number;
   product_nome?: string;
+  product_codigo?: string;
 }
 
 interface BudgetItemsGridProps {
@@ -36,6 +39,7 @@ export function BudgetItemsGrid({
   ipiCalculado,
   disabled
 }: BudgetItemsGridProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const calculateRow = useCallback((row: BudgetItem): BudgetItem => {
     const vUnit = row.valor_unitario || 0;
@@ -49,18 +53,21 @@ export function BudgetItemsGrid({
     const ipiPerc = row.ipi_percent || 0;
     const ipiValor = vUnit * (ipiPerc / 100);
     
-    let total = 0;
+    const qtd = row.quantidade || 1;
+    let baseUnit = 0;
     if (ipiCalculado) {
-      total = vUnit + freteValor;
+      baseUnit = vUnit + freteValor;
     } else {
-      total = vUnit + freteValor + ipiValor;
+      baseUnit = vUnit + freteValor + ipiValor;
     }
+    
+    const total = baseUnit * qtd;
     
     return {
       ...row,
       frete_percent: fretePerc,
-      frete_valor: freteValor,
-      ipi_valor: ipiValor,
+      frete_valor: freteValor * qtd,
+      ipi_valor: ipiValor * qtd,
       total_item: total
     };
   }, [freteTipoCabecalho, fretePercentCabecalho, ipiCalculado]);
@@ -104,7 +111,7 @@ export function BudgetItemsGrid({
           </div>
           <Button 
             disabled={disabled}
-            onClick={() => onChange([...items, calculateRow({ codigo_fornecedor: '', ncm: '', valor_unitario: 0, frete_percent: 0, ipi_percent: 0, icms_percent: 0 })])}
+            onClick={() => setIsModalOpen(true)}
             variant="outline"
           >
             Adicionar Item
@@ -112,18 +119,20 @@ export function BudgetItemsGrid({
         </div>
       </div>
       <div className="border border-border-subtle rounded-lg overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
           <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
             <tr>
-              <th className="px-4 py-3">Produto</th>
-              <th className="px-4 py-3 w-32">Cód. Fornecedor</th>
-              <th className="px-4 py-3 w-28">NCM</th>
-              <th className="px-4 py-3 w-32">Valor Un.</th>
-              <th className="px-4 py-3 w-24">Frete %</th>
-              <th className="px-4 py-3 w-24">IPI %</th>
-              <th className="px-4 py-3 w-24">ICMS %</th>
-              <th className="px-4 py-3 w-32">Total Item</th>
-              <th className="px-4 py-3 w-16 text-right"></th>
+              <th className="px-4 py-3 w-[100px]">Cód. Sistema</th>
+              <th className="px-4 py-3 w-[25%] min-w-[280px]">Produto</th>
+              <th className="px-4 py-3 w-[120px]">Cód. Fornecedor</th>
+              <th className="px-4 py-3 w-[120px]">NCM</th>
+              <th className="px-4 py-3 w-[90px]">Qtd.</th>
+              <th className="px-4 py-3 w-[140px]">Valor Un.</th>
+              <th className="px-4 py-3 w-[90px]">Frete %</th>
+              <th className="px-4 py-3 w-[90px]">IPI %</th>
+              <th className="px-4 py-3 w-[90px]">ICMS %</th>
+              <th className="px-4 py-3 w-[130px]">Total Item</th>
+              <th className="px-4 py-3 w-[50px] text-right"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle bg-surface">
@@ -135,10 +144,16 @@ export function BudgetItemsGrid({
                </tr>
              ) : items.map((row, idx) => (
                 <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
+                  <td className="px-4 py-2">
+                    <span className="text-xs font-bold text-text-muted bg-bg-deep px-2 py-1 rounded">
+                      {row.product_codigo || 'N/A'}
+                    </span>
+                  </td>
                   <td className="px-4 py-2 w-full">
-                    <input 
+                    <textarea 
                       disabled={disabled}
-                      className="w-full text-sm border border-border-subtle rounded px-2 py-1.5 focus:border-brand-primary outline-none"
+                      rows={2}
+                      className="w-full text-sm border border-border-subtle rounded px-2 py-1.5 focus:border-brand-primary outline-none resize-none leading-tight"
                       placeholder="Nome do Produto"
                       value={row.product_nome || ''} 
                       onChange={(e) => updateField(idx, 'product_nome', e.target.value)}
@@ -158,6 +173,16 @@ export function BudgetItemsGrid({
                       className="w-full text-sm border border-border-subtle rounded px-2 py-1.5 focus:border-brand-primary outline-none"
                       value={row.ncm} 
                       onChange={(e) => updateField(idx, 'ncm', e.target.value)}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <input 
+                      disabled={disabled}
+                      type="number"
+                      step="1"
+                      className="w-full text-sm border border-border-subtle rounded px-2 py-1.5 focus:border-brand-primary outline-none"
+                      value={row.quantidade || 1} 
+                      onChange={(e) => updateField(idx, 'quantidade', parseFloat(e.target.value) || 1)}
                     />
                   </td>
                   <td className="px-4 py-2">
@@ -203,7 +228,7 @@ export function BudgetItemsGrid({
                       onChange={(e) => updateField(idx, 'icms_percent', parseFloat(e.target.value) || 0)}
                     />
                   </td>
-                  <td className="px-4 py-2 font-semibold text-sm text-text-primary whitespace-nowrap">
+                  <td className="px-4 py-2 font-semibold text-sm text-text-primary whitespace-nowrap overflow-hidden text-ellipsis">
                     {formatCurrency(row.total_item || 0)}
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -215,12 +240,32 @@ export function BudgetItemsGrid({
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </td>
+                    </td>
                 </tr>
-             ))}
+              ))}
           </tbody>
         </table>
       </div>
+      
+      <ProductSearchModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSelect={(product) => {
+          const newItem = calculateRow({
+            product_id: product.id,
+            product_codigo: product.codigo,
+            product_nome: product.nome,
+            codigo_fornecedor: '', // Starts empty, user fills
+            ncm: product.ncm_codigo || '',
+            valor_unitario: 0,
+            quantidade: 1,
+            frete_percent: 0,
+            ipi_percent: 0,
+            icms_percent: 0
+          });
+          onChange([...items, newItem]);
+        }}
+      />
     </div>
   );
 }

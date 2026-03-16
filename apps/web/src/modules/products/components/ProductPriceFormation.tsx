@@ -11,6 +11,8 @@ interface BudgetItem {
   created_at: string;
   budget?: {
     data_cotacao?: string;
+    numero_orcamento?: string;
+    tipo_orcamento?: string;
     moeda?: string;
     nome_fornecedor_manual?: string;
     supplier?: {
@@ -94,24 +96,21 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
   const [tipoOrcamento, setTipoOrcamento] = useState<
     "REVENDA" | "ATIVO_IMOBILIZADO_USO_CONSUMO"
   >("REVENDA");
-  const [criarCenarioDifal, setCriarCenarioDifal] = useState<boolean>(false);
   const [ufOrigem, setUfOrigem] = useState<string>(initialUfOrigem);
   const [ufDestino, setUfDestino] = useState<string>("MT");
-  const [aliquotaOrcamento, setAliquotaOrcamento] = useState<number>(12);
+  const [aliquotaOrcamento, setAliquotaOrcamento] = useState<number>(icmsFromBudget);
   const [aliquotaInternaDestino, setAliquotaInternaDestino] =
     useState<number>(17);
 
   // DIFAL Calculated
-  const [operacaoInterestadual, setOperacaoInterestadual] =
-    useState<boolean>(false);
   const [valorDifal, setValorDifal] = useState(0);
 
-  // Sync when last budget changes
   useEffect(() => {
     setValorUnitario(initialValorUnitario);
     setIpiPercent(initialIpi);
     setUfOrigem(initialUfOrigem);
-  }, [initialValorUnitario, initialIpi, initialUfOrigem]);
+    setAliquotaOrcamento(icmsFromBudget);
+  }, [initialValorUnitario, initialIpi, initialUfOrigem, icmsFromBudget]);
 
   useEffect(() => {
     const ipiUnit = valorUnitario * (ipiPercent / 100);
@@ -170,8 +169,8 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
     let c_valorDifalBase = 0;
     let c_valorDifal = 0;
 
-    if (ufOrigem && ufDestino && ufOrigem !== ufDestino) {
-      opInterestadual = true;
+    if (ufOrigem && ufDestino) {
+      opInterestadual = ufOrigem !== ufDestino;
 
       // 3.1 Base de Cálculo Inicial do DIFAL (Produto + IPI + Frete)
       const baseComIpiEFrete = valorUnitario + ipiUnit + freteUnit;
@@ -190,24 +189,23 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
         c_valorDifalBase = c_icmsDestino - c_icmsOrigem;
       }
 
-      if (tipoOrcamento === "ATIVO_IMOBILIZADO_USO_CONSUMO") {
-        c_valorDifal = c_valorDifalBase;
-      } else if (tipoOrcamento === "REVENDA") {
-        if (criarCenarioDifal) {
-          const diffDifalSt = c_valorDifalBase - calcIcmsStFinal;
+      if (!opInterestadual) {
+        c_valorDifalBase = 0;
+      }
 
-          if (diffDifalSt > 0) {
-            c_valorDifal = calcIcmsStFinal + diffDifalSt;
-          } else {
-            c_valorDifal = c_valorDifalBase;
-          }
+      if (tipoOrcamento === "ATIVO_IMOBILIZADO_USO_CONSUMO") {
+        c_valorDifal = Math.max(0, c_valorDifalBase);
+      } else if (tipoOrcamento === "REVENDA") {
+        const diffDifalSt = c_valorDifalBase - calcIcmsStFinal;
+
+        if (diffDifalSt > 0) {
+          c_valorDifal = calcIcmsStFinal + diffDifalSt;
         } else {
-          c_valorDifal = 0;
+          c_valorDifal = Math.max(0, c_valorDifalBase);
         }
       }
     }
 
-    setOperacaoInterestadual(opInterestadual);
     setValorDifal(c_valorDifal);
 
     const custoF = valorUnitario + ipiUnit + freteUnit + calcIcmsStFinal;
@@ -235,9 +233,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
     ufDestino,
     stFlag,
     bitFlag,
-    mvaPercent,
     tipoOrcamento,
-    criarCenarioDifal,
     ufOrigem,
     aliquotaOrcamento,
     aliquotaInternaDestino,
@@ -465,22 +461,6 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
                 </select>
               </div>
 
-              {tipoOrcamento === "REVENDA" && (
-                <div className="space-y-1.5 lg:col-span-2 flex items-end">
-                  <label className="flex items-center gap-2 cursor-pointer pt-2">
-                    <input
-                      type="checkbox"
-                      checked={criarCenarioDifal}
-                      onChange={(e) => setCriarCenarioDifal(e.target.checked)}
-                      className="w-4 h-4 text-brand-primary border-border-subtle rounded focus:ring-brand-primary"
-                    />
-                    <span className="text-sm font-bold text-text-primary">
-                      Criar Cenário DIFAL (Simulação)
-                    </span>
-                  </label>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-text-muted">
                   UF Origem (Fornecedor)
@@ -541,6 +521,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
             {/* Removido o quadro de 'Resumo do Cálculo DIFAL' a pedido do usuário, agora incorporado no quadro comparativo abaixo */}
           </div>
         </div>
+
 
         {/* Composição do Custo */}
         <div className="space-y-4">
@@ -669,9 +650,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
           </div>
 
           {/* Novo Painel para Cenário DIFAL */}
-          {tipoOrcamento === "REVENDA" &&
-            criarCenarioDifal &&
-            operacaoInterestadual && (
+          {tipoOrcamento === "REVENDA" && (
               <div className="bg-surface border border-brand-primary/30 rounded-xl p-6 shadow-sm mt-6">
                 <h3 className="text-sm font-bold text-brand-primary flex items-center gap-2 mb-5">
                   <Calculator className="w-4 h-4 text-brand-primary" />
@@ -786,6 +765,8 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
               <thead className="bg-bg-deep border-b border-border-subtle text-xs uppercase tracking-wider text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-bold">Data Cotação</th>
+                  <th className="px-4 py-3 font-bold">Nº Cotação</th>
+                  <th className="px-4 py-3 font-bold">Tipo</th>
                   <th className="px-4 py-3 font-bold">Fornecedor</th>
                   <th className="px-4 py-3 font-bold text-center">Qtd</th>
                   <th className="px-4 py-3 font-bold text-center">UN</th>
@@ -835,6 +816,12 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
                             Atual
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-text-primary max-w-[120px] truncate">
+                        {b.budget?.numero_orcamento || "Não inf."}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-muted">
+                        {b.budget?.tipo_orcamento === 'REVENDA' ? 'Revenda' : (b.budget?.tipo_orcamento === 'ATIVO_IMOBILIZADO_USO_CONSUMO' ? 'Uso/Consumo' : 'N/A')}
                       </td>
                       <td className="px-4 py-3 font-medium text-text-primary max-w-[180px] truncate">
                         {fornecedor}

@@ -3,6 +3,8 @@ import { Plus, Trash2, Save, ShoppingCart, Building2, Package, Loader2, Truck, U
 import { AnimatePresence, motion } from 'framer-motion';
 import { productApi } from '../api/productApi';
 import { api } from '../../../services/api';
+import { ProductSearchModal } from './ProductSearchModal';
+
 export interface OpportunityBudgetItemCreatePayload {
     codigo_fornecedor?: string;
     descricao: string;
@@ -13,6 +15,7 @@ export interface OpportunityBudgetItemCreatePayload {
     icms_percentual: number;
     valor_unitario: number;
     produto_id: string;
+    produto_codigo?: string;
 }
 
 export interface OpportunityBudgetManualCreatePayload {
@@ -61,6 +64,7 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
 
     // Supplier selected from catalog
     const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
     // Freight state (Bug 5)
     const [modalidadeFrete, setModalidadeFrete] = useState<'CIF' | 'FOB'>('CIF');
@@ -129,17 +133,20 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
         setItems(newItems);
     };
 
-    const addItem = () => {
+
+
+    const addSearchedItem = (product: any) => {
         setItems(prev => [...prev, {
             codigo_fornecedor: '',
-            descricao: '',
+            descricao: product.nome || '',
             quantidade: 1,
             unidade: 'UN',
-            ncm: '',
+            ncm: product.ncm_codigo || '',
             ipi_percentual: 0,
             icms_percentual: 0,
             valor_unitario: 0,
-            produto_id: productId
+            produto_id: product.id,
+            produto_codigo: product.codigo
         }]);
     };
 
@@ -509,7 +516,7 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
                                 </h3>
                                 <button
                                     type="button"
-                                    onClick={addItem}
+                                    onClick={() => setIsProductModalOpen(true)}
                                     className="flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-primary/10 px-3 py-1.5 rounded-lg hover:bg-brand-primary/20 transition-colors cursor-pointer"
                                 >
                                     <Plus size={16} /> Adicionar Item
@@ -520,7 +527,8 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
                                 <table className="w-full text-left text-xs min-w-[1100px]">
                                     <thead className="bg-bg-deep border-b border-border-subtle">
                                         <tr>
-                                            <th className="px-3 py-3 font-bold text-text-muted w-32">Código</th>
+                                            <th className="px-3 py-3 font-bold text-text-muted w-24">Cód. Sistema</th>
+                                            <th className="px-3 py-3 font-bold text-text-muted w-32">Cód. Fornecedor</th>
                                             <th className="px-3 py-3 font-bold text-text-muted min-w-[200px]">Descrição</th>
                                             <th className="px-3 py-3 font-bold text-text-muted w-20">Qtd</th>
                                             <th className="px-3 py-3 font-bold text-text-muted w-20">UN</th>
@@ -536,7 +544,12 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
                                         {items.map((item, index) => (
                                             <tr key={index} className="bg-surface hover:bg-bg-deep/30 transition-colors">
                                                 <td className="px-3 py-2">
-                                                    <input type="text" value={item.codigo_fornecedor}
+                                                    <span className="text-xs font-bold text-text-muted bg-bg-deep px-2 py-1 flex items-center justify-center rounded">
+                                                        {item.produto_codigo || (item.produto_id === productId ? productSku : 'N/A')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <input type="text" value={item.codigo_fornecedor || ''}
                                                         onChange={(e) => handleItemChange(index, 'codigo_fornecedor', e.target.value)}
                                                         className={inputClass} />
                                                 </td>
@@ -640,6 +653,11 @@ export function ProductBudgetManualModal({ productId, productName, productSku, p
                     </div>
                 </div>
             </div>
+            <ProductSearchModal
+                isOpen={isProductModalOpen}
+                onClose={() => setIsProductModalOpen(false)}
+                onSelect={(product) => addSearchedItem(product)}
+            />
         </div>
     );
 }

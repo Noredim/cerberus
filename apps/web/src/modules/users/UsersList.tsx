@@ -24,6 +24,7 @@ interface User {
     tenant_id: string;
     is_active: boolean;
     roles: string[];
+    companies: string[];
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -52,13 +53,32 @@ interface UserPanelProps {
     onSuccess: () => void;
 }
 
+interface Company {
+    id: string;
+    cnpj: string;
+    razao_social: string;
+}
+
 const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSuccess }) => {
     const isEditing = !!userData;
     const [formData, setFormData] = useState({
-        name: '', email: '', password: '', role: 'ADMIN', is_active: true
+        name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: [] as string[]
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+
+    useEffect(() => {
+        const fetchCompanies = async () => {
+            try {
+                const { data } = await api.get('/companies');
+                setAllCompanies(data);
+            } catch (err) {
+                console.error('Failed to fetch companies', err);
+            }
+        };
+        fetchCompanies();
+    }, []);
 
     useEffect(() => {
         if (userData) {
@@ -68,9 +88,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                 password: '',
                 role: userData.roles?.[0] || 'ADMIN',
                 is_active: userData.is_active ?? true,
+                companies: userData.companies || [],
             });
         } else {
-            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true });
+            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: [] });
         }
         setError(null);
     }, [userData, isOpen]);
@@ -86,15 +107,17 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                     email: formData.email,
                     roles: [formData.role],
                     is_active: formData.is_active,
+                    companies: formData.companies,
                 });
             } else {
                 if (!formData.password) { setError('A senha inicial é obrigatória.'); setLoading(false); return; }
-                await api.post('/users', { name: formData.name, email: formData.email, password: formData.password, role: formData.role });
+                await api.post('/users', { name: formData.name, email: formData.email, password: formData.password, role: formData.role, companies: formData.companies });
             }
             onSuccess();
             onClose();
-        } catch (err: any) {
-            setError(err.response?.data?.detail || 'Ocorreu um erro ao salvar o usuário.');
+        } catch (err: unknown) {
+            const error = err as any;
+            setError(error.response?.data?.detail || 'Ocorreu um erro ao salvar o usuário.');
         } finally {
             setLoading(false);
         }
@@ -178,6 +201,28 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                                 >
                                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                                 </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-text-primary">Empresas Vinculadas</label>
+                                <select
+                                    multiple
+                                    value={formData.companies}
+                                    onChange={e => {
+                                        const values = Array.from(e.target.selectedOptions, option => option.value);
+                                        setFormData({ ...formData, companies: values });
+                                    }}
+                                    className="w-full bg-bg-deep border border-border-subtle rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand-primary outline-none h-32"
+                                >
+                                    {allCompanies.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.razao_social} ({c.cnpj})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-text-muted mt-1">
+                                    Segure <kbd className="font-sans px-1 bg-border-subtle rounded">Ctrl</kbd> (ou <kbd className="font-sans px-1 bg-border-subtle rounded">Cmd</kbd>) para selecionar múltiplas.
+                                </p>
                             </div>
 
                             {isEditing && (
