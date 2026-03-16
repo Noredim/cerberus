@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from src.core.base import Base
+from sqlalchemy import UniqueConstraint, Numeric
 from sqlalchemy import UniqueConstraint
 
 class Product(Base):
@@ -31,6 +32,10 @@ class Product(Base):
     cmt_codigo = Column(String(20), index=True)
     
     ativo = Column(Boolean, default=True)
+    
+    ultimo_preco_compra = Column(Numeric(15, 4), nullable=True)
+    data_ultimo_preco = Column(DateTime(timezone=True), nullable=True)
+    fornecedor_ultimo_preco_id = Column(String, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

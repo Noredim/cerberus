@@ -22,8 +22,9 @@ import ProductList from './modules/products/ProductList';
 import ProductForm from './modules/products/ProductForm';
 import CustomerList from './modules/customers/CustomerList';
 import CustomerForm from './modules/customers/CustomerForm';
-import { OpportunityList } from './modules/opportunities/OpportunityList';
-import { OpportunityForm } from './modules/opportunities/OpportunityForm';
+import { BudgetsList } from './modules/purchase_budgets/BudgetsList';
+import { BudgetForm } from './modules/purchase_budgets/BudgetForm';
+
 import { Loader2, ServerOff } from 'lucide-react';
 
 const ProtectedRoute = () => {
@@ -123,10 +124,11 @@ function App() {
             <Route path="/cadastro/produtos/editar/:id" element={<ProductForm />} />
             <Route path="/cadastro/produtos/detalhes/:id" element={<ProductForm />} />
 
-            {/* Oportunidades & Formação de Preço */}
-            <Route path="/oportunidades" element={<OpportunityList />} />
-            <Route path="/oportunidades/nova" element={<OpportunityForm />} />
-            <Route path="/oportunidades/:id" element={<OpportunityForm />} />
+            {/* Purchase Budgets */}
+            <Route path="/orcamentos-compras" element={<BudgetsList />} />
+            <Route path="/orcamentos-compras/novo" element={<BudgetForm />} />
+            <Route path="/orcamentos-compras/:id" element={<BudgetForm />} />
+
           </Route>
         </Routes>
       </Router>

@@ -13,7 +13,6 @@ import {
     Edit2,
     ShieldCheck,
     Truck,
-    TrendingUp,
     Plus,
     Trash2,
     Calculator
@@ -23,7 +22,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { productApi } from './api/productApi';
 import { api } from '../../services/api';
 import type { MvaLookupResult, ProductSupplier, ProductFormData } from './types';
-import { ProductBudgetManualModal } from './components/ProductBudgetManualModal';
+
 import { ProductPriceFormation } from './components/ProductPriceFormation';
 
 const ProductForm: React.FC = () => {
@@ -43,9 +42,7 @@ const ProductForm: React.FC = () => {
     const [mvaLoading, setMvaLoading] = useState(false);
     const [benefits, setBenefits] = useState<any[]>([]);
     const [benefitsLoading, setBenefitsLoading] = useState(false);
-    const [productBudgets, setProductBudgets] = useState<any[]>([]);
-    const [budgetsLoading, setBudgetsLoading] = useState(false);
-    const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+    const [budgets, setBudgets] = useState<any[]>([]);
 
     // Suppliers State
     const [supplierList, setSupplierList] = useState<any[]>([]); // For the autocomplete lookup
@@ -81,8 +78,11 @@ const ProductForm: React.FC = () => {
         { id: 'fiscal', label: 'Fiscal & Impostos', icon: FileText },
         { id: 'pricing', label: 'Formação de Preço', icon: Calculator },
         { id: 'suppliers', label: 'Fornecedores', icon: Truck },
-        { id: 'quotes', label: 'Orçamentos', icon: TrendingUp },
     ];
+
+    if (budgets.length > 0) {
+        tabs.push({ id: 'budgets', label: 'Orçamentos', icon: FileText });
+    }
 
     useEffect(() => {
         const fetchData = async () => {
@@ -119,6 +119,30 @@ const ProductForm: React.FC = () => {
                         checkMva(product.ncm_codigo, product.company_id, 'REVENDA');
                         checkBenefits(product.ncm_codigo);
                     }
+
+                    try {
+                        const budgetsData = await productApi.getBudgets(id);
+                        const mappedBudgets = budgetsData.map((b: any) => ({
+                            id: b.id,
+                            quantidade: 1, 
+                            valor_unitario: b.valor_unitario,
+                            ipi_percentual: b.ipi_percent,
+                            icms_percentual: b.icms_percent,
+                            created_at: b.created_at,
+                            budget: {
+                                numero_orcamento: b.budget?.numero_orcamento,
+                                data_cotacao: b.budget?.data_orcamento,
+                                supplier: {
+                                    nome_fantasia: b.budget?.supplier_nome_fantasia || 'Fornecedor',
+                                    razao_social: b.budget?.supplier_razao_social || 'Fornecedor',
+                                    uf: 'SP'
+                                }
+                            }
+                        }));
+                        setBudgets(mappedBudgets);
+                    } catch(err) {
+                        console.error('Error fetching product budgets:', err);
+                    }
                 }
             } catch (err) {
                 console.error('Initial fetch error:', err);
@@ -130,7 +154,7 @@ const ProductForm: React.FC = () => {
     }, [id]);
 
     const checkMva = async (ncm: string, company_id: string, finalidade: string) => {
-        if (!ncm || !company_id || finalidade !== 'REVENDA') {
+        if (!ncm || ncm.length < 4 || !company_id || finalidade !== 'REVENDA') {
             setMvaResult(null);
             return;
         }
@@ -163,24 +187,7 @@ const ProductForm: React.FC = () => {
         }
     };
 
-    const fetchBudgets = async () => {
-        if (!id) return;
-        setBudgetsLoading(true);
-        try {
-            const res = await productApi.getBudgets(id);
-            setProductBudgets(res);
-        } catch (err) {
-            console.error('Error fetching budgets:', err);
-        } finally {
-            setBudgetsLoading(false);
-        }
-    };
 
-    useEffect(() => {
-        if ((activeTab === 'quotes' || activeTab === 'pricing') && id) {
-            fetchBudgets();
-        }
-    }, [activeTab, id]);
 
     useEffect(() => {
         if (formData.ncm_codigo && formData.company_id) {
@@ -590,12 +597,12 @@ const ProductForm: React.FC = () => {
 
                         {activeTab === 'pricing' && (
                             <ProductPriceFormation
-                                basePrice={productBudgets.length > 0 ? Number(productBudgets[0].valor_unitario) : 0}
+                                basePrice={0}
                                 stFlag={!!mvaResult?.found}
                                 bitFlag={benefits.some(b => b.nome?.toUpperCase().includes('BIT'))}
                                 importadoFlag={false}
                                 mvaFromProduct={mvaResult?.mva_percent ?? 0}
-                                budgets={productBudgets}
+                                budgets={budgets}
                             />
                         )}
 
@@ -744,115 +751,52 @@ const ProductForm: React.FC = () => {
                             </div>
                         )}
 
-
-                        {activeTab === 'quotes' && (
+                        {activeTab === 'budgets' && budgets.length > 0 && (
                             <div className="space-y-6">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
-                                            <TrendingUp className="w-5 h-5 text-brand-primary" />
-                                            Histórico de Preços e Orçamentos
-                                        </h3>
-                                        <p className="text-xs text-text-muted mt-0.5">
-                                            Consolidado de todas as cotações onde este produto foi cotado.
-                                        </p>
-                                    </div>
-                                    {id && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsBudgetModalOpen(true)}
-                                            className="flex items-center gap-2 bg-brand-primary/10 text-brand-primary px-4 py-2 rounded-lg font-bold hover:bg-brand-primary/20 transition-all text-sm cursor-pointer"
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                            Novo Lançamento
-                                        </button>
-                                    )}
-                                </div>
-
-                                {budgetsLoading ? (
-                                    <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-                                        <Loader2 className="w-8 h-8 animate-spin text-brand-primary mb-2" />
-                                        <p className="text-sm">Buscando histórico...</p>
-                                    </div>
-                                ) : productBudgets.length > 0 ? (
-                                    <div className="border border-border-subtle rounded-lg overflow-hidden shadow-sm">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="bg-bg-deep border-b border-border-subtle text-xs uppercase tracking-wider text-text-muted">
-                                                    <th className="p-4 font-bold">Data Cotação</th>
-                                                    <th className="p-4 font-bold">Fornecedor</th>
-                                                    <th className="p-4 font-bold text-center">Qtd</th>
-                                                    <th className="p-4 font-bold text-center">Unidade</th>
-                                                    <th className="p-4 font-bold text-right">Vlr. Unit.</th>
-                                                    <th className="p-4 font-bold text-right">Vlr. Total</th>
-                                                    <th className="p-4 font-bold text-center">Origem</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="text-sm divide-y divide-border-subtle bg-surface">
-                                                {productBudgets.map((item: any) => (
-                                                    <tr key={item.id} className="hover:bg-bg-deep/50 transition-colors">
-                                                        <td className="p-4 text-text-primary whitespace-nowrap text-sm">
-                                                            {item.budget?.data_cotacao
-                                                                ? new Date(item.budget.data_cotacao).toLocaleDateString('pt-BR')
-                                                                : new Date(item.created_at).toLocaleDateString('pt-BR')}
+                                <div className="border border-border-subtle rounded-xl overflow-hidden">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-bg-deep border-b border-border-subtle text-xs uppercase tracking-wider text-text-muted">
+                                                <th className="p-3 font-bold">Num. Cotação</th>
+                                                <th className="p-3 font-bold">Data</th>
+                                                <th className="p-3 font-bold">Fornecedor</th>
+                                                <th className="p-3 font-bold text-right">Valor Unitário</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-sm divide-y divide-border-subtle bg-surface">
+                                            {budgets.map((b: any, idx: number) => {
+                                                const sName = b.budget?.supplier?.nome_fantasia || b.budget?.supplier?.razao_social || 'N/A';
+                                                
+                                                return (
+                                                    <tr key={b.id} className="hover:bg-bg-deep/50 transition-colors">
+                                                        <td className="p-3 font-medium text-text-primary">
+                                                            {b.budget?.numero_orcamento || 'N/A'}
                                                         </td>
-                                                        <td className="p-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="font-bold text-text-primary text-sm">
-                                                                    {item.budget?.supplier?.nome_fantasia
-                                                                        || item.budget?.supplier?.razao_social
-                                                                        || item.budget?.nome_fornecedor_manual
-                                                                        || 'Fornecedor não identificado'}
-                                                                </span>
-                                                                <span className="text-[10px] text-text-muted">
-                                                                    {item.budget?.supplier?.cnpj || item.budget?.cnpj_fornecedor || '---'}
-                                                                </span>
+                                                        <td className="p-3 text-text-muted">
+                                                            {new Date(b.budget?.data_cotacao || b.created_at).toLocaleDateString('pt-BR')}
+                                                        </td>
+                                                        <td className="p-3 font-medium text-text-primary">
+                                                            {sName}
+                                                        </td>
+                                                        <td className="p-3 text-right font-mono text-text-primary font-bold">
+                                                            <div className="flex items-center justify-end gap-3">
+                                                                {idx === 0 && (
+                                                                    <span className="px-2 py-0.5 bg-brand-success/10 text-brand-success text-[10px] uppercase font-bold tracking-wider rounded border border-brand-success/20">
+                                                                        Vigente
+                                                                    </span>
+                                                                )}
+                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(b.valor_unitario || 0)}
                                                             </div>
                                                         </td>
-                                                        <td className="p-4 text-center text-text-muted text-sm">
-                                                            {Number(item.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}
-                                                        </td>
-                                                        <td className="p-4 text-center text-text-muted text-sm">
-                                                            {item.unidade || 'UN'}
-                                                        </td>
-                                                        <td className="p-4 text-right">
-                                                            <span className="font-bold text-text-primary text-sm">
-                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: item.budget?.moeda || 'BRL' }).format(Number(item.valor_unitario))}
-                                                            </span>
-                                                            {item.budget?.cambio && Number(item.budget.cambio) > 1 && (
-                                                                <span className="block text-[10px] text-text-muted">Câmbio: {item.budget.cambio}</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 text-right">
-                                                            <span className="font-bold text-brand-primary text-sm">
-                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: item.budget?.moeda || 'BRL' }).format(Number(item.quantidade) * Number(item.valor_unitario))}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-4 text-center">
-                                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${item.budget?.origem_lancamento === 'UPLOAD_XLSX'
-                                                                ? 'bg-blue-100 text-blue-700'
-                                                                : 'bg-green-100 text-green-700'
-                                                                }`}>
-                                                                {item.budget?.origem_lancamento === 'UPLOAD_XLSX' ? 'Excel' : 'Manual'}
-                                                            </span>
-                                                        </td>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-lg p-10 text-center max-w-2xl mx-auto">
-                                        <TrendingUp className="w-12 h-12 text-brand-primary/30 mx-auto mb-4" />
-                                        <h3 className="text-lg font-bold text-brand-primary mb-2">Sem Histórico de Preços</h3>
-                                        <p className="text-sm text-text-muted leading-relaxed">
-                                            Não encontramos cotações anteriores para este produto.
-                                            Você pode realizar um <strong>lançamento avulso</strong> agora ou aguardar a integração via Oportunidades.
-                                        </p>
-                                    </div>
-                                )}
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
+
                     </motion.div>
                 </AnimatePresence>
 
@@ -878,22 +822,7 @@ const ProductForm: React.FC = () => {
                     )
                 }
             </form >
-            {
-                id && (
-                    <ProductBudgetManualModal
-                        productId={id}
-                        productName={formData.nome || ''}
-                        productSku={sku || ''}
-                        productNcm={formData.ncm_codigo || ''}
-                        isOpen={isBudgetModalOpen}
-                        onClose={() => setIsBudgetModalOpen(false)}
-                        onSuccess={() => {
-                            setIsBudgetModalOpen(false);
-                            fetchBudgets();
-                        }}
-                    />
-                )
-            }
+
         </>
     );
 };

@@ -10,7 +10,6 @@ import os
 from src.modules.auth.router import router as auth_router
 from src.modules.tenants.router import router as tenants_router
 from src.modules.fiscal.router import router as fiscal_router
-from src.modules.opportunities.router import router as opportunities_router
 from src.modules.dashboards.router import router as dashboards_router
 from src.modules.catalog.router import router as catalog_router
 from src.modules.users.router import router as users_router
@@ -24,6 +23,7 @@ from src.modules.ncm_st.router import router as ncm_st_router
 from src.modules.suppliers.router import router as suppliers_router
 from src.modules.products.router import router as products_router
 from src.modules.customers.router import router as customers_router
+from src.modules.purchase_budgets.router import router as purchase_budgets_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -124,7 +124,6 @@ app.include_router(auth_router)
 # Multi-Tenant Core Services
 app.include_router(tenants_router)
 app.include_router(fiscal_router)
-app.include_router(opportunities_router)
 app.include_router(dashboards_router)
 app.include_router(catalog_router)
 app.include_router(users_router)
@@ -138,3 +137,4 @@ app.include_router(ncm_st_router)
 app.include_router(suppliers_router)
 app.include_router(products_router)
 app.include_router(customers_router)
+app.include_router(purchase_budgets_router)

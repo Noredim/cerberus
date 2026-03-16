@@ -69,3 +69,9 @@ body {
 .dark .glass {
   box-shadow: none;
 }
+
+@layer components {
+  .input-primary {
+    @apply flex min-h-[38px] w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm text-text-primary shadow-sm transition-all duration-200 placeholder:text-text-muted hover:border-brand-primary/50 focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary disabled:cursor-not-allowed disabled:bg-bg-deep disabled:text-text-muted disabled:opacity-70;
+  }
+}

@@ -147,7 +147,7 @@ class ProductService:
             NcmStHeader.is_active == True,
             NcmStItem.is_active == True,
             # Hierarchical match logic: rule NCM is a prefix of product NCM
-            func.length(NcmStItem.ncm_normalizado) > 0,
+            func.length(NcmStItem.ncm_normalizado) >= 4,
             # Using cast/string ops to ensure prefix match
             # This is equivalent to: ncm_clean starting with NcmStItem.ncm_normalizado
             literal_column(f"'{ncm_clean}'").like(NcmStItem.ncm_normalizado + '%')

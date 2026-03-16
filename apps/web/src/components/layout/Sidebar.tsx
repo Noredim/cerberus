@@ -11,7 +11,7 @@ import {
     Building2,
     ChevronDown,
     ChevronRight,
-    Handshake
+    FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -58,7 +58,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Benefícios Fiscais', path: '/beneficios' },
             ]
         },
-        { icon: Handshake, label: 'Oportunidades', path: '/oportunidades' },
+        { icon: FileText, label: 'Orç. Compras', path: '/orcamentos-compras' },
+
         { icon: BarChart3, label: 'Relatórios', path: '/dashboards' },
         { icon: Shield, label: 'Segurança', path: '/security' },
         { icon: Settings, label: 'Configurações', path: '/settings' },

@@ -5,7 +5,10 @@ from sqlalchemy import pool
 
 from alembic import context
 import os
+import sys
 
+# Add apps/api to path so `src.*` can be resolved
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 config = context.config
 
 if config.config_file_name is not None:
@@ -15,7 +18,6 @@ from src.core.base import Base
 # Import all models here for Alembic auto-discovery
 from src.modules.tenants.models import Tenant, TenantCnae
 from src.modules.users.models import User, UserRole
-from src.modules.opportunities.models import Opportunity, OpportunityParametersSales, OpportunityParametersRent, OpportunityItem, OpportunityItemKit, OpportunityBudget, OpportunityBudgetItem, OpportunityInstallation, OpportunityMaintenance
 from src.modules.fiscal.models import NcmRule
 from src.modules.catalog.models import State, City, IbgeSyncJob
 from src.modules.utils.models.cep import CepCache
@@ -23,8 +25,9 @@ from src.modules.companies.models import Company, CompanyCnae, CompanyBenefit, C
 from src.modules.ncm.models import Ncm, NcmImportacao
 from src.modules.ncm_st.models import NcmStHeader, NcmStItem
 from src.modules.suppliers.models import Supplier
-from src.modules.products.models import Product
+from src.modules.products.models import Product, ProductSupplier
 from src.modules.customers.models import Customer
+from src.modules.purchase_budgets.models import PaymentCondition, PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem
 
 from src.core.config import settings
 target_metadata = Base.metadata

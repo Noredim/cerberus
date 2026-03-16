@@ -10,8 +10,8 @@ headers = [
     "quantidade",
     "unidade",
     "ncm",
-    "ipi_percentual",
-    "icms_percentual",
+    "ipi_percent",
+    "icms_percent",
     "valor_unitario"
 ]
 ws.append(headers)

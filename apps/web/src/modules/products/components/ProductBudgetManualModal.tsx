@@ -3,7 +3,30 @@ import { Plus, Trash2, Save, ShoppingCart, Building2, Package, Loader2, Truck, U
 import { AnimatePresence, motion } from 'framer-motion';
 import { productApi } from '../api/productApi';
 import { api } from '../../../services/api';
-import type { OpportunityBudgetManualCreatePayload, OpportunityBudgetItemCreatePayload } from '../../opportunities/types';
+export interface OpportunityBudgetItemCreatePayload {
+    codigo_fornecedor?: string;
+    descricao: string;
+    quantidade: number;
+    unidade: string;
+    ncm?: string;
+    ipi_percentual: number;
+    icms_percentual: number;
+    valor_unitario: number;
+    produto_id: string;
+}
+
+export interface OpportunityBudgetManualCreatePayload {
+    tipo_orcamento: 'REVENDA' | 'ATIVO_IMOBILIZADO';
+    nome_fornecedor_manual?: string;
+    cnpj_fornecedor?: string;
+    fornecedor_id?: string;
+    moeda: string;
+    cambio: number;
+    data_cotacao: string;
+    aliquota_orcamento: number;
+    criar_cenario_difal: boolean;
+    items: OpportunityBudgetItemCreatePayload[];
+}
 
 interface Supplier {
     id: string;
