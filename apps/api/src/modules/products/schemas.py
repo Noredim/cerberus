@@ -1,9 +1,21 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 import re
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
+
+# Fields that should NOT be uppercased (numeric codes, emails, etc.)
+_SKIP_UPPER = {'ncm_codigo', 'cest_codigo', 'cmt_codigo', 'email'}
+
+def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
+    """Uppercase all string values in a dict, skipping specified keys."""
+    if not isinstance(data, dict):
+        return data
+    for key, val in data.items():
+        if key not in skip and isinstance(val, str):
+            data[key] = val.upper()
+    return data
 
 class ProductType(str, Enum):
     EQUIPAMENTO = "EQUIPAMENTO"
@@ -28,6 +40,11 @@ class ProductBase(BaseModel):
     cest_codigo: Optional[str] = None
     cmt_codigo: Optional[str] = None
     ativo: bool = True
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
     @field_validator('ncm_codigo', mode='before')
     @classmethod
@@ -71,6 +88,11 @@ class ProductUpdate(BaseModel):
     cmt_codigo: Optional[str] = None
     ativo: Optional[bool] = None
     suppliers: Optional[List[ProductSupplierCreate]] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
     @field_validator('ncm_codigo', mode='before')
     @classmethod

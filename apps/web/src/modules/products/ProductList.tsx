@@ -11,12 +11,14 @@ import {
     Edit2,
     Trash2,
     Activity,
-    Briefcase
+    Briefcase,
+    ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { productApi } from './api/productApi';
 import { useAuth } from '../../contexts/AuthContext';
+import type { Product } from './types';
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '-';
@@ -292,7 +294,6 @@ const ProductList: React.FC = () => {
     );
 };
 
-// Add ArrowRight to the imports in the real file
-import { ArrowRight } from 'lucide-react';
+
 
 export default ProductList;

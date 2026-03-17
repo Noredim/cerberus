@@ -76,7 +76,6 @@ class PurchaseBudgetService:
         def _calculate_costs(item: PurchaseBudgetItem, is_revenda: bool):
             budget = item.budget
             ALIQ_INTERNA_DESTINO = 0.17 
-            UF_DESTINO = "MT"
             FATOR_BIT = 0.4117
             DESCONTO_CREDITO_OUTORGADO = 0.12
             ALIQUOTA_INTERESTADUAL_PADRAO = 0.12
@@ -107,12 +106,19 @@ class PurchaseBudgetService:
                 if any("BIT" in (b.nome or "").upper() for b in benefits):
                     bit_flag = True
 
+            # --- DETERMINE INTERSTATE OPERATION ---
+            from src.modules.companies.models import Company
+            company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
+            uf_destino = company.state_id.upper() if (company and company.state_id) else "MT"
+            uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
+            op_interestadual = (uf_origem != uf_destino)
+
             icms_from_budget = float(item.icms_percent)
             icms_entrada_effective = icms_from_budget if icms_from_budget <= 4 else 7
 
-            # --- CALCULATE ST ---
+            # --- CALCULATE ST (only for interstate operations) ---
             calc_icms_st_final = 0.0
-            if st_flag:
+            if st_flag and op_interestadual:
                 cred = icms_entrada_effective / 100.0
                 base_com_mva = (final_valor_unitario + ipi_unit) * (1 + (mva_percent / 100.0))
                 
@@ -127,8 +133,6 @@ class PurchaseBudgetService:
 
             # --- CALCULATE DIFAL ---
             c_valor_difal = 0.0
-            uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
-            op_interestadual = (uf_origem != UF_DESTINO)
             
             if op_interestadual:
                 base_com_ipi_e_frete = final_valor_unitario + ipi_unit + frete_unit

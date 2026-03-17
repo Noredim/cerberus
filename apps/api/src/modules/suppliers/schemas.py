@@ -1,8 +1,18 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List
 import re
 from datetime import datetime
 from uuid import UUID
+
+_SKIP_UPPER = {'cnpj', 'cep', 'email', 'municipality_id', 'state_id'}
+
+def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
+    if not isinstance(data, dict):
+        return data
+    for key, val in data.items():
+        if key not in skip and isinstance(val, str):
+            data[key] = val.upper()
+    return data
 
 class SupplierBase(BaseModel):
     cnpj: str = Field(..., min_length=14, max_length=14)
@@ -19,6 +29,11 @@ class SupplierBase(BaseModel):
     bairro: Optional[str] = None
     municipality_id: Optional[str] = None
     state_id: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
     @field_validator('cnpj', mode='before')
     @classmethod
@@ -41,6 +56,11 @@ class SupplierUpdate(BaseModel):
     municipality_id: Optional[str] = None
     state_id: Optional[str] = None
     active: Optional[bool] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
 class SupplierOut(SupplierBase):
     id: str # Using str to match model's primary key type (which is UUID-based but stored as String)

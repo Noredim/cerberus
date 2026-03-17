@@ -1,14 +1,30 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface CostComposition {
+  base_unitario: number;
+  ipi_percent: number;
+  ipi_unitario: number;
+  frete_cif_unitario: number;
+  has_st: boolean;
+  icms_st_normal: number;
+  cred_outorgado_percent: number;
+  cred_outorgado_valor: number;
+  icms_st_final: number;
+  is_bit: boolean;
+  custo_unit_final: number;
+}
 
 interface SalesBudgetItem {
   id?: string;
   product_id: string | null;
   product_nome: string;
   product_codigo: string;
+  ncm_codigo: string;
   tipo_item: 'MERCADORIA' | 'SERVICO_INSTALACAO' | 'SERVICO_MANUTENCAO';
   descricao_servico: string;
   usa_parametros_padrao: boolean;
@@ -30,14 +46,10 @@ interface SalesBudgetItem {
   lucro_unit: number;
   margem_unit: number;
   total_venda: number;
-  _expanded?: boolean;
+  cost_composition?: CostComposition;
 }
 
-const TIPO_LABELS: Record<string, string> = {
-  MERCADORIA: 'Mercadoria',
-  SERVICO_INSTALACAO: 'Serv. Instalação',
-  SERVICO_MANUTENCAO: 'Serv. Manutenção',
-};
+
 
 function calcItem(item: SalesBudgetItem, defaults: any): SalesBudgetItem {
   const isService = item.tipo_item !== 'MERCADORIA';
@@ -100,6 +112,7 @@ const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 export function SalesBudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { activeCompanyId } = useAuth();
   const isEditing = Boolean(id);
 
   const [loading, setLoading] = useState(false);
@@ -160,8 +173,8 @@ export function SalesBudgetForm() {
     const loadData = async () => {
       try {
         const [custRes, prodRes] = await Promise.all([
-          api.get('/customers', { params: { limit: 200 } }),
-          api.get('/products', { params: { limit: 500 } }),
+          api.get('/cadastro/clientes', { params: { limit: 200 } }),
+          api.get('/cadastro/produtos', { params: { limit: 500 } }),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data.items || []);
@@ -172,10 +185,33 @@ export function SalesBudgetForm() {
     loadData();
   }, []);
 
+  // Load company sales parameters as defaults for new budgets
+  useEffect(() => {
+    if (isEditing || !activeCompanyId) return;
+    const loadSalesParams = async () => {
+      try {
+        const { data } = await api.get(`/companies/${activeCompanyId}/sales-parameters`);
+        setMarkupPadrao(Number(data.mkp_padrao) || 1.35);
+        setPercDespesaAdm(Number(data.despesa_administrativa) || 0);
+        setPercComissao(Number(data.comissionamento) || 0);
+        setPercPis(Number(data.pis) || 0);
+        setPercCofins(Number(data.cofins) || 0);
+        setPercCsll(Number(data.csll) || 0);
+        setPercIrpj(Number(data.irpj) || 0);
+        setPercIss(Number(data.iss) || 0);
+        setPercIcmsInterno(Number(data.icms_interno) || 0);
+        setPercIcmsExterno(Number(data.icms_externo) || 0);
+      } catch (err) {
+        console.error('Failed to load company sales parameters:', err);
+      }
+    };
+    loadSalesParams();
+  }, [activeCompanyId, isEditing]);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    api.get(`/sales-budgets/${id}`).then(res => {
+    api.get(`/sales-budgets/${id}`).then(async (res) => {
       const d = res.data;
       setTitulo(d.titulo);
       setCustomerId(d.customer_id);
@@ -195,16 +231,56 @@ export function SalesBudgetForm() {
       setPercIss(d.perc_iss);
       setPercIcmsInterno(d.perc_icms_interno);
       setPercIcmsExterno(d.perc_icms_externo);
-      setItems(d.items || []);
+
+      // Load items and re-fetch cost_composition for each product
+      const loadedItems: SalesBudgetItem[] = d.items || [];
+      const enriched = await Promise.all(
+        loadedItems.map(async (item: SalesBudgetItem) => {
+          if (item.product_id) {
+            try {
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}`);
+              return { ...item, cost_composition: cc };
+            } catch { /* fallback: no composition */ }
+          }
+          return item;
+        })
+      );
+      setItems(enriched);
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const addProduct = (product: any) => {
+  const addProduct = async (product: any) => {
+    // Parallel: check ST + fetch cost composition
+    let hasSt = false;
+    let costComp: CostComposition | undefined;
+
+    const promises: Promise<void>[] = [];
+
+    if (product.ncm_codigo && activeCompanyId) {
+      promises.push(
+        api.get(`/sales-budgets/check-st`, {
+          params: { ncm_codigo: product.ncm_codigo, company_id: activeCompanyId }
+        }).then(({ data }) => { hasSt = data.has_st === true; })
+          .catch(err => console.error('ST check failed:', err))
+      );
+    }
+
+    if (product.id) {
+      promises.push(
+        api.get(`/sales-budgets/product-cost-composition/${product.id}`)
+          .then(({ data }) => { costComp = data; })
+          .catch(err => console.error('Cost composition fetch failed:', err))
+      );
+    }
+
+    await Promise.all(promises);
+
     const newItem: SalesBudgetItem = {
       product_id: product.id,
       product_nome: product.nome,
       product_codigo: product.codigo,
+      ncm_codigo: product.ncm_codigo || '',
       tipo_item: 'MERCADORIA',
       descricao_servico: '',
       usa_parametros_padrao: true,
@@ -214,21 +290,24 @@ export function SalesBudgetForm() {
       perc_frete_venda: 0, frete_venda_unit: 0,
       perc_pis: 0, pis_unit: 0, perc_cofins: 0, cofins_unit: 0,
       perc_csll: 0, csll_unit: 0, perc_irpj: 0, irpj_unit: 0,
-      perc_icms: 0, icms_unit: 0, tem_st: false,
+      perc_icms: 0, icms_unit: 0, tem_st: hasSt,
       perc_iss: 0, iss_unit: 0,
       perc_despesa_adm: 0, despesa_adm_unit: 0,
       perc_comissao: 0, comissao_unit: 0,
       lucro_unit: 0, margem_unit: 0, total_venda: 0,
+      cost_composition: costComp,
     };
     setItems(prev => [...prev, calcItem(newItem, defaults)]);
     setShowProductSearch(false);
   };
 
+  // @ts-expect-error — kept for future service items implementation
   const addService = (tipo: 'SERVICO_INSTALACAO' | 'SERVICO_MANUTENCAO') => {
     const newItem: SalesBudgetItem = {
       product_id: null,
       product_nome: '',
       product_codigo: '',
+      ncm_codigo: '',
       tipo_item: tipo,
       descricao_servico: '',
       usa_parametros_padrao: true,
@@ -260,18 +339,24 @@ export function SalesBudgetForm() {
     setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const toggleExpand = (idx: number) => {
-    setItems(prev => prev.map((item, i) => i === idx ? { ...item, _expanded: !item._expanded } : item));
-  };
+  // Tooltip state for cost composition and tax breakdown
+  const [hoveredCost, setHoveredCost] = useState<number | null>(null);
+  const [hoveredTax, setHoveredTax] = useState<number | null>(null);
 
   // Totals
   const totals = useMemo(() => {
     const t = {
       custo: 0, venda: 0, frete: 0, impostos: 0,
       despAdm: 0, comissao: 0, lucro: 0,
+      // Cost composition breakdown
+      base_fornecedor: 0, total_ipi: 0, total_frete_compra: 0, total_icms_st: 0,
+      // Tax breakdown (sales)
+      total_pis: 0, total_cofins: 0, total_csll: 0,
+      total_irpj: 0, total_icms: 0, total_iss: 0,
     };
     items.forEach(i => {
       const q = i.quantidade;
+      const cc = i.cost_composition;
       t.custo += i.custo_unit_base * q;
       t.venda += i.venda_unit * q;
       t.frete += i.frete_venda_unit * q;
@@ -279,6 +364,18 @@ export function SalesBudgetForm() {
       t.despAdm += i.despesa_adm_unit * q;
       t.comissao += i.comissao_unit * q;
       t.lucro += i.lucro_unit * q;
+      // Cost breakdown from composition
+      t.base_fornecedor += (cc?.base_unitario ?? i.custo_unit_base) * q;
+      t.total_ipi += (cc?.ipi_unitario ?? 0) * q;
+      t.total_frete_compra += (cc?.frete_cif_unitario ?? 0) * q;
+      t.total_icms_st += (cc?.icms_st_final ?? 0) * q;
+      // Tax breakdown
+      t.total_pis += i.pis_unit * q;
+      t.total_cofins += i.cofins_unit * q;
+      t.total_csll += i.csll_unit * q;
+      t.total_irpj += i.irpj_unit * q;
+      t.total_icms += i.icms_unit * q;
+      t.total_iss += i.iss_unit * q;
     });
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
   }, [items]);
@@ -336,7 +433,9 @@ export function SalesBudgetForm() {
       }
     } catch (err: any) {
       console.error('Save error:', err.response?.data || err);
-      alert('Erro ao salvar: ' + (err.response?.data?.erro || err.message));
+      const detail = err.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail.map((d: any) => d.msg).join(', ') : (typeof detail === 'string' ? detail : err.message);
+      alert('Erro ao salvar: ' + msg);
     } finally {
       setSaving(false);
     }
@@ -354,7 +453,7 @@ export function SalesBudgetForm() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-6 space-y-6 w-full">
       {/* Top Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -387,7 +486,7 @@ export function SalesBudgetForm() {
             </Button>
           )}
           {!isReadonly && (
-            <Button onClick={handleSave} disabled={saving}>
+            <Button type="button" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
               Salvar
             </Button>
@@ -425,6 +524,75 @@ export function SalesBudgetForm() {
         </div>
       </div>
 
+      {/* Consolidação — right after header */}
+      {items.length > 0 && (
+        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-3">
+          <h2 className="font-semibold text-text-primary text-lg">Consolidação</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Custo Total — with composition tooltip */}
+            <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
+              <span className="text-xs text-text-muted border-b border-dashed border-text-muted">Custo Total</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.custo)}</p>
+              <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
+                <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
+                  {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
+                  {totals.total_frete_compra > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span className="text-amber-300">+ {fmt(totals.total_frete_compra)}</span></div>}
+                  {totals.total_icms_st > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(totals.total_icms_st)}</span></div>}
+                  <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.custo)}</span></div>
+                </div>
+                <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+              </div>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Venda Total</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.venda)}</p>
+            </div>
+            {/* Impostos de Venda — with per-tax tooltip */}
+            <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
+              <span className="text-xs text-text-muted border-b border-dashed border-text-muted">Impostos de Venda</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.impostos)}</p>
+              <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
+                <div className="font-semibold text-sky-300 mb-2">Detalhamento dos Impostos</div>
+                <div className="space-y-1">
+                  {totals.total_pis > 0 && <div className="flex justify-between"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>}
+                  {totals.total_cofins > 0 && <div className="flex justify-between"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>}
+                  {totals.total_csll > 0 && <div className="flex justify-between"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>}
+                  {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
+                  {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
+                  {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
+                  <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
+                </div>
+                <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+              </div>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Frete Venda</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.frete)}</p>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Desp. Adm.</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.despAdm)}</p>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Comissão</span>
+              <p className="text-lg font-bold text-text-primary">{fmt(totals.comissao)}</p>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Lucro</span>
+              <p className={`text-lg font-bold ${margemClass}`}>{fmt(totals.lucro)}</p>
+            </div>
+            <div className="bg-bg-deep rounded-lg p-3">
+              <span className="text-xs text-text-muted">Margem Líquida</span>
+              <p className={`text-lg font-bold ${margemClass}`}>
+                {fmtPct(totals.margem)}<span className="text-xs ml-1 font-normal">({margemLabel})</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pricing Defaults */}
       <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
         <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
@@ -454,186 +622,253 @@ export function SalesBudgetForm() {
         </div>
       </div>
 
-      {/* Items */}
+      {/* Items - Flat Data Table */}
       <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-text-primary text-lg">Itens do Orçamento</h2>
+          <h2 className="font-semibold text-text-primary text-lg">Itens de Mercadoria</h2>
           {!isReadonly && (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Mercadoria
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => addService('SERVICO_INSTALACAO')}>
-                <Plus className="w-4 h-4 mr-1" /> Instalação
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => addService('SERVICO_MANUTENCAO')}>
-                <Plus className="w-4 h-4 mr-1" /> Manutenção
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Adicionar Item
+            </Button>
           )}
         </div>
 
         {items.length === 0 ? (
           <div className="text-center py-12 text-text-muted text-sm">Nenhum item adicionado.</div>
         ) : (
-          <div className="space-y-3">
-            {items.map((item, idx) => (
-              <div key={idx} className="border border-border-subtle rounded-lg overflow-hidden">
-                {/* Item Row */}
-                <div className="flex items-center gap-2 px-4 py-3 bg-bg-deep/30">
-                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${item.tipo_item === 'MERCADORIA' ? 'bg-blue-50 text-blue-700' : 'bg-teal-50 text-teal-700'}`}>
-                    {TIPO_LABELS[item.tipo_item]}
-                  </span>
-                  <span className="font-medium text-sm text-text-primary flex-1 truncate">
-                    {item.product_nome || item.descricao_servico || '—'}
-                    {item.product_codigo && <span className="text-text-muted ml-1 text-xs">({item.product_codigo})</span>}
-                  </span>
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
-                    <span>Custo: {fmt(item.custo_unit_base)}</span>
-                    <span>×{item.markup}</span>
-                    <span className="font-semibold text-text-primary">Venda: {fmt(item.venda_unit)}</span>
-                    <span>Qtd: {item.quantidade}</span>
-                    <span className="font-bold text-text-primary">{fmt(item.total_venda)}</span>
-                    <span className={`font-semibold ${item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>
-                      {fmtPct(item.margem_unit)}
-                    </span>
-                  </div>
-                  <button onClick={() => toggleExpand(idx)} className="p-1 hover:bg-bg-deep rounded transition-colors">
-                    {item._expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                  {!isReadonly && (
-                    <button onClick={() => removeItem(idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+          <div>
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                <tr>
+                  <th className="px-1.5 py-2 whitespace-nowrap">Produto</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
+                {items.map((item, idx) => {
+                  const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
+                  const custoTotal = item.custo_unit_base * item.quantidade;
+                  const lucroTotal = item.lucro_unit * item.quantidade;
+                  const vendaTotal = item.venda_unit * item.quantidade;
+                  const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
 
-                {/* Expanded Detail */}
-                {item._expanded && (
-                  <div className="px-4 py-3 border-t border-border-subtle space-y-3">
-                    {item.tipo_item !== 'MERCADORIA' && (
-                      <div>
-                        <label className="block text-xs font-medium text-text-muted mb-1">Descrição do Serviço</label>
-                        <input value={item.descricao_servico} onChange={e => updateItem(idx, 'descricao_servico', e.target.value)} disabled={isReadonly}
-                          className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm disabled:opacity-60" />
-                      </div>
-                    )}
-                    <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                      <div>
-                        <label className="block text-xs text-text-muted mb-1">Custo Unit.</label>
-                        <input type="number" step="0.01" value={item.custo_unit_base} onChange={e => updateItem(idx, 'custo_unit_base', +e.target.value)} disabled={isReadonly}
-                          className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm text-right disabled:opacity-60" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-text-muted mb-1">Markup</label>
-                        <input type="number" step="0.01" value={item.markup} onChange={e => updateItem(idx, 'markup', +e.target.value)} disabled={isReadonly}
-                          className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm text-right disabled:opacity-60" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-text-muted mb-1">Quantidade</label>
-                        <input type="number" step="1" min="1" value={item.quantidade} onChange={e => updateItem(idx, 'quantidade', +e.target.value)} disabled={isReadonly}
-                          className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm text-right disabled:opacity-60" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-text-muted mb-1 flex items-center gap-1">
-                          Padrão
-                        </label>
-                        <select value={item.usa_parametros_padrao ? 'true' : 'false'} onChange={e => updateItem(idx, 'usa_parametros_padrao', e.target.value === 'true')} disabled={isReadonly}
-                          className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm disabled:opacity-60">
-                          <option value="true">Sim</option>
-                          <option value="false">Não</option>
-                        </select>
-                      </div>
-                      {item.tipo_item === 'MERCADORIA' && (
-                        <div>
-                          <label className="block text-xs text-text-muted mb-1">Subst. Tributária</label>
-                          <select value={item.tem_st ? 'true' : 'false'} onChange={e => updateItem(idx, 'tem_st', e.target.value === 'true')} disabled={isReadonly}
-                            className="w-full px-2 py-1.5 border border-border-subtle rounded bg-bg-deep text-sm disabled:opacity-60">
-                            <option value="true">Sim</option>
-                            <option value="false">Não</option>
-                          </select>
+                  return (
+                    <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
+                      {/* Produto */}
+                      <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
+                        <div className="flex flex-col truncate">
+                          <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || item.descricao_servico || '—'}</span>
+                          {item.product_codigo && <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>}
                         </div>
-                      )}
-                    </div>
+                      </td>
 
-                    {/* Calculation Memo */}
-                    <div className="bg-bg-deep rounded-lg p-3 text-xs font-mono space-y-1 text-text-muted">
-                      <div className="text-text-primary font-semibold text-sm mb-2">Memória de Cálculo</div>
-                      <div className="flex justify-between"><span>Custo produto</span><span>{fmt(item.custo_unit_base)}</span></div>
-                      <div className="flex justify-between"><span>Markup {item.markup}</span><span>{fmt(item.venda_unit)}</span></div>
-                      {item.tipo_item === 'MERCADORIA' && (
-                        <>
-                          <div className="flex justify-between"><span>Frete venda {fmtPct(item.perc_frete_venda)}</span><span>{fmt(item.frete_venda_unit)}</span></div>
-                          <div className="flex justify-between"><span>PIS {fmtPct(item.perc_pis)}</span><span>{fmt(item.pis_unit)}</span></div>
-                          <div className="flex justify-between"><span>COFINS {fmtPct(item.perc_cofins)}</span><span>{fmt(item.cofins_unit)}</span></div>
-                          <div className="flex justify-between"><span>CSLL {fmtPct(item.perc_csll)}</span><span>{fmt(item.csll_unit)}</span></div>
-                          <div className="flex justify-between"><span>IRPJ {fmtPct(item.perc_irpj)}</span><span>{fmt(item.irpj_unit)}</span></div>
-                          <div className="flex justify-between"><span>ICMS {fmtPct(item.perc_icms)} {item.tem_st ? '(ST — isento)' : ''}</span><span>{fmt(item.icms_unit)}</span></div>
-                        </>
-                      )}
-                      {item.tipo_item !== 'MERCADORIA' && (
-                        <div className="flex justify-between"><span>ISS {fmtPct(item.perc_iss)}</span><span>{fmt(item.iss_unit)}</span></div>
-                      )}
-                      <div className="flex justify-between"><span>Desp. Adm. {fmtPct(item.perc_despesa_adm)}</span><span>{fmt(item.despesa_adm_unit)}</span></div>
-                      <div className="flex justify-between"><span>Comissão {fmtPct(item.perc_comissao)}</span><span>{fmt(item.comissao_unit)}</span></div>
-                      <div className="border-t border-border-subtle my-1" />
-                      <div className="flex justify-between font-bold text-text-primary">
-                        <span>Lucro</span><span>{fmt(item.lucro_unit)}</span>
-                      </div>
-                      <div className={`flex justify-between font-bold ${item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>
-                        <span>Margem</span><span>{fmtPct(item.margem_unit)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                      {/* QTD — editable */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                        <input
+                          type="number" step="1" min="1" value={item.quantidade}
+                          onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
+                          disabled={isReadonly}
+                          className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                        />
+                      </td>
+
+                      {/* Custo Unit — with composition tooltip */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right relative"
+                        onMouseEnter={() => setHoveredCost(idx)}
+                        onMouseLeave={() => setHoveredCost(null)}
+                      >
+                        <span className="cursor-help border-b border-dashed border-text-muted">{fmt(item.custo_unit_base)}</span>
+                        {hoveredCost === idx && (() => {
+                          const cc = item.cost_composition;
+                          const baseU = cc?.base_unitario ?? item.custo_unit_base;
+                          const ipiPct = cc?.ipi_percent ?? 0;
+                          const ipiU = cc?.ipi_unitario ?? 0;
+                          const freteU = cc?.frete_cif_unitario ?? 0;
+                          const hasSt = cc?.has_st ?? false;
+                          const stNormal = cc?.icms_st_normal ?? 0;
+                          const credPct = cc?.cred_outorgado_percent ?? 0;
+                          const credVal = cc?.cred_outorgado_valor ?? 0;
+                          const stFinal = cc?.icms_st_final ?? 0;
+                          const isBit = cc?.is_bit ?? false;
+                          const custoFinal = cc?.custo_unit_final ?? item.custo_unit_base;
+                          return (
+                            <div className="absolute right-0 top-full mt-1 z-30 bg-surface border border-border-subtle rounded-lg shadow-xl p-3 w-72 text-xs">
+                              <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                Composição do Custo
+                              </div>
+                              <div className="space-y-1 font-mono text-text-muted">
+                                <div className="flex justify-between">
+                                  <span>Base (Unit.):</span>
+                                  <span className="font-semibold text-text-primary">{fmt(baseU)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-amber-600">IPI ({ipiPct.toFixed(0)}%):</span>
+                                  <span className="text-amber-600">+ {fmt(ipiU)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-amber-600">Frete CIF:</span>
+                                  <span className="text-amber-600">+ {fmt(freteU)}</span>
+                                </div>
+                                {hasSt && (
+                                  <>
+                                    <div className="border-t border-border-subtle my-1" />
+                                    <div className="flex justify-between">
+                                      <span className="text-amber-600">ICMS-ST {isBit ? '(BIT)' : '(Normal)'} unit.:</span>
+                                      <span className="text-amber-600">+ {fmt(stNormal)}</span>
+                                    </div>
+                                    {!isBit && credPct > 0 && (
+                                      <>
+                                        <div className="flex justify-between">
+                                          <span className="text-green-600">Créd. Outorgado ({credPct.toFixed(0)}%):</span>
+                                          <span className="text-green-600">- {fmt(credVal)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-amber-600">ICMS-ST Final unit.:</span>
+                                          <span className="text-amber-600">+ {fmt(stFinal)}</span>
+                                        </div>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                                <div className="flex justify-between border-t border-border-subtle mt-1.5 pt-1.5 font-bold text-text-primary">
+                                  <span>Custo Unit. Final:</span>
+                                  <span>{fmt(custoFinal)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Custo Total */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                        {fmt(custoTotal)}
+                      </td>
+
+                      {/* MKP — editable */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                        <input
+                          type="number" step="0.01" value={item.markup}
+                          onChange={e => updateItem(idx, 'markup', +e.target.value)}
+                          disabled={isReadonly}
+                          className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                        />
+                      </td>
+
+                      {/* Venda Unit */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                        {fmt(item.venda_unit)}
+                      </td>
+
+                      {/* Frete Venda */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                        {fmt(item.frete_venda_unit)}
+                      </td>
+
+                      {/* Impostos — with breakdown tooltip */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right relative"
+                        onMouseEnter={() => setHoveredTax(idx)}
+                        onMouseLeave={() => setHoveredTax(null)}
+                      >
+                        <span className="cursor-help border-b border-dashed border-text-muted">{fmt(totalImpostos)}</span>
+                        {hoveredTax === idx && (
+                          <div className="absolute right-0 top-full mt-1 z-30 bg-surface border border-border-subtle rounded-lg shadow-xl p-3 w-72 text-xs">
+                            <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                              <Info className="w-3.5 h-3.5 text-brand-primary" />
+                              Detalhamento de Impostos
+                            </div>
+                            <div className="space-y-1.5 font-mono text-text-muted">
+                              {item.tipo_item === 'MERCADORIA' ? (
+                                <>
+                                  <div className="flex justify-between"><span>PIS ({fmtPct(item.perc_pis)})</span><span>{fmt(item.pis_unit)}</span></div>
+                                  <div className="flex justify-between"><span>COFINS ({fmtPct(item.perc_cofins)})</span><span>{fmt(item.cofins_unit)}</span></div>
+                                  <div className="flex justify-between"><span>CSLL ({fmtPct(item.perc_csll)})</span><span>{fmt(item.csll_unit)}</span></div>
+                                  <div className="flex justify-between"><span>IRPJ ({fmtPct(item.perc_irpj)})</span><span>{fmt(item.irpj_unit)}</span></div>
+                                  <div className="flex justify-between">
+                                    <span>ICMS ({fmtPct(item.perc_icms)}){item.tem_st ? ' — ST isento' : ''}</span>
+                                    <span>{fmt(item.icms_unit)}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex justify-between"><span>ISS ({fmtPct(item.perc_iss)})</span><span>{fmt(item.iss_unit)}</span></div>
+                              )}
+                              <div className="border-t border-border-subtle mt-2 pt-2">
+                                <div className="flex justify-between font-bold text-text-primary">
+                                  <span>Total Impostos</span>
+                                  <span>{fmt(totalImpostos)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Desp. Adm — valor */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                        {fmt(item.despesa_adm_unit)}
+                      </td>
+
+                      {/* Comissão — valor */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                        {fmt(item.comissao_unit)}
+                      </td>
+
+                      {/* Lucro Unit */}
+                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
+                        {fmt(item.lucro_unit)}
+                      </td>
+
+                      {/* Margem */}
+                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                        {fmtPct(item.margem_unit)}
+                      </td>
+
+                      {/* Venda Total */}
+                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
+                        {fmt(vendaTotal)}
+                      </td>
+
+                      {/* Lucro Total */}
+                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                        {fmt(lucroTotal)}
+                      </td>
+
+                      {/* Ações */}
+                      <td className="px-1 py-2 whitespace-nowrap text-center">
+                        {!isReadonly && (
+                          <button
+                            onClick={() => removeItem(idx)}
+                            className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                            title="Remover item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Totals */}
-      {items.length > 0 && (
-        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-3">
-          <h2 className="font-semibold text-text-primary text-lg">Consolidação</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Custo Total</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.custo)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Venda Total</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.venda)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Impostos</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.impostos)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Frete Venda</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.frete)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Desp. Adm.</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.despAdm)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Comissão</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.comissao)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Lucro</span>
-              <p className={`text-lg font-bold ${margemClass}`}>{fmt(totals.lucro)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Margem Líquida</span>
-              <p className={`text-lg font-bold ${margemClass}`}>
-                {fmtPct(totals.margem)}<span className="text-xs ml-1 font-normal">({margemLabel})</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Product Search Modal */}
       {showProductSearch && (

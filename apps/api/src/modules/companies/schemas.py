@@ -1,6 +1,16 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Any
 import re
+
+_SKIP_UPPER = {'cnpj', 'cep', 'email', 'municipality_id', 'state_id', 'cnae_codigo'}
+
+def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
+    if not isinstance(data, dict):
+        return data
+    for key, val in data.items():
+        if key not in skip and isinstance(val, str):
+            data[key] = val.upper()
+    return data
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -123,6 +133,11 @@ class CompanyCreate(BaseModel):
     benefits: List[CompanyBenefitCreate] = []
     qsa: List[CompanyQsaBase] = []
 
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
+
     @field_validator('cnpj', mode='before')
     @classmethod
     def clean_cnpj(cls, v):
@@ -154,6 +169,11 @@ class CompanyUpdate(BaseModel):
     initial_tax_profile: Optional[CompanyTaxProfileBase] = None
     benefits: Optional[List[CompanyBenefitCreate]] = None
     qsa: Optional[List[CompanyQsaBase]] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
     @field_validator('cnpj', mode='before')
     @classmethod

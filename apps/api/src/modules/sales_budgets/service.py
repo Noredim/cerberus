@@ -1,14 +1,16 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func, literal_column
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from uuid import UUID
+import re
 
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, SalesBudgetResponsavel
 from src.modules.sales_budgets.schemas import SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetItemCreate
 from src.modules.products.models import Product
 from src.modules.companies.models import Company, CompanySalesParameter
 from src.modules.customers.models import Customer
-from src.modules.fiscal.models import NcmRule
+from src.modules.ncm_st.models import NcmStHeader, NcmStItem
 
 
 def _d(val) -> Decimal:
@@ -39,15 +41,26 @@ def get_next_numero(db: Session, tenant_id: str) -> str:
     return f"OV-{num:04d}"
 
 
-def check_st_flag(db: Session, ncm_codigo: Optional[str], uf: str) -> bool:
-    """Check if product has ST based on NCM + UF rule."""
+def check_st_flag(db: Session, tenant_id: str, ncm_codigo: Optional[str], company_uf: str) -> bool:
+    """Check if product has active ST rule via NcmStHeader/NcmStItem.
+
+    Uses the same data source as the Product's Fiscal & Impostos tab.
+    If an active ST rule is found, ICMS should NOT be calculated.
+    """
     if not ncm_codigo or len(ncm_codigo) < 4:
         return False
-    rule = db.query(NcmRule).filter(
-        NcmRule.ncm.startswith(ncm_codigo[:4]),
-        NcmRule.uf == uf
+    ncm_clean = re.sub(r'[^0-9]', '', ncm_codigo)
+    if len(ncm_clean) < 4:
+        return False
+    match = db.query(NcmStItem).join(NcmStHeader).filter(
+        NcmStHeader.tenant_id == tenant_id,
+        NcmStHeader.state_id == company_uf,
+        NcmStHeader.is_active == True,
+        NcmStItem.is_active == True,
+        func.length(NcmStItem.ncm_normalizado) >= 4,
+        literal_column(f"'{ncm_clean}'").like(NcmStItem.ncm_normalizado + '%')
     ).first()
-    return bool(rule and rule.st_flag)
+    return match is not None
 
 
 def calculate_item(
@@ -212,7 +225,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         # Check ST
         has_st = False
         if product and item_data.tipo_item == "MERCADORIA":
-            has_st = item_data.tem_st or check_st_flag(db, product.ncm_codigo, company_uf)
+            has_st = item_data.tem_st or check_st_flag(db, tenant_id, product.ncm_codigo, company_uf)
 
         # Resolve ICMS based on UF
         if not item_data.usa_parametros_padrao and item_data.perc_icms is not None:
@@ -287,7 +300,7 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
 
         has_st = False
         if product and item_data.tipo_item == "MERCADORIA":
-            has_st = item_data.tem_st or check_st_flag(db, product.ncm_codigo, company_uf)
+            has_st = item_data.tem_st or check_st_flag(db, budget.tenant_id, product.ncm_codigo, company_uf)
 
         if item_data.usa_parametros_padrao or item_data.perc_icms is None:
             if company_uf == customer_uf:

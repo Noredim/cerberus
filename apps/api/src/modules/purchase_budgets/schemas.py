@@ -1,9 +1,19 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+
+_SKIP_UPPER = {'supplier_id', 'payment_condition_id', 'vendedor_email', 'ncm', 'product_id', 'budget_item_id'}
+
+def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
+    if not isinstance(data, dict):
+        return data
+    for key, val in data.items():
+        if key not in skip and isinstance(val, str):
+            data[key] = val.upper()
+    return data
 
 class BudgetTypeEnum(str, Enum):
     REVENDA = 'REVENDA'
@@ -21,6 +31,11 @@ class PaymentConditionBase(BaseModel):
     descricao: str
     prazo: int = 0
     parcelas: int = 1
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
 class PaymentConditionCreate(PaymentConditionBase):
     pass
@@ -114,6 +129,11 @@ class PurchaseBudgetBase(BaseModel):
     frete_tipo: FreightTypeEnum
     frete_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
     ipi_calculado: bool = False
+
+    @model_validator(mode='before')
+    @classmethod
+    def uppercase_all(cls, data):
+        return _uppercase_strings(data) if isinstance(data, dict) else data
 
 class PurchaseBudgetCreate(PurchaseBudgetBase):
     items: List[PurchaseBudgetItemCreate]

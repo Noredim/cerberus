@@ -22,16 +22,16 @@ class SalesBudget(Base):
 
     # Pricing defaults (inherited from CompanySalesParameter on create)
     markup_padrao = Column(Numeric(10, 4), nullable=False, default=1.0)
-    perc_despesa_adm = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_comissao = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_frete_venda = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_pis = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_cofins = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_csll = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_irpj = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_iss = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_icms_interno = Column(Numeric(5, 4), nullable=False, default=0)
-    perc_icms_externo = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_despesa_adm = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_comissao = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_frete_venda = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_pis = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_cofins = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_csll = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_irpj = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_iss = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_icms_interno = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_icms_externo = Column(Numeric(6, 4), nullable=False, default=0)
 
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
@@ -71,32 +71,32 @@ class SalesBudgetItem(Base):
     venda_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # Freight
-    perc_frete_venda = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_frete_venda = Column(Numeric(6, 4), nullable=False, default=0)
     frete_venda_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # Federal taxes
-    perc_pis = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_pis = Column(Numeric(6, 4), nullable=False, default=0)
     pis_unit = Column(Numeric(15, 4), nullable=False, default=0)
-    perc_cofins = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_cofins = Column(Numeric(6, 4), nullable=False, default=0)
     cofins_unit = Column(Numeric(15, 4), nullable=False, default=0)
-    perc_csll = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_csll = Column(Numeric(6, 4), nullable=False, default=0)
     csll_unit = Column(Numeric(15, 4), nullable=False, default=0)
-    perc_irpj = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_irpj = Column(Numeric(6, 4), nullable=False, default=0)
     irpj_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # ICMS (merchandise only)
-    perc_icms = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_icms = Column(Numeric(6, 4), nullable=False, default=0)
     icms_unit = Column(Numeric(15, 4), nullable=False, default=0)
     tem_st = Column(Boolean, nullable=False, default=False)
 
     # ISS (services only)
-    perc_iss = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_iss = Column(Numeric(6, 4), nullable=False, default=0)
     iss_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # Administrative & commission
-    perc_despesa_adm = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_despesa_adm = Column(Numeric(6, 4), nullable=False, default=0)
     despesa_adm_unit = Column(Numeric(15, 4), nullable=False, default=0)
-    perc_comissao = Column(Numeric(5, 4), nullable=False, default=0)
+    perc_comissao = Column(Numeric(6, 4), nullable=False, default=0)
     comissao_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # Result

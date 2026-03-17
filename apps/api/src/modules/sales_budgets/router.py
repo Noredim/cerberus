@@ -45,6 +45,156 @@ def _calc_margem(items) -> float:
     return round(total_lucro / total_venda * 100, 2)
 
 
+@router.get("/check-st")
+def check_st(
+    ncm_codigo: str,
+    company_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Check if a product NCM has ST rules for the company's UF."""
+    from src.modules.companies.models import Company
+    company = db.query(Company).filter(Company.id == company_id).first()
+    company_uf = company.state_id if company else ""
+    has_st = service.check_st_flag(db, current_user.tenant_id, ncm_codigo, company_uf)
+    return {"has_st": has_st}
+
+
+@router.get("/product-cost-composition/{product_id}")
+def get_product_cost_composition(
+    product_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Return the full cost composition breakdown for a product."""
+    from src.modules.products.models import Product
+    from src.modules.products.service import ProductService
+    from src.modules.ncm.services.ncm_service import NcmService
+    from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.tenant_id == current_user.tenant_id
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    custo_ref = float(product.vlr_referencia_revenda or 0)
+
+    # Default fallback when no linked budget
+    result = {
+        "base_unitario": custo_ref,
+        "ipi_percent": 0.0,
+        "ipi_unitario": 0.0,
+        "frete_cif_unitario": 0.0,
+        "has_st": False,
+        "icms_st_normal": 0.0,
+        "cred_outorgado_percent": 0.0,
+        "cred_outorgado_valor": 0.0,
+        "icms_st_final": 0.0,
+        "is_bit": False,
+        "custo_unit_final": custo_ref,
+    }
+
+    if not product.orcamento_referencia_revenda_id:
+        return result
+
+    budget_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+        PurchaseBudgetItem.product_id == product_id,
+        PurchaseBudget.id == product.orcamento_referencia_revenda_id
+    ).first()
+
+    if not budget_item:
+        return result
+
+    budget = budget_item.budget
+    qtd = float(budget_item.quantidade) if float(budget_item.quantidade) > 0 else 1
+
+    # Negotiated unit price
+    base_unitario = float(budget_item.valor_unitario)
+    if budget.negotiations:
+        latest_neg = sorted(budget.negotiations, key=lambda x: x.data_negociacao, reverse=True)[0]
+        for n_item in latest_neg.items:
+            if n_item.budget_item_id == budget_item.id:
+                base_unitario = float(n_item.valor_final) / qtd
+
+    ipi_unitario = float(budget_item.ipi_valor) / qtd if qtd > 0 else 0
+    frete_unitario = float(budget_item.frete_valor) / qtd if qtd > 0 else 0
+
+    # --- ST calculation (mirrors PurchaseBudgetService._calculate_costs) ---
+    ALIQ_INTERNA_DESTINO = 0.17
+    FATOR_BIT = 0.4117
+    DESCONTO_CREDITO_OUTORGADO = 0.12
+
+    st_flag = False
+    mva_percent = 0.0
+    bit_flag = False
+    icms_st_normal = 0.0
+    cred_outorgado_valor = 0.0
+    calc_icms_st_final = 0.0
+
+    prod_service = ProductService(db)
+    ncm_service = NcmService(db)
+
+    if product.ncm_codigo:
+        mva_data = prod_service.get_product_mva(
+            budget.tenant_id, product.ncm_codigo, str(budget.company_id), "REVENDA"
+        )
+        if mva_data:
+            st_flag = True
+            mva_percent = float(mva_data.get("mva_percent", 0))
+
+        benefits = ncm_service.get_linked_benefits(product.ncm_codigo)
+        benefits = [b for b in benefits if str(b.tenant_id) == str(budget.tenant_id)]
+        if any("BIT" in (b.nome or "").upper() for b in benefits):
+            bit_flag = True
+
+    icms_from_budget = float(budget_item.icms_percent)
+    icms_entrada_effective = icms_from_budget if icms_from_budget <= 4 else 7
+
+    # --- DETERMINE INTERSTATE OPERATION ---
+    from src.modules.companies.models import Company
+    company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
+    uf_destino = company.state_id.upper() if (company and company.state_id) else "MT"
+    uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
+    op_interestadual = (uf_origem != uf_destino)
+
+    # --- CALCULATE ST (only for interstate operations) ---
+    if st_flag and op_interestadual:
+        cred = icms_entrada_effective / 100.0
+        base_com_mva = (base_unitario + ipi_unitario) * (1 + (mva_percent / 100.0))
+
+        if bit_flag:
+            icms_st_saida = base_com_mva * FATOR_BIT * ALIQ_INTERNA_DESTINO
+            icms_credito = base_unitario * FATOR_BIT * cred
+            calc_icms_st_final = max(0.0, icms_st_saida - icms_credito)
+            icms_st_normal = calc_icms_st_final  # BIT: single step
+        else:
+            icms_st_bruto = base_com_mva * ALIQ_INTERNA_DESTINO - base_unitario * cred
+            icms_st_normal = max(0.0, icms_st_bruto)
+            cred_outorgado_valor = icms_st_normal * DESCONTO_CREDITO_OUTORGADO
+            calc_icms_st_final = max(0.0, icms_st_normal - cred_outorgado_valor)
+
+    custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
+
+    return {
+        "base_unitario": round(base_unitario, 2),
+        "ipi_percent": float(budget_item.ipi_percent or 0),
+        "ipi_unitario": round(ipi_unitario, 2),
+        "frete_cif_unitario": round(frete_unitario, 2),
+        "has_st": st_flag and op_interestadual,
+        "icms_st_normal": round(icms_st_normal, 2),
+        "cred_outorgado_percent": DESCONTO_CREDITO_OUTORGADO * 100 if (st_flag and op_interestadual and not bit_flag) else 0,
+        "cred_outorgado_valor": round(cred_outorgado_valor, 2),
+        "icms_st_final": round(calc_icms_st_final, 2),
+        "is_bit": bit_flag,
+        "is_intrastate": not op_interestadual,
+        "uf_origem": uf_origem,
+        "uf_destino": uf_destino,
+        "custo_unit_final": round(custo_unit_final, 2),
+    }
+
+
 @router.post("")
 def create_budget(
     data: SalesBudgetCreate,

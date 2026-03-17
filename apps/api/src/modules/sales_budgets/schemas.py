@@ -29,15 +29,15 @@ class SalesBudgetItemBase(BaseModel):
     markup: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
     quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
     # Override percentages (when usa_parametros_padrao = False)
-    perc_frete_venda: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_pis: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_cofins: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_csll: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_irpj: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_icms: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_iss: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_despesa_adm: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
-    perc_comissao: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=4)
+    perc_frete_venda: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_pis: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_cofins: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_csll: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_irpj: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_icms: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_iss: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_despesa_adm: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_comissao: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     tem_st: bool = False
 
 
@@ -74,16 +74,16 @@ class SalesBudgetBase(BaseModel):
     observacoes: Optional[str] = None
     data_orcamento: datetime
     markup_padrao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
-    perc_despesa_adm: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_comissao: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_frete_venda: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_pis: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_cofins: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_csll: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_irpj: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_iss: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_icms_interno: Decimal = Field(default=0, max_digits=5, decimal_places=4)
-    perc_icms_externo: Decimal = Field(default=0, max_digits=5, decimal_places=4)
+    perc_despesa_adm: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_comissao: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_frete_venda: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_pis: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_cofins: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_csll: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_irpj: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_iss: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_icms_interno: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_icms_externo: Decimal = Field(default=0, max_digits=6, decimal_places=4)
 
 
 class SalesBudgetCreate(SalesBudgetBase):
