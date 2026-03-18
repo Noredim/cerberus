@@ -27,6 +27,8 @@ class RentalBudgetItemBase(BaseModel):
     custo_op_mensal_kit: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     
     is_kit_instalacao: bool = False
+    tipo_contrato_kit: Optional[str] = None
+    kit_taxa_juros_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=6)
     kit_custo_produtos: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_custo_servicos: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_pis: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)

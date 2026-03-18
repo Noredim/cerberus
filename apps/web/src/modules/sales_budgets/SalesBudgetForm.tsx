@@ -64,6 +64,8 @@ interface RentalBudgetItem {
   
   // Kit Integration Fields
   is_kit_instalacao?: boolean;
+  tipo_contrato_kit?: string | null;
+  kit_taxa_juros_mensal?: number | null;
   kit_custo_produtos?: number;
   kit_custo_servicos?: number;
   kit_pis?: number;
@@ -103,13 +105,119 @@ interface RentalBudgetItem {
 }
 
 function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
+  const isKit = !!item.opportunity_kit_id;
+  const isInstalacao = !!item.is_kit_instalacao;
+  
+  let isComodato = rd.tipo_receita_rental === 'COMODATO';
+  if (isKit && item.tipo_contrato_kit) {
+      isComodato = item.tipo_contrato_kit === 'COMODATO';
+  }
+
+  if (isKit) {
+    const custoAquisicaoUnit = Number(item.custo_aquisicao_unit || 0);
+    const prazo = Number(item.prazo_contrato || rd.prazo_contrato_meses || 36);
+    const custoOpMensalUnit = Number(item.custo_op_mensal_kit || 0);
+    
+    let manutencaoMensalUnit = 0;
+    if (!isInstalacao) {
+      const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 0) : Number(item.taxa_manutencao_anual_item || 0);
+      manutencaoMensalUnit = (custoAquisicaoUnit * (taxaManut / 100)) / 12;
+    }
+    const custoManutMensalUnit = manutencaoMensalUnit + custoOpMensalUnit;
+    
+    const fm = Number(item.fator_margem || 1);
+    const valorBaseVendaUnit = custoAquisicaoUnit * fm;
+
+    let taxa = Number(rd.taxa_juros_mensal || 0) / 100;
+    if (item.kit_taxa_juros_mensal != null) {
+        taxa = Number(item.kit_taxa_juros_mensal) / 100;
+    }
+    
+    let txLocacao = 0;
+    
+    let prazoMensalidades = prazo - Number(rd.prazo_instalacao_meses || 0);
+    if (prazoMensalidades < 0) prazoMensalidades = 0;
+
+    if (isInstalacao) {
+        txLocacao = 1;
+    } else if (prazoMensalidades > 0 && taxa > 0) {
+        txLocacao = taxa / (1 - Math.pow(1 + taxa, -prazoMensalidades));
+    } else if (prazoMensalidades > 0 && taxa === 0) {
+        txLocacao = 1 / prazoMensalidades;
+    }
+
+    const parcelaLocacaoUnit = valorBaseVendaUnit * txLocacao;
+    const valorBaseFinalUnit = parcelaLocacaoUnit + manutencaoMensalUnit + custoOpMensalUnit;
+
+    let pImp = 0;
+    if (item.kit_pis != null) {
+        // Kit defines its own taxes unconditionally
+        pImp = Number(item.kit_pis || 0) + Number(item.kit_cofins || 0) + Number(item.kit_csll || 0) + Number(item.kit_irpj || 0) + Number(item.kit_iss || 0);
+    } else {
+        pImp = Number(rd.perc_pis_rental || 0) + Number(rd.perc_cofins_rental || 0) + Number(rd.perc_csll_rental || 0) + Number(rd.perc_irpj_rental || 0);
+        if (isComodato) pImp += Number(rd.perc_iss_rental || 0);
+    }
+
+    let valorMensalUnit = 0;
+    let impostosUnit = 0;
+    if (isInstalacao) {
+        valorMensalUnit = valorBaseFinalUnit;
+        impostosUnit = valorMensalUnit * (pImp / 100);
+    } else {
+        const beforeTaxes = valorBaseFinalUnit;
+        impostosUnit = beforeTaxes * (pImp / 100);
+        valorMensalUnit = beforeTaxes + impostosUnit;
+    }
+
+    const recLiqUnit = valorMensalUnit - impostosUnit;
+    const depreciacaoUnit = (!isInstalacao && prazo > 0) ? (custoAquisicaoUnit / prazo) : 0;
+    const custoTotalMensalUnit = depreciacaoUnit + custoManutMensalUnit;
+
+    let lucroMensalUnit = 0;
+    if (isInstalacao) {
+        lucroMensalUnit = recLiqUnit - custoAquisicaoUnit - custoOpMensalUnit;
+    } else {
+        lucroMensalUnit = recLiqUnit - custoTotalMensalUnit;
+    }
+
+    let margem = 0;
+    if (isComodato) {
+        lucroMensalUnit = 0;
+        margem = 0;
+    } else {
+        if (recLiqUnit > 0) {
+            margem = isInstalacao ? (lucroMensalUnit / valorMensalUnit * 100) : (lucroMensalUnit / recLiqUnit * 100);
+        }
+    }
+
+    return {
+        ...item,
+        prazo_contrato: prazo,
+        custo_total_aquisicao: custoAquisicaoUnit,
+        custo_manut_mensal: custoManutMensalUnit,
+        custo_total_mensal: custoTotalMensalUnit,
+        fator_margem: fm,
+        valor_venda_equipamento: valorBaseVendaUnit,
+        parcela_locacao: parcelaLocacaoUnit,
+        manutencao_locacao: manutencaoMensalUnit,
+        valor_mensal: valorMensalUnit,
+        perc_impostos_total: pImp,
+        impostos_mensal: impostosUnit,
+        receita_liquida_mensal: recLiqUnit,
+        perc_comissao: 0,
+        comissao_mensal: 0,
+        lucro_mensal: lucroMensalUnit,
+        margem: margem,
+    };
+  }
+
+  // Fallback / legacy calculation for Non-Kits (Individual items)
   const base = Number(item.custo_aquisicao_unit || 0);
   const ipi = Number(item.ipi_unit || 0);
   const frete = Number(item.frete_unit || 0);
   const st = Number(item.icms_st_unit || 0);
   const difal = Number(item.difal_unit || 0);
   
-  // Instalação (Exclusiva: valor item > perc item > perc global)
   let instalacao = 0;
   if (item.valor_instalacao_item != null) {
       instalacao = Number(item.valor_instalacao_item);
@@ -126,37 +234,28 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   
   const taxa = Number(rd.taxa_juros_mensal || 0) / 100;
   const prazo = Number(item.prazo_contrato || rd.prazo_contrato_meses || 36);
-  const totalJuros = +(baseFinanceiraLocacao * taxa * prazo).toFixed(4);
   
+  let prazoMensalidades = prazo - Number(rd.prazo_instalacao_meses || 0);
+  if (prazoMensalidades < 0) prazoMensalidades = 0;
+
   let parcela = 0;
-  if (prazo > 0) {
-      parcela = +((baseFinanceiraLocacao + totalJuros) / prazo).toFixed(4);
+  if (prazoMensalidades > 0 && taxa > 0) {
+      const tx = taxa / (1 - Math.pow(1 + taxa, -prazoMensalidades));
+      parcela = +(baseFinanceiraLocacao * tx).toFixed(4);
+  } else if (prazoMensalidades > 0 && taxa === 0) {
+      parcela = +(baseFinanceiraLocacao / prazoMensalidades).toFixed(4);
   }
 
-  let custoManut = 0;
-  if (item.opportunity_kit_id && item.custo_op_mensal_kit != null) {
-      const baseOpMensal = Number(item.custo_op_mensal_kit || 0) * Number(item.quantidade || 1);
-      const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 0) : Number(item.taxa_manutencao_anual_item || 0);
-      custoManut = +(baseFinanceiraLocacao * taxaManut / 100 / 12).toFixed(4) + baseOpMensal;
-  } else {
-      const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 5) : Number(item.taxa_manutencao_anual_item || 5);
-      custoManut = +(baseFinanceiraLocacao * taxaManut / 100 / 12).toFixed(4);
-  }
+  const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 5) : Number(item.taxa_manutencao_anual_item || 5);
+  const custoManut = +(custoTotal * (taxaManut / 100) / 12).toFixed(4);
   
-  const custoMensal = custoManut; // Depreciação contábil removida deste fluxo de caixa
+  const depreciacao = (isComodato && prazo > 0) ? +(custoTotal / prazo).toFixed(4) : 0;
+  const custoMensal = custoManut + depreciacao; 
   const valorMensal = parcela + custoManut;
 
-  let pImp = 0;
-  if (item.opportunity_kit_id && item.kit_pis != null) {
-      pImp = Number(item.kit_pis || 0) + Number(item.kit_cofins || 0) + Number(item.kit_csll || 0) + Number(item.kit_irpj || 0);
-      if (rd.tipo_receita_rental === 'COMODATO') {
-          pImp += Number(item.kit_iss || 0);
-      }
-  } else {
-      pImp = Number(rd.perc_pis_rental || 0) + Number(rd.perc_cofins_rental || 0) + Number(rd.perc_csll_rental || 0) + Number(rd.perc_irpj_rental || 0);
-      if (rd.tipo_receita_rental === 'COMODATO') {
-          pImp += Number(rd.perc_iss_rental || 0);
-      }
+  let pImp = Number(rd.perc_pis_rental || 0) + Number(rd.perc_cofins_rental || 0) + Number(rd.perc_csll_rental || 0) + Number(rd.perc_irpj_rental || 0);
+  if (isComodato) {
+      pImp += Number(rd.perc_iss_rental || 0);
   }
   
   const impostos = +(valorMensal * pImp / 100).toFixed(4);
@@ -164,19 +263,19 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   const pCom = Number(rd.perc_comissao_rental || 0);
   const comissao = +(recLiq * pCom / 100).toFixed(4);
   
-  let lucro = 0;
-  if (item.opportunity_kit_id && item.is_kit_instalacao) {
-      lucro = +(recLiq - custoAquisicao - custoMensal).toFixed(4);
-  } else {
-      lucro = +(recLiq - custoMensal - comissao).toFixed(4);
-  }
+  let lucro = +(recLiq - custoMensal - comissao).toFixed(4);
+  let margem = valorMensal > 0 ? +(lucro / valorMensal * 100).toFixed(2) : 0;
   
-  const margem = valorMensal > 0 ? +(lucro / valorMensal * 100).toFixed(2) : 0;
+  if (isComodato) {
+      lucro = 0;
+      margem = 0;
+  }
   
   return { 
       ...item, 
       instalacao_unit: instalacao, 
       custo_total_aquisicao: custoTotal, 
+      prazo_contrato: prazo,
       custo_manut_mensal: custoManut, 
       custo_total_mensal: custoMensal, 
       fator_margem: fm, 
@@ -607,6 +706,8 @@ export function SalesBudgetForm() {
         custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0),
         // Kit Integration Fields
         is_kit_instalacao: kit.tipo_contrato === 'INSTALACAO',
+        tipo_contrato_kit: kit.tipo_contrato,
+        kit_taxa_juros_mensal: kit.taxa_juros_mensal != null ? Number(kit.taxa_juros_mensal) : null,
         kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
         kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0),
         kit_pis: Number(kit.aliq_pis || 0),
@@ -767,6 +868,18 @@ export function SalesBudgetForm() {
         })),
         rental_items: rentalItems.map(i => ({
           product_id: i.product_id || null,
+          opportunity_kit_id: i.opportunity_kit_id || null,
+          custo_op_mensal_kit: i.custo_op_mensal_kit != null ? +i.custo_op_mensal_kit : null,
+          is_kit_instalacao: !!i.is_kit_instalacao,
+          tipo_contrato_kit: i.tipo_contrato_kit || null,
+          kit_taxa_juros_mensal: i.kit_taxa_juros_mensal != null ? +i.kit_taxa_juros_mensal : null,
+          kit_custo_produtos: i.kit_custo_produtos != null ? +i.kit_custo_produtos : null,
+          kit_custo_servicos: i.kit_custo_servicos != null ? +i.kit_custo_servicos : null,
+          kit_pis: i.kit_pis != null ? +i.kit_pis : null,
+          kit_cofins: i.kit_cofins != null ? +i.kit_cofins : null,
+          kit_csll: i.kit_csll != null ? +i.kit_csll : null,
+          kit_irpj: i.kit_irpj != null ? +i.kit_irpj : null,
+          kit_iss: i.kit_iss != null ? +i.kit_iss : null,
           quantidade: +i.quantidade,
           perc_instalacao_item: i.perc_instalacao_item != null ? +i.perc_instalacao_item : null,
           valor_instalacao_item: i.valor_instalacao_item != null ? +i.valor_instalacao_item : null,
@@ -1304,8 +1417,7 @@ export function SalesBudgetForm() {
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Qtd</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Custo Aquis.</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Prazo</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Manut./mês</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Custo/mês</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Manutenção</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">F.Margem</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Parcela</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Mensal</th>
@@ -1340,41 +1452,40 @@ export function SalesBudgetForm() {
                             ri.opportunity_kit_id ? (
                               <div className="space-y-1 w-52">
                                 <div className="font-semibold text-amber-300 mb-2">Composição de Custos</div>
-                                <div className="flex justify-between"><span>Produtos (Total):</span><span className="text-text-primary">{fmt(ri.kit_custo_produtos || 0)}</span></div>
-                                <div className="flex justify-between"><span>Serviços (Total):</span><span className="text-text-primary">{fmt(ri.kit_custo_servicos || 0)}</span></div>
-                                <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total Custo Aquis.:</span><span>{fmt(ri.custo_total_aquisicao)}</span></div>
+                                <div className="flex justify-between"><span>Produtos (Total):</span><span className="text-text-primary">{fmt((ri.kit_custo_produtos || 0) * ri.quantidade)}</span></div>
+                                <div className="flex justify-between"><span>Serviços (Total):</span><span className="text-text-primary">{fmt((ri.kit_custo_servicos || 0) * ri.quantidade)}</span></div>
+                                <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total Custo Aquis.:</span><span>{fmt(ri.custo_total_aquisicao * ri.quantidade)}</span></div>
                               </div>
                             ) : (
                               <div className="space-y-1 w-52">
                                 <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
-                                <div className="flex justify-between"><span>Base:</span><span>{fmt(ri.custo_aquisicao_unit)}</span></div>
-                                {ri.ipi_unit > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(ri.ipi_unit)}</span></div>}
-                                {ri.frete_unit > 0 && <div className="flex justify-between"><span>Frete:</span><span className="text-amber-300">+ {fmt(ri.frete_unit)}</span></div>}
-                                {ri.icms_st_unit > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(ri.icms_st_unit)}</span></div>}
-                                {ri.difal_unit > 0 && <div className="flex justify-between"><span>DIFAL:</span><span className="text-amber-300">+ {fmt(ri.difal_unit)}</span></div>}
-                                {ri.instalacao_unit > 0 && <div className="flex justify-between"><span>Instalação:</span><span className="text-amber-300">+ {fmt(ri.instalacao_unit)}</span></div>}
-                                <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(ri.custo_total_aquisicao)}</span></div>
+                                <div className="flex justify-between"><span>Base:</span><span>{fmt(ri.custo_aquisicao_unit * ri.quantidade)}</span></div>
+                                {ri.ipi_unit > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(ri.ipi_unit * ri.quantidade)}</span></div>}
+                                {ri.frete_unit > 0 && <div className="flex justify-between"><span>Frete:</span><span className="text-amber-300">+ {fmt(ri.frete_unit * ri.quantidade)}</span></div>}
+                                {ri.icms_st_unit > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(ri.icms_st_unit * ri.quantidade)}</span></div>}
+                                {ri.difal_unit > 0 && <div className="flex justify-between"><span>DIFAL:</span><span className="text-amber-300">+ {fmt(ri.difal_unit * ri.quantidade)}</span></div>}
+                                {ri.instalacao_unit > 0 && <div className="flex justify-between"><span>Instalação:</span><span className="text-amber-300">+ {fmt(ri.instalacao_unit * ri.quantidade)}</span></div>}
+                                <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(ri.custo_total_aquisicao * ri.quantidade)}</span></div>
                               </div>
                             )
                           }>
-                            <span className="border-b border-dashed border-text-muted">{fmt(ri.custo_total_aquisicao)}</span>
+                            <span className="border-b border-dashed border-text-muted">{fmt(ri.custo_total_aquisicao * ri.quantidade)}</span>
                           </Tooltip>
                         </td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" min="1" value={ri.prazo_contrato} onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)} disabled={isReadonly}
                             className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.custo_manut_mensal)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium">{fmt(ri.custo_total_mensal)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.custo_manut_mensal * ri.prazo_contrato * ri.quantidade)}</td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" step="0.01" min="1" value={ri.fator_margem} onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)} disabled={isReadonly}
                             className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.parcela_locacao)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt(ri.valor_mensal)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.impostos_mensal)}</td>
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${mc}`}>{fmt(ri.lucro_mensal)}</td>
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${mc}`}>{fmtPct(ri.margem)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.parcela_locacao * ri.quantidade) : '-'}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt(ri.valor_mensal * ri.quantidade)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.impostos_mensal * ri.quantidade)}</td>
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${mc}`}>{ri.lucro_mensal === 0 ? '-' : fmt(ri.lucro_mensal * ri.quantidade)}</td>
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${mc}`}>{ri.margem === 0 ? '-' : fmtPct(ri.margem)}</td>
                         <td className="px-1 py-2 text-center">
                           {!isReadonly && (
                             <button onClick={() => removeRentalItem(idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer" title="Remover">

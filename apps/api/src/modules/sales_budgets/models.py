@@ -149,6 +149,8 @@ class RentalBudgetItem(Base):
     custo_op_mensal_kit = Column(Numeric(15, 4), nullable=True)
     
     is_kit_instalacao = Column(Boolean, nullable=False, default=False)
+    tipo_contrato_kit = Column(String(50), nullable=True)
+    kit_taxa_juros_mensal = Column(Numeric(15, 6), nullable=True)
     kit_custo_produtos = Column(Numeric(15, 4), nullable=True)
     kit_custo_servicos = Column(Numeric(15, 4), nullable=True)
     
@@ -211,9 +213,13 @@ class RentalBudgetItem(Base):
 
     @property
     def product_nome(self):
+        if self.opportunity_kit:
+            return f"Kit: {self.opportunity_kit.nome_kit or 'Personalizado'}"
         return self.product.nome if self.product else None
 
     @property
     def product_codigo(self):
+        if self.opportunity_kit:
+            return "KIT-GLOBAL"
         return self.product.codigo if self.product else None
 

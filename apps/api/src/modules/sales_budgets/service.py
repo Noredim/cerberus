@@ -140,108 +140,175 @@ def calculate_item(
 # ═══════════════════════════════════════════════════════════════════
 
 def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: dict) -> dict:
-    """Calculate all fields for a rental/comodato budget item.
+    is_kit = bool(getattr(item_data, "opportunity_kit_id", None))
+    is_instalacao = bool(getattr(item_data, "is_kit_instalacao", False))
+    
+    # If it's a kit, uses its own tipo_contrato to define if it's Comodato
+    tipo_contrato_kit = getattr(item_data, "tipo_contrato_kit", None)
+    if is_kit and tipo_contrato_kit:
+        is_comodato = tipo_contrato_kit == "COMODATO"
+    else:
+        is_comodato = rental_defaults.get("tipo_receita_rental", "") == "COMODATO"
 
-    Calculation steps:
-    1. Custo total de aquisição = base + IPI + frete + ICMS-ST + DIFAL
-    2. Depreciação mensal = custo_total / prazo_contrato
-    3. Manutenção mensal = custo_total × taxa_manut_anual / 12
-    4. Custo total mensal = depreciação + manutenção
-    5. Valor venda equipamento = custo_total × fator_margem
-    6. Parcela locação (tabela Price) = V × i / (1 - (1+i)^-n)
-    7. Manutenção locação = V × taxa_manut / 12
-    8. Valor mensal = parcela + manutenção_locação
-    9. Impostos sobre receita
-    10. Receita líquida = valor_mensal - impostos
-    11. Comissão
-    12. Lucro = receita_líquida - custo_total_mensal - comissão
-    """
-    # Acquisition costs
+    prazo = item_data.prazo_contrato or rental_defaults.get("prazo_contrato_meses", 36)
+    if prazo <= 0:
+        prazo = 36
+
+    if is_kit:
+        custo_aquisicao_unit = _d(item_data.custo_aquisicao_unit)
+        custo_op_mensal_unit = _d(getattr(item_data, "custo_op_mensal_kit", 0))
+        
+        manutencao_mensal_unit = Decimal("0")
+        if not is_instalacao:
+            taxa_manut = _d(rental_defaults.get("taxa_manutencao_anual", 0)) if item_data.usa_taxa_manut_padrao else _d(item_data.taxa_manutencao_anual_item or 0)
+            manutencao_mensal_unit = _round(custo_aquisicao_unit * (taxa_manut / Decimal("100")) / Decimal("12"))
+            
+        custo_manut_mensal_unit = manutencao_mensal_unit + custo_op_mensal_unit
+        
+        fm = _d(item_data.fator_margem) if item_data.fator_margem else Decimal("1")
+        valor_base_venda_unit = _round(custo_aquisicao_unit * fm)
+        
+        kit_taxa_juros = getattr(item_data, "kit_taxa_juros_mensal", None)
+        if kit_taxa_juros is not None:
+            taxa = _d(kit_taxa_juros) / Decimal("100")
+        else:
+            taxa = _d(rental_defaults.get("taxa_juros_mensal", 0)) / Decimal("100")
+            
+        prazo_mensalidades = prazo - int(rental_defaults.get("prazo_instalacao_meses", 0))
+        if prazo_mensalidades < 0: prazo_mensalidades = 0
+        
+        tx_locacao = Decimal("0")
+        if is_instalacao:
+            tx_locacao = Decimal("1")
+        elif prazo_mensalidades > 0 and taxa > 0:
+            tx_locacao = taxa / (Decimal("1") - (Decimal("1") + taxa) ** -prazo_mensalidades)
+        elif prazo_mensalidades > 0 and taxa == Decimal("0"):
+            tx_locacao = Decimal("1") / Decimal(prazo_mensalidades)
+            
+        parcela_locacao_unit = _round(valor_base_venda_unit * tx_locacao)
+        valor_base_final_unit = parcela_locacao_unit + manutencao_mensal_unit + custo_op_mensal_unit
+
+        p_imp = Decimal("0")
+        if getattr(item_data, "kit_pis", None) is not None:
+            p_imp = _d(item_data.kit_pis) + _d(getattr(item_data, "kit_cofins", 0)) + _d(getattr(item_data, "kit_csll", 0)) + _d(getattr(item_data, "kit_irpj", 0)) + _d(getattr(item_data, "kit_iss", 0))
+        else:
+            p_imp = _d(rental_defaults.get("perc_pis_rental", 0)) + _d(rental_defaults.get("perc_cofins_rental", 0)) + _d(rental_defaults.get("perc_csll_rental", 0)) + _d(rental_defaults.get("perc_irpj_rental", 0))
+            if is_comodato: p_imp += _d(rental_defaults.get("perc_iss_rental", 0))
+
+        if is_instalacao:
+            valor_mensal_unit = valor_base_final_unit
+            impostos_unit = _round(valor_mensal_unit * (p_imp / Decimal("100")))
+        else:
+            impostos_unit = _round(valor_base_final_unit * (p_imp / Decimal("100")))
+            valor_mensal_unit = valor_base_final_unit + impostos_unit
+            
+        rec_liq_unit = valor_mensal_unit - impostos_unit
+        depreciacao_unit = _round(custo_aquisicao_unit / prazo) if (not is_instalacao and prazo > 0) else Decimal("0")
+        custo_total_mensal_unit = depreciacao_unit + custo_manut_mensal_unit
+
+        if is_instalacao:
+            lucro_mensal_unit = rec_liq_unit - custo_aquisicao_unit - custo_op_mensal_unit
+        else:
+            lucro_mensal_unit = rec_liq_unit - custo_total_mensal_unit
+            
+        margem = Decimal("0")
+        if is_comodato:
+            lucro_mensal_unit = Decimal("0")
+        else:
+            if rec_liq_unit > 0:
+                margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
+
+        return {
+            "custo_aquisicao_unit": custo_aquisicao_unit,
+            "custo_total_aquisicao": custo_aquisicao_unit,
+            "prazo_contrato": prazo,
+            "custo_manut_mensal": custo_manut_mensal_unit,
+            "custo_total_mensal": custo_total_mensal_unit,
+            "fator_margem": fm,
+            "valor_venda_equipamento": valor_base_venda_unit,
+            "parcela_locacao": parcela_locacao_unit,
+            "manutencao_locacao": manutencao_mensal_unit,
+            "valor_mensal": valor_mensal_unit,
+            "perc_impostos_total": p_imp,
+            "impostos_mensal": impostos_unit,
+            "receita_liquida_mensal": rec_liq_unit,
+            "perc_comissao": Decimal("0"),
+            "comissao_mensal": Decimal("0"),
+            "lucro_mensal": lucro_mensal_unit,
+            "margem": margem,
+            "quantidade": _d(item_data.quantidade),
+        }
+
+    # Non-Kit Logic
     base = _d(item_data.custo_aquisicao_unit)
     ipi = _d(item_data.ipi_unit)
     frete = _d(item_data.frete_unit)
     icms_st = _d(item_data.icms_st_unit)
     difal = _d(item_data.difal_unit)
-    custo_total_aquisicao = base + ipi + frete + icms_st + difal
-
-    # Contract terms
-    prazo = item_data.prazo_contrato or rental_defaults.get("prazo_contrato_meses", 36)
-    if prazo <= 0:
-        prazo = 36
-
-    # Maintenance rate
-    if item_data.usa_taxa_manut_padrao or item_data.taxa_manutencao_anual_item is None:
-        taxa_manut = _d(rental_defaults.get("taxa_manutencao_anual", 5))
+    
+    instalacao = Decimal("0")
+    if getattr(item_data, "valor_instalacao_item", None) is not None:
+        instalacao = _d(item_data.valor_instalacao_item)
     else:
-        taxa_manut = _d(item_data.taxa_manutencao_anual_item)
-
-    # Depreciation
-    depreciacao_mensal = _round(custo_total_aquisicao / prazo)
-
-    # Maintenance cost
-    custo_manut_mensal = _round(custo_total_aquisicao * taxa_manut / Decimal("100") / Decimal("12"))
-
-    # Total monthly cost
-    custo_total_mensal = depreciacao_mensal + custo_manut_mensal
-
-    # Revenue calculation
-    fator_margem = _d(item_data.fator_margem) if item_data.fator_margem else Decimal("1")
-    valor_venda_equipamento = _round(custo_total_aquisicao * fator_margem)
-
-    # Price formula: P = V × i / (1 - (1+i)^-n)
+        p_instal = _d(item_data.perc_instalacao_item) if getattr(item_data, "perc_instalacao_item", None) is not None else _d(rental_defaults.get("perc_instalacao_padrao", 0))
+        instalacao = _round((base + ipi + frete + icms_st + difal) * (p_instal / Decimal("100")))
+        
+    custo_total_aquisicao = base + ipi + frete + icms_st + difal + instalacao
+    
+    fm = _d(item_data.fator_margem) if item_data.fator_margem else Decimal("1")
+    valor_venda_equipamento = _round(custo_total_aquisicao * fm)
+    
     taxa_juros = _d(rental_defaults.get("taxa_juros_mensal", 0)) / Decimal("100")
-    if taxa_juros > 0 and prazo > 0:
+    prazo_mensalidades = prazo - int(rental_defaults.get("prazo_instalacao_meses", 0))
+    if prazo_mensalidades < 0: prazo_mensalidades = 0
+
+    parcela_locacao = Decimal("0")
+    if prazo_mensalidades > 0 and taxa_juros > 0:
         one_plus_i = Decimal("1") + taxa_juros
-        parcela_locacao = _round(valor_venda_equipamento * taxa_juros / (Decimal("1") - one_plus_i ** (-prazo)))
-    else:
-        # No interest: simple division
-        parcela_locacao = _round(valor_venda_equipamento / prazo) if prazo > 0 else Decimal("0")
+        parcela_locacao = _round(valor_venda_equipamento * taxa_juros / (Decimal("1") - (one_plus_i ** -prazo_mensalidades)))
+    elif prazo_mensalidades > 0 and taxa_juros == 0:
+        parcela_locacao = _round(valor_venda_equipamento / Decimal(prazo_mensalidades))
 
-    # Rental maintenance = equipment value × annual rate / 12
-    manutencao_locacao = _round(valor_venda_equipamento * taxa_manut / Decimal("100") / Decimal("12"))
-
-    # Monthly revenue
-    valor_mensal = parcela_locacao + manutencao_locacao
-
-    # Taxes on revenue
-    perc_pis = _d(rental_defaults.get("perc_pis_rental", 0))
-    perc_cofins = _d(rental_defaults.get("perc_cofins_rental", 0))
-    perc_csll = _d(rental_defaults.get("perc_csll_rental", 0))
-    perc_irpj = _d(rental_defaults.get("perc_irpj_rental", 0))
-    perc_iss = _d(rental_defaults.get("perc_iss_rental", 0))
-    perc_impostos_total = perc_pis + perc_cofins + perc_csll + perc_irpj + perc_iss
-    impostos_mensal = _round(valor_mensal * perc_impostos_total / Decimal("100"))
-
-    # Net revenue
+    taxa_manut = _d(rental_defaults.get("taxa_manutencao_anual", 5)) if item_data.usa_taxa_manut_padrao else _d(item_data.taxa_manutencao_anual_item or 5)
+    custo_manut_mensal = _round(custo_total_aquisicao * taxa_manut / Decimal("100") / Decimal("12"))
+    
+    depreciacao = _round(custo_total_aquisicao / prazo) if (is_comodato and prazo > 0) else Decimal("0")
+    custo_total_mensal = custo_manut_mensal + depreciacao
+    valor_mensal = parcela_locacao + custo_manut_mensal
+    
+    p_imp = _d(rental_defaults.get("perc_pis_rental", 0)) + _d(rental_defaults.get("perc_cofins_rental", 0)) + _d(rental_defaults.get("perc_csll_rental", 0)) + _d(rental_defaults.get("perc_irpj_rental", 0))
+    if is_comodato: p_imp += _d(rental_defaults.get("perc_iss_rental", 0))
+    
+    impostos_mensal = _round(valor_mensal * (p_imp / Decimal("100")))
     receita_liquida_mensal = valor_mensal - impostos_mensal
-
-    # Commission
-    perc_comissao = _d(rental_defaults.get("perc_comissao_rental", 0))
-    comissao_mensal = _round(receita_liquida_mensal * perc_comissao / Decimal("100"))
-
-    # Profit
+    
+    p_com = _d(rental_defaults.get("perc_comissao_rental", 0))
+    comissao_mensal = _round(receita_liquida_mensal * (p_com / Decimal("100")))
+    
     lucro_mensal = receita_liquida_mensal - custo_total_mensal - comissao_mensal
-    margem = _round(lucro_mensal / valor_mensal * Decimal("100"), 4) if valor_mensal > 0 else Decimal("0")
+    margem = _round((lucro_mensal / valor_mensal) * Decimal("100"), 2) if valor_mensal > 0 else Decimal("0")
+
+    if is_comodato:
+        lucro_mensal = Decimal("0")
+        margem = Decimal("0")
 
     return {
         "custo_aquisicao_unit": base, "ipi_unit": ipi, "frete_unit": frete,
         "icms_st_unit": icms_st, "difal_unit": difal,
+        "instalacao_unit": instalacao,
         "custo_total_aquisicao": custo_total_aquisicao,
         "prazo_contrato": prazo,
-        "usa_taxa_manut_padrao": item_data.usa_taxa_manut_padrao,
-        "taxa_manutencao_anual_item": item_data.taxa_manutencao_anual_item,
-        "depreciacao_mensal": depreciacao_mensal,
         "custo_manut_mensal": custo_manut_mensal,
         "custo_total_mensal": custo_total_mensal,
-        "fator_margem": fator_margem,
+        "fator_margem": fm,
         "valor_venda_equipamento": valor_venda_equipamento,
         "parcela_locacao": parcela_locacao,
-        "manutencao_locacao": manutencao_locacao,
+        "manutencao_locacao": custo_manut_mensal,
         "valor_mensal": valor_mensal,
-        "perc_impostos_total": perc_impostos_total,
+        "perc_impostos_total": p_imp,
         "impostos_mensal": impostos_mensal,
         "receita_liquida_mensal": receita_liquida_mensal,
-        "perc_comissao": perc_comissao,
+        "perc_comissao": p_com,
         "comissao_mensal": comissao_mensal,
         "lucro_mensal": lucro_mensal,
         "margem": margem,
