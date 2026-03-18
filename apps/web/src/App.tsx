@@ -26,6 +26,8 @@ import { BudgetsList } from './modules/purchase_budgets/BudgetsList';
 import { BudgetForm } from './modules/purchase_budgets/BudgetForm';
 import { SalesBudgetList } from './modules/sales_budgets/SalesBudgetList';
 import { SalesBudgetForm } from './modules/sales_budgets/SalesBudgetForm';
+import { OpportunityKitList } from './modules/opportunity_kits/OpportunityKitList';
+import { OpportunityKitForm } from './modules/opportunity_kits/OpportunityKitForm';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -135,6 +137,11 @@ function App() {
             <Route path="/orcamentos-vendas" element={<SalesBudgetList />} />
             <Route path="/orcamentos-vendas/novo" element={<SalesBudgetForm />} />
             <Route path="/orcamentos-vendas/:id" element={<SalesBudgetForm />} />
+
+            {/* Opportunity Kits */}
+            <Route path="/cadastros/kits" element={<OpportunityKitList />} />
+            <Route path="/cadastros/kits/novo" element={<OpportunityKitForm />} />
+            <Route path="/cadastros/kits/:kitId" element={<OpportunityKitForm />} />
 
           </Route>
         </Routes>

@@ -108,8 +108,13 @@ class PurchaseBudgetService:
 
             # --- DETERMINE INTERSTATE OPERATION ---
             from src.modules.companies.models import Company
+            from src.modules.catalog.models import State
             company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
-            uf_destino = company.state_id.upper() if (company and company.state_id) else "MT"
+            uf_destino = "MT"
+            if company and company.state_id:
+                state = db.query(State).filter(State.id == company.state_id).first()
+                if state:
+                    uf_destino = state.sigla.upper()
             uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
             op_interestadual = (uf_origem != uf_destino)
 
@@ -135,8 +140,11 @@ class PurchaseBudgetService:
             c_valor_difal = 0.0
             
             if op_interestadual:
+                # Use the actual budget item ICMS instead of the hardcoded 12%
+                aliquota_origem = float(item.icms_percent) / 100.0 if item.icms_percent else 0.12
+                
                 base_com_ipi_e_frete = final_valor_unitario + ipi_unit + frete_unit
-                c_icms_origem = base_com_ipi_e_frete * ALIQUOTA_INTERESTADUAL_PADRAO
+                c_icms_origem = base_com_ipi_e_frete * aliquota_origem
                 base_sem_icms = base_com_ipi_e_frete - c_icms_origem
                 divisor = 1 - ALIQ_INTERNA_DESTINO
                 
@@ -157,6 +165,7 @@ class PurchaseBudgetService:
             return {
                 "custo_revenda": final_valor_unitario + ipi_unit + frete_unit + calc_icms_st_final,
                 "custo_uso_consumo": final_valor_unitario + ipi_unit + frete_unit + c_valor_difal,
+                "valor_difal": c_valor_difal,
                 "budget_id": budget.id,
                 "date": budget.data_orcamento or budget.created_at
             }
@@ -166,6 +175,7 @@ class PurchaseBudgetService:
         product.orcamento_referencia_revenda_id = None
         
         product.vlr_referencia_uso_consumo = None
+        product.vlr_referencia_difal = None
         product.orcamento_referencia_uso_consumo_id = None
         product.origem_valor_uso_consumo = None
 
@@ -180,6 +190,7 @@ class PurchaseBudgetService:
             
             # Sub-derive uso_consumo
             product.vlr_referencia_uso_consumo = revenda_res["custo_uso_consumo"]
+            product.vlr_referencia_difal = revenda_res["valor_difal"]
             product.origem_valor_uso_consumo = "DERIVADO_REVENDA"
             product.orcamento_referencia_uso_consumo_id = revenda_res["budget_id"]
             product.data_atualizacao_uso_consumo = now
@@ -191,6 +202,7 @@ class PurchaseBudgetService:
             # Or if there is no revenda budget at all
             if not revenda_res or (uso_res["date"] >= revenda_res["date"]):
                 product.vlr_referencia_uso_consumo = uso_res["custo_uso_consumo"]
+                product.vlr_referencia_difal = uso_res["valor_difal"]
                 product.origem_valor_uso_consumo = "ORCAMENTO_USO_CONSUMO"
                 product.orcamento_referencia_uso_consumo_id = uso_res["budget_id"]
                 product.data_atualizacao_uso_consumo = now

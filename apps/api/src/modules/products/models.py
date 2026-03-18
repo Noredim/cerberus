@@ -40,6 +40,7 @@ class Product(Base):
     # Reference Prices (from purchase budgets)
     vlr_referencia_revenda = Column(Numeric(18, 2), nullable=True)
     vlr_referencia_uso_consumo = Column(Numeric(18, 2), nullable=True)
+    vlr_referencia_difal = Column(Numeric(18, 2), nullable=True)
     orcamento_referencia_revenda_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
     orcamento_referencia_uso_consumo_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
     data_atualizacao_revenda = Column(DateTime(timezone=True), nullable=True)

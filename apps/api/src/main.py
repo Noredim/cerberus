@@ -25,6 +25,7 @@ from src.modules.products.router import router as products_router
 from src.modules.customers.router import router as customers_router
 from src.modules.purchase_budgets.router import router as purchase_budgets_router
 from src.modules.sales_budgets.router import router as sales_budgets_router
+from src.modules.opportunity_kits.router import router as opportunity_kits_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -140,3 +141,4 @@ app.include_router(products_router)
 app.include_router(customers_router)
 app.include_router(purchase_budgets_router)
 app.include_router(sales_budgets_router)
+app.include_router(opportunity_kits_router)

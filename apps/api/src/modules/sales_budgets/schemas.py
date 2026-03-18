@@ -18,7 +18,65 @@ class BudgetStatusEnum(str, Enum):
     ARQUIVADO = "ARQUIVADO"
 
 
-# --- Items ---
+# ─── Rental (Locação) Items ───
+
+class RentalBudgetItemBase(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    product_id: Optional[UUID] = None
+    opportunity_kit_id: Optional[UUID] = None
+    custo_op_mensal_kit: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    
+    is_kit_instalacao: bool = False
+    kit_custo_produtos: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_custo_servicos: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_pis: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_cofins: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_csll: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_irpj: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_iss: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    
+    quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
+    custo_aquisicao_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    ipi_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    frete_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    icms_st_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    difal_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    prazo_contrato: int = 36
+    usa_taxa_manut_padrao: bool = True
+    taxa_manutencao_anual_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    perc_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    valor_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    fator_margem: Decimal = Field(default=1, max_digits=10, decimal_places=4)
+
+
+class RentalBudgetItemCreate(RentalBudgetItemBase):
+    pass
+
+
+class RentalBudgetItemOut(RentalBudgetItemBase):
+    id: UUID
+    custo_total_aquisicao: Decimal = 0
+    custo_manut_mensal: Decimal = 0
+    custo_total_mensal: Decimal = 0
+    valor_venda_equipamento: Decimal = 0
+    parcela_locacao: Decimal = 0
+    manutencao_locacao: Decimal = 0
+    valor_mensal: Decimal = 0
+    perc_impostos_total: Decimal = 0
+    impostos_mensal: Decimal = 0
+    receita_liquida_mensal: Decimal = 0
+    perc_comissao: Decimal = 0
+    comissao_mensal: Decimal = 0
+    lucro_mensal: Decimal = 0
+    margem: Decimal = 0
+    product_nome: Optional[str] = None
+    product_codigo: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Sale Items ───
+
 class SalesBudgetItemBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     product_id: Optional[UUID] = None
@@ -28,7 +86,6 @@ class SalesBudgetItemBase(BaseModel):
     custo_unit_base: Decimal = Field(default=0, max_digits=15, decimal_places=4)
     markup: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
     quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
-    # Override percentages (when usa_parametros_padrao = False)
     perc_frete_venda: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     perc_pis: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     perc_cofins: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
@@ -66,13 +123,16 @@ class SalesBudgetItemOut(SalesBudgetItemBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# --- Budget ---
+# ─── Budget ───
+
 class SalesBudgetBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     customer_id: str
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime
+
+    # Sale tab defaults
     markup_padrao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
     perc_despesa_adm: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_comissao: Decimal = Field(default=0, max_digits=6, decimal_places=4)
@@ -85,15 +145,32 @@ class SalesBudgetBase(BaseModel):
     perc_icms_interno: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_icms_externo: Decimal = Field(default=0, max_digits=6, decimal_places=4)
 
+    # Rental tab defaults
+    prazo_contrato_meses: int = 36
+    prazo_instalacao_meses: int = 1
+    taxa_juros_mensal: Decimal = Field(default=0, max_digits=10, decimal_places=6)
+    taxa_manutencao_anual: Decimal = Field(default=5, max_digits=6, decimal_places=4)
+    tipo_receita_rental: str = "LOCACAO_PURA"
+    fator_margem_padrao: Decimal = Field(default=1, max_digits=6, decimal_places=4)
+    perc_instalacao_padrao: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_comissao_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_pis_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_cofins_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_csll_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_irpj_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_iss_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+
 
 class SalesBudgetCreate(SalesBudgetBase):
     responsavel_ids: List[UUID] = []
-    items: List[SalesBudgetItemCreate]
+    items: List[SalesBudgetItemCreate] = []
+    rental_items: List[RentalBudgetItemCreate] = []
 
 
 class SalesBudgetUpdate(SalesBudgetBase):
     responsavel_ids: List[UUID] = []
-    items: List[SalesBudgetItemCreate]
+    items: List[SalesBudgetItemCreate] = []
+    rental_items: List[RentalBudgetItemCreate] = []
 
 
 class SalesBudgetStatusUpdate(BaseModel):
@@ -107,6 +184,7 @@ class SalesBudgetOut(SalesBudgetBase):
     numero_orcamento: Optional[str] = None
     status: BudgetStatusEnum
     items: List[SalesBudgetItemOut] = []
+    rental_items: List[RentalBudgetItemOut] = []
     responsavel_ids: List[UUID] = []
     created_at: datetime
     updated_at: datetime

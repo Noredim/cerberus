@@ -45,6 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Municípios', path: '/cadastros/municipios' },
                 { label: 'NCM', path: '/ncms' },
                 { label: 'NCM ST', path: '/cadastros/ncm-st' },
+                { label: 'Kits Oportunidade', path: '/cadastros/kits' },
                 { label: 'Fornecedores', path: '/cadastros/fornecedores' },
                 { label: 'Clientes', path: '/cadastros/clientes' },
                 { label: 'Produtos', path: '/cadastro/produtos' },

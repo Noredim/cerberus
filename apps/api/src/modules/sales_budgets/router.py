@@ -63,6 +63,7 @@ def check_st(
 @router.get("/product-cost-composition/{product_id}")
 def get_product_cost_composition(
     product_id: str,
+    tipo: str = "REVENDA",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -79,7 +80,14 @@ def get_product_cost_composition(
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    custo_ref = float(product.vlr_referencia_revenda or 0)
+    # Select reference price + budget based on tipo
+    uso_consumo = tipo.upper() == "USO_CONSUMO"
+    if uso_consumo:
+        custo_ref = float(product.vlr_referencia_uso_consumo or 0)
+        ref_budget_id = product.orcamento_referencia_uso_consumo_id
+    else:
+        custo_ref = float(product.vlr_referencia_revenda or 0)
+        ref_budget_id = product.orcamento_referencia_revenda_id
 
     # Default fallback when no linked budget
     result = {
@@ -96,12 +104,12 @@ def get_product_cost_composition(
         "custo_unit_final": custo_ref,
     }
 
-    if not product.orcamento_referencia_revenda_id:
+    if not ref_budget_id:
         return result
 
     budget_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
         PurchaseBudgetItem.product_id == product_id,
-        PurchaseBudget.id == product.orcamento_referencia_revenda_id
+        PurchaseBudget.id == ref_budget_id
     ).first()
 
     if not budget_item:
@@ -138,7 +146,7 @@ def get_product_cost_composition(
 
     if product.ncm_codigo:
         mva_data = prod_service.get_product_mva(
-            budget.tenant_id, product.ncm_codigo, str(budget.company_id), "REVENDA"
+            budget.tenant_id, product.ncm_codigo, str(budget.company_id), "USO_CONSUMO" if uso_consumo else "REVENDA"
         )
         if mva_data:
             st_flag = True
@@ -154,8 +162,13 @@ def get_product_cost_composition(
 
     # --- DETERMINE INTERSTATE OPERATION ---
     from src.modules.companies.models import Company
+    from src.modules.catalog.models import State
     company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
-    uf_destino = company.state_id.upper() if (company and company.state_id) else "MT"
+    uf_destino = "MT"
+    if company and company.state_id:
+        state_rec = db.query(State).filter(State.id == company.state_id).first()
+        if state_rec:
+            uf_destino = state_rec.sigla.upper()
     uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
     op_interestadual = (uf_origem != uf_destino)
 
@@ -175,7 +188,34 @@ def get_product_cost_composition(
             cred_outorgado_valor = icms_st_normal * DESCONTO_CREDITO_OUTORGADO
             calc_icms_st_final = max(0.0, icms_st_normal - cred_outorgado_valor)
 
-    custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
+    # --- CALCULATE DIFAL (for USO_CONSUMO) ---
+    ALIQUOTA_INTERESTADUAL_PADRAO = 0.12
+    difal_unitario = 0.0
+
+    if op_interestadual:
+        base_com_ipi_e_frete = base_unitario + ipi_unitario + frete_unitario
+        c_icms_origem = base_com_ipi_e_frete * ALIQUOTA_INTERESTADUAL_PADRAO
+        base_sem_icms = base_com_ipi_e_frete - c_icms_origem
+        divisor = 1 - ALIQ_INTERNA_DESTINO
+        if divisor > 0:
+            c_base_calculo_difal = base_sem_icms / divisor
+            c_icms_destino = c_base_calculo_difal * ALIQ_INTERNA_DESTINO
+            c_valor_difal_base = c_icms_destino - c_icms_origem
+
+            if uso_consumo:
+                difal_unitario = max(0.0, c_valor_difal_base)
+            else:
+                diff_difal_st = c_valor_difal_base - calc_icms_st_final
+                if diff_difal_st > 0:
+                    difal_unitario = calc_icms_st_final + diff_difal_st
+                else:
+                    difal_unitario = max(0.0, c_valor_difal_base)
+
+    # Choose final cost based on tipo
+    if uso_consumo:
+        custo_unit_final = base_unitario + ipi_unitario + frete_unitario + difal_unitario
+    else:
+        custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
 
     return {
         "base_unitario": round(base_unitario, 2),
@@ -191,6 +231,8 @@ def get_product_cost_composition(
         "is_intrastate": not op_interestadual,
         "uf_origem": uf_origem,
         "uf_destino": uf_destino,
+        "difal_unitario": round(difal_unitario, 2),
+        "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
         "custo_unit_final": round(custo_unit_final, 2),
     }
 

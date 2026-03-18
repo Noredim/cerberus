@@ -104,6 +104,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
 
   // DIFAL Calculated
   const [valorDifal, setValorDifal] = useState(0);
+  const [isInterstate, setIsInterstate] = useState(true);
 
   useEffect(() => {
     setValorUnitario(initialValorUnitario);
@@ -127,7 +128,11 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
     let calcIcmsStFinal = 0;
     let calcCreditoOutorgado = 0;
 
-    if (stFlag && ufDestino === "MT") {
+    // ST only applies for interstate operations (different UF origin vs destination)
+    const _isInterstate = ufOrigem.toUpperCase() !== ufDestino.toUpperCase();
+    setIsInterstate(_isInterstate);
+
+    if (stFlag && _isInterstate && ufDestino === "MT") {
       // P = valorUnitario, IPI = ipiUnit
       // CRED = ICMS entrada cap (4% importado, 7% nacional — já calculado em icmsEntradaEffective)
       const ALIQUOTA_INTERNA = 0.17;
@@ -549,7 +554,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
                 <span className="text-orange-500">+ {fmt(valorFreteUnit)}</span>
               </div>
 
-              {stFlag && (
+              {stFlag && isInterstate && (
                 <>
                   <div className="flex justify-between text-amber-600 pt-2 border-t border-border-subtle/50">
                     <span
@@ -621,7 +626,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
                   <span>+ {fmt(valorFreteUnit * quantidade)}</span>
                 </div>
               )}
-              {stFlag && (
+              {stFlag && isInterstate && (
                 <div className="flex justify-between text-amber-600 text-xs pl-2">
                   <span>↳ ICMS-ST total:</span>
                   <span>+ {fmt(icmsStFinal * quantidade)}</span>
