@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { api } from '../../services/api';
 import { ProductSearchModal } from '../../components/modals/ProductSearchModal';
+import { AddOperationalCostModal } from '../../components/modals/AddOperationalCostModal';
 
 interface KitFormValues {
   nome_kit: string;
@@ -17,6 +18,10 @@ interface KitFormValues {
   fator_margem_locacao: number;
   taxa_juros_mensal: number;
   taxa_manutencao_anual: number;
+  instalacao_inclusa: boolean;
+  percentual_instalacao: number | '';
+  manutencao_inclusa: boolean;
+  fator_manutencao: number | '';
   aliq_pis: number;
   aliq_cofins: number;
   aliq_csll: number;
@@ -33,6 +38,13 @@ interface KitFormValues {
     descricao_item: string;
     quantidade_no_kit: number;
   }>;
+  costs: Array<{
+    product_id: string;
+    tipo_custo: string;
+    quantidade: number;
+    valor_unitario: number;
+    descricao_item?: string;
+  }>;
 }
 
 export const OpportunityKitForm = () => {
@@ -42,6 +54,7 @@ export const OpportunityKitForm = () => {
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [showCostSearch, setShowCostSearch] = useState(false);
 
   const [form, setForm] = useState<KitFormValues>({
     nome_kit: '',
@@ -53,6 +66,10 @@ export const OpportunityKitForm = () => {
     fator_margem_locacao: 1.0,
     taxa_juros_mensal: 0,
     taxa_manutencao_anual: 0,
+    instalacao_inclusa: false,
+    percentual_instalacao: '',
+    manutencao_inclusa: false,
+    fator_manutencao: '',
     aliq_pis: 0,
     aliq_cofins: 0,
     aliq_csll: 0,
@@ -65,6 +82,7 @@ export const OpportunityKitForm = () => {
     custo_software_mensal_kit: 0,
     custo_itens_acessorios_mensal_kit: 0,
     items: [],
+    costs: [],
   });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -80,6 +98,11 @@ export const OpportunityKitForm = () => {
       const res = await api.get(`/opportunity-kits/${kitId}`);
       const data = res.data;
       if (!data.items) data.items = [];
+      if (!data.costs) data.costs = [];
+      data.costs = data.costs.map((c: any) => ({
+        ...c,
+        descricao_item: c.product?.nome || c.descricao_item || 'Serviço'
+      }));
       setForm(data);
     } catch(err) {
       console.error(err);
@@ -149,6 +172,30 @@ export const OpportunityKitForm = () => {
       const newItems = [...prev.items];
       newItems.splice(index, 1);
       return { ...prev, items: newItems };
+    });
+  };
+
+  const handleAddCost = (data: { product: any; quantidade: number; tipo_custo: string; valor_unitario: number }) => {
+    setForm(prev => ({
+      ...prev,
+      costs: [
+        ...prev.costs,
+        {
+          product_id: data.product.id,
+          tipo_custo: data.tipo_custo,
+          quantidade: data.quantidade,
+          valor_unitario: data.valor_unitario,
+          descricao_item: data.product.nome,
+        }
+      ]
+    }));
+  };
+
+  const removeCost = (index: number) => {
+    setForm(prev => {
+      const newCosts = [...prev.costs];
+      newCosts.splice(index, 1);
+      return { ...prev, costs: newCosts };
     });
   };
 
@@ -265,34 +312,120 @@ export const OpportunityKitForm = () => {
                 <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
                 <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Taxa Manutanção a.a (%)</label>
-                <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" />
-                <p className="text-xs text-text-muted mt-1">% s/ custo aq. anual.</p>
+
+              {/* FLAGS E OPÇÕES */}
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input 
+                      type="checkbox" 
+                      id="chk-instalacao"
+                      checked={form.instalacao_inclusa}
+                      onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
+                      className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                    />
+                    <label htmlFor="chk-instalacao" className="text-sm font-medium cursor-pointer">Instalação Inclusa</label>
+                  </div>
+                  {form.instalacao_inclusa && (
+                    <div className="pl-8">
+                      <label className="block text-sm font-medium mb-1">% de Instalação</label>
+                      <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input 
+                      type="checkbox" 
+                      id="chk-manutencao"
+                      checked={form.manutencao_inclusa}
+                      onChange={(e) => handleInputChange('manutencao_inclusa', e.target.checked)}
+                      className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                    />
+                    <label htmlFor="chk-manutencao" className="text-sm font-medium cursor-pointer">Manutenção Inclusa</label>
+                  </div>
+                  {form.manutencao_inclusa && (
+                    <div className="pl-8">
+                      {form.instalacao_inclusa ? (
+                        <>
+                          <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
+                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
+                          <p className="text-xs text-text-muted mt-1">% s/ custo aq. anual.</p>
+                        </>
+                      ) : (
+                        <>
+                          <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
+                          <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
 
            {form.tipo_contrato !== 'INSTALACAO' && (
              <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-               <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
-                3. Custos Operacionais Mensais (R$)
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {[
-                  {k: 'custo_manut_mensal_kit', l: 'Manutenção Mensal'},
-                  {k: 'custo_suporte_mensal_kit', l: 'Suporte SLA'},
-                  {k: 'custo_seguro_mensal_kit', l: 'Seguro Apólice'},
-                  {k: 'custo_logistica_mensal_kit', l: 'Logística/Veículo'},
-                  {k: 'custo_software_mensal_kit', l: 'Loc. Software'},
-                  {k: 'custo_itens_acessorios_mensal_kit', l: 'Outros Consumíveis'},
-                ].map(f => (
-                  <div key={f.k}>
-                    <label className="block text-xs font-medium text-text-secondary mb-1">{f.l}</label>
-                    <Input type="number" step="0.01" value={(form as any)[f.k]} onChange={(e) => handleInputChange(f.k as any, parseFloat(e.target.value) || 0)} className="w-full bg-bg-deep/50" />
-                  </div>
-                ))}
-              </div>
+               <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
+                 <h2 className="text-xl font-semibold">3. Custos Operacionais Mensais (R$)</h2>
+                 <Button variant="outline" size="sm" onClick={() => setShowCostSearch(true)}>
+                   <Plus className="w-4 h-4 mr-2" />
+                   Adicionar Custo (Serviço)
+                 </Button>
+               </div>
+
+              {form.costs.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle rounded-xl bg-bg-deep/50 hover:bg-bg-deep/80 transition-colors">
+                  <p className="text-sm text-text-muted">Nenhum custo operacional adicionado.</p>
+                </div>
+              ) : (
+                 <div className="overflow-x-auto rounded-xl border border-border-subtle">
+                   <table className="w-full text-sm text-left">
+                     <thead className="bg-bg-deep/50 text-text-muted font-medium border-b border-border-subtle">
+                       <tr>
+                         <th className="px-4 py-3">Serviço</th>
+                         <th className="px-4 py-3">Tipo de Custo</th>
+                         <th className="px-4 py-3 text-right">Qtd</th>
+                         <th className="px-4 py-3 text-right">Vlr. Unitário</th>
+                         <th className="px-4 py-3 text-right">Total</th>
+                         <th className="px-4 py-3 w-16"></th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
+                       {form.costs.map((c, idx) => (
+                         <tr key={idx} className="hover:bg-bg-deep/20 transition-colors group">
+                           <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
+                           <td className="px-4 py-3 text-text-secondary">{c.tipo_custo}</td>
+                           <td className="px-4 py-3 text-right tabular-nums">{c.quantidade}</td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
+                           <td className="px-4 py-3 text-right tabular-nums font-medium text-brand-warning">{fmtC(c.valor_unitario * c.quantidade)}</td>
+                           <td className="px-4 py-3 text-right">
+                             <Button variant="ghost" size="sm" onClick={() => removeCost(idx)} className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity">
+                               <Trash2 className="w-4 h-4" />
+                             </Button>
+                           </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                     <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
+                       <tr>
+                         <td colSpan={4} className="px-4 py-3 text-right text-text-muted">Total Custos Operacionais:</td>
+                         <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
+                           {fmtC(form.costs.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
+                         </td>
+                         <td></td>
+                       </tr>
+                     </tfoot>
+                   </table>
+                 </div>
+              )}
+              <AddOperationalCostModal 
+                 isOpen={showCostSearch} 
+                 onClose={() => setShowCostSearch(false)} 
+                 onConfirm={handleAddCost} 
+              />
             </section>
            )}
 
@@ -454,28 +587,54 @@ export const OpportunityKitForm = () => {
                    </div>
                  )}
                  <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted">Op. e Manutenção <span className="text-[10px] bg-bg-deep px-1 rounded">(Mês)</span></span>
-                   <span className="font-medium text-brand-warning">{fmtC((financials?.summary?.custo_operacional_mensal_kit || 0) + (financials?.summary?.manutencao_mensal || 0))}</span>
+                   <span className="text-text-muted">Custos Operacionais <span className="text-[10px] bg-bg-deep px-1 rounded">(Mês)</span></span>
+                   <span className="font-medium text-brand-warning">{fmtC(financials?.summary?.custo_operacional_mensal_kit || 0)}</span>
                  </div>
-                 <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted flex items-center" title="Apenas Locação/Comodato">Depreciação de Ativos <HelpCircle className="w-3 h-3 ml-1" /></span>
-                   <span className="font-medium text-brand-danger">{fmtC(financials?.summary?.depreciacao_mensal_kit)}</span>
-                 </div>
+                 {form.costs && form.costs.length > 0 && form.costs.map((c, idx) => (
+                   <div key={`cost-line-${idx}`} className="flex justify-between items-center text-xs pl-3 mt-1 border-l-2 border-brand-warning/20 ml-1">
+                     <span className="text-text-muted flex items-center">
+                       <span className="text-[10px] opacity-50 mr-1">↳</span> {c.tipo_custo} <span className="text-[10px] ml-1 opacity-50 truncate max-w-[100px]" title={c.descricao_item}>({c.descricao_item})</span>
+                     </span>
+                     <span className="font-medium text-text-secondary">{fmtC(c.valor_unitario * c.quantidade)}</span>
+                   </div>
+                 ))}
               </div>
 
                <div className="space-y-3 pt-2">
-                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border-subtle pb-2">Rateio Impositivo</h4>
+                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border-subtle pb-2">Formação de Preço Mensal</h4>
                  <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted whitespace-nowrap">Parcela Financeira Venda</span>
-                   <span className="font-medium text-text-primary">{fmtC(financials?.summary?.valor_parcela_locacao)}</span>
+                   <span className="text-text-muted whitespace-nowrap">Valor Total</span>
+                   <span className="font-bold text-text-primary">
+                     {fmtC((financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0))}
+                   </span>
                  </div>
-                 <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted">Tributação Retida ({financials?.summary?.aliq_total_impostos || 0}%)</span>
-                   <span className="font-medium text-brand-danger">{fmtC(financials?.summary?.valor_impostos)}</span>
+                 <div className="flex justify-between items-center text-xs pl-3 border-l-2 border-brand-primary/20 ml-1">
+                   <span className="text-text-muted" title={`Fator: R$ ${Number(financials?.summary?.tx_locacao || 0).toFixed(6)} por real financiado`}>
+                     ↳ vlr loc prod. (tx_locação: {(Number(financials?.summary?.tx_locacao || 0) * 100).toFixed(4)}%)
+                   </span>
+                   <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.valor_mensal_locacao_base)}</span>
                  </div>
-                 <div className="flex justify-between items-center text-sm pt-2 mt-2 border-t border-border-subtle border-dashed">
-                   <span className="text-text-muted hidden md:inline">Valor Operacional Livre</span>
-                   <span className="font-medium text-brand-success">{fmtC(financials?.summary?.receita_liquida_mensal_kit)}</span>
+                 {Number(financials?.summary?.vlt_manut) > 0 && (
+                   <div className="flex justify-between items-center text-xs pl-3 border-l-2 border-brand-warning/20 ml-1">
+                     <span className="text-text-muted">↳ vlr Manut (tx_manut)</span>
+                     <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.vlt_manut)}</span>
+                   </div>
+                 )}
+
+                 {/* Seção de Impostos */}
+                 <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-border-subtle">
+                   <span className="text-text-muted whitespace-nowrap">Total de Impostos</span>
+                   <span className="font-bold text-brand-danger">
+                     {fmtC(financials?.summary?.valor_impostos)}
+                   </span>
+                 </div>
+                 <div className="flex flex-col text-xs pl-3 border-l-2 border-brand-danger/20 ml-1 mt-1 space-y-1">
+                   <span className="text-text-muted">
+                     ↳ Alíquota Total: {(financials?.summary?.aliq_total_impostos || 0).toFixed(2)}%
+                   </span>
+                   <span className="text-[10px] text-text-muted opacity-80 uppercase tracking-tighter">
+                     (PIS, COFINS, CSLL, IRPJ, ISS)
+                   </span>
                  </div>
               </div>
 
@@ -484,28 +643,61 @@ export const OpportunityKitForm = () => {
                   <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none" />
                   <span className="block text-brand-primary-light text-sm font-medium">Faturamento Mensal Estimado</span>
                   <div className="text-3xl font-extrabold tracking-tight">
-                    {fmtC(financials?.summary?.valor_mensal_kit)}
+                    {fmtC((financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0))}
                   </div>
                   <div className="text-sm font-medium text-brand-primary-light pt-3 mt-3 border-t border-white/20 flex justify-between">
                     <span>Prazo Tarifa:</span>
-                    <span>{financials?.summary?.prazo_mensalidades || 0} meses tarifados</span>
+                    <span>{financials?.summary?.prazo_mensalidades || 0} meses faturados</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
-                    <span className="block text-xs font-medium text-text-muted mb-1">Lucro Líquido Real</span>
-                    <div className="text-xl font-bold text-brand-success tabular-nums">
-                      {fmtC(financials?.summary?.lucro_mensal_kit)}
+                {(() => {
+                  const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
+                  const faturamentoMensal = (financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0);
+                  const impostosMensais = financials?.summary?.valor_impostos || 0;
+                  const custoAq = financials?.summary?.custo_aquisicao_kit || 0;
+                  const custoOperacionalMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
+
+                  const totalFaturamentoContrato = faturamentoMensal * mesesFaturados;
+                  const custoTotalContrato = custoAq + (custoOperacionalMensal * mesesFaturados);
+                  const receitaLiquida = faturamentoMensal - impostosMensais;
+                  const roiMeses = receitaLiquida > 0 ? (custoTotalContrato / receitaLiquida) : 0;
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
+                        <span className="block text-xs font-medium text-text-muted mb-1">Total Faturamento Anual</span>
+                        <div className="text-xl font-bold text-text-primary tabular-nums">
+                          {fmtC(totalFaturamentoContrato)}
+                        </div>
+                        <div className="text-[10px] text-text-muted mt-1 leading-tight">
+                          ({mesesFaturados} meses faturados x {fmtC(faturamentoMensal)})
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
+                          <span className="block text-xs font-medium text-text-muted mb-1">Custo Total</span>
+                          <div className="text-xl font-bold text-brand-warning tabular-nums">
+                            {fmtC(custoTotalContrato)}
+                          </div>
+                          <div className="text-[10px] text-text-muted mt-1 leading-tight line-clamp-2" title={`Custo de aquisição total + (${fmtC(custoOperacionalMensal)} x ${mesesFaturados})`}>
+                            CA + (C.Op x {mesesFaturados})
+                          </div>
+                        </div>
+                        <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
+                          <span className="block text-xs font-medium text-text-muted mb-1">ROI (Retorno)</span>
+                          <div className="text-xl font-bold text-brand-secondary tabular-nums">
+                            {roiMeses.toFixed(1)} {roiMeses === 1 ? 'mês' : 'meses'}
+                          </div>
+                          <div className="text-[10px] text-text-muted mt-1 leading-tight">
+                            CT / ({fmtC(faturamentoMensal)} - Imp)
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
-                    <span className="block text-xs font-medium text-text-muted mb-1">Margem Operacional</span>
-                    <div className="text-xl font-bold text-brand-secondary tabular-nums">
-                      {financials?.summary?.margem_kit?.toFixed(2) || '0.00'}%
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
 
             </div>
