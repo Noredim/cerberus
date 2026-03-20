@@ -40,6 +40,7 @@ class SalesBudget(Base):
     taxa_manutencao_anual = Column(Numeric(6, 4), nullable=False, default=5)
     tipo_receita_rental = Column(String(50), nullable=False, default="LOCACAO_PURA")
     fator_margem_padrao = Column(Numeric(6, 4), nullable=False, default=1)
+    fator_manutencao_padrao = Column(Numeric(6, 4), nullable=False, default=1)
     perc_instalacao_padrao = Column(Numeric(6, 4), nullable=False, default=0)
     perc_comissao_rental = Column(Numeric(6, 4), nullable=False, default=0)
     perc_pis_rental = Column(Numeric(6, 4), nullable=False, default=0)

@@ -305,6 +305,18 @@ def duplicate_budget(
     return _budget_to_dict(budget)
 
 
+@router.delete("/{budget_id}")
+def delete_budget(
+    budget_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    success = service.delete_budget(db, current_user.tenant_id, str(budget_id))
+    if not success:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    return {"message": "Orçamento excluído com sucesso"}
+
+
 def _budget_to_dict(budget) -> dict:
     """Serialize budget to response dict."""
     items = []

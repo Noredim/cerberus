@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArrowLeft, Save, Calculator, HelpCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -33,6 +33,7 @@ interface KitFormValues {
   custo_logistica_mensal_kit: number;
   custo_software_mensal_kit: number;
   custo_itens_acessorios_mensal_kit: number;
+  sales_budget_id?: string;
   items: Array<{
     product_id: string;
     descricao_item: string;
@@ -47,16 +48,29 @@ interface KitFormValues {
   }>;
 }
 
-export const OpportunityKitForm = () => {
-  const { kitId } = useParams();
+export interface OpportunityKitFormProps {
+  isModal?: boolean;
+  onClose?: () => void;
+  initialSalesBudgetId?: string | null;
+  onSuccess?: (savedKit?: any) => void;
+  modalEditKitId?: string | null;
+}
+
+export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudgetId, onSuccess, modalEditKitId }: OpportunityKitFormProps = {}) => {
+  const { kitId: routeKitId } = useParams();
+  const kitId = isModal ? modalEditKitId : routeKitId;
   const { activeCompanyId } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sourceBudgetId = initialSalesBudgetId || searchParams.get('source_budget_id');
+
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showCostSearch, setShowCostSearch] = useState(false);
 
   const [form, setForm] = useState<KitFormValues>({
+    sales_budget_id: sourceBudgetId || undefined,
     nome_kit: '',
     descricao_kit: '',
     quantidade_kits: 1,
@@ -117,14 +131,25 @@ export const OpportunityKitForm = () => {
     return () => clearTimeout(timerRef.current);
   }, [form]);
 
+  const sanitizePayload = (data: KitFormValues) => {
+    return {
+      ...data,
+      nome_kit: data.nome_kit || "PREVIEW_KIT",
+      percentual_instalacao: data.percentual_instalacao === '' ? null : data.percentual_instalacao,
+      fator_manutencao: data.fator_manutencao === '' ? null : data.fator_manutencao,
+    };
+  };
+
   const recalculate = async (data: KitFormValues) => {
-    if (!data.nome_kit || data.prazo_contrato_meses <= 0) return;
+    if (data.prazo_contrato_meses <= 0) return;
     setIsCalculating(true);
     try {
-      const resp = await api.post(`/opportunity-kits/preview`, data);
+      const payload = sanitizePayload(data);
+      const resp = await api.post(`/opportunity-kits/preview`, payload);
       setFinancials(resp.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro no recálculo de preview", err);
+      if (err.response?.status === 422) console.error(err.response.data);
     } finally {
       setIsCalculating(false);
     }
@@ -201,12 +226,24 @@ export const OpportunityKitForm = () => {
 
   const onSubmit = async () => {
     try {
+      const payload = sanitizePayload(form);
+      let savedKit = null;
       if (kitId) {
-        await api.put(`/opportunity-kits/${kitId}`, form);
+        const resp = await api.put(`/opportunity-kits/${kitId}`, payload);
+        savedKit = resp.data;
       } else {
-        await api.post(`/opportunity-kits/company/${activeCompanyId}`, form);
+        const resp = await api.post(`/opportunity-kits/company/${activeCompanyId}`, payload);
+        savedKit = resp.data;
       }
-      navigate('/cadastros/kits');
+      if (isModal && onSuccess) {
+        onSuccess(savedKit);
+        return;
+      }
+      if (sourceBudgetId || form.sales_budget_id) {
+        navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
+      } else {
+        navigate('/cadastros/kits');
+      }
     } catch (error) {
       console.error("Error saving kit", error);
       alert("Erro ao salvar kit. Verifique se o prazo de carência não é maior que o de contrato.");
@@ -217,28 +254,47 @@ export const OpportunityKitForm = () => {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-24">
+    <div className={`space-y-6 mx-auto ${isModal ? 'max-w-full pb-8' : 'max-w-[1600px] pb-24'}`}>
       {/* HEADER */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" type="button" onClick={() => navigate('/cadastros/kits')}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar para Lista
-        </Button>
-      </div>
+      {!isModal && (
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" type="button" onClick={() => {
+            if (sourceBudgetId || form.sales_budget_id) navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
+            else navigate('/cadastros/kits');
+          }}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-           <h1 className="text-3xl font-bold text-text-primary tracking-tight">
-            {kitId ? 'Editar Kit de Oportunidade' : 'Novo Kit de Oportunidade'}
-          </h1>
+           <div className="flex items-center gap-3">
+             <h1 className="text-3xl font-bold text-text-primary tracking-tight">
+              {kitId ? 'Editar Kit de Oportunidade' : 'Novo Kit de Oportunidade'}
+             </h1>
+             {(sourceBudgetId || form.sales_budget_id) && (
+               <span className="bg-primary-50 text-primary-600 border border-primary-200 px-3 py-1 rounded-full text-sm font-semibold">
+                 Exclusivo do Orçamento
+               </span>
+             )}
+           </div>
           <p className="text-text-muted mt-2 text-lg">
             Configure os parâmetros de locação, agrupe produtos e calcule tarifas.
           </p>
         </div>
-        <Button variant="primary" size="lg" onClick={onSubmit}>
-          <Save className="w-5 h-5 mr-2" />
-          Salvar Kit de Oportunidade
-        </Button>
+        <div className="flex items-center gap-3">
+          {isModal && onClose && (
+            <Button variant="ghost" size="lg" onClick={onClose}>
+              Cancelar
+            </Button>
+          )}
+          <Button variant="primary" size="lg" onClick={onSubmit}>
+            <Save className="w-5 h-5 mr-2" />
+            Salvar Kit de Oportunidade
+          </Button>
+        </div>
       </div>
 
       {/* SIDESPLIT LAYOUT */}
@@ -313,6 +369,19 @@ export const OpportunityKitForm = () => {
                 <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
               </div>
 
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle">
+                <div>
+                  <label className="block text-sm font-medium mb-1">% de Instalação</label>
+                  <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
+                  <p className="text-xs text-text-muted mt-1">Ref. para custo de manutenção/instalação.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
+                  <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
+                  <p className="text-xs text-text-muted mt-1">% s/ custo aq. (+ inst) anual.</p>
+                </div>
+              </div>
+
               {/* FLAGS E OPÇÕES */}
               <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle">
                 <div className="space-y-4">
@@ -326,12 +395,6 @@ export const OpportunityKitForm = () => {
                     />
                     <label htmlFor="chk-instalacao" className="text-sm font-medium cursor-pointer">Instalação Inclusa</label>
                   </div>
-                  {form.instalacao_inclusa && (
-                    <div className="pl-8">
-                      <label className="block text-sm font-medium mb-1">% de Instalação</label>
-                      <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -345,20 +408,10 @@ export const OpportunityKitForm = () => {
                     />
                     <label htmlFor="chk-manutencao" className="text-sm font-medium cursor-pointer">Manutenção Inclusa</label>
                   </div>
-                  {form.manutencao_inclusa && (
+                  {form.manutencao_inclusa && !form.instalacao_inclusa && (
                     <div className="pl-8">
-                      {form.instalacao_inclusa ? (
-                        <>
-                          <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
-                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
-                          <p className="text-xs text-text-muted mt-1">% s/ custo aq. anual.</p>
-                        </>
-                      ) : (
-                        <>
-                          <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
-                          <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
-                        </>
-                      )}
+                      <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
+                      <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
                     </div>
                   )}
                 </div>

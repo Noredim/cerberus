@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user
@@ -16,11 +16,12 @@ router = APIRouter(prefix="/opportunity-kits", tags=["Opportunity Kits"])
 @router.get("/company/{company_id}", response_model=List[OpportunityKitResponse])
 def list_kits_by_company(
     company_id: UUID,
+    sales_budget_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     service = OpportunityKitService(db)
-    return service.list_kits(current_user.tenant_id, str(company_id))
+    return service.list_kits(current_user.tenant_id, str(company_id), str(sales_budget_id) if sales_budget_id else None)
 @router.get("/{kit_id}", response_model=OpportunityKitResponse)
 def get_kit(
     kit_id: UUID,

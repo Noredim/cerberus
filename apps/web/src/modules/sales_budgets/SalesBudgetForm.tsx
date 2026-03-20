@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { AddRentalItemModal } from './AddRentalItemModal';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
+import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 
 interface CostComposition {
   base_unitario: number;
@@ -102,6 +103,12 @@ interface RentalBudgetItem {
   lucro_mensal: number;
   margem: number;
   cost_composition?: CostComposition;
+  kit_vlt_manut?: number;
+  kit_valor_mensal?: number;
+  kit_valor_impostos?: number;
+  kit_receita_liquida?: number;
+  kit_lucro_mensal?: number;
+  kit_margem?: number;
 }
 
 function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
@@ -120,10 +127,14 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
     
     let manutencaoMensalUnit = 0;
     if (!isInstalacao) {
-      const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 0) : Number(item.taxa_manutencao_anual_item || 0);
-      manutencaoMensalUnit = (custoAquisicaoUnit * (taxaManut / 100)) / 12;
+      if (item.kit_vlt_manut != null) {
+          manutencaoMensalUnit = item.kit_vlt_manut;
+      } else {
+          const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 0) : Number(item.taxa_manutencao_anual_item || 0);
+          manutencaoMensalUnit = (custoAquisicaoUnit * (taxaManut / 100)) / 12;
+      }
     }
-    const custoManutMensalUnit = manutencaoMensalUnit + custoOpMensalUnit;
+    const custoManutMensalUnit = manutencaoMensalUnit + (item.kit_vlt_manut != null ? 0 : custoOpMensalUnit);
     
     const fm = Number(item.fator_margem || 1);
     const valorBaseVendaUnit = custoAquisicaoUnit * fm;
@@ -169,19 +180,23 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
         valorMensalUnit = beforeTaxes + impostosUnit;
     }
 
-    const recLiqUnit = valorMensalUnit - impostosUnit;
+    const recLiqUnit = item.kit_receita_liquida != null ? item.kit_receita_liquida : (valorMensalUnit - impostosUnit);
     const depreciacaoUnit = (!isInstalacao && prazo > 0) ? (custoAquisicaoUnit / prazo) : 0;
     const custoTotalMensalUnit = depreciacaoUnit + custoManutMensalUnit;
 
     let lucroMensalUnit = 0;
-    if (isInstalacao) {
+    if (item.kit_lucro_mensal != null) {
+        lucroMensalUnit = item.kit_lucro_mensal;
+    } else if (isInstalacao) {
         lucroMensalUnit = recLiqUnit - custoAquisicaoUnit - custoOpMensalUnit;
     } else {
         lucroMensalUnit = recLiqUnit - custoTotalMensalUnit;
     }
 
     let margem = 0;
-    if (isComodato) {
+    if (item.kit_margem != null) {
+        margem = item.kit_margem;
+    } else if (isComodato) {
         lucroMensalUnit = 0;
         margem = 0;
     } else {
@@ -200,9 +215,9 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
         valor_venda_equipamento: valorBaseVendaUnit,
         parcela_locacao: parcelaLocacaoUnit,
         manutencao_locacao: manutencaoMensalUnit,
-        valor_mensal: valorMensalUnit,
+        valor_mensal: item.kit_valor_mensal != null ? item.kit_valor_mensal : valorMensalUnit,
         perc_impostos_total: pImp,
-        impostos_mensal: impostosUnit,
+        impostos_mensal: item.kit_valor_impostos != null ? item.kit_valor_impostos : impostosUnit,
         receita_liquida_mensal: recLiqUnit,
         perc_comissao: 0,
         comissao_mensal: 0,
@@ -388,7 +403,8 @@ export function SalesBudgetForm() {
   const [items, setItems] = useState<SalesBudgetItem[]>([]);
 
   // Tab
-  const [activeTab, setActiveTab] = useState<'venda' | 'locacao'>('venda');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'locacao' ? 'locacao' : 'venda';
 
   // Rental defaults
   const [tipoReceitaRental, setTipoReceitaRental] = useState('LOCACAO_PURA');
@@ -397,6 +413,7 @@ export function SalesBudgetForm() {
   const [taxaJurosMensal, setTaxaJurosMensal] = useState(0);
   const [taxaManutencaoAnual, setTaxaManutencaoAnual] = useState(5);
   const [fatorMargemPadrao, setFatorMargemPadrao] = useState(1);
+  const [fatorManutencaoPadrao, setFatorManutencaoPadrao] = useState(1);
   const [percInstalacaoPadrao, setPercInstalacaoPadrao] = useState(0);
   const [percComissaoRental, setPercComissaoRental] = useState(0);
   const [percPisRental, setPercPisRental] = useState(0);
@@ -407,6 +424,8 @@ export function SalesBudgetForm() {
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
   const [showAddRentalItemModal, setShowAddRentalItemModal] = useState(false);
   const [showKitSearchModal, setShowKitSearchModal] = useState(false);
+  const [showCreateKitModal, setShowCreateKitModal] = useState(false);
+  const [showOverwriteModal, setShowOverwriteModal] = useState(false);
   const [viewingKitId, setViewingKitId] = useState<string | null>(null);
 
   // Lookups
@@ -437,6 +456,7 @@ export function SalesBudgetForm() {
     taxa_juros_mensal: taxaJurosMensal,
     taxa_manutencao_anual: taxaManutencaoAnual,
     fator_margem_padrao: fatorMargemPadrao,
+    fator_manutencao_padrao: fatorManutencaoPadrao,
     perc_instalacao_padrao: percInstalacaoPadrao,
     perc_comissao_rental: percComissaoRental,
     perc_pis_rental: percPisRental,
@@ -444,7 +464,7 @@ export function SalesBudgetForm() {
     perc_csll_rental: percCsllRental,
     perc_irpj_rental: percIrpjRental,
     perc_iss_rental: percIssRental,
-  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, fatorMargemPadrao, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
+  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, fatorMargemPadrao, fatorManutencaoPadrao, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
 
   // Recalculate items when defaults change
   useEffect(() => {
@@ -525,6 +545,7 @@ export function SalesBudgetForm() {
       setTaxaJurosMensal(Number(d.taxa_juros_mensal) || 0);
       setTaxaManutencaoAnual(Number(d.taxa_manutencao_anual) || 5);
       setFatorMargemPadrao(Number(d.fator_margem_padrao) || 1);
+      setFatorManutencaoPadrao(Number(d.fator_manutencao_padrao) || 1);
       setPercInstalacaoPadrao(Number(d.perc_instalacao_padrao) || 0);
       setPercComissaoRental(Number(d.perc_comissao_rental) || 0);
       setPercPisRental(Number(d.perc_pis_rental) || 0);
@@ -730,6 +751,12 @@ export function SalesBudgetForm() {
         usa_taxa_manut_padrao: false,
         taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
         fator_margem: Number(kit.fator_margem_locacao || fatorMargemPadrao || 1),
+        kit_vlt_manut: Number(kit.summary?.vlt_manut || 0),
+        kit_valor_mensal: Number(kit.summary?.valor_mensal_kit || 0),
+        kit_valor_impostos: Number(kit.summary?.valor_impostos || 0),
+        kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
+        kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
+        kit_margem: Number(kit.summary?.margem_kit || 0),
         custo_manut_mensal: 0, 
         custo_total_mensal: 0,
         valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
@@ -751,6 +778,46 @@ export function SalesBudgetForm() {
 
   const removeRentalItem = (idx: number) => {
     setRentalItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleBlurRentalItem = async (idx: number, field: string, value: any) => {
+    const item = rentalItems[idx];
+    if (!item.opportunity_kit_id) return;
+    
+    try {
+      const payload: any = {};
+      if (field === 'prazo_contrato') payload.prazo_contrato_meses = value;
+      else if (field === 'fator_margem') payload.fator_margem_locacao = value;
+      else return; // only sync specific fields
+      
+      const res = await api.put(`/opportunity-kits/${item.opportunity_kit_id}`, payload);
+      const updatedKit = res.data;
+      
+      setRentalItems(prev => {
+        const updated = [...prev];
+        updated[idx] = calcRentalItem({ 
+           ...updated[idx],
+           custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
+           kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
+           kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
+           custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
+           ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
+           frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
+           icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
+           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
+           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
+           // these won't change but just to ensure syncing:
+           kit_pis: Number(updatedKit.aliq_pis || 0),
+           kit_cofins: Number(updatedKit.aliq_cofins || 0),
+           kit_csll: Number(updatedKit.aliq_csll || 0),
+           kit_irpj: Number(updatedKit.aliq_irpj || 0),
+           kit_iss: Number(updatedKit.aliq_iss || 0)
+        }, rentalDefaults);
+        return updated;
+      });
+    } catch (err) {
+      console.error("Erro ao sincronizar kit backend:", err);
+    }
   };
 
   // Tooltip state for cost composition and tax breakdown
@@ -812,8 +879,75 @@ export function SalesBudgetForm() {
   const margemLabel = totals.margem >= 15 ? 'Saudável' : totals.margem >= 5 ? 'Atenção' : 'Crítico';
   const rentalMargemClass = rentalTotals.margem >= 15 ? 'text-emerald-600' : rentalTotals.margem >= 5 ? 'text-amber-600' : 'text-rose-600';
 
-  const handleSave = async () => {
-    if (!titulo || !customerId) return alert('Preencha título e cliente.');
+  const handleGlobalKitOverwrite = async () => {
+    if (!id) {
+      alert("Salve o orçamento primeiro antes de sobrescrever kits globais.");
+      setShowOverwriteModal(false);
+      return;
+    }
+    const kitIds = Array.from(new Set(rentalItems.filter(ri => ri.opportunity_kit_id).map(ri => ri.opportunity_kit_id)));
+    if (kitIds.length === 0) {
+      alert("Não há kits lançados neste orçamento para atualizar.");
+      setShowOverwriteModal(false);
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const kitUpdates = await Promise.all(kitIds.map(async kitId => {
+        const res = await api.put(`/opportunity-kits/${kitId}`, {
+          prazo_contrato_meses: prazoContratoMeses,
+          fator_margem_locacao: fatorMargemPadrao,
+          fator_manutencao: fatorManutencaoPadrao
+        });
+        return { kitId, data: res.data };
+      }));
+
+      const kitMap = new Map(kitUpdates.map(k => [k.kitId, k.data]));
+      
+      const updatedRentalItems = rentalItems.map(ri => {
+         if (!ri.opportunity_kit_id || !kitMap.has(ri.opportunity_kit_id)) return ri;
+         const updatedKit = kitMap.get(ri.opportunity_kit_id);
+         return calcRentalItem({ 
+           ...ri,
+           prazo_contrato: prazoContratoMeses,
+           fator_margem: fatorMargemPadrao,
+           custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
+           kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
+           kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
+           custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
+           ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
+           frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
+           icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
+           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
+           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
+           kit_pis: Number(updatedKit.aliq_pis || 0),
+           kit_cofins: Number(updatedKit.aliq_cofins || 0),
+           kit_csll: Number(updatedKit.aliq_csll || 0),
+           kit_irpj: Number(updatedKit.aliq_irpj || 0),
+           kit_iss: Number(updatedKit.aliq_iss || 0)
+        }, rentalDefaults);
+      });
+
+      const success = await handleSave(true, updatedRentalItems);
+      if (!success) return;
+
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao sobrescrever kits na oportunidade.");
+    } finally {
+      setSaving(false);
+      setShowOverwriteModal(false);
+    }
+  };
+
+  const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems) => {
+    if (!titulo || !customerId) {
+        alert('Preencha título e cliente.');
+        return false;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -839,6 +973,7 @@ export function SalesBudgetForm() {
         taxa_juros_mensal: +taxaJurosMensal,
         taxa_manutencao_anual: +taxaManutencaoAnual,
         fator_margem_padrao: +fatorMargemPadrao,
+        fator_manutencao_padrao: +fatorManutencaoPadrao,
         perc_instalacao_padrao: +percInstalacaoPadrao,
         perc_comissao_rental: +percComissaoRental,
         perc_pis_rental: +percPisRental,
@@ -866,7 +1001,7 @@ export function SalesBudgetForm() {
           perc_comissao: +i.perc_comissao,
           tem_st: i.tem_st,
         })),
-        rental_items: rentalItems.map(i => ({
+        rental_items: (overriddenRentalItems || rentalItems).map(i => ({
           product_id: i.product_id || null,
           opportunity_kit_id: i.opportunity_kit_id || null,
           custo_op_mensal_kit: i.custo_op_mensal_kit != null ? +i.custo_op_mensal_kit : null,
@@ -880,6 +1015,12 @@ export function SalesBudgetForm() {
           kit_csll: i.kit_csll != null ? +i.kit_csll : null,
           kit_irpj: i.kit_irpj != null ? +i.kit_irpj : null,
           kit_iss: i.kit_iss != null ? +i.kit_iss : null,
+          kit_vlt_manut: i.kit_vlt_manut != null ? +i.kit_vlt_manut : null,
+          kit_valor_mensal: i.kit_valor_mensal != null ? +i.kit_valor_mensal : null,
+          kit_valor_impostos: i.kit_valor_impostos != null ? +i.kit_valor_impostos : null,
+          kit_receita_liquida: i.kit_receita_liquida != null ? +i.kit_receita_liquida : null,
+          kit_lucro_mensal: i.kit_lucro_mensal != null ? +i.kit_lucro_mensal : null,
+          kit_margem: i.kit_margem != null ? +i.kit_margem : null,
           quantidade: +i.quantidade,
           perc_instalacao_item: i.perc_instalacao_item != null ? +i.perc_instalacao_item : null,
           valor_instalacao_item: i.valor_instalacao_item != null ? +i.valor_instalacao_item : null,
@@ -897,15 +1038,18 @@ export function SalesBudgetForm() {
 
       if (isEditing) {
         await api.put(`/sales-budgets/${id}`, payload);
+        if (!preventNavigate) alert('Salvo com sucesso!');
       } else {
         const res = await api.post('/sales-budgets', payload);
-        navigate(`/orcamentos-vendas/${res.data.id}`, { replace: true });
+        if (!preventNavigate) navigate(`/orcamentos-vendas/${res.data.id}?tab=${activeTab}`, { replace: true });
       }
+      return true;
     } catch (err: any) {
       console.error('Save error:', err.response?.data || err);
       const detail = err.response?.data?.detail;
       const msg = Array.isArray(detail) ? detail.map((d: any) => d.msg).join(', ') : (typeof detail === 'string' ? detail : err.message);
       alert('Erro ao salvar: ' + msg);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -956,7 +1100,7 @@ export function SalesBudgetForm() {
             </Button>
           )}
           {!isReadonly && (
-            <Button type="button" onClick={handleSave} disabled={saving}>
+            <Button type="button" onClick={() => handleSave()} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
               Salvar
             </Button>
@@ -996,8 +1140,8 @@ export function SalesBudgetForm() {
 
       {/* Tab Bar */}
       <div className="flex border-b border-border-subtle">
-        <button onClick={() => setActiveTab('venda')} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>Venda</button>
-        <button onClick={() => setActiveTab('locacao')} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>Locação / Comodato</button>
+        <button onClick={() => setSearchParams({ tab: 'venda' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>Venda</button>
+        <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>Locação / Comodato</button>
       </div>
 
       {/* ═══ VENDA TAB ═══ */}
@@ -1366,21 +1510,21 @@ export function SalesBudgetForm() {
 
         {/* Rental Parameters */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-          <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Parâmetros de Locação</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Parâmetros de Locação/Comodato</h2>
+            {!isReadonly && (
+              <Button size="sm" variant="outline" className="border-brand-primary text-brand-primary hover:bg-brand-primary/10" onClick={() => setShowOverwriteModal(true)}>
+                <Save className="w-4 h-4 mr-2" /> Salvar e recalcular oportunidade
+              </Button>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
               { label: 'Prazo Contrato (meses)', val: prazoContratoMeses, set: setPrazoContratoMeses, step: '1' },
-              { label: 'Prazo Instalação (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
-              { label: 'Taxa Juros Mensal %', val: taxaJurosMensal, set: setTaxaJurosMensal, step: '0.0001' },
-              { label: 'Manutenção Anual %', val: taxaManutencaoAnual, set: setTaxaManutencaoAnual },
               { label: 'Fator Margem Padrão', val: fatorMargemPadrao, set: setFatorMargemPadrao, step: '0.01' },
-              { label: '% Instalação Padrão', val: percInstalacaoPadrao, set: setPercInstalacaoPadrao },
+              { label: 'Fator Margem Manut.', val: fatorManutencaoPadrao, set: setFatorManutencaoPadrao, step: '0.01' },
+              { label: 'Prazo Instalação (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
               { label: 'Comissão %', val: percComissaoRental, set: setPercComissaoRental },
-              { label: 'PIS %', val: percPisRental, set: setPercPisRental },
-              { label: 'COFINS %', val: percCofinsRental, set: setPercCofinsRental },
-              { label: 'CSLL %', val: percCsllRental, set: setPercCsllRental },
-              { label: 'IRPJ %', val: percIrpjRental, set: setPercIrpjRental },
-              { label: 'ISS %', val: percIssRental, set: setPercIssRental },
             ].map(p => (
               <div key={p.label}>
                 <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
@@ -1400,6 +1544,20 @@ export function SalesBudgetForm() {
                 <Button variant="outline" size="sm" onClick={() => setShowKitSearchModal(true)}>
                   <Package className="w-4 h-4 mr-1" /> Adicionar Kit Global
                 </Button>
+              )}
+              {!isReadonly && (
+                <Tooltip content={!id ? "Salve o orçamento primeiro para criar um kit específico" : ""}>
+                  <div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      disabled={!id}
+                      onClick={() => setShowCreateKitModal(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Criar Novo Kit na Oportunidade
+                    </Button>
+                  </div>
+                </Tooltip>
               )}
               {!isReadonly && (
                 <Button variant="outline" size="sm" onClick={() => setShowAddRentalItemModal(true)}>
@@ -1452,8 +1610,8 @@ export function SalesBudgetForm() {
                             ri.opportunity_kit_id ? (
                               <div className="space-y-1 w-52">
                                 <div className="font-semibold text-amber-300 mb-2">Composição de Custos</div>
-                                <div className="flex justify-between"><span>Produtos (Total):</span><span className="text-text-primary">{fmt((ri.kit_custo_produtos || 0) * ri.quantidade)}</span></div>
-                                <div className="flex justify-between"><span>Serviços (Total):</span><span className="text-text-primary">{fmt((ri.kit_custo_servicos || 0) * ri.quantidade)}</span></div>
+                                <div className="flex justify-between"><span>Produtos (Total):</span><span>{fmt((ri.kit_custo_produtos || 0) * ri.quantidade)}</span></div>
+                                <div className="flex justify-between"><span>Serviços (Total):</span><span>{fmt((ri.kit_custo_servicos || 0) * ri.quantidade)}</span></div>
                                 <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total Custo Aquis.:</span><span>{fmt(ri.custo_total_aquisicao * ri.quantidade)}</span></div>
                               </div>
                             ) : (
@@ -1473,12 +1631,18 @@ export function SalesBudgetForm() {
                           </Tooltip>
                         </td>
                         <td className="px-1.5 py-2 text-center">
-                          <input type="number" min="1" value={ri.prazo_contrato} onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)} disabled={isReadonly}
+                          <input type="number" min="1" value={ri.prazo_contrato} 
+                            onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)} 
+                            onBlur={e => handleBlurRentalItem(idx, 'prazo_contrato', +e.target.value)}
+                            disabled={isReadonly}
                             className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.custo_manut_mensal * ri.prazo_contrato * ri.quantidade)}</td>
                         <td className="px-1.5 py-2 text-center">
-                          <input type="number" step="0.01" min="1" value={ri.fator_margem} onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)} disabled={isReadonly}
+                          <input type="number" step="0.01" min="1" value={ri.fator_margem} 
+                            onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)} 
+                            onBlur={e => handleBlurRentalItem(idx, 'fator_margem', +e.target.value)}
+                            disabled={isReadonly}
                             className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.parcela_locacao * ri.quantidade) : '-'}</td>
@@ -1503,6 +1667,51 @@ export function SalesBudgetForm() {
         </div>
       </>)}
 
+      {/* Create Kit Modal Overlay */}
+      {showCreateKitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
+               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Criar Kit Exclusivo</h3>
+               <button onClick={() => setShowCreateKitModal(false)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
+                <OpportunityKitForm 
+                   isModal={true} 
+                   onClose={() => setShowCreateKitModal(false)} 
+                   initialSalesBudgetId={id}
+                   onSuccess={(savedKit) => {
+                     setShowCreateKitModal(false);
+                     if (savedKit) handleAddKit(savedKit);
+                   }}
+                />
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* Overwrite Confirmation Modal */}
+      {showOverwriteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-bg-deep rounded-2xl shadow-2xl p-6 w-full max-w-md border border-border-subtle">
+            <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substituição</h3>
+            <p className="text-text-muted mb-6">
+              Esta ação irá <b>salvar o orçamento atual</b> e aplicar os valores de <br/><br/>
+              • Prazo de contrato<br/>
+              • Fator margem<br/>
+              • Fator margem manut.<br/><br/>
+              em <b>todos os kits lançados</b> neste orçamento, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowOverwriteModal(false)} disabled={saving}>Cancelar</Button>
+              <Button onClick={handleGlobalKitOverwrite} disabled={saving} className="bg-brand-primary text-white">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} Confirmar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Product Search Modal — Sale */}
       {showProductSearch && (
         <ProductSearchModal
@@ -1526,6 +1735,7 @@ export function SalesBudgetForm() {
           isOpen={showKitSearchModal}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
+          salesBudgetId={id}
         />
       )}
       {/* Kit Search Modal */}
@@ -1544,12 +1754,57 @@ export function SalesBudgetForm() {
           onSelect={handleAddKit}
         />
       )}
-      {/* Kit Items View Modal */}
+      {/* Kit Items Edit Modal */}
       {viewingKitId && (
-        <OpportunityKitItemsModal
-          kitId={viewingKitId}
-          onClose={() => setViewingKitId(null)}
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
+               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Editar Kit na Oportunidade</h3>
+               <button onClick={() => setViewingKitId(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
+                <OpportunityKitForm 
+                   isModal={true} 
+                   modalEditKitId={viewingKitId}
+                   onClose={() => setViewingKitId(null)} 
+                   initialSalesBudgetId={id}
+                   onSuccess={(savedKit) => {
+                     setViewingKitId(null);
+                     if (savedKit) {
+                       // Update the existing grid item with the newly saved kit values
+                       setRentalItems(prev => prev.map(item => {
+                         if (item.opportunity_kit_id === savedKit.id) {
+                           return calcRentalItem({ ...item, 
+                             product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
+                             custo_op_mensal_kit: Number(savedKit.summary?.custo_operacional_mensal_kit || 0),
+                             is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
+                             tipo_contrato_kit: savedKit.tipo_contrato,
+                             kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
+                             kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
+                             kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
+                             kit_pis: Number(savedKit.aliq_pis || 0),
+                             kit_cofins: Number(savedKit.aliq_cofins || 0),
+                             kit_csll: Number(savedKit.aliq_csll || 0),
+                             kit_irpj: Number(savedKit.aliq_irpj || 0),
+                             kit_iss: Number(savedKit.aliq_iss || 0),
+                             custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
+                             ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
+                             frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
+                             icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
+                             difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
+                             taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
+                             fator_margem: Number(savedKit.fator_margem_locacao || fatorMargemPadrao || 1),
+                             prazo_contrato: Number(savedKit.prazo_contrato_meses || prazoContratoMeses)
+                           }, rentalDefaults);
+                         }
+                         return item;
+                       }));
+                     }
+                   }}
+                />
+             </div>
+           </div>
+        </div>
       )}
     </div>
   );
@@ -1598,104 +1853,3 @@ function ProductSearchModal({ products, onSelect, onClose }: { products: any[]; 
   );
 }
 
-function OpportunityKitItemsModal({ kitId, onClose }: { kitId: string; onClose: () => void }) {
-  const [kit, setKit] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get(`/opportunity-kits/${kitId}`)
-      .then(res => setKit(res.data))
-      .catch(err => console.error(err))
-      .finally(() => setLoading(false));
-  }, [kitId]);
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-surface rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden ring-1 ring-white/10" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-border-subtle bg-bg-deep">
-          <div>
-            <h3 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-              <Package className="w-5 h-5 text-brand-primary" />
-              Itens do Kit
-            </h3>
-            {kit && <p className="text-xs text-text-muted mt-0.5">{kit.nome_kit}</p>}
-          </div>
-          <button onClick={onClose} className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        
-        <div className="p-5 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-brand-primary" />
-            </div>
-          ) : !kit || !kit.items || kit.items.length === 0 ? (
-            <p className="text-center py-8 text-text-muted text-sm">Este kit não possui itens ou não foi encontrado.</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 bg-bg-deep p-4 rounded-xl border border-border-subtle">
-                <div>
-                  <div className="text-xs text-text-muted">Modalidade</div>
-                  <div className="font-medium text-text-primary">{kit.tipo_contrato === 'COM_EQUIPAMENTO' ? 'Com Eq.' : 'Instalação'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Custo Kit</div>
-                  <div className="font-medium text-text-primary">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kit.summary?.custo_aquisicao_total || 0)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Prazo (Meses)</div>
-                  <div className="font-medium text-text-primary">{kit.prazo_contrato_meses}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Fator Margem</div>
-                  <div className="font-medium text-text-primary">{kit.fator_margem_locacao}</div>
-                </div>
-              </div>
-
-              <div className="border border-border-subtle rounded-lg overflow-hidden">
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead className="bg-[#f8f9fa] dark:bg-bg-deep font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
-                    <tr>
-                      <th className="px-3 py-2">Descrição do Item</th>
-                      <th className="px-3 py-2 text-center w-20">Qtd. Un.</th>
-                      <th className="px-3 py-2 text-right w-28">Custo Unitário</th>
-                      <th className="px-3 py-2 text-right w-28">Custo Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-subtle bg-surface">
-                    {kit.items.map((item: any, idx: number) => {
-                      // Total per kit item (unit_cost * quantity_in_kit)
-                      const itemTotal = (item.product?.vlr_referencia_uso_consumo || 0) * (item.quantidade_no_kit || 1);
-                      return (
-                        <tr key={idx} className="hover:bg-bg-deep/50 transition-colors">
-                          <td className="px-3 py-2">
-                            <div className="font-medium text-text-primary">{item.descricao_item || item.product?.nome}</div>
-                            {item.product?.codigo && (
-                              <div className="text-[10px] text-brand-primary font-mono mt-0.5">{item.product.codigo}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center font-medium text-text-muted">
-                            {item.quantidade_no_kit}
-                          </td>
-                          <td className="px-3 py-2 text-right text-text-muted">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.product?.vlr_referencia_uso_consumo || 0)}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium text-text-primary">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(itemTotal)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -12,6 +12,7 @@ class OpportunityKit(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Dados Gerais
     nome_kit = Column(String(255), nullable=False)
@@ -27,6 +28,12 @@ class OpportunityKit(Base):
     fator_margem_locacao = Column(Numeric(10, 4), nullable=False, default=1.0)
     taxa_juros_mensal = Column(Numeric(10, 6), nullable=False, default=0.0)
     taxa_manutencao_anual = Column(Numeric(6, 4), nullable=False, default=0.0)
+    
+    # Flags de Instalação e Manutenção
+    instalacao_inclusa = Column(Boolean, nullable=False, default=False)
+    percentual_instalacao = Column(Numeric(10, 4), nullable=True)
+    manutencao_inclusa = Column(Boolean, nullable=False, default=False)
+    fator_manutencao = Column(Numeric(10, 4), nullable=True)
     
     # Impostos sobre Receita
     aliq_pis = Column(Numeric(6, 4), nullable=False, default=0.0)
@@ -48,6 +55,25 @@ class OpportunityKit(Base):
 
     company = relationship("Company")
     items = relationship("OpportunityKitItem", back_populates="kit", cascade="all, delete-orphan")
+    costs = relationship("OpportunityKitCost", back_populates="kit", cascade="all, delete-orphan")
+
+
+class OpportunityKitCost(Base):
+    __tablename__ = "opportunity_kit_costs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kit_id = Column(UUID(as_uuid=True), ForeignKey("opportunity_kits.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
+    
+    tipo_custo = Column(String(50), nullable=False) # Seguro apólice, Logística/veículos, Loc. software, Manut pred./corretiva
+    quantidade = Column(Numeric(15, 4), nullable=False, default=1.0)
+    valor_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    kit = relationship("OpportunityKit", back_populates="costs")
+    product = relationship("Product")
 
 
 class OpportunityKitItem(Base):

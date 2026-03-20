@@ -9,9 +9,10 @@ interface OpportunityKitSearchModalProps {
   onClose: () => void;
   onSelect: (kit: any) => void;
   title?: string;
+  salesBudgetId?: string;
 }
 
-export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade' }: OpportunityKitSearchModalProps) {
+export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId }: OpportunityKitSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -31,7 +32,9 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
     if (!activeCompanyId) return;
     setIsSearching(true);
     try {
-      const res = await api.get(`/opportunity-kits/company/${activeCompanyId}`);
+      const res = await api.get(`/opportunity-kits/company/${activeCompanyId}`, {
+        params: { sales_budget_id: salesBudgetId }
+      });
       setResults(res.data);
     } catch (err) {
       console.error('Erro ao buscar kits', err);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Receipt, Search, Copy, Eye } from 'lucide-react';
+import { Plus, Receipt, Search, Copy, Eye, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 
@@ -69,6 +69,17 @@ export function SalesBudgetList() {
       loadBudgets();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Tem certeza que deseja excluir este orçamento?')) return;
+    try {
+      await api.delete(`/sales-budgets/${id}`);
+      loadBudgets();
+    } catch (err) {
+      console.error('Erro ao excluir orçamento:', err);
     }
   };
 
@@ -190,6 +201,13 @@ export function SalesBudgetList() {
                         title="Duplicar"
                       >
                         <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(b.id, e)}
+                        className="p-1.5 rounded hover:bg-rose-100 text-text-muted hover:text-rose-600 transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>

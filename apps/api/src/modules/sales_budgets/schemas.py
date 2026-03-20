@@ -43,6 +43,13 @@ class RentalBudgetItemBase(BaseModel):
     frete_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
     icms_st_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
     difal_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    
+    kit_vlt_manut: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_valor_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_valor_impostos: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_receita_liquida: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_lucro_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_margem: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=4)
     prazo_contrato: int = 36
     usa_taxa_manut_padrao: bool = True
     taxa_manutencao_anual_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
@@ -154,6 +161,7 @@ class SalesBudgetBase(BaseModel):
     taxa_manutencao_anual: Decimal = Field(default=5, max_digits=6, decimal_places=4)
     tipo_receita_rental: str = "LOCACAO_PURA"
     fator_margem_padrao: Decimal = Field(default=1, max_digits=6, decimal_places=4)
+    fator_manutencao_padrao: Decimal = Field(default=1, max_digits=6, decimal_places=4)
     perc_instalacao_padrao: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_comissao_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_pis_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)

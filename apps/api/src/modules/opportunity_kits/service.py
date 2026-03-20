@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
+from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem, OpportunityKitCost
 from src.modules.opportunity_kits.schemas import (
     OpportunityKitCreate, OpportunityKitUpdate, OpportunityKitFinancialSummary,
     OpportunityKitItemFinancialSummary
@@ -42,15 +42,12 @@ class OpportunityKitService:
         if kit.prazo_instalacao_meses >= kit.prazo_contrato_meses:
             prazo_mensalidades = 0
 
-        # 5. Custos Operacionais Mensais
-        custo_operacional_mensal_kit = sum([
-            Decimal(kit.custo_manut_mensal_kit or 0),
-            Decimal(kit.custo_suporte_mensal_kit or 0),
-            Decimal(kit.custo_seguro_mensal_kit or 0),
-            Decimal(kit.custo_logistica_mensal_kit or 0),
-            Decimal(kit.custo_software_mensal_kit or 0),
-            Decimal(kit.custo_itens_acessorios_mensal_kit or 0),
-        ])
+        # 5. Custos Operacionais Mensais (Apenas valores da grid)
+        custo_operacional_mensal_kit = Decimal("0.0")
+        
+        if hasattr(kit, 'costs') and kit.costs:
+            for cost in kit.costs:
+                custo_operacional_mensal_kit += Decimal(cost.valor_unitario or 0) * Decimal(cost.quantidade or 1)
 
         # 8 & 9. Custo Consolidado
         custo_aquisicao_kit = Decimal("0.0")
@@ -88,14 +85,10 @@ class OpportunityKitService:
 
         custo_aquisicao_total = custo_aquisicao_kit * Decimal(kit.quantidade_kits or 1)
 
-        # 10. Depreciacao
-        if kit.tipo_contrato in ["COMODATO", "LOCACAO"] and kit.prazo_contrato_meses > 0:
-            depreciacao_mensal_kit = custo_aquisicao_kit / Decimal(kit.prazo_contrato_meses)
-        else:
-            depreciacao_mensal_kit = Decimal("0.0")
-
+        # 10. Depreciacao (Removido da formacao de custos)
+        
         # 11. Custo Total Mensal
-        custo_total_mensal_kit = depreciacao_mensal_kit + custo_operacional_mensal_kit
+        custo_total_mensal_kit = custo_operacional_mensal_kit
 
         # 12. Calculo da Taxa de Locação
         tx_locacao = Decimal("0.0")
@@ -103,24 +96,53 @@ class OpportunityKitService:
         
         if kit.tipo_contrato == "INSTALACAO":
             tx_locacao = Decimal("1.0")
-        elif prazo_mensalidades > 0 and juros > 0:
-            # txLocacao = taxa / (1 - (1 + taxa)^(-prazo))
+        elif kit.prazo_contrato_meses > 0 and juros > 0:
+            # txLocacao = taxa / (1 - (1 + taxa)^(-prazo_contrato))
             base = Decimal(1.0) + juros
-            tx_locacao = juros / (Decimal(1.0) - (base ** -prazo_mensalidades))
-        elif prazo_mensalidades > 0 and juros == 0:
-            tx_locacao = Decimal(1.0) / Decimal(prazo_mensalidades)
+            tx_locacao = juros / (Decimal(1.0) - (base ** -kit.prazo_contrato_meses))
+        elif kit.prazo_contrato_meses > 0 and juros == 0:
+            tx_locacao = Decimal(1.0) / Decimal(kit.prazo_contrato_meses)
 
         # 13. Formação do Valor
-        margem = Decimal(kit.fator_margem_locacao or 1)
-        valor_base_venda = custo_aquisicao_kit * margem
+        fator_margem = Decimal(kit.fator_margem_locacao or 1)
+        valor_base_venda = custo_aquisicao_kit * fator_margem
         
-        valor_parcela_locacao = valor_base_venda * tx_locacao
-        if kit.tipo_contrato == "INSTALACAO":
-            manutencao_mensal = Decimal("0.0")
+        # We always compute the base for the installation percentage, used for maintenance
+        perc_inst = Decimal(kit.percentual_instalacao or 0) / Decimal(100.0)
+        vlr_instal_calc_base_manut = custo_aquisicao_kit * perc_inst
+        
+        vlr_instal_calc = Decimal("0.0")
+        if kit.instalacao_inclusa:
+            vlr_instal_calc = vlr_instal_calc_base_manut
+            valor_mensal_locacao_base = ((custo_aquisicao_kit + vlr_instal_calc) * fator_margem) * tx_locacao
         else:
-            manutencao_mensal = (custo_aquisicao_kit * (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(100.0))) / Decimal(12.0)
+            valor_mensal_locacao_base = (custo_aquisicao_kit * fator_margem) * tx_locacao
+
+        # Manutenção
+        vlt_manut = Decimal("0.0")
         
-        valor_base_final = valor_parcela_locacao + manutencao_mensal + custo_operacional_mensal_kit
+        # We always need the maintenance base
+        tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
+        
+        if kit.manutencao_inclusa:
+            if kit.instalacao_inclusa:
+                vlt_manut = ((custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem) * tx_manut
+            else:
+                fator_manut = Decimal(kit.fator_manutencao or 1)
+                vlt_manut = custo_operacional_mensal_kit * fator_manut
+        else:
+            # When manutencao is NOT inclusa
+            # Formula requested: vlt_manut = ((total custo aquisicao + vlr_instal_calc) * fator margem) * tx_manut
+            vlt_manut = ((custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem) * tx_manut
+                
+        # Mantendo nomes compatíveis:
+        valor_parcela_locacao = valor_mensal_locacao_base
+        manutencao_mensal = vlt_manut
+
+        if kit.tipo_contrato == "INSTALACAO":
+            valor_base_final = valor_parcela_locacao + custo_operacional_mensal_kit
+        else:
+            valor_base_final = valor_parcela_locacao + manutencao_mensal
 
         # 14. Calculo de Impostos
         aliq_total_impostos = sum([
@@ -173,9 +195,11 @@ class OpportunityKitService:
                 "custo_aquisicao_servicos": round(custo_aquisicao_servicos, 2),
                 "custo_aquisicao_total": round(custo_aquisicao_total, 2),
                 "total_difal_kit": round(total_difal_kit, 2),
-                "depreciacao_mensal_kit": round(depreciacao_mensal_kit, 2),
                 "custo_total_mensal_kit": round(custo_total_mensal_kit, 2),
                 "tx_locacao": round(tx_locacao, 6),
+                "vlr_instal_calc": round(vlr_instal_calc, 2),
+                "valor_mensal_locacao_base": round(valor_mensal_locacao_base, 2),
+                "vlt_manut": round(vlt_manut, 2),
                 "valor_base_venda": round(valor_base_venda, 2),
                 "valor_parcela_locacao": round(valor_parcela_locacao, 2),
                 "manutencao_mensal": round(manutencao_mensal, 2),
@@ -190,11 +214,19 @@ class OpportunityKitService:
             "item_summaries": item_summaries
         }
 
-    def list_kits(self, tenant_id: str, company_id: str):
-        kits = self.db.query(OpportunityKit).filter(
+    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: str = None):
+        query = self.db.query(OpportunityKit).filter(
             OpportunityKit.tenant_id == tenant_id,
             OpportunityKit.company_id == company_id
-        ).all()
+        )
+        if sales_budget_id:
+            query = query.filter(
+                (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
+            )
+        else:
+            query = query.filter(OpportunityKit.sales_budget_id == None)
+            
+        kits = query.all()
         
         # Compute dynamic financials
         for kit in kits:
@@ -221,6 +253,7 @@ class OpportunityKitService:
         kit = OpportunityKit(
             tenant_id=tenant_id,
             company_id=company_id,
+            sales_budget_id=data.sales_budget_id,
             nome_kit=data.nome_kit,
             descricao_kit=data.descricao_kit,
             quantidade_kits=data.quantidade_kits,
@@ -254,6 +287,17 @@ class OpportunityKitService:
             )
             self.db.add(item)
             
+        for cost_data in data.costs:
+            cost = OpportunityKitCost(
+                kit_id=kit.id,
+                product_id=cost_data.product_id,
+                tipo_custo=cost_data.tipo_custo,
+                quantidade=cost_data.quantidade,
+                valor_unitario=cost_data.valor_unitario
+            )
+            self.db.add(cost)
+
+            
         self.db.commit()
         self.db.refresh(kit)
         fin = self.calculate_financials(kit, tenant_id)
@@ -282,6 +326,22 @@ class OpportunityKitService:
                     quantidade_no_kit=item["quantidade_no_kit"]
                 )
                 self.db.add(new_item)
+                
+        costs_data = update_data.pop("costs", None)
+        if costs_data is not None:
+            # Delete old costs
+            self.db.query(OpportunityKitCost).filter(OpportunityKitCost.kit_id == kit.id).delete()
+            self.db.flush()
+            # Insert new costs
+            for cost in costs_data:
+                new_cost = OpportunityKitCost(
+                    kit_id=kit.id,
+                    product_id=cost["product_id"],
+                    tipo_custo=cost["tipo_custo"],
+                    quantidade=cost["quantidade"],
+                    valor_unitario=cost["valor_unitario"]
+                )
+                self.db.add(new_cost)
 
         for key, value in update_data.items():
             setattr(kit, key, value)
@@ -299,8 +359,9 @@ class OpportunityKitService:
     def recalculate_kit_preview(self, tenant_id: str, data: OpportunityKitCreate) -> dict:
         """Endpoint used to preview financials without saving to DB"""
         # Create a mock objects
-        kit = OpportunityKit(**data.model_dump(exclude={"items"}))
+        kit = OpportunityKit(**data.model_dump(exclude={"items", "costs"}))
         kit.items = [OpportunityKitItem(**item_data.model_dump()) for item_data in data.items]
+        kit.costs = [OpportunityKitCost(**cost_data.model_dump()) for cost_data in data.costs]
         
         fin = self.calculate_financials(kit, tenant_id)
         return fin

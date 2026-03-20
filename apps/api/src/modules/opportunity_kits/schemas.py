@@ -26,7 +26,25 @@ class OpportunityKitItemResponse(OpportunityKitItemBase):
     class Config:
         from_attributes = True
 
+class OpportunityKitCostBase(BaseModel):
+    product_id: UUID
+    tipo_custo: str
+    quantidade: Decimal = Field(default=Decimal(1))
+    valor_unitario: Decimal = Field(default=Decimal(0))
+
+class OpportunityKitCostCreate(OpportunityKitCostBase):
+    pass
+
+class OpportunityKitCostResponse(OpportunityKitCostBase):
+    id: UUID
+    kit_id: UUID
+    product: Optional[ProductSimpleResponse] = None
+    
+    class Config:
+        from_attributes = True
+
 class OpportunityKitBase(BaseModel):
+    sales_budget_id: Optional[UUID] = None
     nome_kit: str
     descricao_kit: Optional[str] = None
     quantidade_kits: int = Field(default=1)
@@ -38,6 +56,11 @@ class OpportunityKitBase(BaseModel):
     fator_margem_locacao: Decimal = Field(default=Decimal(1.0))
     taxa_juros_mensal: Decimal = Field(default=Decimal(0.0))
     taxa_manutencao_anual: Decimal = Field(default=Decimal(0.0))
+    
+    instalacao_inclusa: bool = Field(default=False)
+    percentual_instalacao: Optional[Decimal] = None
+    manutencao_inclusa: bool = Field(default=False)
+    fator_manutencao: Optional[Decimal] = None
     
     aliq_pis: Decimal = Field(default=Decimal(0.0))
     aliq_cofins: Decimal = Field(default=Decimal(0.0))
@@ -54,9 +77,11 @@ class OpportunityKitBase(BaseModel):
 
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
+    costs: List[OpportunityKitCostCreate] = []
 
 class OpportunityKitUpdate(BaseModel):
     items: Optional[List[OpportunityKitItemCreate]] = None
+    costs: Optional[List[OpportunityKitCostCreate]] = None
     nome_kit: Optional[str] = None
     descricao_kit: Optional[str] = None
     quantidade_kits: Optional[int] = None
@@ -68,6 +93,11 @@ class OpportunityKitUpdate(BaseModel):
     fator_margem_locacao: Optional[Decimal] = None
     taxa_juros_mensal: Optional[Decimal] = None
     taxa_manutencao_anual: Optional[Decimal] = None
+    
+    instalacao_inclusa: Optional[bool] = None
+    percentual_instalacao: Optional[Decimal] = None
+    manutencao_inclusa: Optional[bool] = None
+    fator_manutencao: Optional[Decimal] = None
     
     aliq_pis: Optional[Decimal] = None
     aliq_cofins: Optional[Decimal] = None
@@ -90,9 +120,12 @@ class OpportunityKitFinancialSummary(BaseModel):
     custo_aquisicao_servicos: Decimal
     custo_aquisicao_total: Decimal
     total_difal_kit: Decimal
-    depreciacao_mensal_kit: Decimal
     custo_total_mensal_kit: Decimal
     tx_locacao: Decimal
+    
+    vlr_instal_calc: Decimal
+    valor_mensal_locacao_base: Decimal
+    vlt_manut: Decimal
     valor_base_venda: Decimal
     valor_parcela_locacao: Decimal
     manutencao_mensal: Decimal
@@ -113,6 +146,7 @@ class OpportunityKitItemFinancialSummary(BaseModel):
 class OpportunityKitResponse(OpportunityKitBase):
     id: UUID
     items: List[OpportunityKitItemResponse]
+    costs: List[OpportunityKitCostResponse] = []
     summary: Optional[OpportunityKitFinancialSummary] = None
     item_summaries: Optional[List[OpportunityKitItemFinancialSummary]] = None
 

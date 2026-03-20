@@ -212,11 +212,31 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             lucro_mensal_unit = rec_liq_unit - custo_total_mensal_unit
             
         margem = Decimal("0")
-        if is_comodato:
+        if getattr(item_data, "kit_margem", None) is not None:
+            margem = _d(item_data.kit_margem)
+        elif is_comodato:
             lucro_mensal_unit = Decimal("0")
         else:
             if rec_liq_unit > 0:
                 margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
+                
+        # --- EXACT OVERRIDES ---
+        if getattr(item_data, "kit_vlt_manut", None) is not None:
+            manutencao_mensal_unit = _d(item_data.kit_vlt_manut)
+            custo_manut_mensal_unit = manutencao_mensal_unit + custo_op_mensal_unit
+            custo_total_mensal_unit = depreciacao_unit + custo_manut_mensal_unit
+            
+        if getattr(item_data, "kit_valor_mensal", None) is not None:
+            valor_mensal_unit = _d(item_data.kit_valor_mensal)
+            
+        if getattr(item_data, "kit_valor_impostos", None) is not None:
+            impostos_unit = _d(item_data.kit_valor_impostos)
+            
+        if getattr(item_data, "kit_receita_liquida", None) is not None:
+            rec_liq_unit = _d(item_data.kit_receita_liquida)
+            
+        if getattr(item_data, "kit_lucro_mensal", None) is not None:
+            lucro_mensal_unit = _d(item_data.kit_lucro_mensal)
 
         return {
             "custo_aquisicao_unit": custo_aquisicao_unit,
@@ -680,3 +700,15 @@ def get_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[SalesBud
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
     ).first()
+
+
+def delete_budget(db: Session, tenant_id: str, budget_id: str) -> bool:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        return False
+    db.delete(budget)
+    db.commit()
+    return True
