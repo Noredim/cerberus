@@ -533,7 +533,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
           <div className="bg-surface border border-border-subtle rounded-xl p-6 shadow-sm">
             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2 mb-5">
               <Info className="w-4 h-4 text-brand-primary" />
-              Composição do Custo
+              Formação de custo REVENDA
             </h3>
 
             {/* Unit breakdown */}
@@ -659,7 +659,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
               <div className="bg-surface border border-brand-primary/30 rounded-xl p-6 shadow-sm mt-6">
                 <h3 className="text-sm font-bold text-brand-primary flex items-center gap-2 mb-5">
                   <Calculator className="w-4 h-4 text-brand-primary" />
-                  Comparativo DIFAL
+                  Formação de custo COMODATO/LOCAÇÃO
                 </h3>
 
                 <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold mb-2">

@@ -87,8 +87,7 @@ class OpportunityKitService:
 
         # 10. Depreciacao (Removido da formacao de custos)
         
-        # 11. Custo Total Mensal
-        custo_total_mensal_kit = custo_operacional_mensal_kit
+        # 11. Custo Total Mensal (Will be added with maintenance later)
 
         # 12. Calculo da Taxa de Locação
         tx_locacao = Decimal("0.0")
@@ -143,6 +142,12 @@ class OpportunityKitService:
             valor_base_final = valor_parcela_locacao + custo_operacional_mensal_kit
         else:
             valor_base_final = valor_parcela_locacao + manutencao_mensal
+
+        # To fix ROI and downstream UI math, the operational cost explicitly absorbs the calculated maintenance
+        custo_operacional_mensal_kit += vlt_manut
+        
+        # 11. Custo Total Mensal (includes maintenance!)
+        custo_total_mensal_kit = custo_operacional_mensal_kit
 
         # 14. Calculo de Impostos
         aliq_total_impostos = sum([

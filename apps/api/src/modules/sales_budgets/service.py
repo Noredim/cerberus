@@ -522,7 +522,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.prazo_instalacao_meses = data.prazo_instalacao_meses
     budget.taxa_juros_mensal = data.taxa_juros_mensal
     budget.taxa_manutencao_anual = data.taxa_manutencao_anual
+    budget.tipo_receita_rental = data.tipo_receita_rental
     budget.fator_margem_padrao = data.fator_margem_padrao
+    budget.fator_manutencao_padrao = data.fator_manutencao_padrao
     budget.perc_instalacao_padrao = data.perc_instalacao_padrao
     budget.perc_comissao_rental = data.perc_comissao_rental
     budget.perc_pis_rental = data.perc_pis_rental

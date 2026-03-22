@@ -548,6 +548,16 @@ class PurchaseBudgetService:
 
     @staticmethod
     def link_supplier_product(db: Session, tenant_id: str, supplier_id: str, product_id: UUID, codigo_fornecedor: str) -> ProductSupplier:
+        # Prevent UniqueConstraint violation
+        existing_code = db.query(ProductSupplier).filter(
+            ProductSupplier.supplier_id == str(supplier_id),
+            ProductSupplier.codigo_externo == codigo_fornecedor,
+            ProductSupplier.product_id != product_id
+        ).first()
+        
+        if existing_code:
+            raise HTTPException(status_code=400, detail="Este código de fornecedor já está vinculado a outro produto deste fornecedor.")
+
         ps = db.query(ProductSupplier).filter(
             ProductSupplier.supplier_id == str(supplier_id),
             ProductSupplier.product_id == product_id
@@ -559,7 +569,9 @@ class PurchaseBudgetService:
             ps = ProductSupplier(
                 supplier_id=supplier_id,
                 product_id=product_id,
-                codigo_externo=codigo_fornecedor
+                codigo_externo=codigo_fornecedor,
+                unidade="UN",
+                fator_conversao="1"
             )
             db.add(ps)
         db.commit()
