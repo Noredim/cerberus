@@ -169,6 +169,7 @@ class SalesBudgetBase(BaseModel):
     perc_csll_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_irpj_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_iss_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_comissao_diretoria: Decimal = Field(default=0, max_digits=6, decimal_places=4)
 
 
 class SalesBudgetCreate(SalesBudgetBase):

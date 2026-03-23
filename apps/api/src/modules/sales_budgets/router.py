@@ -431,6 +431,7 @@ def _budget_to_dict(budget) -> dict:
         "perc_csll_rental": float(budget.perc_csll_rental or 0),
         "perc_irpj_rental": float(budget.perc_irpj_rental or 0),
         "perc_iss_rental": float(budget.perc_iss_rental or 0),
+        "perc_comissao_diretoria": float(budget.perc_comissao_diretoria or 0),
         "responsavel_ids": [r.user_id for r in budget.responsaveis],
         "items": items,
         "rental_items": rental_items,

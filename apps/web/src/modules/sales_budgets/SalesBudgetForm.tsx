@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AddRentalItemModal } from './AddRentalItemModal';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
 import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
+import { EvolutivoChartModal } from './EvolutivoChartModal';
 
 interface CostComposition {
   base_unitario: number;
@@ -45,7 +46,7 @@ const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (/^[0-9.,-]*$/.test(val)) {
-        setLocalStr(val);
+      setLocalStr(val);
     }
   };
 
@@ -102,7 +103,7 @@ interface RentalBudgetItem {
   product_nome?: string;
   product_codigo?: string;
   custo_op_mensal_kit?: number;
-  
+
   // Kit Integration Fields
   is_kit_instalacao?: boolean;
   tipo_contrato_kit?: string | null;
@@ -114,7 +115,7 @@ interface RentalBudgetItem {
   kit_csll?: number;
   kit_irpj?: number;
   kit_iss?: number;
-  
+
   quantidade: number;
   custo_aquisicao_unit: number;
   ipi_unit: number;
@@ -156,44 +157,44 @@ interface RentalBudgetItem {
 
 function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   const isKit = !!item.opportunity_kit_id;
-  
+
   let isComodato = rd.tipo_receita_rental === 'COMODATO';
   if (isKit && item.tipo_contrato_kit) {
-      isComodato = item.tipo_contrato_kit === 'COMODATO';
+    isComodato = item.tipo_contrato_kit === 'COMODATO';
   }
 
   if (isKit) {
-      let kitFaturamento = 0;
-      if (item.tipo_contrato_kit === 'INSTALACAO') {
-          kitFaturamento = Number(item.kit_valor_mensal || 0);
-      } else {
-          kitFaturamento = Number(item.kit_valor_mensal || 0) - Number(item.kit_valor_impostos || 0);
-      }
-      
-      const impostosKit = Number(item.kit_valor_impostos || 0);
-      const recLiqKit = kitFaturamento - impostosKit;
-      
-      let prazoMensalidades = Number(item.prazo_contrato || rd.prazo_contrato_meses || 36) - Number(rd.prazo_instalacao_meses || 0);
-      if (prazoMensalidades < 0) prazoMensalidades = 0;
-      
-      const cP = Number(item.custo_op_mensal_kit || 0);
-      const custoAquisicaoUnit = Number(item.custo_aquisicao_unit || 0);
-      const custoTotalContrato = custoAquisicaoUnit + (cP * prazoMensalidades);
-      
-      return {
-          ...item,
-          faturamento_mensal: kitFaturamento,
-          valor_mensal: kitFaturamento,
-          impostos_mensal: impostosKit,
-          receita_liquida_mensal: recLiqKit,
-          lucro_mensal: Number(item.kit_lucro_mensal || 0),
-          margem: Number(item.kit_margem || 0),
-          roi_meses: recLiqKit > 0 ? (custoTotalContrato / recLiqKit) : 0,
-          custo_total_aquisicao: custoAquisicaoUnit,
-          custo_manut_mensal: Number(item.kit_vlt_manut || 0) + cP,
-          custo_total_mensal: Number(item.kit_vlt_manut || 0) + cP,
-          fator_margem: Number(item.fator_margem || 1)
-      };
+    let kitFaturamento = 0;
+    if (item.tipo_contrato_kit === 'INSTALACAO') {
+      kitFaturamento = Number(item.kit_valor_mensal || 0);
+    } else {
+      kitFaturamento = Number(item.kit_valor_mensal || 0) - Number(item.kit_valor_impostos || 0);
+    }
+
+    const impostosKit = Number(item.kit_valor_impostos || 0);
+    const recLiqKit = kitFaturamento - impostosKit;
+
+    let prazoMensalidades = Number(item.prazo_contrato || rd.prazo_contrato_meses || 36) - Number(rd.prazo_instalacao_meses || 0);
+    if (prazoMensalidades < 0) prazoMensalidades = 0;
+
+    const cP = Number(item.custo_op_mensal_kit || 0);
+    const custoAquisicaoUnit = Number(item.custo_aquisicao_unit || 0);
+    const custoTotalContrato = custoAquisicaoUnit + (cP * prazoMensalidades);
+
+    return {
+      ...item,
+      faturamento_mensal: kitFaturamento,
+      valor_mensal: kitFaturamento,
+      impostos_mensal: impostosKit,
+      receita_liquida_mensal: recLiqKit,
+      lucro_mensal: Number(item.kit_lucro_mensal || 0),
+      margem: Number(item.kit_margem || 0),
+      roi_meses: recLiqKit > 0 ? (custoTotalContrato / recLiqKit) : 0,
+      custo_total_aquisicao: custoAquisicaoUnit,
+      custo_manut_mensal: Number(item.kit_vlt_manut || 0) + cP,
+      custo_total_mensal: Number(item.kit_vlt_manut || 0) + cP,
+      fator_margem: Number(item.fator_margem || 1)
+    };
   }
 
   // Fallback / legacy calculation for Non-Kits (Individual items)
@@ -202,83 +203,83 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   const frete = Number(item.frete_unit || 0);
   const st = Number(item.icms_st_unit || 0);
   const difal = Number(item.difal_unit || 0);
-  
+
   let instalacao = 0;
   if (item.valor_instalacao_item != null) {
-      instalacao = Number(item.valor_instalacao_item);
+    instalacao = Number(item.valor_instalacao_item);
   } else {
-      const pInstal = item.perc_instalacao_item != null ? Number(item.perc_instalacao_item) : Number(rd.perc_instalacao_padrao || 0);
-      instalacao = +((base + ipi + frete + st + difal) * pInstal / 100).toFixed(4);
+    const pInstal = item.perc_instalacao_item != null ? Number(item.perc_instalacao_item) : Number(rd.perc_instalacao_padrao || 0);
+    instalacao = +((base + ipi + frete + st + difal) * pInstal / 100).toFixed(4);
   }
 
   const custoAquisicao = base + ipi + frete + st + difal;
   const custoTotal = custoAquisicao + instalacao;
-  
+
   const fm = Number(item.fator_margem || 1);
   const baseFinanceiraLocacao = +(custoTotal * fm).toFixed(4);
-  
+
   const taxa = Number(rd.taxa_juros_mensal || 0) / 100;
   const prazo = Number(item.prazo_contrato || rd.prazo_contrato_meses || 36);
-  
+
   let prazoMensalidades = prazo - Number(rd.prazo_instalacao_meses || 0);
   if (prazoMensalidades < 0) prazoMensalidades = 0;
 
   let parcela = 0;
   if (prazoMensalidades > 0 && taxa > 0) {
-      const tx = taxa / (1 - Math.pow(1 + taxa, -prazoMensalidades));
-      parcela = +(baseFinanceiraLocacao * tx).toFixed(4);
+    const tx = taxa / (1 - Math.pow(1 + taxa, -prazoMensalidades));
+    parcela = +(baseFinanceiraLocacao * tx).toFixed(4);
   } else if (prazoMensalidades > 0 && taxa === 0) {
-      parcela = +(baseFinanceiraLocacao / prazoMensalidades).toFixed(4);
+    parcela = +(baseFinanceiraLocacao / prazoMensalidades).toFixed(4);
   }
 
   const taxaManut = item.usa_taxa_manut_padrao ? Number(rd.taxa_manutencao_anual || 5) : Number(item.taxa_manutencao_anual_item || 5);
   const custoManut = +(custoTotal * (taxaManut / 100) / 12).toFixed(4);
-  
+
   const depreciacao = (isComodato && prazo > 0) ? +(custoTotal / prazo).toFixed(4) : 0;
-  const custoMensal = custoManut + depreciacao; 
+  const custoMensal = custoManut + depreciacao;
   const valorMensal = parcela + custoManut;
 
   let pImp = Number(rd.perc_pis_rental || 0) + Number(rd.perc_cofins_rental || 0) + Number(rd.perc_csll_rental || 0) + Number(rd.perc_irpj_rental || 0);
   if (isComodato) {
-      pImp += Number(rd.perc_iss_rental || 0);
+    pImp += Number(rd.perc_iss_rental || 0);
   }
-  
+
   const impostos = +(valorMensal * pImp / 100).toFixed(4);
   const recLiq = valorMensal - impostos;
   const pCom = Number(rd.perc_comissao_rental || 0);
   const comissao = +(recLiq * pCom / 100).toFixed(4);
-  
+
   let lucro = +(recLiq - custoMensal - comissao).toFixed(4);
   let margem = valorMensal > 0 ? +(lucro / valorMensal * 100).toFixed(2) : 0;
-  
+
   if (isComodato) {
-      lucro = 0;
-      margem = 0;
+    lucro = 0;
+    margem = 0;
   }
 
   const roi = recLiq > 0 ? (custoTotal / recLiq) : 0;
-  
-  return { 
-      ...item, 
-      instalacao_unit: instalacao, 
-      custo_total_aquisicao: custoTotal, 
-      prazo_contrato: prazo,
-      custo_manut_mensal: custoManut, 
-      custo_total_mensal: custoMensal, 
-      fator_margem: fm, 
-      valor_venda_equipamento: baseFinanceiraLocacao, 
-      parcela_locacao: parcela, 
-      manutencao_locacao: custoManut, 
-      valor_mensal: valorMensal, 
-      perc_impostos_total: pImp, 
-      impostos_mensal: impostos, 
-      receita_liquida_mensal: recLiq, 
-      perc_comissao: pCom, 
-      comissao_mensal: comissao, 
-      lucro_mensal: lucro, 
-      margem,
-      roi_meses: roi,
-      faturamento_mensal: valorMensal
+
+  return {
+    ...item,
+    instalacao_unit: instalacao,
+    custo_total_aquisicao: custoTotal,
+    prazo_contrato: prazo,
+    custo_manut_mensal: custoManut,
+    custo_total_mensal: custoMensal,
+    fator_margem: fm,
+    valor_venda_equipamento: baseFinanceiraLocacao,
+    parcela_locacao: parcela,
+    manutencao_locacao: custoManut,
+    valor_mensal: valorMensal,
+    perc_impostos_total: pImp,
+    impostos_mensal: impostos,
+    receita_liquida_mensal: recLiq,
+    perc_comissao: pCom,
+    comissao_mensal: comissao,
+    lucro_mensal: lucro,
+    margem,
+    roi_meses: roi,
+    faturamento_mensal: valorMensal
   };
 }
 
@@ -350,6 +351,38 @@ export function SalesBudgetForm() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a');
+      const isInternalNav = target && target.href && !target.href.includes(window.location.pathname) && target.target !== '_blank';
+
+      const isTabClick = target && target.role === 'tab'; // Don't block tab switching inside the same screen
+
+      if (isInternalNav && !isTabClick) {
+        if (!window.confirm('Existem alterações não salvas no orçamento. Deseja realmente sair e perder as alterações?')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('click', handleClick, { capture: true });
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('click', handleClick, { capture: true });
+    };
+  }, [hasUnsavedChanges]);
 
   // Header
   const [titulo, setTitulo] = useState('');
@@ -395,11 +428,15 @@ export function SalesBudgetForm() {
   const [percCsllRental, setPercCsllRental] = useState(0);
   const [percIrpjRental, setPercIrpjRental] = useState(0);
   const [percIssRental, setPercIssRental] = useState(0);
+  const [percComissaoDiretoria, setPercComissaoDiretoria] = useState(0);
+  const [taxaInvestimentoMensal, setTaxaInvestimentoMensal] = useState<number | ''>(1.10);
+  const [isComparativoExpanded, setIsComparativoExpanded] = useState(true);
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
   const [showAddRentalItemModal, setShowAddRentalItemModal] = useState(false);
   const [showKitSearchModal, setShowKitSearchModal] = useState(false);
   const [showCreateKitModal, setShowCreateKitModal] = useState(false);
   const [showOverwriteModal, setShowOverwriteModal] = useState(false);
+  const [showEvolutivoChart, setShowEvolutivoChart] = useState(false);
   const [viewingKitId, setViewingKitId] = useState<string | null>(null);
 
   // Lookups
@@ -527,6 +564,7 @@ export function SalesBudgetForm() {
       setPercCsllRental(Number(d.perc_csll_rental) || 0);
       setPercIrpjRental(Number(d.perc_irpj_rental) || 0);
       setPercIssRental(Number(d.perc_iss_rental) || 0);
+      setPercComissaoDiretoria(Number(d.perc_comissao_diretoria) || 0);
 
       // Load sale items and re-fetch cost_composition
       const loadedItems: SalesBudgetItem[] = d.items || [];
@@ -586,7 +624,7 @@ export function SalesBudgetForm() {
           return item;
         })
       );
-      
+
       const rDefaults = {
         prazo_contrato_meses: d.prazo_contrato_meses,
         prazo_instalacao_meses: d.prazo_instalacao_meses,
@@ -601,6 +639,7 @@ export function SalesBudgetForm() {
         perc_csll_rental: d.perc_csll_rental,
         perc_irpj_rental: d.perc_irpj_rental,
         perc_iss_rental: d.perc_iss_rental,
+        perc_comissao_diretoria: d.perc_comissao_diretoria,
         tipo_receita_rental: d.tipo_receita_rental,
       };
 
@@ -610,6 +649,7 @@ export function SalesBudgetForm() {
   }, [id]);
 
   const addProduct = async (product: any) => {
+    setHasUnsavedChanges(true);
     // Parallel: check ST + fetch cost composition
     let hasSt = false;
     let costComp: CostComposition | undefined;
@@ -695,13 +735,15 @@ export function SalesBudgetForm() {
   };
 
   const removeItem = (idx: number) => {
+    setHasUnsavedChanges(true);
     setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
   // ── Rental item functions ──
   const handleAddRentalItem = (modalOutput: any) => {
+    setHasUnsavedChanges(true);
     const { product, quantidade, perc_instalacao_item, valor_instalacao_item, cost_composition } = modalOutput;
-    
+
     const base = cost_composition?.base_unitario ?? (product.vlr_referencia_uso_consumo || product.vlr_referencia_revenda || 0);
     const newItem: RentalBudgetItem = {
       product_id: product.id,
@@ -732,6 +774,7 @@ export function SalesBudgetForm() {
 
   const handleAddKit = (kit: any) => {
     if (!kit) return;
+    setHasUnsavedChanges(true);
     setRentalItems(prev => {
       const newItem: RentalBudgetItem = {
         opportunity_kit_id: kit.id,
@@ -750,7 +793,7 @@ export function SalesBudgetForm() {
         kit_csll: Number(kit.aliq_csll || 0),
         kit_irpj: Number(kit.aliq_irpj || 0),
         kit_iss: Number(kit.aliq_iss || 0),
-        
+
         quantidade: Number(kit.quantidade_kits || 1),
         perc_instalacao_item: null,
         valor_instalacao_item: 0,
@@ -771,7 +814,7 @@ export function SalesBudgetForm() {
         kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
         kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
         kit_margem: Number(kit.summary?.margem_kit || 0),
-        custo_manut_mensal: 0, 
+        custo_manut_mensal: 0,
         custo_total_mensal: 0,
         valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
         perc_impostos_total: 0, impostos_mensal: 0, receita_liquida_mensal: 0,
@@ -791,47 +834,48 @@ export function SalesBudgetForm() {
   };
 
   const removeRentalItem = (idx: number) => {
+    setHasUnsavedChanges(true);
     setRentalItems(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleBlurRentalItem = async (idx: number, field: string, value: any) => {
     const item = rentalItems[idx];
     if (!item.opportunity_kit_id) return;
-    
+
     try {
       const payload: any = {};
       if (field === 'prazo_contrato') payload.prazo_contrato_meses = value;
       else if (field === 'fator_margem') payload.fator_margem_locacao = value;
       else return; // only sync specific fields
-      
+
       const res = await api.put(`/opportunity-kits/${item.opportunity_kit_id}`, payload);
       const updatedKit = res.data;
-      
+
       setRentalItems(prev => {
         const updated = [...prev];
-        updated[idx] = calcRentalItem({ 
-           ...updated[idx],
-           custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
-           kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
-           kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
-           custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
-           ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
-           frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
-           icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
-           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
-           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
-           kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
-           kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
-           kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
-           kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
-           kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
-           kit_margem: Number(updatedKit.summary?.margem_kit || 0),
-           // these won't change but just to ensure syncing:
-           kit_pis: Number(updatedKit.aliq_pis || 0),
-           kit_cofins: Number(updatedKit.aliq_cofins || 0),
-           kit_csll: Number(updatedKit.aliq_csll || 0),
-           kit_irpj: Number(updatedKit.aliq_irpj || 0),
-           kit_iss: Number(updatedKit.aliq_iss || 0)
+        updated[idx] = calcRentalItem({
+          ...updated[idx],
+          custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
+          kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
+          kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
+          custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
+          ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
+          frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
+          icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
+          difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
+          taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
+          kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
+          kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
+          kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
+          kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
+          kit_margem: Number(updatedKit.summary?.margem_kit || 0),
+          // these won't change but just to ensure syncing:
+          kit_pis: Number(updatedKit.aliq_pis || 0),
+          kit_cofins: Number(updatedKit.aliq_cofins || 0),
+          kit_csll: Number(updatedKit.aliq_csll || 0),
+          kit_irpj: Number(updatedKit.aliq_irpj || 0),
+          kit_iss: Number(updatedKit.aliq_iss || 0)
         }, rentalDefaults);
         return updated;
       });
@@ -882,70 +926,81 @@ export function SalesBudgetForm() {
 
   // Rental totals
   const rentalTotals = useMemo(() => {
-    const t = { 
-      investimento: 0, faturamentoMensal: 0, impostosMensal: 0, receitaLiqMensal: 0, custoMensal: 0, lucroMensal: 0,
+    const t = {
+      investimento: 0, investimentoInstalacao: 0, faturamentoMensal: 0, impostosMensal: 0, receitaLiqMensal: 0, custoMensal: 0, lucroMensal: 0,
       fornecedoresTotal: 0, impostosCompraTotal: 0, freteTotal: 0, faturamentoTotal: 0, impostosTotal: 0,
-      custoOpMensalTotal: 0, custoOpTotal: 0,
-      impostosDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
+      custoOpMensalTotal: 0, custoOpTotal: 0, totalInstalacao: 0,
+      impostosInstalacaoTotal: 0, custoOpInstalacaoTotal: 0,
+      impostosDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
+      impostosInstalacaoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
     };
     rentalItems.forEach(i => {
       const q = i.quantidade;
-      
+
       t.investimento += i.custo_total_aquisicao * q;
-      const fatur = (i.faturamento_mensal || i.valor_mensal) * q;
-      t.faturamentoMensal += fatur;
       const impostos = i.impostos_mensal * q;
-      t.impostosMensal += impostos;
-      t.receitaLiqMensal += (i.receita_liquida_mensal || i.kit_receita_liquida || 0) * q;
-      t.custoMensal += i.custo_total_mensal * q;
-      t.lucroMensal += i.lucro_mensal * q;
+
+      if (i.is_kit_instalacao) {
+        t.totalInstalacao += (i.faturamento_mensal || i.valor_mensal || 0) * q;
+        t.investimentoInstalacao += i.custo_total_aquisicao * q;
+        t.impostosInstalacaoTotal += impostos;
+        t.custoOpInstalacaoTotal += (i.custo_op_mensal_kit || 0) * q;
+      } else {
+        t.faturamentoMensal += (i.faturamento_mensal || i.valor_mensal) * q;
+        t.impostosMensal += impostos;
+        t.receitaLiqMensal += (i.receita_liquida_mensal || i.kit_receita_liquida || 0) * q;
+        t.custoMensal += i.custo_total_mensal * q;
+        t.lucroMensal += i.lucro_mensal * q;
+        t.custoOpMensalTotal += (i.custo_op_mensal_kit || 0) * q;
+      }
 
       const difal_ipi_st = ((i.difal_unit || 0) + (i.ipi_unit || 0) + (i.icms_st_unit || 0)) * q;
       const frete = (i.frete_unit || 0) * q;
-      
+
       t.impostosCompraTotal += difal_ipi_st;
       t.freteTotal += frete;
       t.fornecedoresTotal += (i.custo_total_aquisicao * q) - difal_ipi_st - frete;
-      
-      t.custoOpMensalTotal += (i.custo_op_mensal_kit || 0) * q;
 
       // Breakdown monthly taxes
+      const isInstalacao = i.is_kit_instalacao;
+      const tTarget = isInstalacao ? t.impostosInstalacaoDetalhados : t.impostosDetalhados;
+
       if (i.opportunity_kit_id) {
-         const pImp = (i.kit_pis || 0) + (i.kit_cofins || 0) + (i.kit_csll || 0) + (i.kit_irpj || 0) + (i.kit_iss || 0);
-         if (pImp > 0) {
-            t.impostosDetalhados.pis += impostos * ((i.kit_pis || 0) / pImp);
-            t.impostosDetalhados.cofins += impostos * ((i.kit_cofins || 0) / pImp);
-            t.impostosDetalhados.csll += impostos * ((i.kit_csll || 0) / pImp);
-            t.impostosDetalhados.irpj += impostos * ((i.kit_irpj || 0) / pImp);
-            t.impostosDetalhados.iss += (i.kit_iss || 0) > 0 ? (impostos * ((i.kit_iss || 0) / pImp)) : 0;
-         }
+        const pImp = (i.kit_pis || 0) + (i.kit_cofins || 0) + (i.kit_csll || 0) + (i.kit_irpj || 0) + (i.kit_iss || 0);
+        if (pImp > 0) {
+          tTarget.pis += impostos * ((i.kit_pis || 0) / pImp);
+          tTarget.cofins += impostos * ((i.kit_cofins || 0) / pImp);
+          tTarget.csll += impostos * ((i.kit_csll || 0) / pImp);
+          tTarget.irpj += impostos * ((i.kit_irpj || 0) / pImp);
+          tTarget.iss += (i.kit_iss || 0) > 0 ? (impostos * ((i.kit_iss || 0) / pImp)) : 0;
+        }
       } else {
-         let pImp = Number(rentalDefaults.perc_pis_rental || 0) + Number(rentalDefaults.perc_cofins_rental || 0) + Number(rentalDefaults.perc_csll_rental || 0) + Number(rentalDefaults.perc_irpj_rental || 0);
-         const isCom = rentalDefaults.tipo_receita_rental === 'COMODATO' || i.tipo_contrato_kit === 'COMODATO';
-         if (isCom) pImp += Number(rentalDefaults.perc_iss_rental || 0);
-         if (pImp > 0) {
-            t.impostosDetalhados.pis += impostos * ((Number(rentalDefaults.perc_pis_rental) || 0) / pImp);
-            t.impostosDetalhados.cofins += impostos * ((Number(rentalDefaults.perc_cofins_rental) || 0) / pImp);
-            t.impostosDetalhados.csll += impostos * ((Number(rentalDefaults.perc_csll_rental) || 0) / pImp);
-            t.impostosDetalhados.irpj += impostos * ((Number(rentalDefaults.perc_irpj_rental) || 0) / pImp);
-            if (isCom) t.impostosDetalhados.iss += impostos * ((Number(rentalDefaults.perc_iss_rental) || 0) / pImp);
-         }
+        let pImp = Number(rentalDefaults.perc_pis_rental || 0) + Number(rentalDefaults.perc_cofins_rental || 0) + Number(rentalDefaults.perc_csll_rental || 0) + Number(rentalDefaults.perc_irpj_rental || 0);
+        const isCom = rentalDefaults.tipo_receita_rental === 'COMODATO' || i.tipo_contrato_kit === 'COMODATO';
+        if (isCom) pImp += Number(rentalDefaults.perc_iss_rental || 0);
+        if (pImp > 0) {
+          tTarget.pis += impostos * ((Number(rentalDefaults.perc_pis_rental) || 0) / pImp);
+          tTarget.cofins += impostos * ((Number(rentalDefaults.perc_cofins_rental) || 0) / pImp);
+          tTarget.csll += impostos * ((Number(rentalDefaults.perc_csll_rental) || 0) / pImp);
+          tTarget.irpj += impostos * ((Number(rentalDefaults.perc_irpj_rental) || 0) / pImp);
+          if (isCom) tTarget.iss += impostos * ((Number(rentalDefaults.perc_iss_rental) || 0) / pImp);
+        }
       }
     });
 
     // Calculate global totals using the global contract term card
-    t.faturamentoTotal = t.faturamentoMensal * (prazoContratoMeses || 1);
-    t.impostosTotal = t.impostosMensal * (prazoContratoMeses || 1);
-    t.custoOpTotal = t.custoOpMensalTotal * (prazoContratoMeses || 1);
+    const prazoFaturamento = Math.max(0, (prazoContratoMeses || 1) - (prazoInstalacaoMeses || 0));
+    t.faturamentoTotal = (t.faturamentoMensal * prazoFaturamento) + t.totalInstalacao;
+    t.impostosTotal = (t.impostosMensal * prazoFaturamento) + t.impostosInstalacaoTotal;
+    t.custoOpTotal = (t.custoOpMensalTotal * prazoFaturamento) + t.custoOpInstalacaoTotal;
 
-    const receitaMensal = t.faturamentoMensal - t.impostosMensal;
-    const roiMeses = receitaMensal > 0 ? ((t.investimento + t.custoOpTotal) / receitaMensal) : 0;
+    const divisor_roi = (t.faturamentoTotal - t.impostosTotal) / (prazoContratoMeses || 1);
+    const roiMeses = divisor_roi > 0 ? ((t.investimento + t.custoOpTotal) / divisor_roi) : 0;
 
     return { ...t, margem: t.faturamentoMensal > 0 ? (t.lucroMensal / t.faturamentoMensal * 100) : 0, roiMeses };
   }, [rentalItems, rentalDefaults, prazoContratoMeses]);
 
-  const margemClass = totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600';
-  const margemLabel = totals.margem >= 15 ? 'Saudável' : totals.margem >= 5 ? 'Atenção' : 'Crítico';
+
 
   const handleGlobalKitOverwrite = async () => {
     if (!id) {
@@ -962,10 +1017,11 @@ export function SalesBudgetForm() {
 
     try {
       setSaving(true);
-      
+
       const kitUpdates = await Promise.all(kitIds.map(async kitId => {
         const res = await api.put(`/opportunity-kits/${kitId}`, {
           prazo_contrato_meses: prazoContratoMeses,
+          prazo_instalacao_meses: prazoInstalacaoMeses,
           fator_margem_locacao: fatorMargemPadrao,
           fator_manutencao: fatorManutencaoPadrao
         });
@@ -973,34 +1029,34 @@ export function SalesBudgetForm() {
       }));
 
       const kitMap = new Map(kitUpdates.map(k => [k.kitId, k.data]));
-      
+
       const updatedRentalItems = rentalItems.map(ri => {
-         if (!ri.opportunity_kit_id || !kitMap.has(ri.opportunity_kit_id)) return ri;
-         const updatedKit = kitMap.get(ri.opportunity_kit_id);
-         return calcRentalItem({ 
-           ...ri,
-           prazo_contrato: prazoContratoMeses,
-           fator_margem: fatorMargemPadrao,
-           custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
-           kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
-           kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
-           custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
-           ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
-           frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
-           icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
-           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
-           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
-           kit_pis: Number(updatedKit.aliq_pis || 0),
-           kit_cofins: Number(updatedKit.aliq_cofins || 0),
-           kit_csll: Number(updatedKit.aliq_csll || 0),
-           kit_irpj: Number(updatedKit.aliq_irpj || 0),
-           kit_iss: Number(updatedKit.aliq_iss || 0),
-           kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
-           kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
-           kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
-           kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
-           kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
-           kit_margem: Number(updatedKit.summary?.margem_kit || 0)
+        if (!ri.opportunity_kit_id || !kitMap.has(ri.opportunity_kit_id)) return ri;
+        const updatedKit = kitMap.get(ri.opportunity_kit_id);
+        return calcRentalItem({
+          ...ri,
+          prazo_contrato: prazoContratoMeses,
+          fator_margem: fatorMargemPadrao,
+          custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
+          kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
+          kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
+          custo_aquisicao_unit: Number(updatedKit.summary?.custo_aquisicao_total || 0),
+          ipi_unit: Number(updatedKit.summary?.total_ipi_kit || 0),
+          frete_unit: Number(updatedKit.summary?.total_frete_kit || 0),
+          icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
+          difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
+          taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
+          kit_pis: Number(updatedKit.aliq_pis || 0),
+          kit_cofins: Number(updatedKit.aliq_cofins || 0),
+          kit_csll: Number(updatedKit.aliq_csll || 0),
+          kit_irpj: Number(updatedKit.aliq_irpj || 0),
+          kit_iss: Number(updatedKit.aliq_iss || 0),
+          kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
+          kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
+          kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
+          kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
+          kit_margem: Number(updatedKit.summary?.margem_kit || 0)
         }, rentalDefaults);
       });
 
@@ -1019,8 +1075,8 @@ export function SalesBudgetForm() {
 
   const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems) => {
     if (!titulo || !customerId) {
-        alert('Preencha título e cliente.');
-        return false;
+      alert('Preencha título e cliente.');
+      return false;
     }
     setSaving(true);
     try {
@@ -1055,6 +1111,7 @@ export function SalesBudgetForm() {
         perc_csll_rental: +percCsllRental,
         perc_irpj_rental: +percIrpjRental,
         perc_iss_rental: +percIssRental,
+        perc_comissao_diretoria: +percComissaoDiretoria,
         responsavel_ids: responsavelIds,
         items: items.map(i => ({
           product_id: i.product_id || null,
@@ -1112,9 +1169,11 @@ export function SalesBudgetForm() {
 
       if (isEditing) {
         await api.put(`/sales-budgets/${id}`, payload);
+        setHasUnsavedChanges(false);
         if (!preventNavigate) alert('Salvo com sucesso!');
       } else {
         const res = await api.post('/sales-budgets', payload);
+        setHasUnsavedChanges(false);
         if (!preventNavigate) navigate(`/orcamentos-vendas/${res.data.id}?tab=${activeTab}`, { replace: true });
       }
       return true;
@@ -1141,11 +1200,19 @@ export function SalesBudgetForm() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
 
   return (
-    <div className="p-6 space-y-6 w-full">
+    <div className="p-6 space-y-6 w-full" onChange={() => setHasUnsavedChanges(true)}>
       {/* Top Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/orcamentos-vendas')} className="p-2 rounded-lg hover:bg-bg-deep text-text-muted transition-colors">
+          <button
+            onClick={() => {
+              if (hasUnsavedChanges) {
+                if (!window.confirm('Existem alterações não salvas no orçamento. Deseja realmente sair sem salvar?')) return;
+              }
+              navigate('/orcamentos-vendas');
+            }}
+            className="p-2 rounded-lg hover:bg-bg-deep text-text-muted transition-colors"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -1220,465 +1287,1010 @@ export function SalesBudgetForm() {
 
       {/* ═══ VENDA TAB ═══ */}
       {activeTab === 'venda' && (<>
-      {/* Consolidação — right after header */}
-      {items.length > 0 && (
-        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-3">
-          <h2 className="font-semibold text-text-primary text-lg">Consolidação</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Custo Total — with composition tooltip */}
-            <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
-              <span className="text-xs text-text-muted border-b border-dashed border-text-muted">Custo Total</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.custo)}</p>
-              <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
-                <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
-                  {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
-                  {totals.total_frete_compra > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span className="text-amber-300">+ {fmt(totals.total_frete_compra)}</span></div>}
-                  {totals.total_icms_st > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(totals.total_icms_st)}</span></div>}
-                  <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.custo)}</span></div>
+        {/* Consolidação Diretoria — right after header */}
+        {items.length > 0 && (() => {
+          const venda_fat = totals.venda;
+          const venda_custo_total = totals.custo + totals.impostos + totals.frete + totals.despAdm;
+          const venda_rec_liq = venda_fat - venda_custo_total;
+          const venda_comissao_diretoria = Math.max(0, venda_rec_liq * (percComissaoDiretoria / 100));
+          const venda_saldo = venda_rec_liq - venda_comissao_diretoria;
+          const venda_margem = venda_fat > 0 ? (venda_saldo / venda_fat) * 100 : 0;
+
+          return (
+            <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mb-6 mt-4">
+              <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none transition-opacity group-hover:opacity-[0.06]">
+                <Calculator className="w-32 h-32" />
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolidação Diretoria</h2>
+                  <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">Análise de viabilidade e comissionamento executivo</p>
                 </div>
-                <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+              </div>
+
+              {/* Top Controls & Totals */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
+                <div className="lg:col-span-4">
+                  <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+                    Comissão sobre receita líquida
+                  </label>
+                  <div className="relative max-w-[180px]">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      disabled={isReadonly}
+                      value={percComissaoDiretoria}
+                      onChange={e => {
+                        setPercComissaoDiretoria(+e.target.value);
+                        setHasUnsavedChanges(true);
+                      }}
+                      className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-8 flex flex-wrap gap-6 items-end lg:justify-end">
+                  <div>
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Faturamento</span>
+                    <span className="text-xl font-bold text-teal-400">{fmt(venda_fat)}</span>
+                  </div>
+                  <div className="hidden sm:block h-8 w-px bg-border-subtle mx-2"></div>
+                  <div>
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp + Frete + Desp Adm)</span></span>
+                    <span className="text-xl font-bold text-rose-400">{fmt(venda_custo_total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Strip format */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 border border-border-subtle rounded-lg lg:divide-x divide-y lg:divide-y-0 divide-border-subtle bg-bg-deep overflow-hidden">
+                <Tooltip content={
+                  <div className="w-80 space-y-3 text-gray-200">
+                    <div>
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita Líquida Venda</div>
+                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Faturamento - (Custo Aq. + Impostos + Frete + Desp. Adm.)</div>
+                      <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_rec_liq)}</div>
+                    </div>
+                  </div>
+                }>
+                  <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+                      Receita Líquida
+                      <HelpCircle className="w-3 h-3 opacity-50" />
+                    </span>
+                    <p className="text-xl font-bold text-text-primary">{fmt(venda_rec_liq)}</p>
+                  </div>
+                </Tooltip>
+
+                <Tooltip content={
+                  <div className="w-80 space-y-3 text-gray-200">
+                    <div>
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comissão Venda</div>
+                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">MÁX(0, Receita Líquida × % Receita Líquida)</div>
+                      <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_comissao_diretoria)}</div>
+                    </div>
+                  </div>
+                }>
+                  <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+                      Comissão Rec/Liq
+                      <HelpCircle className="w-3 h-3 opacity-50" />
+                    </span>
+                    <p className="text-xl font-bold text-text-primary">{fmt(venda_comissao_diretoria)}</p>
+                  </div>
+                </Tooltip>
+
+                <div className="p-4 sm:p-5 bg-white/[0.015] border-t lg:border-t-0 border-border-subtle">
+                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-2">Lucro / Saldo</span>
+                  <p className="text-xl font-bold text-brand-primary">{fmt(venda_saldo)}</p>
+                </div>
+
+                <div className="p-4 sm:p-5 bg-white/[0.015] border-l border-t lg:border-l lg:border-t-0 border-border-subtle">
+                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-2">Margem Diretoria</span>
+                  <p className="text-xl font-bold text-teal-500">{fmtPct(venda_margem)}</p>
+                </div>
+              </div>
+
+              {/* Detalhamento de Operação (Replaces previous Consolidação standard blocks) */}
+              <div className="mt-8 pt-6 border-t border-border-subtle">
+                <h3 className="font-semibold text-text-primary text-base mb-4 flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-brand-primary" />
+                  Detalhamento de Operação
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                  <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisição</span>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.custo)}</p>
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
+                      <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
+                        {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
+                        {totals.total_frete_compra > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span className="text-amber-300">+ {fmt(totals.total_frete_compra)}</span></div>}
+                        {totals.total_icms_st > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(totals.total_icms_st)}</span></div>}
+                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.custo)}</span></div>
+                      </div>
+                      <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+                    </div>
+                  </div>
+                  <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Impostos</span>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.impostos)}</p>
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
+                      <div className="font-semibold text-sky-300 mb-2">Detalhamento dos Impostos</div>
+                      <div className="space-y-1">
+                        {totals.total_pis > 0 && <div className="flex justify-between"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>}
+                        {totals.total_cofins > 0 && <div className="flex justify-between"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>}
+                        {totals.total_csll > 0 && <div className="flex justify-between"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>}
+                        {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
+                        {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
+                        {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
+                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
+                      </div>
+                      <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+                    </div>
+                  </div>
+                  <div className="bg-bg-deep rounded-lg p-3">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Frete Venda</span>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.frete)}</p>
+                  </div>
+                  <div className="bg-bg-deep rounded-lg p-3">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Desp. Adm.</span>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.despAdm)}</p>
+                  </div>
+                  <Tooltip content={
+                    <div className="w-64 space-y-1 text-gray-200 p-1">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comissão Padrão</div>
+                      <div className="text-xs">Comissão informada linha-a-linha na tabela de mercadorias. (Não é a comissão da diretoria)</div>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comissão Padrão</span>
+                      <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.comissao)}</p>
+                    </div>
+                  </Tooltip>
+                  <Tooltip content={
+                    <div className="w-64 space-y-1 text-gray-200 p-1">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padrão</div>
+                      <div className="text-xs">Lucro tradicional considerando a comissão padrão e sem deduzir a comissão de diretoria.</div>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padrão</span>
+                      <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
+                    </div>
+                  </Tooltip>
+                </div>
               </div>
             </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Venda Total</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.venda)}</p>
-            </div>
-            {/* Impostos de Venda — with per-tax tooltip */}
-            <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
-              <span className="text-xs text-text-muted border-b border-dashed border-text-muted">Impostos de Venda</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.impostos)}</p>
-              <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
-                <div className="font-semibold text-sky-300 mb-2">Detalhamento dos Impostos</div>
-                <div className="space-y-1">
-                  {totals.total_pis > 0 && <div className="flex justify-between"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>}
-                  {totals.total_cofins > 0 && <div className="flex justify-between"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>}
-                  {totals.total_csll > 0 && <div className="flex justify-between"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>}
-                  {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
-                  {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
-                  {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
-                  <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
-                </div>
-                <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+          );
+        })()}
+
+        {/* Pricing Defaults */}
+        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+          <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+            <Calculator className="w-5 h-5 text-brand-primary" />
+            Parâmetros Padrão
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Markup', val: markupPadrao, set: setMarkupPadrao, step: '0.01' },
+              { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
+              { label: 'Comissão %', val: percComissao, set: setPercComissao },
+              { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
+              { label: 'PIS %', val: percPis, set: setPercPis },
+              { label: 'COFINS %', val: percCofins, set: setPercCofins },
+              { label: 'CSLL %', val: percCsll, set: setPercCsll },
+              { label: 'IRPJ %', val: percIrpj, set: setPercIrpj },
+              { label: 'ISS %', val: percIss, set: setPercIss },
+              { label: 'ICMS Int. %', val: percIcmsInterno, set: setPercIcmsInterno },
+              { label: 'ICMS Ext. %', val: percIcmsExterno, set: setPercIcmsExterno },
+            ].map(p => (
+              <div key={p.label}>
+                <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+                <input type="number" step={p.step || '0.01'} value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
+                  className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Frete Venda</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.frete)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Desp. Adm.</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.despAdm)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Comissão</span>
-              <p className="text-lg font-bold text-text-primary">{fmt(totals.comissao)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Lucro</span>
-              <p className={`text-lg font-bold ${margemClass}`}>{fmt(totals.lucro)}</p>
-            </div>
-            <div className="bg-bg-deep rounded-lg p-3">
-              <span className="text-xs text-text-muted">Margem Líquida</span>
-              <p className={`text-lg font-bold ${margemClass}`}>
-                {fmtPct(totals.margem)}<span className="text-xs ml-1 font-normal">({margemLabel})</span>
-              </p>
-            </div>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* Pricing Defaults */}
-      <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-        <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-          <Calculator className="w-5 h-5 text-brand-primary" />
-          Parâmetros Padrão
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {[
-            { label: 'Markup', val: markupPadrao, set: setMarkupPadrao, step: '0.01' },
-            { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
-            { label: 'Comissão %', val: percComissao, set: setPercComissao },
-            { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
-            { label: 'PIS %', val: percPis, set: setPercPis },
-            { label: 'COFINS %', val: percCofins, set: setPercCofins },
-            { label: 'CSLL %', val: percCsll, set: setPercCsll },
-            { label: 'IRPJ %', val: percIrpj, set: setPercIrpj },
-            { label: 'ISS %', val: percIss, set: setPercIss },
-            { label: 'ICMS Int. %', val: percIcmsInterno, set: setPercIcmsInterno },
-            { label: 'ICMS Ext. %', val: percIcmsExterno, set: setPercIcmsExterno },
-          ].map(p => (
-            <div key={p.label}>
-              <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
-              <input type="number" step={p.step || '0.01'} value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
-                className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+        {/* Items - Flat Data Table */}
+        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-text-primary text-lg">Itens de Mercadoria</h2>
+            {!isReadonly && (
+              <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Adicionar Item
+              </Button>
+            )}
+          </div>
+
+          {items.length === 0 ? (
+            <div className="text-center py-12 text-text-muted text-sm">Nenhum item adicionado.</div>
+          ) : (
+            <div>
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                  <tr>
+                    <th className="px-1.5 py-2 whitespace-nowrap">Produto</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
+                  {items.map((item, idx) => {
+                    const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
+                    const custoTotal = item.custo_unit_base * item.quantidade;
+                    const lucroTotal = item.lucro_unit * item.quantidade;
+                    const vendaTotal = item.venda_unit * item.quantidade;
+                    const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
+
+                    return (
+                      <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
+                        {/* Produto */}
+                        <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
+                          <div className="flex flex-col truncate">
+                            <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || item.descricao_servico || '—'}</span>
+                            {item.product_codigo && <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>}
+                          </div>
+                        </td>
+
+                        {/* QTD — editable */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                          <input
+                            type="number" step="1" min="1" value={item.quantidade}
+                            onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
+                            disabled={isReadonly}
+                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                          />
+                        </td>
+
+                        {/* Custo Unit — with composition tooltip */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
+                          <Tooltip content={
+                            (() => {
+                              const cc = item.cost_composition;
+                              const baseU = cc?.base_unitario ?? item.custo_unit_base;
+                              const ipiPct = cc?.ipi_percent ?? 0;
+                              const ipiU = cc?.ipi_unitario ?? 0;
+                              const freteU = cc?.frete_cif_unitario ?? 0;
+                              const hasSt = cc?.has_st ?? false;
+                              const stNormal = cc?.icms_st_normal ?? 0;
+                              const credPct = cc?.cred_outorgado_percent ?? 0;
+                              const credVal = cc?.cred_outorgado_valor ?? 0;
+                              const stFinal = cc?.icms_st_final ?? 0;
+                              const isBit = cc?.is_bit ?? false;
+                              const custoFinal = cc?.custo_unit_final ?? item.custo_unit_base;
+
+                              return (
+                                <div className="w-72">
+                                  <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                    <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                    Composição do Custo
+                                  </div>
+                                  <div className="space-y-1 font-mono text-text-muted">
+                                    <div className="flex justify-between">
+                                      <span>Base (Unit.):</span>
+                                      <span className="font-semibold text-text-primary">{fmt(baseU)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-amber-300">IPI ({ipiPct.toFixed(0)}%):</span>
+                                      <span className="text-amber-300">+ {fmt(ipiU)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-amber-300">Frete CIF:</span>
+                                      <span className="text-amber-300">+ {fmt(freteU)}</span>
+                                    </div>
+                                    {hasSt && (
+                                      <>
+                                        <div className="border-t border-border-subtle my-1" />
+                                        <div className="flex justify-between">
+                                          <span className="text-amber-300">ICMS-ST {isBit ? '(BIT)' : '(Normal)'} unit.:</span>
+                                          <span className="text-amber-300">+ {fmt(stNormal)}</span>
+                                        </div>
+                                        {!isBit && credPct > 0 && (
+                                          <>
+                                            <div className="flex justify-between">
+                                              <span className="text-green-400">Créd. Outorgado ({credPct.toFixed(0)}%):</span>
+                                              <span className="text-green-400">- {fmt(credVal)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-amber-300">ICMS-ST Final unit.:</span>
+                                              <span className="text-amber-300">+ {fmt(stFinal)}</span>
+                                            </div>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                    <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5 font-bold text-text-primary">
+                                      <span>Custo Unit. Final:</span>
+                                      <span>{fmt(custoFinal)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          }>
+                            <span className="cursor-help border-b border-dashed border-text-muted">{fmt(item.custo_unit_base)}</span>
+                          </Tooltip>
+                        </td>
+
+                        {/* Custo Total */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                          {fmt(custoTotal)}
+                        </td>
+
+                        {/* MKP — editable */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                          <input
+                            type="number" step="0.01" value={item.markup}
+                            onChange={e => updateItem(idx, 'markup', +e.target.value)}
+                            disabled={isReadonly}
+                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                          />
+                        </td>
+
+                        {/* Venda Unit */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                          {fmt(item.venda_unit)}
+                        </td>
+
+                        {/* Frete Venda */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.frete_venda_unit)}
+                        </td>
+
+                        {/* Impostos — with breakdown tooltip */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
+                          <Tooltip content={
+                            <div className="w-72">
+                              <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                Detalhamento de Impostos
+                              </div>
+                              <div className="space-y-1.5 font-mono text-text-muted">
+                                {item.tipo_item === 'MERCADORIA' ? (
+                                  <>
+                                    <div className="flex justify-between"><span>PIS ({fmtPct(item.perc_pis)})</span><span>{fmt(item.pis_unit)}</span></div>
+                                    <div className="flex justify-between"><span>COFINS ({fmtPct(item.perc_cofins)})</span><span>{fmt(item.cofins_unit)}</span></div>
+                                    <div className="flex justify-between"><span>CSLL ({fmtPct(item.perc_csll)})</span><span>{fmt(item.csll_unit)}</span></div>
+                                    <div className="flex justify-between"><span>IRPJ ({fmtPct(item.perc_irpj)})</span><span>{fmt(item.irpj_unit)}</span></div>
+                                    <div className="flex justify-between">
+                                      <span>ICMS ({fmtPct(item.perc_icms)}){item.tem_st ? ' — ST isento' : ''}</span>
+                                      <span>{fmt(item.icms_unit)}</span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex justify-between"><span>ISS ({fmtPct(item.perc_iss)})</span><span>{fmt(item.iss_unit)}</span></div>
+                                )}
+                                <div className="border-t border-white/20 mt-2 pt-2">
+                                  <div className="flex justify-between font-bold text-text-primary">
+                                    <span>Total Impostos</span>
+                                    <span>{fmt(totalImpostos)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          }>
+                            <span className="cursor-help border-b border-dashed border-text-muted">{fmt(totalImpostos)}</span>
+                          </Tooltip>
+                        </td>
+
+                        {/* Desp. Adm — valor */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.despesa_adm_unit)}
+                        </td>
+
+                        {/* Comissão — valor */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.comissao_unit)}
+                        </td>
+
+                        {/* Lucro Unit */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
+                          {fmt(item.lucro_unit)}
+                        </td>
+
+                        {/* Margem */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                          {fmtPct(item.margem_unit)}
+                        </td>
+
+                        {/* Venda Total */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
+                          {fmt(vendaTotal)}
+                        </td>
+
+                        {/* Lucro Total */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                          {fmt(lucroTotal)}
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-1 py-2 whitespace-nowrap text-center">
+                          {!isReadonly && (
+                            <button
+                              onClick={() => removeItem(idx)}
+                              className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Remover item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Items - Flat Data Table */}
-      <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-text-primary text-lg">Itens de Mercadoria</h2>
-          {!isReadonly && (
-            <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Adicionar Item
-            </Button>
           )}
         </div>
-
-        {items.length === 0 ? (
-          <div className="text-center py-12 text-text-muted text-sm">Nenhum item adicionado.</div>
-        ) : (
-          <div>
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
-                <tr>
-                  <th className="px-1.5 py-2 whitespace-nowrap">Produto</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
-                {items.map((item, idx) => {
-                  const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
-                  const custoTotal = item.custo_unit_base * item.quantidade;
-                  const lucroTotal = item.lucro_unit * item.quantidade;
-                  const vendaTotal = item.venda_unit * item.quantidade;
-                  const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
-
-                  return (
-                    <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
-                      {/* Produto */}
-                      <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
-                        <div className="flex flex-col truncate">
-                          <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || item.descricao_servico || '—'}</span>
-                          {item.product_codigo && <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>}
-                        </div>
-                      </td>
-
-                      {/* QTD — editable */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-center">
-                        <input
-                          type="number" step="1" min="1" value={item.quantidade}
-                          onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
-                          disabled={isReadonly}
-                          className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
-                        />
-                      </td>
-
-                      {/* Custo Unit — with composition tooltip */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                        <Tooltip content={
-                          (() => {
-                            const cc = item.cost_composition;
-                            const baseU = cc?.base_unitario ?? item.custo_unit_base;
-                            const ipiPct = cc?.ipi_percent ?? 0;
-                            const ipiU = cc?.ipi_unitario ?? 0;
-                            const freteU = cc?.frete_cif_unitario ?? 0;
-                            const hasSt = cc?.has_st ?? false;
-                            const stNormal = cc?.icms_st_normal ?? 0;
-                            const credPct = cc?.cred_outorgado_percent ?? 0;
-                            const credVal = cc?.cred_outorgado_valor ?? 0;
-                            const stFinal = cc?.icms_st_final ?? 0;
-                            const isBit = cc?.is_bit ?? false;
-                            const custoFinal = cc?.custo_unit_final ?? item.custo_unit_base;
-
-                            return (
-                              <div className="w-72">
-                                <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
-                                  <Info className="w-3.5 h-3.5 text-brand-primary" />
-                                  Composição do Custo
-                                </div>
-                                <div className="space-y-1 font-mono text-text-muted">
-                                  <div className="flex justify-between">
-                                    <span>Base (Unit.):</span>
-                                    <span className="font-semibold text-text-primary">{fmt(baseU)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-amber-300">IPI ({ipiPct.toFixed(0)}%):</span>
-                                    <span className="text-amber-300">+ {fmt(ipiU)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-amber-300">Frete CIF:</span>
-                                    <span className="text-amber-300">+ {fmt(freteU)}</span>
-                                  </div>
-                                  {hasSt && (
-                                    <>
-                                      <div className="border-t border-border-subtle my-1" />
-                                      <div className="flex justify-between">
-                                        <span className="text-amber-300">ICMS-ST {isBit ? '(BIT)' : '(Normal)'} unit.:</span>
-                                        <span className="text-amber-300">+ {fmt(stNormal)}</span>
-                                      </div>
-                                      {!isBit && credPct > 0 && (
-                                        <>
-                                          <div className="flex justify-between">
-                                            <span className="text-green-400">Créd. Outorgado ({credPct.toFixed(0)}%):</span>
-                                            <span className="text-green-400">- {fmt(credVal)}</span>
-                                          </div>
-                                          <div className="flex justify-between">
-                                            <span className="text-amber-300">ICMS-ST Final unit.:</span>
-                                            <span className="text-amber-300">+ {fmt(stFinal)}</span>
-                                          </div>
-                                        </>
-                                      )}
-                                    </>
-                                  )}
-                                  <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5 font-bold text-text-primary">
-                                    <span>Custo Unit. Final:</span>
-                                    <span>{fmt(custoFinal)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()
-                        }>
-                          <span className="cursor-help border-b border-dashed border-text-muted">{fmt(item.custo_unit_base)}</span>
-                        </Tooltip>
-                      </td>
-
-                      {/* Custo Total */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                        {fmt(custoTotal)}
-                      </td>
-
-                      {/* MKP — editable */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-center">
-                        <input
-                          type="number" step="0.01" value={item.markup}
-                          onChange={e => updateItem(idx, 'markup', +e.target.value)}
-                          disabled={isReadonly}
-                          className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
-                        />
-                      </td>
-
-                      {/* Venda Unit */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                        {fmt(item.venda_unit)}
-                      </td>
-
-                      {/* Frete Venda */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                        {fmt(item.frete_venda_unit)}
-                      </td>
-
-                      {/* Impostos — with breakdown tooltip */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                        <Tooltip content={
-                          <div className="w-72">
-                            <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
-                              <Info className="w-3.5 h-3.5 text-brand-primary" />
-                              Detalhamento de Impostos
-                            </div>
-                            <div className="space-y-1.5 font-mono text-text-muted">
-                              {item.tipo_item === 'MERCADORIA' ? (
-                                <>
-                                  <div className="flex justify-between"><span>PIS ({fmtPct(item.perc_pis)})</span><span>{fmt(item.pis_unit)}</span></div>
-                                  <div className="flex justify-between"><span>COFINS ({fmtPct(item.perc_cofins)})</span><span>{fmt(item.cofins_unit)}</span></div>
-                                  <div className="flex justify-between"><span>CSLL ({fmtPct(item.perc_csll)})</span><span>{fmt(item.csll_unit)}</span></div>
-                                  <div className="flex justify-between"><span>IRPJ ({fmtPct(item.perc_irpj)})</span><span>{fmt(item.irpj_unit)}</span></div>
-                                  <div className="flex justify-between">
-                                    <span>ICMS ({fmtPct(item.perc_icms)}){item.tem_st ? ' — ST isento' : ''}</span>
-                                    <span>{fmt(item.icms_unit)}</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="flex justify-between"><span>ISS ({fmtPct(item.perc_iss)})</span><span>{fmt(item.iss_unit)}</span></div>
-                              )}
-                              <div className="border-t border-white/20 mt-2 pt-2">
-                                <div className="flex justify-between font-bold text-text-primary">
-                                  <span>Total Impostos</span>
-                                  <span>{fmt(totalImpostos)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        }>
-                          <span className="cursor-help border-b border-dashed border-text-muted">{fmt(totalImpostos)}</span>
-                        </Tooltip>
-                      </td>
-
-                      {/* Desp. Adm — valor */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                        {fmt(item.despesa_adm_unit)}
-                      </td>
-
-                      {/* Comissão — valor */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                        {fmt(item.comissao_unit)}
-                      </td>
-
-                      {/* Lucro Unit */}
-                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
-                        {fmt(item.lucro_unit)}
-                      </td>
-
-                      {/* Margem */}
-                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                        {fmtPct(item.margem_unit)}
-                      </td>
-
-                      {/* Venda Total */}
-                      <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
-                        {fmt(vendaTotal)}
-                      </td>
-
-                      {/* Lucro Total */}
-                      <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                        {fmt(lucroTotal)}
-                      </td>
-
-                      {/* Ações */}
-                      <td className="px-1 py-2 whitespace-nowrap text-center">
-                        {!isReadonly && (
-                          <button
-                            onClick={() => removeItem(idx)}
-                            className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                            title="Remover item"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
       </>)}
 
       {/* ═══ LOCAÇÃO / COMODATO TAB ═══ */}
       {activeTab === 'locacao' && (<>
-        {/* Rental Consolidation */}
-        {rentalItems.length > 0 && (
-          <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Fechamento de proposta</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              
-              {/* Row 1 */}
-              <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Valor Locação/Comodato Mensal</span>
-                <p className="text-2xl font-black text-brand-primary">{fmt(rentalTotals.faturamentoMensal)}</p>
+        {rentalItems.length > 0 && (() => {
+          const diretor_rec_liq = rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal;
+
+          const prazo_fat = Math.max(1, (prazoContratoMeses || 1) - (prazoInstalacaoMeses || 0));
+          const val_locacao_mensal_total = rentalTotals.faturamentoMensal * prazo_fat;
+          const custo_aq_mensal = rentalTotals.investimento - rentalTotals.investimentoInstalacao;
+          const imposto_mensal_total = rentalTotals.impostosMensal * prazo_fat;
+          const custo_op_total = rentalTotals.custoOpTotal;
+
+          const rec_liq_inst_calc = rentalTotals.totalInstalacao - rentalTotals.investimentoInstalacao - rentalTotals.impostosInstalacaoTotal;
+          const rec_liq_mensal_calc = val_locacao_mensal_total - custo_aq_mensal - imposto_mensal_total - custo_op_total;
+
+          const comissao_inst_calc = Math.max(0, rec_liq_inst_calc * (percComissaoDiretoria / 100));
+          const comissao_mensal_calc = Math.max(0, (rec_liq_mensal_calc * (percComissaoDiretoria / 100)) / prazo_fat);
+
+          const diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat);
+
+          // Evolutivo Chart Projector (Stacked Monthly) calculated FIRST to sync ROI
+          const chartData = [];
+
+          let saldoInvestimento = rentalTotals.investimento;
+          let paybackMes: number | null = null;
+          let paybackDecimal = 0;
+          let lucroAcumuladoGeral = 0;
+
+          // Parâmetros paralelos para o Fechamento (sem comissão)
+          let saldoInvestimentoBv = rentalTotals.investimento;
+          let paybackMesBv: number | null = null;
+          let paybackDecimalBv = 0;
+
+          const pCtr = prazoContratoMeses || 1;
+          const pInst = prazoInstalacaoMeses || 0;
+          const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
+
+          for (let m = 1; m <= pCtr; m++) {
+            let fatMes = 0;
+
+            if (m <= pInst) {
+              fatMes = rentalTotals.totalInstalacao / (pInst || 1);
+            } else {
+              fatMes = rentalTotals.faturamentoMensal;
+            }
+
+            // "O correto é: Valor de imposto mensal + custo op. mensal + comissão mes a mes"
+            const impMes = rentalTotals.impostosMensal;
+            const comMes = comissao_mensal_calc;
+
+            const gastosMes = impMes + opMes + comMes;
+            const receitaLivre = fatMes - gastosMes;
+
+            const gastosMesBv = impMes + opMes;
+            const receitaLivreBv = fatMes - gastosMesBv;
+
+            let quitarMes = 0;
+            if (saldoInvestimento > 0 && receitaLivre > 0) {
+              quitarMes = Math.min(receitaLivre, saldoInvestimento);
+              saldoInvestimento -= quitarMes;
+            }
+
+            let quitarMesBv = 0;
+            if (saldoInvestimentoBv > 0 && receitaLivreBv > 0) {
+              quitarMesBv = Math.min(receitaLivreBv, saldoInvestimentoBv);
+              saldoInvestimentoBv -= quitarMesBv;
+            }
+
+            const lucroLivreMes = Math.max(0, receitaLivre - quitarMes);
+            lucroAcumuladoGeral += lucroLivreMes;
+
+            if (saldoInvestimento <= 0 && paybackMes === null) {
+              paybackMes = m;
+              const fraction = receitaLivre > 0 ? (quitarMes / receitaLivre) : 1;
+              paybackDecimal = (m - 1) + fraction;
+            }
+
+            if (saldoInvestimentoBv <= 0 && paybackMesBv === null) {
+              paybackMesBv = m;
+              const fractionBv = receitaLivreBv > 0 ? (quitarMesBv / receitaLivreBv) : 1;
+              paybackDecimalBv = (m - 1) + fractionBv;
+            }
+
+            chartData.push({
+              mesLabel: `M${m}`,
+              GastosOperacionais: gastosMes,
+              QuitarInvestimento: quitarMes,
+              LucroLivre: lucroLivreMes,
+              Faturamento: fatMes,
+              SaldoAcumulado: saldoInvestimento > 0 ? -1 * saldoInvestimento : lucroAcumuladoGeral
+            });
+          }
+
+          const diretor_saldo = diretor_rec_liq - diretor_comissao;
+          const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
+
+          // Using exact payback loop simulation to avoid any math mismatch
+          const diretor_roi = paybackDecimal > 0 ? paybackDecimal : ((prazoContratoMeses || 1) + 1); // fallback if it never pays off
+          const base_roi = paybackDecimalBv > 0 ? paybackDecimalBv : ((prazoContratoMeses || 1) + 1);
+
+          return (
+            <>
+              <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mt-4">
+                <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none transition-opacity group-hover:opacity-[0.06]">
+                  <Calculator className="w-32 h-32" />
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolidação Diretoria</h2>
+                    <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">Análise de viabilidade e comissionamento executivo</p>
+                  </div>
+                  <button
+                    onClick={() => setShowEvolutivoChart(true)}
+                    type="button"
+                    className="px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold text-text-primary bg-bg-deep border border-border-subtle hover:border-brand-primary/50 rounded-lg transition-all shadow-sm"
+                  >
+                    <TrendingUp className="w-4 h-4 text-teal-400" />
+                    Ver Quadro Evolutivo
+                  </button>
+                </div>
+
+                {/* Top Controls & Totals */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
+                  <div className="lg:col-span-4">
+                    <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+                      Comissão sobre receita líquida
+                    </label>
+                    <div className="relative max-w-[180px]">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        disabled={isReadonly}
+                        value={percComissaoDiretoria}
+                        onChange={e => {
+                          setPercComissaoDiretoria(+e.target.value);
+                          setHasUnsavedChanges(true);
+                        }}
+                        className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-8 flex flex-wrap gap-6 items-end lg:justify-end">
+                    <div>
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Faturamento</span>
+                      <span className="text-xl font-bold text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span>
+                    </div>
+                    <div className="hidden sm:block h-8 w-px bg-border-subtle mx-2"></div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp + Op)</span></span>
+                      <span className="text-xl font-bold text-rose-400">{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data Strip format to replace floating bento boxes */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 border border-border-subtle rounded-lg lg:divide-x divide-y lg:divide-y-0 divide-border-subtle bg-bg-deep overflow-hidden">
+                  <Tooltip content={
+                    <div className="w-80 space-y-3 text-gray-200">
+                      <div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instalação</div>
+                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Total Instalação - Custo Aq. Total de Instalação - Impostos de Instalação</div>
+                        <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_inst_calc)}</div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">(Valor Locação Mensal × (Prazo Contrato - Prazo Instalação)) - (Custo Aquisição Total - Custo Aq. Total Instalação) - (Imposto Mensal × (Prazo Contrato - Prazo Instalação)) - Custos Operacionais Totais</div>
+                        <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_mensal_calc)}</div>
+                      </div>
+                    </div>
+                  }>
+                    <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+                        Receita Líquida
+                        <HelpCircle className="w-3 h-3 opacity-50" />
+                      </span>
+                      <p className="text-xl font-bold text-text-primary">{fmt(diretor_rec_liq)}</p>
+                    </div>
+                  </Tooltip>
+
+                  <Tooltip content={
+                    <div className="w-80 space-y-3 text-gray-200">
+                      <div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instalação</div>
+                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">MÁX(0, Receita Líquida de Instalação × % Receita Líquida)</div>
+                        <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_inst_calc)}</div>
+                      </div>
+                      <div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">MÁX(0, (Receita Líquida Mensal × % Receita Líquida) / (Prazo Contrato - Prazo Instalação))</div>
+                        <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_mensal_calc)}</div>
+                      </div>
+                    </div>
+                  }>
+                    <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+                        Comissão Rec/Liq
+                        <HelpCircle className="w-3 h-3 opacity-50" />
+                      </span>
+                      <p className="text-xl font-bold text-text-primary">{fmt(diretor_comissao)}</p>
+                    </div>
+                  </Tooltip>
+
+                  <div className="p-4 sm:p-5 bg-white/[0.015]">
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-2">Saldo de Contrato</span>
+                    <p className="text-xl font-bold text-brand-primary">{fmt(diretor_saldo)}</p>
+                  </div>
+
+                  <div className="p-4 sm:p-5 bg-white/[0.015] border-l lg:border-l-0 border-border-subtle">
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-2">Margem</span>
+                    <p className="text-xl font-bold text-teal-500">{fmtPct(diretor_margem)}</p>
+                  </div>
+
+                  <Tooltip content={
+                    <div className="w-72 space-y-1 text-gray-200">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comissões" amortiza o Investimento inicial.</div>
+                    </div>
+                  }>
+                    <div className="p-4 sm:p-5 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] col-span-2 lg:col-span-1 border-t lg:border-t-0 border-border-subtle">
+                      <span className="text-[10px] font-semibold text-brand-primary/80 uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-brand-primary transition-colors">
+                        ROI Final
+                        <HelpCircle className="w-3 h-3 opacity-60" />
+                      </span>
+                      <p className="text-xl font-black text-brand-secondary">{diretor_roi.toFixed(1)} <span className="text-xs font-semibold text-brand-primary/60 ml-0.5">meses</span></p>
+                    </div>
+                  </Tooltip>
+                </div>
+
+                {/* Novo Recurso: Comparativo de Rentabilidade do Valor Investido */}
+                <div className="mt-8 pt-6 border-t border-border-subtle">
+                  <div
+                    className="flex items-center justify-between mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => setIsComparativoExpanded(!isComparativoExpanded)}
+                  >
+                    <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
+                      Comparativo de Rentabilidade do Valor Investido
+                      {isComparativoExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
+                    </h3>
+                  </div>
+
+                  {isComparativoExpanded && (
+                    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div>
+                          <p className="text-[11px] text-text-muted leading-relaxed max-w-2xl">
+                            Este comparativo utiliza a taxa mensal informada manualmente abaixo e os prazos já existentes nos campos <span className="text-brand-primary font-medium">ROI Final</span> e <span className="text-brand-primary font-medium">Prazo de Contrato</span>.
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+                            Taxa Mensal (%)
+                          </label>
+                          <div className="relative w-[120px]">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              disabled={isReadonly}
+                              value={taxaInvestimentoMensal === '' ? '' : taxaInvestimentoMensal}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTaxaInvestimentoMensal(val === '' ? '' : +val);
+                              }}
+                              className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const taxaManual = typeof taxaInvestimentoMensal === 'number' ? taxaInvestimentoMensal : 0;
+                        const investimento = rentalTotals.investimento || 0;
+                        const prazoContrato = prazoContratoMeses || 0;
+                        const roiFinalMeses = diretor_roi || 0;
+
+                        if (investimento <= 0 || taxaManual < 0 || roiFinalMeses <= 0 || prazoContrato <= 0) {
+                          return (
+                            <div className="bg-bg-deep/50 border border-border-subtle rounded-lg p-6 text-center">
+                              <p className="text-sm font-medium text-text-muted">Preencha corretamente valor investido, taxa e prazos para calcular o comparativo.</p>
+                            </div>
+                          );
+                        }
+
+                        const taxaDecimal = taxaManual / 100;
+
+                        // Opção 1 (ROI Final)
+                        const vfRoi = investimento * Math.pow((1 + taxaDecimal), roiFinalMeses);
+                        const lucroRoiValue = vfRoi - investimento;
+                        
+                        // Opção 2 (Prazo Contrato)
+                        const vfContrato = investimento * Math.pow((1 + taxaDecimal), prazoContrato);
+                        const lucroContratoValue = vfContrato - investimento;
+
+                        // Identify highest profit
+                        const bestRoi = lucroRoiValue > lucroContratoValue;
+                        const bestContrato = lucroContratoValue >= lucroRoiValue;
+
+                        const saldoContrato = diretor_saldo || 0;
+                        
+                        // Dif Roi
+                        const difReaisRoi = lucroRoiValue - saldoContrato;
+                        const difPctRoi = saldoContrato > 0 ? (lucroRoiValue / saldoContrato) * 100 : 0;
+
+                        // Dif Contrato
+                        const difReaisContrato = lucroContratoValue - saldoContrato;
+                        const difPctContrato = saldoContrato > 0 ? (lucroContratoValue / saldoContrato) * 100 : 0;
+
+                        return (
+                          <div className="border border-border-subtle rounded-lg overflow-x-auto bg-bg-deep">
+                            {/* Desktop Header */}
+                            <div className="hidden lg:grid grid-cols-12 gap-1 border-b border-border-subtle bg-white/[0.02] min-w-[900px]">
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider border-r border-border-subtle">Base</div>
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Meses</div>
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Investimento</div>
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle hover:text-white transition-colors cursor-help tooltip-trigger relative group">
+                                Taxa
+                                <span className="hidden group-hover:block absolute top-[110%] left-0 w-48 bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Informada manualmente</span>
+                              </div>
+                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle group relative">
+                                <span className="flex items-center justify-end gap-1 cursor-help hover:text-white transition-colors">
+                                  V. Futuro
+                                  <HelpCircle className="w-3 h-3 text-text-muted opacity-70" />
+                                </span>
+                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-64 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Calculado via Juros Compostos: Valor Atual × (1 + taxa) ^ meses</span>
+                              </div>
+                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Lucro (R$)</div>
+                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Saldo Ctt.</div>
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle group relative cursor-help">
+                                Dif. R$
+                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-48 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Lucro da Aplicação - Saldo do Contrato</span>
+                              </div>
+                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right group relative cursor-help">
+                                Dif. %
+                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-48 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Lucro da Aplicação / Saldo do Contrato</span>
+                              </div>
+                            </div>
+
+                            {/* Rows */}
+                            <div className="divide-y divide-border-subtle min-w-[900px]">
+                              {/* Opção 1: ROI Final */}
+                              <div className={`grid grid-cols-2 lg:grid-cols-12 hover:bg-white/[0.015] transition-colors ${bestRoi ? 'bg-amber-400/5' : ''}`}>
+                                <div className="col-span-2 lg:col-span-1 p-2 border-b lg:border-b-0 lg:border-r border-border-subtle flex items-center">
+                                  <span className="font-semibold text-text-primary text-[11px] flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-brand-primary"></span>ROI Final</span>
+                                </div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{roiFinalMeses.toFixed(1)}</div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(investimento)}</div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{taxaManual.toFixed(2)}%</div>
+                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-semibold text-text-primary font-mono whitespace-nowrap">{fmt(vfRoi)}</div>
+                                <div className={`lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${bestRoi ? 'font-bold text-amber-400' : 'text-teal-400'}`}>{fmt(lucroRoiValue)}</div>
+                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(saldoContrato)}</div>
+                                <div className={`lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${difReaisRoi >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(difReaisRoi)}</div>
+                                <div className="lg:col-span-1 p-2 text-right text-xs text-text-secondary">{difPctRoi.toFixed(2)}%</div>
+                              </div>
+
+                              {/* Opção 2: Prazo de Contrato */}
+                              <div className={`grid grid-cols-2 lg:grid-cols-12 hover:bg-white/[0.015] transition-colors ${bestContrato ? 'bg-amber-400/5' : ''}`}>
+                                <div className="col-span-2 lg:col-span-1 p-2 border-b lg:border-b-0 lg:border-r border-border-subtle flex items-center">
+                                  <span className="font-semibold text-text-primary text-[11px] flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>Prazo Ctt.</span>
+                                </div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{prazoContrato}</div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(investimento)}</div>
+                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{taxaManual.toFixed(2)}%</div>
+                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-semibold text-text-primary font-mono whitespace-nowrap">{fmt(vfContrato)}</div>
+                                <div className={`lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${bestContrato ? 'font-bold text-amber-400' : 'text-teal-400'}`}>{fmt(lucroContratoValue)}</div>
+                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(saldoContrato)}</div>
+                                <div className={`lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${difReaisContrato >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(difReaisContrato)}</div>
+                                <div className="lg:col-span-1 p-2 text-right text-xs text-text-secondary">{difPctContrato.toFixed(2)}%</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
+              <EvolutivoChartModal
+                isOpen={showEvolutivoChart}
+                onClose={() => setShowEvolutivoChart(false)}
+                chartData={chartData}
+                prazoContrato={prazoContratoMeses || 1}
+                paybackMes={paybackMes}
+                roiFinal={diretor_roi}
+                totals={{
+                  investimento: rentalTotals.investimento,
+                  faturamento: rentalTotals.faturamentoTotal,
+                  impostos: rentalTotals.impostosTotal,
+                  manutencao: rentalTotals.custoOpTotal,
+                  comissao: diretor_comissao,
+                  lucro: diretor_saldo,
+                  margem: diretor_margem
+                }}
+              />
 
-              <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Prazo de Contrato</span>
-                <p className="text-2xl font-black text-text-primary">{prazoContratoMeses} <span className="text-sm font-medium text-text-muted">meses</span></p>
+              {/* Rental Consolidation */}
+              <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4 mt-6">
+                <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Fechamento de proposta</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+
+                  {/* Row 1 */}
+                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Valor Locação/Comodato Mensal</span>
+                    <p className="text-2xl font-black text-brand-primary">{fmt(rentalTotals.faturamentoMensal)}</p>
+                  </div>
+
+                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Prazo de Contrato</span>
+                    <p className="text-2xl font-black text-text-primary">{prazoContratoMeses} <span className="text-sm font-medium text-text-muted">meses</span></p>
+                  </div>
+
+                  {rentalTotals.totalInstalacao > 0 && (
+                    <div className="bg-bg-deep rounded-xl p-4 border border-brand-primary/30 shadow-[0_0_15px_rgba(20,184,166,0.1)]">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-brand-secondary mb-1 block text-teal-400">Total Instalação</span>
+                      <p className="text-2xl font-black text-teal-500">{fmt(rentalTotals.totalInstalacao)}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Faturamento Total</span>
+                    <p className="text-2xl font-black text-teal-600">{fmt(rentalTotals.faturamentoTotal)}</p>
+                  </div>
+
+                  {/* Row 2 */}
+                  <Tooltip content={
+                    <div className="w-64 space-y-2 text-gray-200">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
+                      <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Impostos de compras:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
+                        Custo de Aquisição Total
+                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
+                      </span>
+                      <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.investimento)}</p>
+                    </div>
+                  </Tooltip>
+
+                  <Tooltip content={
+                    <div className="w-max min-w-[340px] space-y-2 text-gray-200 pr-2">
+                      <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2">Desmembramento de Impostos</div>
+
+                      <table className="w-full text-sm text-right border-collapse">
+                        <thead>
+                          <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
+                            <th className="text-left pb-1 font-bold">Imposto</th>
+                            <th className="pb-1 font-bold pl-3">Alíq.</th>
+                            {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Instalação</th>}
+                            <th className="pb-1 font-bold pl-4">Mensal</th>
+                            <th className="pb-1 font-bold pl-4">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700/50">
+                          {[
+                            { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis },
+                            { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins },
+                            { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll },
+                            { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj },
+                            { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss }
+                          ].map(imp => {
+                            const rFat = rentalTotals.faturamentoMensal > 0 ? rentalTotals.faturamentoMensal : rentalTotals.totalInstalacao;
+                            const rVal = rentalTotals.faturamentoMensal > 0 ? imp.valMen : imp.valInst;
+                            const pct = rFat > 0 ? (rVal / rFat) * 100 : 0;
+
+                            const totMensalPrazo = imp.valMen * prazoContratoMeses;
+                            const tot = totMensalPrazo + imp.valInst;
+
+                            if (pct === 0 && tot === 0) return null;
+
+                            return (
+                              <tr key={imp.label} className="hover:bg-white/5 transition-colors">
+                                <td className="text-left font-medium text-white py-1">{imp.label}</td>
+                                <td className="text-xs text-amber-400 pl-3">{fmtPct(pct)}</td>
+                                {rentalTotals.totalInstalacao > 0 && (
+                                  <td className="text-gray-300 pl-4">{fmt(imp.valInst)}</td>
+                                )}
+                                <td className="text-gray-300 pl-4">{fmt(imp.valMen)}</td>
+                                <td className="text-white font-medium pl-4">{fmt(tot)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-gray-600 font-bold">
+                            <td className="text-left text-white pt-1.5">Total</td>
+                            <td className="pt-1.5"></td>
+                            {rentalTotals.totalInstalacao > 0 && (
+                              <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosInstalacaoTotal)}</td>
+                            )}
+                            <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosMensal)}</td>
+                            <td className="text-amber-400 pt-1.5 pl-4">{fmt(rentalTotals.impostosTotal)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
+                        Impostos Totais
+                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
+                      </span>
+                      <p className="text-2xl font-black text-amber-500">{fmt(rentalTotals.impostosTotal)}</p>
+                    </div>
+                  </Tooltip>
+
+                  <Tooltip content={
+                    <div className="w-56 space-y-2 text-gray-200">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Operacional</div>
+                      <div className="flex justify-between text-sm"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpMensalTotal)}</span></div>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
+                        Custos Operacionais Totais
+                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
+                      </span>
+                      <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.custoOpTotal)}</p>
+                    </div>
+                  </Tooltip>
+
+                  <Tooltip content={
+                    <div className="w-64 space-y-1 text-gray-200">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês calculando quando o fluxo "Faturamento - Impostos - Custos Operacionais" amortiza o Investimento inicial. Não inclui Comissões (Calculada apenas na área da Diretoria).</div>
+                    </div>
+                  }>
+                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
+                        ROI em Meses
+                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
+                      </span>
+                      <p className="text-2xl font-black text-brand-secondary">{base_roi.toFixed(1)} <span className="text-sm font-medium text-text-muted">meses</span></p>
+                    </div>
+                  </Tooltip>
+
+                </div>
               </div>
+            </>
+          );
+        })()}
 
-              <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle md:col-span-1 lg:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Faturamento Total</span>
-                <p className="text-2xl font-black text-teal-600">{fmt(rentalTotals.faturamentoTotal)}</p>
-              </div>
-
-              {/* Row 2 */}
-              <Tooltip content={
-                <div className="w-64 space-y-2 text-gray-200">
-                   <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
-                   <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
-                   <div className="flex justify-between text-sm"><span>Impostos de compras:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
-                   <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
-                </div>
-              }>
-                <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                    Custo de Aquisição Total
-                    <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                  </span>
-                  <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.investimento)}</p>
-                </div>
-              </Tooltip>
-
-              <Tooltip content={
-                <div className="w-[340px] space-y-2 text-gray-200">
-                   <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2">Desmembramento de Impostos</div>
-                   
-                   <div className="grid grid-cols-12 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                     <div className="col-span-3">Imposto</div>
-                     <div className="col-span-2 text-right">% Aliq.</div>
-                     <div className="col-span-3 text-right">Mensal</div>
-                     <div className="col-span-4 text-right">Total</div>
-                   </div>
-
-                   {[
-                     { label: 'PIS', val: rentalTotals.impostosDetalhados.pis },
-                     { label: 'COFINS', val: rentalTotals.impostosDetalhados.cofins },
-                     { label: 'CSLL', val: rentalTotals.impostosDetalhados.csll },
-                     { label: 'IRPJ', val: rentalTotals.impostosDetalhados.irpj },
-                     { label: 'ISS', val: rentalTotals.impostosDetalhados.iss }
-                   ].map(imp => {
-                     const pct = rentalTotals.faturamentoMensal > 0 ? (imp.val / rentalTotals.faturamentoMensal) * 100 : 0;
-                     const tot = rentalTotals.impostosMensal > 0 ? (imp.val / rentalTotals.impostosMensal) * rentalTotals.impostosTotal : 0;
-                     if (pct === 0 && tot === 0) return null;
-                     return (
-                       <div key={imp.label} className="grid grid-cols-12 text-sm items-center hover:bg-white/5 py-0.5 rounded transition-colors">
-                         <span className="col-span-3 font-medium text-white">{imp.label}</span>
-                         <span className="col-span-2 text-right text-xs text-amber-400">{fmtPct(pct)}</span>
-                         <span className="col-span-3 text-right text-gray-300">{fmt(imp.val)}</span>
-                         <span className="col-span-4 text-right text-white font-medium">{fmt(tot)}</span>
-                       </div>
-                     );
-                   })}
-
-                   <div className="grid grid-cols-12 text-sm items-center border-t border-gray-600 pt-1.5 mt-1 font-bold">
-                     <span className="col-span-3 text-white">Total</span>
-                     <span className="col-span-2 text-right text-amber-500 text-xs">
-                       {fmtPct(rentalTotals.faturamentoMensal > 0 ? (rentalTotals.impostosMensal / rentalTotals.faturamentoMensal) * 100 : 0)}
-                     </span>
-                     <span className="col-span-3 text-right text-gray-300">{fmt(rentalTotals.impostosMensal)}</span>
-                     <span className="col-span-4 text-right text-amber-400">{fmt(rentalTotals.impostosTotal)}</span>
-                   </div>
-                </div>
-              }>
-                <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                    Impostos Totais
-                    <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                  </span>
-                  <p className="text-2xl font-black text-amber-500">{fmt(rentalTotals.impostosTotal)}</p>
-                </div>
-              </Tooltip>
-
-              <Tooltip content={
-                <div className="w-56 space-y-2 text-gray-200">
-                   <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Operacional</div>
-                   <div className="flex justify-between text-sm"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpMensalTotal)}</span></div>
-                </div>
-              }>
-                <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                    Custos Operacionais Totais
-                    <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                  </span>
-                  <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.custoOpTotal)}</p>
-                </div>
-              </Tooltip>
-
-              <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">ROI em Meses</span>
-                <p className="text-2xl font-black text-brand-secondary">{rentalTotals.roiMeses.toFixed(1)} <span className="text-sm font-medium text-text-muted">meses</span></p>
-              </div>
-
-            </div>
-          </div>
-        )}
 
         {/* Rental Parameters */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -1720,9 +2332,9 @@ export function SalesBudgetForm() {
               {!isReadonly && (
                 <Tooltip content={!id ? "Salve o orçamento primeiro para criar um kit específico" : ""}>
                   <div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       disabled={!id}
                       onClick={() => setShowCreateKitModal(true)}
                     >
@@ -1780,11 +2392,11 @@ export function SalesBudgetForm() {
                             className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                          <CurrencyCellInput 
-                            value={ri.custo_aquisicao_unit} 
+                          <CurrencyCellInput
+                            value={ri.custo_aquisicao_unit}
                             onChange={(val: number) => updateRentalItem(idx, 'custo_aquisicao_unit', val)}
                             disabled={isReadonly}
-                            className="w-24 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-right focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" 
+                            className="w-24 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-right focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60"
                           />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted font-medium">
@@ -1797,23 +2409,23 @@ export function SalesBudgetForm() {
                           {fmt((ri.custo_op_mensal_kit || 0) * ri.quantidade)}
                         </td>
                         <td className="px-1.5 py-2 text-center">
-                          <input type="number" min="1" value={ri.prazo_contrato} 
-                            onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)} 
+                          <input type="number" min="1" value={ri.prazo_contrato}
+                            onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)}
                             onBlur={e => handleBlurRentalItem(idx, 'prazo_contrato', +e.target.value)}
                             disabled={isReadonly}
-                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
+                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
                         </td>
                         <td className="px-1.5 py-2 text-center">
-                          <input type="number" step="0.01" min="1" value={ri.fator_margem} 
-                            onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)} 
+                          <input type="number" step="0.01" min="0.01" value={ri.fator_margem}
+                            onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)}
                             onBlur={e => handleBlurRentalItem(idx, 'fator_margem', +e.target.value)}
                             disabled={isReadonly}
-                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
+                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.parcela_locacao * ri.quantidade) : '-'}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{fmt(ri.faturamento_mensal || ri.valor_mensal)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt(((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * (ri.prazo_contrato || 0))}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.faturamento_mensal || ri.valor_mensal) : '-'}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{ri.is_kit_instalacao ? fmt(0) : fmt(ri.faturamento_mensal || ri.valor_mensal)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{ri.is_kit_instalacao ? fmt(0) : fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{ri.is_kit_instalacao ? fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) : fmt(((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * Math.max(0, (ri.prazo_contrato || 0) - (rentalDefaults.prazo_instalacao_meses || 0)))}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
                           <Tooltip content={
                             <div className="w-56 space-y-1">
@@ -1825,11 +2437,11 @@ export function SalesBudgetForm() {
                                   <>
                                     {pImp > 0 ? (
                                       <>
-                                        <div className="flex justify-between"><span>PIS ({fmtPct(ri.kit_pis || 0)}):</span> <span>{fmt(vImp * ((ri.kit_pis||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>COFINS ({fmtPct(ri.kit_cofins || 0)}):</span> <span>{fmt(vImp * ((ri.kit_cofins||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>CSLL ({fmtPct(ri.kit_csll || 0)}):</span> <span>{fmt(vImp * ((ri.kit_csll||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>IRPJ ({fmtPct(ri.kit_irpj || 0)}):</span> <span>{fmt(vImp * ((ri.kit_irpj||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>ISS ({fmtPct(ri.kit_iss || 0)}):</span> <span>{fmt(vImp * ((ri.kit_iss||0)/pImp))}</span></div>
+                                        <div className="flex justify-between"><span>PIS ({fmtPct(ri.kit_pis || 0)}):</span> <span>{fmt(vImp * ((ri.kit_pis || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>COFINS ({fmtPct(ri.kit_cofins || 0)}):</span> <span>{fmt(vImp * ((ri.kit_cofins || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>CSLL ({fmtPct(ri.kit_csll || 0)}):</span> <span>{fmt(vImp * ((ri.kit_csll || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>IRPJ ({fmtPct(ri.kit_irpj || 0)}):</span> <span>{fmt(vImp * ((ri.kit_irpj || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>ISS ({fmtPct(ri.kit_iss || 0)}):</span> <span>{fmt(vImp * ((ri.kit_iss || 0) / pImp))}</span></div>
                                       </>
                                     ) : (
                                       <span className="text-text-muted">Sem impostos.</span>
@@ -1845,12 +2457,12 @@ export function SalesBudgetForm() {
                                   <>
                                     {pImp > 0 ? (
                                       <>
-                                        <div className="flex justify-between"><span>PIS ({fmtPct(rentalDefaults.perc_pis_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_pis_rental||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>COFINS ({fmtPct(rentalDefaults.perc_cofins_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_cofins_rental||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>CSLL ({fmtPct(rentalDefaults.perc_csll_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_csll_rental||0)/pImp))}</span></div>
-                                        <div className="flex justify-between"><span>IRPJ ({fmtPct(rentalDefaults.perc_irpj_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_irpj_rental||0)/pImp))}</span></div>
+                                        <div className="flex justify-between"><span>PIS ({fmtPct(rentalDefaults.perc_pis_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_pis_rental || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>COFINS ({fmtPct(rentalDefaults.perc_cofins_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_cofins_rental || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>CSLL ({fmtPct(rentalDefaults.perc_csll_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_csll_rental || 0) / pImp))}</span></div>
+                                        <div className="flex justify-between"><span>IRPJ ({fmtPct(rentalDefaults.perc_irpj_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_irpj_rental || 0) / pImp))}</span></div>
                                         {isCom && (
-                                           <div className="flex justify-between"><span>ISS ({fmtPct(rentalDefaults.perc_iss_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_iss_rental||0)/pImp))}</span></div>
+                                          <div className="flex justify-between"><span>ISS ({fmtPct(rentalDefaults.perc_iss_rental || 0)}):</span> <span>{fmt(vImp * ((rentalDefaults.perc_iss_rental || 0) / pImp))}</span></div>
                                         )}
                                       </>
                                     ) : (
@@ -1890,23 +2502,23 @@ export function SalesBudgetForm() {
       {/* Create Kit Modal Overlay */}
       {showCreateKitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
-             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
-               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Criar Kit Exclusivo</h3>
-               <button onClick={() => setShowCreateKitModal(false)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
-             </div>
-             <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
-                <OpportunityKitForm 
-                   isModal={true} 
-                   onClose={() => setShowCreateKitModal(false)} 
-                   initialSalesBudgetId={id}
-                   onSuccess={(savedKit) => {
-                     setShowCreateKitModal(false);
-                     if (savedKit) handleAddKit(savedKit);
-                   }}
-                />
-             </div>
-           </div>
+          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
+              <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Criar Kit Exclusivo</h3>
+              <button onClick={() => setShowCreateKitModal(false)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
+              <OpportunityKitForm
+                isModal={true}
+                onClose={() => setShowCreateKitModal(false)}
+                initialSalesBudgetId={id}
+                onSuccess={(savedKit) => {
+                  setShowCreateKitModal(false);
+                  if (savedKit) handleAddKit(savedKit);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -1916,10 +2528,11 @@ export function SalesBudgetForm() {
           <div className="bg-bg-deep rounded-2xl shadow-2xl p-6 w-full max-w-md border border-border-subtle">
             <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substituição</h3>
             <p className="text-text-muted mb-6">
-              Esta ação irá <b>salvar o orçamento atual</b> e aplicar os valores de <br/><br/>
-              • Prazo de contrato<br/>
-              • Fator margem<br/>
-              • Fator margem manut.<br/><br/>
+              Esta ação irá <b>salvar o orçamento atual</b> e aplicar os valores de <br /><br />
+              • Prazo de contrato<br />
+              • Prazo de instalação (Carência)<br />
+              • Fator margem<br />
+              • Fator margem manut.<br /><br />
               em <b>todos os kits lançados</b> neste orçamento, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
             </p>
             <div className="flex justify-end gap-3">
@@ -1977,59 +2590,60 @@ export function SalesBudgetForm() {
       {/* Kit Items Edit Modal */}
       {viewingKitId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
-             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
-               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Editar Kit na Oportunidade</h3>
-               <button onClick={() => setViewingKitId(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
-             </div>
-             <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
-                <OpportunityKitForm 
-                   isModal={true} 
-                   modalEditKitId={viewingKitId}
-                   onClose={() => setViewingKitId(null)} 
-                   initialSalesBudgetId={id}
-                   onSuccess={(savedKit) => {
-                     setViewingKitId(null);
-                     if (savedKit) {
-                       // Update the existing grid item with the newly saved kit values
-                       setRentalItems(prev => prev.map(item => {
-                         if (item.opportunity_kit_id === savedKit.id) {
-                           return calcRentalItem({ ...item, 
-                             product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
-                             custo_op_mensal_kit: Number(savedKit.summary?.custo_operacional_mensal_kit || 0),
-                             is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
-                             tipo_contrato_kit: savedKit.tipo_contrato,
-                             kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
-                             kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
-                             kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
-                             kit_pis: Number(savedKit.aliq_pis || 0),
-                             kit_cofins: Number(savedKit.aliq_cofins || 0),
-                             kit_csll: Number(savedKit.aliq_csll || 0),
-                             kit_irpj: Number(savedKit.aliq_irpj || 0),
-                             kit_iss: Number(savedKit.aliq_iss || 0),
-                             custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
-                             ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
-                             frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
-                             icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
-                             difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
-                             taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
-                             fator_margem: Number(savedKit.fator_margem_locacao || fatorMargemPadrao || 1),
-                             prazo_contrato: Number(savedKit.prazo_contrato_meses || prazoContratoMeses),
-                             kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
-                             kit_valor_mensal: Number(savedKit.summary?.valor_mensal_kit || 0),
-                             kit_valor_impostos: Number(savedKit.summary?.valor_impostos || 0),
-                             kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
-                             kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
-                             kit_margem: Number(savedKit.summary?.margem_kit || 0)
-                           }, rentalDefaults);
-                         }
-                         return item;
-                       }));
-                     }
-                   }}
-                />
-             </div>
-           </div>
+          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
+              <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Editar Kit na Oportunidade</h3>
+              <button onClick={() => setViewingKitId(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
+              <OpportunityKitForm
+                isModal={true}
+                modalEditKitId={viewingKitId}
+                onClose={() => setViewingKitId(null)}
+                initialSalesBudgetId={id}
+                onSuccess={(savedKit) => {
+                  setViewingKitId(null);
+                  if (savedKit) {
+                    // Update the existing grid item with the newly saved kit values
+                    setRentalItems(prev => prev.map(item => {
+                      if (item.opportunity_kit_id === savedKit.id) {
+                        return calcRentalItem({
+                          ...item,
+                          product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
+                          custo_op_mensal_kit: Number(savedKit.summary?.custo_operacional_mensal_kit || 0),
+                          is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
+                          tipo_contrato_kit: savedKit.tipo_contrato,
+                          kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
+                          kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
+                          kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
+                          kit_pis: Number(savedKit.aliq_pis || 0),
+                          kit_cofins: Number(savedKit.aliq_cofins || 0),
+                          kit_csll: Number(savedKit.aliq_csll || 0),
+                          kit_irpj: Number(savedKit.aliq_irpj || 0),
+                          kit_iss: Number(savedKit.aliq_iss || 0),
+                          custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
+                          ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
+                          frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
+                          icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
+                          difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
+                          taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
+                          fator_margem: Number(savedKit.fator_margem_locacao || fatorMargemPadrao || 1),
+                          prazo_contrato: Number(savedKit.prazo_contrato_meses || prazoContratoMeses),
+                          kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
+                          kit_valor_mensal: Number(savedKit.summary?.valor_mensal_kit || 0),
+                          kit_valor_impostos: Number(savedKit.summary?.valor_impostos || 0),
+                          kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
+                          kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
+                          kit_margem: Number(savedKit.summary?.margem_kit || 0)
+                        }, rentalDefaults);
+                      }
+                      return item;
+                    }));
+                  }
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

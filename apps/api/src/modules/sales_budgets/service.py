@@ -464,6 +464,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_csll_rental=data.perc_csll_rental,
         perc_irpj_rental=data.perc_irpj_rental,
         perc_iss_rental=data.perc_iss_rental,
+        perc_comissao_diretoria=data.perc_comissao_diretoria,
     )
     db.add(budget)
     db.flush()
@@ -532,6 +533,7 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.perc_csll_rental = data.perc_csll_rental
     budget.perc_irpj_rental = data.perc_irpj_rental
     budget.perc_iss_rental = data.perc_iss_rental
+    budget.perc_comissao_diretoria = data.perc_comissao_diretoria
 
     # Update responsaveis
     db.query(SalesBudgetResponsavel).filter(SalesBudgetResponsavel.budget_id == budget.id).delete()
@@ -613,6 +615,7 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
         perc_csll_rental=original.perc_csll_rental,
         perc_irpj_rental=original.perc_irpj_rental,
         perc_iss_rental=original.perc_iss_rental,
+        perc_comissao_diretoria=original.perc_comissao_diretoria,
     )
     db.add(new_budget)
     db.flush()

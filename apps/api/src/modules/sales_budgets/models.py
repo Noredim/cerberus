@@ -48,6 +48,7 @@ class SalesBudget(Base):
     perc_csll_rental = Column(Numeric(6, 4), nullable=False, default=0)
     perc_irpj_rental = Column(Numeric(6, 4), nullable=False, default=0)
     perc_iss_rental = Column(Numeric(6, 4), nullable=False, default=0)
+    perc_comissao_diretoria = Column(Numeric(6, 4), nullable=False, default=0)
 
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
