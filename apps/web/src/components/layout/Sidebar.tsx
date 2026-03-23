@@ -50,6 +50,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             subItems: [
                 { label: 'Estados', path: '/cadastros/estados' },
                 { label: 'Municípios', path: '/cadastros/municipios' },
+                { label: 'Cargos', path: '/cadastros/cargos' },
+                { label: 'Profissionais', path: '/cadastros/profissionais' },
                 { label: 'NCM', path: '/ncms' },
                 { label: 'NCM ST', path: '/cadastros/ncm-st' },
                 { label: 'Produtos', path: '/cadastro/produtos' },

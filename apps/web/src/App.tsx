@@ -11,7 +11,7 @@ import EmpresasList from './modules/companies/EmpresasList';
 import EmpresaForm from './modules/companies/EmpresaForm';
 import TaxBenefitsList from './modules/tax-benefits/TaxBenefitsList';
 import TaxBenefitForm from './modules/tax-benefits/TaxBenefitForm';
-import ProfileForm from './modules/profiles/ProfileForm';
+import ProfileDashboard from './modules/profiles/ProfileDashboard';
 import NcmList from './modules/ncm/NcmList';
 import NcmForm from './modules/ncm/NcmForm';
 import NcmStList from './modules/ncm-st/NcmStList';
@@ -29,6 +29,8 @@ import { SalesBudgetList } from './modules/sales_budgets/SalesBudgetList';
 import { SalesBudgetForm } from './modules/sales_budgets/SalesBudgetForm';
 import { OpportunityKitList } from './modules/opportunity_kits/OpportunityKitList';
 import { OpportunityKitForm } from './modules/opportunity_kits/OpportunityKitForm';
+import RolesDashboard from './modules/roles/RolesDashboard';
+import ProfessionalsDashboard from './modules/professionals/ProfessionalsDashboard';
 import Dashboard from './modules/dashboard/Dashboard';
 
 import { Loader2, ServerOff } from 'lucide-react';
@@ -90,7 +92,9 @@ function App() {
             <Route path="/cadastros/estados" element={<StatesList />} />
             <Route path="/cadastros/municipios" element={<CitiesList />} />
             <Route path="/cadastros/jobs" element={<SyncJobsList />} />
-            <Route path="/seguranca/perfil" element={<ProfileForm />} />
+            <Route path="/cadastros/cargos" element={<RolesDashboard />} />
+            <Route path="/cadastros/profissionais" element={<ProfessionalsDashboard />} />
+            <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
 
             {/* Empresas */}
             <Route path="/empresas" element={<EmpresasList />} />

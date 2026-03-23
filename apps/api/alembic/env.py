@@ -30,6 +30,9 @@ from src.modules.customers.models import Customer
 from src.modules.purchase_budgets.models import PaymentCondition, PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetResponsavel, SalesBudgetItem
 from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
+from src.modules.profiles.models import FunctionalProfile
+from src.modules.roles.models import Role
+from src.modules.professionals.models import Professional
 
 from src.core.config import settings
 target_metadata = Base.metadata

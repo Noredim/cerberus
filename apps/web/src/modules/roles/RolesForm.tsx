@@ -1,90 +1,68 @@
 import React, { useState, useEffect } from 'react';
 import { Save, X, AlertCircle, Loader2 } from 'lucide-react';
-import { createFunctionalProfile, updateFunctionalProfile } from '../../services/profileApi';
-import type { FunctionalProfileResponse } from '../../services/profileApi';
+import { roleApi } from '../../services/roleApi';
+import type { Role } from '../../services/roleApi';
 
-interface ProfileFormProps {
-    profile: FunctionalProfileResponse | null;
+interface RolesFormProps {
+    role: Role | null;
+    companies: { id: string; razao_social: string }[];
     onSuccess: () => void;
     onCancel: () => void;
 }
 
-const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel }) => {
+const RolesForm: React.FC<RolesFormProps> = ({ role, companies, onSuccess, onCancel }) => {
     const [name, setName] = useState('');
-    const [marginLimit, setMarginLimit] = useState('');
-    const [viewDirector, setViewDirector] = useState(false);
+    const [companyId, setCompanyId] = useState('');
+    const [canPerformSale, setCanPerformSale] = useState(false);
     
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
-        if (profile) {
-            setName(profile.name);
-            setMarginLimit(profile.margin_factor_limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 5 }));
-            setViewDirector(profile.view_director_consolidation);
+        if (role) {
+            setName(role.name);
+            setCompanyId(role.company_id);
+            setCanPerformSale(role.can_perform_sale);
         } else {
             setName('');
-            setMarginLimit('');
-            setViewDirector(false);
+            setCompanyId(companies[0]?.id || '');
+            setCanPerformSale(false);
         }
-    }, [profile]);
-
-    const formatLimit = (value: string) => {
-        let formatted = value.replace(/[^0-9,]/g, '');
-        const parts = formatted.split(',');
-        if (parts.length > 2) {
-             formatted = parts[0] + ',' + parts.slice(1).join('');
-        }
-        if (formatted.includes(',')) {
-            const [integer, decimal] = formatted.split(',');
-            formatted = `${integer},${decimal.slice(0, 5)}`;
-        }
-        return formatted;
-    };
-
-    const handleMarginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setMarginLimit(formatLimit(e.target.value));
-    };
+    }, [role, companies]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
 
         if (!name.trim()) {
-            setError('O nome do perfil é obrigatório.');
+            setError('O nome do cargo é obrigatório.');
             return;
         }
 
-        if (!marginLimit) {
-            setError('O limite de fator de margem é obrigatório.');
+        if (!companyId) {
+            setError('A empresa associada é obrigatória.');
             return;
-        }
-
-        const numericMargin = parseFloat(marginLimit.replace(',', '.'));
-        if (isNaN(numericMargin) || numericMargin < 0) {
-             setError('O limite de fator de margem deve ser um número válido e positivo.');
-             return;
         }
 
         setLoading(true);
         try {
-            if (profile) {
-                await updateFunctionalProfile(profile.id, {
+            if (role) {
+                await roleApi.updateRole(role.id, {
                     name,
-                    margin_factor_limit: numericMargin,
-                    view_director_consolidation: viewDirector
+                    company_id: companyId,
+                    can_perform_sale: canPerformSale
                 });
             } else {
-                await createFunctionalProfile({
+                await roleApi.createRole({
                     name,
-                    margin_factor_limit: numericMargin,
-                    view_director_consolidation: viewDirector
+                    company_id: companyId,
+                    can_perform_sale: canPerformSale
                 });
             }
             onSuccess();
         } catch (err: any) {
-            console.error('Failed to save profile', err);
-            setError(err.response?.data?.detail || 'Erro ao salvar o perfil funcional.');
+            console.error('Failed to save role', err);
+            setError(err.response?.data?.detail || 'Erro ao salvar o cargo.');
         } finally {
             setLoading(false);
         }
@@ -95,10 +73,10 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
             <div className="p-6 border-b border-border-subtle flex items-center justify-between sticky top-0 bg-bg-surface z-10">
                 <div>
                     <h2 className="text-xl font-bold tracking-tight text-text-primary">
-                        {profile ? 'Editar Perfil' : 'Novo Perfil Funcional'}
+                        {role ? 'Editar Cargo' : 'Novo Cargo'}
                     </h2>
                     <p className="text-sm text-text-muted mt-1">
-                        {profile ? 'Altere as configurações deste perfil.' : 'Configure as permissões do novo perfil.'}
+                        {role ? 'Altere as informações deste cargo.' : 'Adicione um novo cargo para a hierarquia.'}
                     </p>
                 </div>
                 <button 
@@ -111,7 +89,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {error && (
-                    <div className="p-4 bg-brand-danger/10 border border-brand-danger/20 rounded-lg flex items-start gap-3 text-brand-danger animate-in fade-in slide-in-from-top-2">
+                    <div className="p-4 bg-brand-danger/10 border border-brand-danger/20 rounded-lg flex items-start gap-3 text-brand-danger">
                         <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                         <div>
                             <h3 className="font-semibold text-sm">Erro ao salvar</h3>
@@ -120,14 +98,30 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
                     </div>
                 )}
 
-                <form id="profile-form" onSubmit={handleSubmit} className="space-y-8">
+                <form id="role-form" onSubmit={handleSubmit} className="space-y-8">
                     <div className="space-y-6">
-                        <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Informações Básicas</h3>
+                        <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Informações do Cargo</h3>
                         
                         <div className="space-y-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-text-primary">
-                                    Nome do Perfil *
+                                    Empresa *
+                                </label>
+                                <select
+                                    value={companyId}
+                                    onChange={(e) => setCompanyId(e.target.value)}
+                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-3 text-text-primary focus:border-brand-primary outline-none transition-colors"
+                                >
+                                    <option value="" disabled>Selecione uma empresa</option>
+                                    {companies.map(c => (
+                                        <option key={c.id} value={c.id}>{c.razao_social}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-text-primary">
+                                    Nome do Cargo *
                                 </label>
                                 <input
                                     type="text"
@@ -137,34 +131,18 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
                                     placeholder="Ex: Diretor de Vendas"
                                 />
                             </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-text-primary">
-                                    Limite Fator de Margem *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={marginLimit}
-                                    onChange={handleMarginChange}
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-3 text-text-primary placeholder:text-text-muted focus:border-brand-primary outline-none transition-colors"
-                                    placeholder="Ex: 1,12345"
-                                />
-                                <p className="text-xs text-text-muted">
-                                    Utilize a vírgula para separar as até 5 casas decimais.
-                                </p>
-                            </div>
                         </div>
                     </div>
                     
                     <div className="space-y-6">
-                        <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Alçadas e Permissões</h3>
+                        <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4">Vendas e Alçadas</h3>
 
                         <label className="flex items-center gap-4 p-4 border border-border-subtle rounded-lg cursor-pointer hover:border-brand-primary/50 bg-bg-deep hover:bg-bg-surface transition-all group">
                             <div className="relative flex items-center justify-center shrink-0">
                                 <input
                                     type="checkbox"
-                                    checked={viewDirector}
-                                    onChange={(e) => setViewDirector(e.target.checked)}
+                                    checked={canPerformSale}
+                                    onChange={(e) => setCanPerformSale(e.target.checked)}
                                     className="peer appearance-none w-5 h-5 border-2 border-border-strong rounded bg-bg-surface checked:bg-brand-primary checked:border-brand-primary transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 cursor-pointer"
                                 />
                                 <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" viewBox="0 0 14 10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -172,8 +150,8 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
                                 </svg>
                             </div>
                             <div>
-                                <span className="text-sm font-bold text-text-primary group-hover:text-brand-primary transition-colors">Visualiza Consolidação Diretoria</span>
-                                <p className="text-xs text-text-muted mt-1 leading-relaxed">Permite que usuários com este perfil visualizem os dados consolidados da diretoria nos orçamentos.</p>
+                                <span className="text-sm font-bold text-text-primary group-hover:text-brand-primary transition-colors">Pode realizar vendas</span>
+                                <p className="text-xs text-text-muted mt-1 leading-relaxed">Permite que o profissional cadastrado neste cargo crie e gerencie propostas e orçamentos.</p>
                             </div>
                         </label>
                     </div>
@@ -191,7 +169,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
                 </button>
                 <button
                     type="submit"
-                    form="profile-form"
+                    form="role-form"
                     disabled={loading}
                     className="px-6 py-2.5 text-sm font-medium text-white bg-brand-primary rounded-md hover:bg-brand-primary/90 transition-all hover:scale-[1.02] flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
                 >
@@ -200,7 +178,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
                     ) : (
                         <>
                             <Save className="w-4 h-4" />
-                            {profile ? 'Salvar Alterações' : 'Criar Perfil'}
+                            {role ? 'Salvar Alterações' : 'Criar Cargo'}
                         </>
                     )}
                 </button>
@@ -209,4 +187,4 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSuccess, onCancel 
     );
 };
 
-export default ProfileForm;
+export default RolesForm;
