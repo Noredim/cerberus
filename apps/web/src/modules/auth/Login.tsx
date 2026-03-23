@@ -46,6 +46,7 @@ const Login: React.FC = () => {
             });
 
             login(access_token, meResponse.data);
+            // Navega para a dashboard e recarrega a página para garantir que o contexto de autenticação seja atualizado
             navigate('/');
         } catch (err: any) {
             setError(err.response?.data?.detail || 'E-mail ou senha incorretos.');

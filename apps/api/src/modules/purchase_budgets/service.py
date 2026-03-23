@@ -19,9 +19,14 @@ import openpyxl
 
 class PurchaseBudgetService:
     @staticmethod
-    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100):
+    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None):
         # returns budgets with nested supplier and items
-        return db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id).order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
+        query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
+        if supplier_id:
+            query = query.filter(PurchaseBudget.supplier_id == supplier_id)
+        if sales_budget_id:
+            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+        return query.order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
     def get_budget_by_id(db: Session, tenant_id: str, budget_id: UUID) -> PurchaseBudget:
@@ -274,7 +279,8 @@ class PurchaseBudgetService:
             tipo_orcamento=data.tipo_orcamento,
             frete_tipo=data.frete_tipo,
             frete_percent=data.frete_percent,
-            ipi_calculado=data.ipi_calculado
+            ipi_calculado=data.ipi_calculado,
+            sales_budget_id=data.sales_budget_id
         )
         db.add(db_budget)
         db.flush() # To get ID
@@ -326,6 +332,7 @@ class PurchaseBudgetService:
         db_budget.frete_tipo = data.frete_tipo
         db_budget.frete_percent = data.frete_percent
         db_budget.ipi_calculado = data.ipi_calculado
+        db_budget.sales_budget_id = data.sales_budget_id
         
         # Delete old items
         db.query(PurchaseBudgetItem).filter(PurchaseBudgetItem.budget_id == budget_id).delete()

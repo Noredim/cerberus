@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, File, UploadFile, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from src.core.database import get_db
@@ -19,10 +19,15 @@ router = APIRouter(
 def list_budgets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    supplier_id: Optional[str] = None,
+    sales_budget_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit)
+    """
+    Listar orcamentos de compra.
+    """
+    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id)
 
 @router.get("/{budget_id}", response_model=schemas.PurchaseBudgetOut)
 def get_budget(

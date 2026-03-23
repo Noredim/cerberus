@@ -42,6 +42,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    profile_picture = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")

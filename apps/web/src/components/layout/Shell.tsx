@@ -95,8 +95,12 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                                     </div>
                                 )}
                             </div>
-                            <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center transition-all group-hover:bg-brand-primary group-hover:text-white shrink-0">
-                                <User className="w-4 h-4" />
+                            <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center transition-all group-hover:bg-brand-primary group-hover:text-white shrink-0 overflow-hidden">
+                                {user?.profile_picture ? (
+                                    <img src={user.profile_picture} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <User className="w-4 h-4" />
+                                )}
                             </div>
 
                             {/* Dropdown for companies is now anchored to the user profile box */}

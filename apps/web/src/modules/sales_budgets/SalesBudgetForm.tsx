@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -9,6 +9,11 @@ import { AddRentalItemModal } from './AddRentalItemModal';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
 import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 import { EvolutivoChartModal } from './EvolutivoChartModal';
+import { BudgetItemsGrid } from '../purchase_budgets/components/BudgetItemsGrid';
+import { Building2 } from 'lucide-react';
+import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportModal';
+import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
+import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
 
 interface CostComposition {
   base_unitario: number;
@@ -409,9 +414,22 @@ export function SalesBudgetForm() {
   // Items
   const [items, setItems] = useState<SalesBudgetItem[]>([]);
 
+  // Purchase Budget State
+  const [purchaseBudgetId, setPurchaseBudgetId] = useState<string | null>(null);
+  const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
+  const [purchasePaymentConditionId, setPurchasePaymentConditionId] = useState<string>('');
+  const [purchaseFreteTipo, setPurchaseFreteTipo] = useState<'CIF' | 'FOB'>('FOB');
+  const [purchaseFretePercent, setPurchaseFretePercent] = useState(0);
+  const [purchaseIpiCalculado, setPurchaseIpiCalculado] = useState(false);
+  const [purchaseItems, setPurchaseItems] = useState<any[]>([]);
+  const [isPurchaseImportModalOpen, setIsPurchaseImportModalOpen] = useState(false);
+  const [isPurchaseReconciliationModalOpen, setIsPurchaseReconciliationModalOpen] = useState(false);
+  const [purchaseUnresolvedItems, setPurchaseUnresolvedItems] = useState<any[]>([]);
+  const [isQuickSupplierModalOpen, setIsQuickSupplierModalOpen] = useState(false);
+
   // Tab
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'locacao' ? 'locacao' : 'venda';
+  const activeTab = searchParams.get('tab') || 'venda';
 
   // Rental defaults
   const [tipoReceitaRental, setTipoReceitaRental] = useState('LOCACAO_PURA');
@@ -442,6 +460,7 @@ export function SalesBudgetForm() {
   // Lookups
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [showProductSearch, setShowProductSearch] = useState(false);
 
   const isReadonly = status !== 'RASCUNHO';
@@ -489,12 +508,14 @@ export function SalesBudgetForm() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [custRes, prodRes] = await Promise.all([
+        const [custRes, prodRes, supRes] = await Promise.all([
           api.get('/cadastro/clientes', { params: { limit: 200 } }),
           api.get('/cadastro/produtos', { params: { limit: 500 } }),
+          api.get('/cadastro/fornecedores', { params: { limit: 200 } }),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data.items || []);
+        setSuppliers(Array.isArray(supRes.data) ? supRes.data : supRes.data.items || []);
       } catch (err) {
         console.error(err);
       }
@@ -644,6 +665,41 @@ export function SalesBudgetForm() {
       };
 
       setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
+      
+      // Load Purchase Budget
+      try {
+        const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
+        if (pbData && pbData.length > 0) {
+          const pb = pbData[0];
+          setPurchaseBudgetId(pb.id);
+          setPurchaseSupplierId(pb.supplier_id);
+          setPurchasePaymentConditionId(pb.payment_condition_id || '');
+          setPurchaseFreteTipo(pb.frete_tipo);
+          setPurchaseFretePercent(pb.frete_percent);
+          setPurchaseIpiCalculado(pb.ipi_calculado);
+          
+          if (pb.items) {
+            setPurchaseItems(pb.items.map((i: any) => ({
+              product_id: i.product_id,
+              product_nome: i.product?.nome || '',
+              product_codigo: i.product?.codigo || '',
+              codigo_fornecedor: i.codigo_fornecedor || '',
+              ncm: i.ncm || '',
+              quantidade: i.quantidade,
+              valor_unitario: i.valor_unitario,
+              frete_percent: i.frete_percent,
+              ipi_percent: i.ipi_percent,
+              icms_percent: i.icms_percent,
+              frete_valor: i.frete_valor,
+              ipi_valor: i.ipi_valor,
+              total_item: i.total_item
+            })));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load purchase budget associated with sales budget', err);
+      }
+      
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [id]);
@@ -1167,15 +1223,53 @@ export function SalesBudgetForm() {
         })),
       };
 
+      let currentSalesBudgetId = id;
       if (isEditing) {
         await api.put(`/sales-budgets/${id}`, payload);
-        setHasUnsavedChanges(false);
         if (!preventNavigate) alert('Salvo com sucesso!');
       } else {
         const res = await api.post('/sales-budgets', payload);
-        setHasUnsavedChanges(false);
-        if (!preventNavigate) navigate(`/orcamentos-vendas/${res.data.id}?tab=${activeTab}`, { replace: true });
+        currentSalesBudgetId = res.data.id;
       }
+
+      // Save Purchase Budget if filled
+      if (purchaseSupplierId) {
+        const pbPayload = {
+          supplier_id: purchaseSupplierId,
+          payment_condition_id: purchasePaymentConditionId || null,
+          sales_budget_id: currentSalesBudgetId,
+          numero_orcamento: numeroOrcamento,
+          data_orcamento: new Date(dataOrcamento).toISOString(),
+          tipo_orcamento: 'REVENDA',
+          frete_tipo: purchaseFreteTipo,
+          frete_percent: purchaseFretePercent,
+          ipi_calculado: purchaseIpiCalculado,
+          items: purchaseItems.map(i => ({
+            product_id: i.product_id,
+            codigo_fornecedor: i.codigo_fornecedor || '',
+            ncm: i.ncm || '',
+            quantidade: i.quantidade,
+            valor_unitario: i.valor_unitario,
+            frete_percent: i.frete_percent,
+            ipi_percent: i.ipi_percent,
+            icms_percent: i.icms_percent
+          }))
+        };
+        try {
+          if (purchaseBudgetId) {
+            await api.put(`/purchase-budgets/${purchaseBudgetId}`, pbPayload);
+          } else {
+            const pbRes = await api.post('/purchase-budgets', pbPayload);
+            setPurchaseBudgetId(pbRes.data.id);
+          }
+        } catch(err) {
+          console.error('Failed to save purchase budget', err);
+          alert('Erro ao salvar aba de orçamento de compra.');
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      if (!isEditing && !preventNavigate) navigate(`/orcamentos-vendas/${currentSalesBudgetId}?tab=${activeTab}`, { replace: true });
       return true;
     } catch (err: any) {
       console.error('Save error:', err.response?.data || err);
@@ -1280,9 +1374,19 @@ export function SalesBudgetForm() {
       </div>
 
       {/* Tab Bar */}
-      <div className="flex border-b border-border-subtle">
-        <button onClick={() => setSearchParams({ tab: 'venda' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>Venda</button>
-        <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>Locação / Comodato</button>
+      <div className="flex border-b border-border-subtle bg-surface">
+        <button onClick={() => setSearchParams({ tab: 'venda' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>
+          <Receipt className="w-4 h-4" />
+          Venda
+        </button>
+        <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>
+          <TrendingUp className="w-4 h-4" />
+          Locação / Comodato
+        </button>
+        <button onClick={() => setSearchParams({ tab: 'compra' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'compra' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-text-muted hover:text-text-primary'}`}>
+          <Package className="w-4 h-4" />
+          Orçamento de Compra
+        </button>
       </div>
 
       {/* ═══ VENDA TAB ═══ */}
@@ -2498,6 +2602,177 @@ export function SalesBudgetForm() {
           )}
         </div>
       </>)}
+
+      {/* ═══ COMPRA TAB ═══ */}
+      {activeTab === 'compra' && (
+        <div className="space-y-6">
+          <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+              <Package className="w-5 h-5 text-orange-500" />
+              Dados da Compra
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-text-primary flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-text-muted" />
+                    Fornecedor
+                  </label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsQuickSupplierModalOpen(true)}
+                    className="text-xs text-brand-primary hover:text-brand-primary-hover font-medium flex items-center gap-1"
+                    disabled={isReadonly}
+                  >
+                    <Plus className="w-3 h-3" /> Novo
+                  </button>
+                </div>
+                <select 
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                  value={purchaseSupplierId} 
+                  onChange={e => { setPurchaseSupplierId(e.target.value); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly}
+                >
+                  <option value="">Selecione o Fornecedor...</option>
+                  {suppliers.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.nome_fantasia || s.razao_social}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1.5">Tipo de Frete</label>
+                <div className="flex bg-bg-deep rounded-lg p-1 border border-border-subtle">
+                  <button type="button" onClick={() => { setPurchaseFreteTipo('FOB'); setHasUnsavedChanges(true); }} disabled={isReadonly}
+                    className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${purchaseFreteTipo === 'FOB' ? 'bg-surface text-text-primary shadow-sm border border-border-subtle/50' : 'text-text-muted hover:text-text-primary'}`}>FOB</button>
+                  <button type="button" onClick={() => { setPurchaseFreteTipo('CIF'); setHasUnsavedChanges(true); }} disabled={isReadonly}
+                    className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${purchaseFreteTipo === 'CIF' ? 'bg-blue-500 text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}>CIF</button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1.5">% Frete Fixo</label>
+                <div className="relative">
+                  <input type="number" step="0.01" min="0" value={purchaseFretePercent} onChange={e => { setPurchaseFretePercent(+e.target.value); setHasUnsavedChanges(true); }} disabled={isReadonly}
+                    className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 pl-8 disabled:opacity-60" />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-bold text-sm">%</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center pt-6">
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100">
+                  <input type="checkbox" checked={purchaseIpiCalculado} onChange={e => { setPurchaseIpiCalculado(e.target.checked); setHasUnsavedChanges(true); }} disabled={isReadonly} 
+                    className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" />
+                  Calcular IPI na Base do ICMS
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+            <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-text-primary">Itens do Orçamento</h2>
+                <p className="text-xs text-text-muted mt-0.5">Adicione os produtos manualmente ou importe via planilha.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = '/modelo_orcamento.xlsx';
+                  link.download = 'modelo_orcamento.xlsx';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}>
+                  <Download className="w-4 h-4 mr-2 text-brand-primary" />
+                  Baixar Modelo Excel
+                </Button>
+                <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => setIsPurchaseImportModalOpen(true)}>
+                  <Upload className="w-4 h-4 mr-2 text-brand-primary" />
+                  Importar Planilha
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-6 pt-2">
+              <BudgetItemsGrid
+                items={purchaseItems}
+                onChange={(newItems: any[]) => { setPurchaseItems(newItems); setHasUnsavedChanges(true); }}
+                freteTipoCabecalho={purchaseFreteTipo}
+                fretePercentCabecalho={purchaseFretePercent}
+                ipiCalculado={purchaseIpiCalculado}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPRA IMPORT/RECONCILIATION MODALS */}
+      <BudgetImportModal 
+        isOpen={isPurchaseImportModalOpen}
+        onClose={() => setIsPurchaseImportModalOpen(false)}
+        supplierId={purchaseSupplierId}
+        onImportSuccess={(foundItems, notFoundItems) => {
+          const safeFoundItems = foundItems || [];
+          const safeNotFoundItems = notFoundItems || [];
+          const mapped = safeFoundItems.map(item => ({
+             product_id: item.product.id,
+             product_nome: item.product.nome,
+             product_codigo: item.product.codigo || '',
+             codigo_fornecedor: item.codigo_fornecedor || '',
+             ncm: item.ncm || item.product.ncm || '',
+             quantidade: item.quantidade || 1,
+             valor_unitario: item.valor_unitario || 0,
+             frete_percent: item.frete_percent || 0,
+             ipi_percent: item.ipi_percent || 0,
+             icms_percent: item.icms_percent || 0
+          }));
+          setPurchaseItems(prev => {
+            setHasUnsavedChanges(true);
+            return [...prev, ...mapped];
+          });
+          if (safeNotFoundItems.length > 0) {
+            setPurchaseUnresolvedItems(safeNotFoundItems);
+            setIsPurchaseReconciliationModalOpen(true);
+          }
+        }}
+      />
+      
+      <BudgetReconciliationModal
+        isOpen={isPurchaseReconciliationModalOpen}
+        onClose={() => setIsPurchaseReconciliationModalOpen(false)}
+        supplierId={purchaseSupplierId}
+        notFoundItems={purchaseUnresolvedItems}
+        onResolved={(resolvedItem) => {
+          const mapped = {
+             product_id: resolvedItem.product.id,
+             product_nome: resolvedItem.product.nome,
+             product_codigo: resolvedItem.product.codigo || '',
+             codigo_fornecedor: resolvedItem.codigo_fornecedor || '',
+             ncm: resolvedItem.product.ncm_codigo || '',
+             quantidade: resolvedItem.quantidade || 1,
+             valor_unitario: resolvedItem.valor_unitario || 0,
+             frete_percent: resolvedItem.frete_percent || 0,
+             ipi_percent: resolvedItem.ipi_percent || 0,
+             icms_percent: resolvedItem.icms_percent || 0
+          };
+          setPurchaseItems(prev => {
+            setHasUnsavedChanges(true);
+            return [...prev, mapped];
+          });
+        }}
+        onIgnored={() => {}}
+      />
+
+      <QuickSupplierCreateModal
+        isOpen={isQuickSupplierModalOpen}
+        onClose={() => setIsQuickSupplierModalOpen(false)}
+        onSuccess={(supplier) => {
+          setSuppliers(prev => [...prev, supplier]);
+          setPurchaseSupplierId(supplier.id);
+          setHasUnsavedChanges(true);
+        }}
+      />
 
       {/* Create Kit Modal Overlay */}
       {showCreateKitModal && (

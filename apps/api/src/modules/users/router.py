@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from src.core.database import get_db
-from src.core.security import get_password_hash
+from src.core.security import get_password_hash, verify_password
 from src.modules.users.models import User, UserRole, UserRoleEnum
-from src.modules.users.schemas import UserResponse, UserCreate, UserUpdate
+from src.modules.users.schemas import UserResponse, UserCreate, UserUpdate, UserProfilePictureUpdate, UserPasswordUpdate
 from src.modules.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -34,6 +34,7 @@ def list_users(
             "email": u.email,
             "tenant_id": u.tenant_id,
             "is_active": u.is_active,
+            "profile_picture": u.profile_picture,
             "roles": [r.role.value for r in u.roles],
             "companies": [str(c.company_id) for c in u.companies] if hasattr(u, "companies") else [],
         }
@@ -140,6 +141,29 @@ def update_user(
     db.refresh(user)
     return format_user_response(user)
 
+@router.put("/me/profile-picture", response_model=UserResponse)
+def update_my_profile_picture(
+    payload: UserProfilePictureUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    current_user.profile_picture = payload.profile_picture
+    db.commit()
+    return format_user_response(current_user)
+
+@router.put("/me/reset-password")
+def reset_my_password(
+    payload: UserPasswordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    
+    current_user.password_hash = get_password_hash(payload.new_password)
+    db.commit()
+    return {"message": "Senha atualizada com sucesso"}
+
 @router.delete("/{user_id}")
 def delete_user(
     user_id: str,
@@ -165,6 +189,7 @@ def format_user_response(u: User):
         "email": u.email,
         "tenant_id": u.tenant_id,
         "is_active": u.is_active,
+        "profile_picture": u.profile_picture,
         "roles": [r.role.value for r in u.roles] if u.roles else [],
         "companies": [str(c.company_id) for c in getattr(u, "companies", [])],
     }

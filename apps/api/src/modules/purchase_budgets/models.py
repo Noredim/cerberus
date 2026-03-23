@@ -23,6 +23,7 @@ class PurchaseBudget(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="SET NULL"), nullable=True, index=True)
     
     supplier_id = Column(String, ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True)
     payment_condition_id = Column(UUID(as_uuid=True), ForeignKey("payment_conditions.id", ondelete="SET NULL"), nullable=True)

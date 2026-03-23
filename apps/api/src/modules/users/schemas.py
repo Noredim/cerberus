@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     tenant_id: str
     is_active: bool
     roles: List[str]
+    profile_picture: Optional[str] = None
     companies: List[str] = []
 
     class Config:
@@ -42,3 +43,10 @@ class UserCompanyResponse(BaseModel):
 class UserCompanyAssign(BaseModel):
     company_id: str
     is_default: Optional[bool] = False
+
+class UserProfilePictureUpdate(BaseModel):
+    profile_picture: str
+
+class UserPasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str

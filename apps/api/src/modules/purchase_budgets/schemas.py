@@ -119,6 +119,7 @@ class PurchaseBudgetBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     supplier_id: str
     payment_condition_id: Optional[UUID] = None
+    sales_budget_id: Optional[UUID] = None
     numero_orcamento: Optional[str] = None
     data_orcamento: datetime
     validade: Optional[datetime] = None

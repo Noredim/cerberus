@@ -7,6 +7,7 @@ interface User {
     name: string;
     email: string;
     roles: string[];
+    profile_picture?: string | null;
 }
 
 export interface UserCompany {
@@ -38,31 +39,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchCompanies = async () => {
         try {
-            const { data } = await api.get<UserCompany[]>('/users/me/companies');
+            const token = sessionStorage.getItem('@Cerberus:token');
+            const companyId = sessionStorage.getItem('@Cerberus:companyId');
+            const { data } = await api.get<UserCompany[]>('/users/me/companies', {
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                    'X-Company-Id': companyId,
+                },
+            });
             setUserCompanies(data);
             
-            // Check if there's a saved company preference in localStorage
-            const savedCompanyId = localStorage.getItem('@Cerberus:companyId');
+            const savedCompanyId = companyId;
             
             if (savedCompanyId && data.some(c => c.company_id === savedCompanyId)) {
                 setActiveCompanyIdState(savedCompanyId);
             } else if (data.length === 1) {
                 // If the user only has 1 company, auto-select it
                 setActiveCompanyIdState(data[0].company_id);
-                localStorage.setItem('@Cerberus:companyId', data[0].company_id);
+                sessionStorage.setItem('@Cerberus:companyId', data[0].company_id);
             } else {
                 // Force user to explicitly choose on next screen
                 setActiveCompanyIdState(null);
-                localStorage.removeItem('@Cerberus:companyId');
+                sessionStorage.removeItem('@Cerberus:companyId');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to fetch user companies', error);
+            // Do not clear session on 401 here; allow the app to handle missing company selection gracefully
+            // Optionally, you could set userCompanies to []
+            setUserCompanies([]);
         }
     };
 
     useEffect(() => {
-        const storedToken = localStorage.getItem('@Cerberus:token');
-        const storedUser = localStorage.getItem('@Cerberus:user');
+        const storedToken = sessionStorage.getItem('@Cerberus:token');
+        const storedUser = sessionStorage.getItem('@Cerberus:user');
 
         if (storedToken && storedUser) {
             try {
@@ -79,23 +89,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = (token: string, userData: User) => {
         setIsLoading(true);
-        localStorage.setItem('@Cerberus:token', token);
-        localStorage.setItem('@Cerberus:user', JSON.stringify(userData));
+        sessionStorage.setItem('@Cerberus:token', token);
+        sessionStorage.setItem('@Cerberus:user', JSON.stringify(userData));
+        // Set default Authorization header for subsequent requests
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUser(userData);
         fetchCompanies().finally(() => setIsLoading(false)); // load context immediately upon login
     };
 
     const logout = () => {
-        localStorage.removeItem('@Cerberus:token');
-        localStorage.removeItem('@Cerberus:user');
-        localStorage.removeItem('@Cerberus:companyId');
+        sessionStorage.removeItem('@Cerberus:token');
+        sessionStorage.removeItem('@Cerberus:user');
+        sessionStorage.removeItem('@Cerberus:companyId');
+        // Remove default Authorization header
+        delete api.defaults.headers.common['Authorization'];
         setUser(null);
         setUserCompanies([]);
         setActiveCompanyIdState(null);
-    };
-    
+    };    
     const setActiveCompany = (companyId: string) => {
-        localStorage.setItem('@Cerberus:companyId', companyId);
+        sessionStorage.setItem('@Cerberus:companyId', companyId);
         setActiveCompanyIdState(companyId);
         // Force a page window reload or heavily rely on React Query cache invalidation. 
         // For simplicity and to ensure total clean state, reload is safest

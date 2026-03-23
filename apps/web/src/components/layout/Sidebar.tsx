@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    Shield,
     LayoutDashboard,
     Settings,
     Users,
@@ -8,14 +7,15 @@ import {
     Menu,
     ChevronLeft,
     LogOut,
-    Building2,
     ChevronDown,
     ChevronRight,
     FileText,
-    Receipt
+    Briefcase,
+    ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
+import { UserProfileModal } from '../modals/UserProfileModal';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -24,10 +24,8 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
     const { user, logout } = useAuth();
-    const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-        Cadastro: true,
-        Empresas: true
-    });
+    const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
     const toggleMenu = (label: string) => {
         setExpandedMenus(prev => ({ ...prev, [label]: !prev[label] }));
@@ -36,35 +34,51 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Painel Geral', path: '/' },
         {
+            icon: ShieldCheck,
+            label: 'Segurança',
+            path: '/seguranca',
+            subItems: [
+                { label: 'Usuário', path: '/cadastros/usuarios' },
+                { label: 'Perfil', path: '/seguranca/perfil' },
+                { label: 'Empresas', path: '/empresas' },
+            ]
+        },
+        {
             icon: Users,
             label: 'Cadastro',
             path: '/cadastros',
             subItems: [
-                { label: 'Usuários', path: '/cadastros/usuarios' },
                 { label: 'Estados', path: '/cadastros/estados' },
                 { label: 'Municípios', path: '/cadastros/municipios' },
                 { label: 'NCM', path: '/ncms' },
                 { label: 'NCM ST', path: '/cadastros/ncm-st' },
-                { label: 'Kits Oportunidade', path: '/cadastros/kits' },
-                { label: 'Fornecedores', path: '/cadastros/fornecedores' },
-                { label: 'Clientes', path: '/cadastros/clientes' },
                 { label: 'Produtos', path: '/cadastro/produtos' },
+                { label: 'Benefícios fiscais', path: '/beneficios' },
             ]
         },
         {
-            icon: Building2,
-            label: 'Empresas',
-            path: '/empresas',
+            icon: Briefcase,
+            label: 'Comercial',
+            path: '/comercial',
             subItems: [
-                { label: 'Empresas', path: '/empresas' },
-                { label: 'Benefícios Fiscais', path: '/beneficios' },
+                { label: 'Clientes', path: '/cadastros/clientes' },
+                { label: 'Fornecedores', path: '/cadastros/fornecedores' },
+                { label: 'Kits (oportunidades)', path: '/cadastros/kits' },
+                { label: 'Orçamento de compra', path: '/orcamentos-compras' },
+                { label: 'Oportunidades', path: '/orcamentos-vendas' },
+                { label: 'Licitações', path: '/comercial/licitacoes' },
+                { label: 'Comparativos de soluções', path: '/comercial/comparativos' },
             ]
         },
-        { icon: FileText, label: 'Orç. Compras', path: '/orcamentos-compras' },
-        { icon: Receipt, label: 'Orç. Vendas', path: '/orcamentos-vendas' },
-
+        {
+            icon: FileText,
+            label: 'Fiscal',
+            path: '/fiscal',
+            subItems: [
+                { label: 'Análise de NF-e', path: '/fiscal/analise-nfe' },
+            ]
+        },
         { icon: BarChart3, label: 'Relatórios', path: '/dashboards' },
-        { icon: Shield, label: 'Segurança', path: '/security' },
         { icon: Settings, label: 'Configurações', path: '/settings' },
     ];
 
@@ -76,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         >
             <div className="h-16 flex items-center justify-between px-4 bg-brand-primary text-white shrink-0">
                 <div className="flex items-center gap-2 overflow-hidden">
-                    <img src="/cerberus-logo.png" alt="Cerberus" className="w-8 h-8 object-contain rounded bg-white/10 p-0.5 shrink-0" />
+                    <img src="/cerberus-logo.png" alt="Cerberus" className="w-8 h-8 object-contain rounded bg-white p-0.5 shrink-0" />
                     {isOpen && (
                         <motion.span
                             initial={{ opacity: 0 }}
@@ -159,10 +173,32 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             </nav>
 
             <div className="p-3 border-t border-border-subtle flex flex-col gap-2 shrink-0">
-                {user && isOpen && (
-                    <div className="flex flex-col mb-1 px-2">
-                        <span className="text-sm font-semibold text-text-primary truncate">{user.name}</span>
-                        <span className="text-xs text-text-muted truncate">{user.email}</span>
+                {user && (
+                    <div 
+                        className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-bg-deep rounded-md transition-colors"
+                        onClick={() => setIsProfileModalOpen(true)}
+                        title="Abrir Perfil"
+                    >
+                        <img 
+                            src={user.profile_picture || '/default-avatar.png'} 
+                            alt="User" 
+                            className="w-8 h-8 rounded-full object-cover bg-surface border border-border-subtle shrink-0" 
+                            onError={(e) => {
+                                // Fallback to a single letter if no image
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement!.querySelector('.fallback-initial')!.classList.remove('hidden');
+                            }}
+                        />
+                        <div className="hidden fallback-initial w-8 h-8 rounded-full bg-brand-primary text-white flex-shrink-0 flex items-center justify-center font-bold text-sm">
+                            {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        
+                        {isOpen && (
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-semibold text-text-primary truncate">{user.name}</span>
+                                <span className="text-xs text-text-muted truncate">{user.email}</span>
+                            </div>
+                        )}
                     </div>
                 )}
                 <button
@@ -183,6 +219,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                     </div>
                 </div>
             )}
+
+            <UserProfileModal 
+                isOpen={isProfileModalOpen} 
+                onClose={() => setIsProfileModalOpen(false)} 
+            />
         </motion.aside>
     );
 };

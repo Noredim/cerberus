@@ -38,6 +38,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "tenant_id": current_user.tenant_id,
         "is_active": current_user.is_active,
+        "profile_picture": current_user.profile_picture,
         "roles": [role.role.name for role in current_user.roles]
     }
 

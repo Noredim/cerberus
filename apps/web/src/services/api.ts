@@ -10,14 +10,15 @@ export const api = axios.create({
 // Request Interceptor: Inject Authorization and Context Headers
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('@Cerberus:token');
-        const companyId = localStorage.getItem('@Cerberus:companyId');
+        const token = sessionStorage.getItem('@Cerberus:token');
+        const companyId = sessionStorage.getItem('@Cerberus:companyId');
         
         if (config.headers) {
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;
             }
-            if (companyId) {
+            // Add X-Company-Id for all non-login routes
+            if (companyId && !(config.url?.startsWith('/auth/login'))) {
                 config.headers['X-Company-Id'] = companyId;
             }
         }
@@ -37,8 +38,9 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             // Se não for a rota de login, limpa os dados e joga para /login
             if (!error.config.url?.endsWith('/auth/login')) {
-                localStorage.removeItem('@Cerberus:token');
-                localStorage.removeItem('@Cerberus:user');
+                sessionStorage.removeItem('@Cerberus:token');
+                sessionStorage.removeItem('@Cerberus:user');
+                sessionStorage.removeItem('@Cerberus:companyId');
                 window.location.href = '/login';
             }
         }
