@@ -34,6 +34,11 @@ class OpportunityKit(Base):
     percentual_instalacao = Column(Numeric(10, 4), nullable=True)
     manutencao_inclusa = Column(Boolean, nullable=False, default=False)
     fator_manutencao = Column(Numeric(10, 4), nullable=True)
+    fator_margem_instalacao = Column(Numeric(10, 4), nullable=False, default=1.0)
+    fator_margem_manutencao = Column(Numeric(10, 4), nullable=False, default=1.0)
+    fator_margem_servicos_produtos = Column(Numeric(10, 4), nullable=False, default=1.0)
+    havera_manutencao = Column(Boolean, nullable=False, default=False)
+    qtd_meses_manutencao = Column(Integer, nullable=True)
     
     # Impostos sobre Receita
     aliq_pis = Column(Numeric(6, 4), nullable=False, default=0.0)
@@ -41,6 +46,13 @@ class OpportunityKit(Base):
     aliq_csll = Column(Numeric(6, 4), nullable=False, default=0.0)
     aliq_irpj = Column(Numeric(6, 4), nullable=False, default=0.0)
     aliq_iss = Column(Numeric(6, 4), nullable=False, default=0.0)
+    aliq_icms = Column(Numeric(6, 4), nullable=False, default=0.0)
+    
+    # Parâmetros Específicos para a modalidade VENDA_EQUIPAMENTOS
+    perc_frete_venda = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_despesas_adm = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_comissao = Column(Numeric(6, 4), nullable=False, default=0.0)
+
     
     # Custos Operacionais Mensais
     custo_manut_mensal_kit = Column(Numeric(15, 4), nullable=False, default=0.0)

@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, HelpCircle, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, HelpCircle, Plus, Trash2, Info } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
 import { ProductSearchModal } from '../../components/modals/ProductSearchModal';
 import { AddOperationalCostModal } from '../../components/modals/AddOperationalCostModal';
@@ -16,10 +17,15 @@ interface KitFormValues {
   prazo_contrato_meses: number;
   prazo_instalacao_meses: number;
   fator_margem_locacao: number;
+  fator_margem_instalacao: number;
+  fator_margem_manutencao: number;
+  fator_margem_servicos_produtos: number;
   taxa_juros_mensal: number;
   taxa_manutencao_anual: number;
   instalacao_inclusa: boolean;
   percentual_instalacao: number | '';
+  havera_manutencao: boolean;
+  qtd_meses_manutencao: number | '';
   manutencao_inclusa: boolean;
   fator_manutencao: number | '';
   aliq_pis: number;
@@ -27,6 +33,10 @@ interface KitFormValues {
   aliq_csll: number;
   aliq_irpj: number;
   aliq_iss: number;
+  aliq_icms: number;
+  perc_frete_venda: number;
+  perc_despesas_adm: number;
+  perc_comissao: number;
   custo_manut_mensal_kit: number;
   custo_suporte_mensal_kit: number;
   custo_seguro_mensal_kit: number;
@@ -52,11 +62,12 @@ export interface OpportunityKitFormProps {
   isModal?: boolean;
   onClose?: () => void;
   initialSalesBudgetId?: string | null;
+  initialTipoContrato?: string;
   onSuccess?: (savedKit?: any) => void;
   modalEditKitId?: string | null;
 }
 
-export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudgetId, onSuccess, modalEditKitId }: OpportunityKitFormProps = {}) => {
+export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudgetId, initialTipoContrato = 'LOCACAO', onSuccess, modalEditKitId }: OpportunityKitFormProps = {}) => {
   const { kitId: routeKitId } = useParams();
   const kitId = isModal ? modalEditKitId : routeKitId;
   const { activeCompanyId } = useAuth();
@@ -67,21 +78,26 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
-  const [showCostSearch, setShowCostSearch] = useState(false);
+  const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
 
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
     nome_kit: '',
     descricao_kit: '',
     quantidade_kits: 1,
-    tipo_contrato: 'LOCACAO',
+    tipo_contrato: initialTipoContrato,
     prazo_contrato_meses: 36,
     prazo_instalacao_meses: 0,
     fator_margem_locacao: 1.0,
+    fator_margem_instalacao: 1.0,
+    fator_margem_manutencao: 1.0,
+    fator_margem_servicos_produtos: 1.0,
     taxa_juros_mensal: 0,
     taxa_manutencao_anual: 0,
     instalacao_inclusa: false,
     percentual_instalacao: '',
+    havera_manutencao: false,
+    qtd_meses_manutencao: '',
     manutencao_inclusa: false,
     fator_manutencao: '',
     aliq_pis: 0,
@@ -89,6 +105,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     aliq_csll: 0,
     aliq_irpj: 0,
     aliq_iss: 0,
+    aliq_icms: 0,
+    perc_frete_venda: 0,
+    perc_despesas_adm: 0,
+    perc_comissao: 0,
     custo_manut_mensal_kit: 0,
     custo_suporte_mensal_kit: 0,
     custo_seguro_mensal_kit: 0,
@@ -124,6 +144,36 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   };
 
   useEffect(() => {
+    if (activeCompanyId) {
+      const shouldFetchTaxes = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || !kitId;
+      if (shouldFetchTaxes) {
+        // Auto-fetch corporate taxes for new kits or when it's VENDA_EQUIPAMENTOS to prefill block
+        api.get(`/companies/${activeCompanyId}/sales-parameters`).then(res => {
+          const parametros_venda = res.data;
+        if (parametros_venda) {
+          setForm(prev => ({
+            ...prev,
+            aliq_pis: parametros_venda.pis || 0,
+            aliq_cofins: parametros_venda.cofins || 0,
+            aliq_csll: parametros_venda.csll || 0,
+            aliq_irpj: parametros_venda.irpj || 0,
+            aliq_iss: parametros_venda.iss || 0,
+            aliq_icms: parametros_venda.icms_interno || 0,
+            ...(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? {
+              fator_margem_locacao: parametros_venda.mkp_padrao || 1,
+              fator_margem_servicos_produtos: parametros_venda.mkp_padrao || 1,
+              fator_margem_instalacao: parametros_venda.mkp_padrao || 1,
+              fator_margem_manutencao: parametros_venda.mkp_padrao || 1,
+              perc_despesas_adm: parametros_venda.despesa_administrativa || 0,
+            } : {})
+          }));
+        }
+      });
+      }
+    }
+  }, [kitId, form.tipo_contrato, activeCompanyId]);
+
+  useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       recalculate(form);
@@ -137,6 +187,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       nome_kit: data.nome_kit || "PREVIEW_KIT",
       percentual_instalacao: data.percentual_instalacao === '' ? null : data.percentual_instalacao,
       fator_manutencao: data.fator_manutencao === '' ? null : data.fator_manutencao,
+      qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
     };
   };
 
@@ -216,11 +267,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     }));
   };
 
-  const removeCost = (index: number) => {
+  const updateCostQuantity = (costToUpdate: any, qty: number) => {
     setForm(prev => {
-      const newCosts = [...prev.costs];
-      newCosts.splice(index, 1);
-      return { ...prev, costs: newCosts };
+      const idx = prev.costs.findIndex(c => c.product_id === costToUpdate.product_id && c.tipo_custo === costToUpdate.tipo_custo);
+      if (idx > -1) {
+        const newCosts = [...prev.costs];
+        newCosts[idx].quantidade = qty;
+        return { ...prev, costs: newCosts };
+      }
+      return prev;
+    });
+  };
+
+  const removeCostByProps = (cToRemove: any) => {
+    setForm(prev => {
+      const idx = prev.costs.findIndex(c => c.product_id === cToRemove.product_id && c.tipo_custo === cToRemove.tipo_custo);
+      if (idx > -1) {
+        const newCosts = [...prev.costs];
+        newCosts.splice(idx, 1);
+        return { ...prev, costs: newCosts };
+      }
+      return prev;
     });
   };
 
@@ -252,6 +319,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const fmtC = (val: number | undefined) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
+  const showBlock3 = form.tipo_contrato !== 'INSTALACAO' && (form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' || !!form.havera_manutencao);
+  const showBlock31 = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && !form.instalacao_inclusa;
+  const opCosts = form.costs.filter(c => c.tipo_custo !== 'INSTALACAO');
+  const instCosts = form.costs.filter(c => c.tipo_custo === 'INSTALACAO');
 
   return (
     <div className={`space-y-6 mx-auto ${isModal ? 'max-w-full pb-8' : 'max-w-[1600px] pb-24'}`}>
@@ -297,11 +369,92 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         </div>
       </div>
 
-      {/* SIDESPLIT LAYOUT */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      {/* STICKY TOP HUD */}
+      {(() => {
+        const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
+        const faturamentoMensal = (financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0);
+        const impostosMensais = financials?.summary?.valor_impostos || 0;
+        const custoAq = financials?.summary?.custo_aquisicao_kit || 0;
+        const custoOperacionalMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
         
-        {/* LEFT SIDE: FORM SECTIONS */}
-        <div className="xl:col-span-8 space-y-8">
+        const totalFaturamentoContrato = faturamentoMensal * mesesFaturados;
+        const custoTotalContrato = custoAq + (custoOperacionalMensal * mesesFaturados);
+        const receitaLiquida = faturamentoMensal - impostosMensais;
+        const roiMeses = receitaLiquida > 0 ? (custoTotalContrato / receitaLiquida) : 0;
+
+        return (
+          <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-6 transition-all">
+            <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
+              <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
+                <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo
+              </h3>
+              {isCalculating ? (
+                <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
+                  <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+                <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+                <div className="text-xl font-bold text-text-primary">{fmtC(custoAq)}</div>
+                <div className="text-[10px] text-text-muted mt-1 truncate" title={`Prod: ${fmtC(financials?.summary?.custo_aquisicao_produtos)} | Serv: ${fmtC(financials?.summary?.custo_aquisicao_servicos)}`}>
+                  Prod: {fmtC(financials?.summary?.custo_aquisicao_produtos)} | Serv: {fmtC(financials?.summary?.custo_aquisicao_servicos)}
+                </div>
+              </div>
+
+              <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+                <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Op & Manutenção (Mês)</span>
+                <div className="text-xl font-bold text-brand-warning">{fmtC(custoOperacionalMensal + (financials?.summary?.vlt_manut || 0))}</div>
+                <div className="text-[10px] text-text-muted mt-1 truncate" title={`Op: ${fmtC(custoOperacionalMensal)} | Manut: ${fmtC(financials?.summary?.vlt_manut)}`}>
+                  Op: {fmtC(custoOperacionalMensal)} | Manut: {fmtC(financials?.summary?.vlt_manut)}
+                </div>
+              </div>
+
+              <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+                <span className="block text-[10px] text-brand-danger font-bold uppercase tracking-wider mb-1">Impostos Retidos (Mês)</span>
+                <div className="text-xl font-bold text-brand-danger">{fmtC(impostosMensais)}</div>
+                <div className="text-[10px] text-brand-danger/70 mt-1 truncate">
+                  Alíquota: {(financials?.summary?.aliq_total_impostos || 0).toFixed(2)}%
+                </div>
+              </div>
+
+              <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 shadow-sm flex flex-col justify-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-brand-primary/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none" />
+                <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Mensal</span>
+                <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoMensal)}</div>
+                <div className="text-[10px] font-medium text-text-muted mt-1 truncate relative z-10" title={`Taxa de Locação: ${(Number(financials?.summary?.tx_locacao || 0) * 100).toFixed(4)}%`}>
+                  {mesesFaturados}x | Tx Loc: {(Number(financials?.summary?.tx_locacao || 0) * 100).toFixed(4)}%
+                </div>
+              </div>
+              
+              <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 lg:col-span-4 xl:col-span-1 flex flex-col justify-center space-y-1.5">
+                <div className="flex justify-between items-center whitespace-nowrap">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">ROI Previsto:</span>
+                  <span className="text-sm font-bold text-brand-secondary">{roiMeses.toFixed(1)}m</span>
+                </div>
+                <div className="flex justify-between items-center whitespace-nowrap pt-1.5 border-t border-border-subtle">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Custo Total:</span>
+                  <span className="text-xs font-bold text-text-primary">{fmtC(custoTotalContrato)}</span>
+                </div>
+                <div className="flex justify-between items-center whitespace-nowrap">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Rec. Total:</span>
+                  <span className="text-xs font-bold text-text-primary">{fmtC(totalFaturamentoContrato)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* FULL WIDTH LAYOUT */}
+      <div className="w-full">
+        
+        {/* FORM SECTIONS */}
+        <div className="w-full space-y-8">
           
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
             <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
@@ -350,147 +503,159 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
              <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
               2. Prazos e Parâmetros Financeiros
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* GRUPO 1: Parâmetros Base */}
+            <div className={`grid grid-cols-1 ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'md:grid-cols-4' : 'md:grid-cols-4'} gap-6 mb-8`}>
+              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Prazo Contrato (Meses)</label>
+                    <Input type="number" value={form.prazo_contrato_meses} onChange={(e) => handleInputChange('prazo_contrato_meses', parseFloat(e.target.value) || 0)} className="w-full text-lg font-medium" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Carência/Instalação (Meses)</label>
+                    <Input type="number" value={form.prazo_instalacao_meses} onChange={(e) => handleInputChange('prazo_instalacao_meses', parseFloat(e.target.value) || 0)} className="w-full" />
+                    <p className="text-xs text-text-muted mt-1">Meses sem locação.</p>
+                  </div>
+                </>
+              )}
+
               <div>
-                <label className="block text-sm font-medium mb-1">Prazo Contrato (Meses)</label>
-                <Input type="number" value={form.prazo_contrato_meses} onChange={(e) => handleInputChange('prazo_contrato_meses', parseFloat(e.target.value) || 0)} className="w-full text-lg font-medium" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Carência/Instalação (Meses)</label>
-                <Input type="number" value={form.prazo_instalacao_meses} onChange={(e) => handleInputChange('prazo_instalacao_meses', parseFloat(e.target.value) || 0)} className="w-full" />
-                <p className="text-xs text-text-muted mt-1">Meses sem locação.</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Fator Margem</label>
+                <label className="block text-sm font-medium mb-1">
+                  {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Fator Margem (Produtos)' : 'Fator Margem'}
+                </label>
                 <Input type="number" step="0.01" value={form.fator_margem_locacao} onChange={(e) => handleInputChange('fator_margem_locacao', parseFloat(e.target.value) || 0)} className="w-full" />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
-                <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
+              
+              {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
+                    <Input type="number" step="0.01" value={form.fator_margem_servicos_produtos} onChange={(e) => handleInputChange('fator_margem_servicos_produtos', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Fator Margem Instalação</label>
+                    <Input type="number" step="0.01" value={form.fator_margem_instalacao} onChange={(e) => handleInputChange('fator_margem_instalacao', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
+                    <Input type="number" step="0.01" value={form.fator_margem_manutencao} onChange={(e) => handleInputChange('fator_margem_manutencao', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>
+                    <Input type="number" step="0.01" value={form.perc_frete_venda} onChange={(e) => handleInputChange('perc_frete_venda', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
+                    <Input type="number" step="0.01" value={form.perc_despesas_adm} onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Comissão (%)</label>
+                    <Input type="number" step="0.01" value={form.perc_comissao} onChange={(e) => handleInputChange('perc_comissao', parseFloat(e.target.value) || 0)} className="w-full" />
+                  </div>
+                </>
+              )}
+
+              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
+                  <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
+                </div>
+              )}
+            </div>
+
+            {/* GRUPO 2: Inclusões (Checkboxes Options) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6 border-t border-border-subtle">
+              <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
+                <div className="flex items-center space-x-3 mb-4">
+                  <input 
+                    type="checkbox" 
+                    id="chk-instalacao"
+                    checked={form.instalacao_inclusa}
+                    onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
+                    className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                  />
+                  <label htmlFor="chk-instalacao" className="text-sm font-bold text-text-primary cursor-pointer">Embutir Custo de Instalação</label>
+                </div>
+                {form.instalacao_inclusa && (
+                  <div className="pl-8 pt-4 border-t border-border-subtle/50">
+                    <label className="block text-sm font-medium mb-1">% de Instalação</label>
+                    <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
+                    <p className="text-[10px] text-text-muted mt-1">Calculado sobre o custo de aquisição final do kit.</p>
+                  </div>
+                )}
               </div>
 
-              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle">
-                <div>
-                  <label className="block text-sm font-medium mb-1">% de Instalação</label>
-                  <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
-                  <p className="text-xs text-text-muted mt-1">Ref. para custo de manutenção/instalação.</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
-                  <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
-                  <p className="text-xs text-text-muted mt-1">% s/ custo aq. (+ inst) anual.</p>
-                </div>
-              </div>
-
-              {/* FLAGS E OPÇÕES */}
-              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border-subtle">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <input 
-                      type="checkbox" 
-                      id="chk-instalacao"
-                      checked={form.instalacao_inclusa}
-                      onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
-                      className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
-                    />
-                    <label htmlFor="chk-instalacao" className="text-sm font-medium cursor-pointer">Instalação Inclusa</label>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <input 
-                      type="checkbox" 
-                      id="chk-manutencao"
-                      checked={form.manutencao_inclusa}
-                      onChange={(e) => handleInputChange('manutencao_inclusa', e.target.checked)}
-                      className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
-                    />
-                    <label htmlFor="chk-manutencao" className="text-sm font-medium cursor-pointer">Manutenção Inclusa</label>
-                  </div>
-                  {form.manutencao_inclusa && !form.instalacao_inclusa && (
-                    <div className="pl-8">
-                      <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
-                      <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
+              <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
+                {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                  <>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <input 
+                        type="checkbox" 
+                        id="chk-havera-manutencao"
+                        checked={form.havera_manutencao}
+                        onChange={(e) => handleInputChange('havera_manutencao', e.target.checked)}
+                        className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                      />
+                      <label htmlFor="chk-havera-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Haverá Manutenção Mensal</label>
                     </div>
-                  )}
-                </div>
+                    {form.havera_manutencao && (
+                      <div className="pl-8 pt-4 border-t border-border-subtle/50">
+                        <label className="block text-sm font-medium mb-1">Qtd. Meses de Manutenção</label>
+                        <Input type="number" step="1" maxLength={3} value={form.qtd_meses_manutencao} onChange={(e) => handleInputChange('qtd_meses_manutencao', e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full" placeholder="Ex: 12" />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <input 
+                        type="checkbox" 
+                        id="chk-manutencao"
+                        checked={form.manutencao_inclusa}
+                        onChange={(e) => handleInputChange('manutencao_inclusa', e.target.checked)}
+                        className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                      />
+                      <label htmlFor="chk-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Manutenção Inclusa na Mensalidade</label>
+                    </div>
+                    {form.manutencao_inclusa && (
+                      <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
+                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
+                          <p className="text-[10px] text-text-muted mt-1">% s/ custo total anual.</p>
+                        </div>
+                        {!form.instalacao_inclusa && (
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
+                            <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </section>
 
-           {form.tipo_contrato !== 'INSTALACAO' && (
-             <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-               <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
-                 <h2 className="text-xl font-semibold">3. Custos Operacionais Mensais (R$)</h2>
-                 <Button variant="outline" size="sm" onClick={() => setShowCostSearch(true)}>
-                   <Plus className="w-4 h-4 mr-2" />
-                   Adicionar Custo (Serviço)
-                 </Button>
-               </div>
-
-              {form.costs.length === 0 ? (
-                <div className="py-8 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle rounded-xl bg-bg-deep/50 hover:bg-bg-deep/80 transition-colors">
-                  <p className="text-sm text-text-muted">Nenhum custo operacional adicionado.</p>
-                </div>
-              ) : (
-                 <div className="overflow-x-auto rounded-xl border border-border-subtle">
-                   <table className="w-full text-sm text-left">
-                     <thead className="bg-bg-deep/50 text-text-muted font-medium border-b border-border-subtle">
-                       <tr>
-                         <th className="px-4 py-3">Serviço</th>
-                         <th className="px-4 py-3">Tipo de Custo</th>
-                         <th className="px-4 py-3 text-right">Qtd</th>
-                         <th className="px-4 py-3 text-right">Vlr. Unitário</th>
-                         <th className="px-4 py-3 text-right">Total</th>
-                         <th className="px-4 py-3 w-16"></th>
-                       </tr>
-                     </thead>
-                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
-                       {form.costs.map((c, idx) => (
-                         <tr key={idx} className="hover:bg-bg-deep/20 transition-colors group">
-                           <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
-                           <td className="px-4 py-3 text-text-secondary">{c.tipo_custo}</td>
-                           <td className="px-4 py-3 text-right tabular-nums">{c.quantidade}</td>
-                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
-                           <td className="px-4 py-3 text-right tabular-nums font-medium text-brand-warning">{fmtC(c.valor_unitario * c.quantidade)}</td>
-                           <td className="px-4 py-3 text-right">
-                             <Button variant="ghost" size="sm" onClick={() => removeCost(idx)} className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity">
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
-                           </td>
-                         </tr>
-                       ))}
-                     </tbody>
-                     <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
-                       <tr>
-                         <td colSpan={4} className="px-4 py-3 text-right text-text-muted">Total Custos Operacionais:</td>
-                         <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
-                           {fmtC(form.costs.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
-                         </td>
-                         <td></td>
-                       </tr>
-                     </tfoot>
-                   </table>
-                 </div>
-              )}
-              <AddOperationalCostModal 
-                 isOpen={showCostSearch} 
-                 onClose={() => setShowCostSearch(false)} 
-                 onConfirm={handleAddCost} 
-              />
-            </section>
-           )}
-
            <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
              <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
-              4. Impostos sobre Faturamento (%)
+              3. Impostos sobre Faturamento (%)
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-              {['aliq_pis', 'aliq_cofins', 'aliq_csll', 'aliq_irpj', 'aliq_iss'].map(f => (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
+              {['aliq_pis', 'aliq_cofins', 'aliq_csll', 'aliq_irpj', 'aliq_iss', 'aliq_icms'].map(f => (
                 <div key={f}>
                   <label className="block text-xs font-medium text-text-secondary mb-1 uppercase">{f.split('_')[1]}</label>
-                  <Input type="number" step="0.01" value={(form as any)[f]} onChange={(e) => handleInputChange(f as any, parseFloat(e.target.value) || 0)} className="w-full" />
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    value={(form as any)[f]} 
+                    onChange={(e) => handleInputChange(f as keyof KitFormValues, parseFloat(e.target.value) || 0)}
+                    readOnly={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'} 
+                    disabled={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'} 
+                    className={`w-full ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'bg-bg-deep/50 text-text-muted cursor-not-allowed' : ''}`} 
+                    title={form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Imposto carregado automaticamente dos Parâmetros de Venda' : ''} 
+                  />
                 </div>
               ))}
             </div>
@@ -498,7 +663,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
              <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
-                <h2 className="text-xl font-semibold">5. Itens do kit (produtos + serviços)</h2>
+                <h2 className="text-xl font-semibold">4. Itens do kit (produtos + serviços)</h2>
                 {form.items.length > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
                     <Plus className="w-4 h-4 mr-2" />
@@ -521,11 +686,31 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                    <thead className="bg-bg-deep/50 text-text-muted font-medium border-b border-border-subtle">
                      <tr>
                        <th className="px-4 py-3">Produto</th>
-                       <th className="px-4 py-3 w-32">Quantidade</th>
-                       <th className="px-4 py-3 text-right">DIFAL (Un.)</th>
-                       <th className="px-4 py-3 text-right">Custo Un. Base</th>
-                       <th className="px-4 py-3 text-right">Custo Total</th>
-                       <th className="px-4 py-3 w-16"></th>
+                       {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                         <>
+                           <th className="px-1.5 py-3 w-20 text-center">Quantidade</th>
+                           <th className="px-1.5 py-3 text-right">Custo Un.</th>
+                           <th className="px-1.5 py-3 text-right">Custo Total</th>
+                           <th className="px-1.5 py-3 text-right">Fator</th>
+                           <th className="px-1.5 py-3 text-right">Venda Un.</th>
+                           <th className="px-1.5 py-3 text-right">Frete</th>
+                           <th className="px-1.5 py-3 text-right">Impostos</th>
+                           <th className="px-1.5 py-3 text-right">Desp. Adm</th>
+                           <th className="px-1.5 py-3 text-right">Comissão</th>
+                           <th className="px-1.5 py-3 text-right">Lucro Un.</th>
+                           <th className="px-1.5 py-3 text-right">Margem</th>
+                           <th className="px-1.5 py-3 text-right">Venda Total</th>
+                           <th className="px-1.5 py-3 text-right">Lucro Total</th>
+                         </>
+                       ) : (
+                         <>
+                           <th className="px-1.5 py-3 w-20">Quantidade</th>
+                           <th className="px-1.5 py-3 text-right">DIFAL (Un.)</th>
+                           <th className="px-1.5 py-3 text-right">Custo Un. Base</th>
+                           <th className="px-1.5 py-3 text-right">Custo Total</th>
+                         </>
+                       )}
+                       <th className="px-1.5 py-3 w-10"></th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-border-subtle bg-bg-surface">
@@ -535,11 +720,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                        
                        return (
                          <tr key={idx} className="hover:bg-bg-deep/20 transition-colors group">
-                           <td className="px-4 py-3 font-medium text-text-primary">
-                             <div className="flex flex-col">
-                               <span>{item.descricao_item}</span>
+                           <td className="px-1.5 py-3 font-medium text-text-primary max-w-[200px] truncate" title={item.descricao_item}>
+                             <div className="flex flex-col truncate">
+                               <span className="truncate">{item.descricao_item}</span>
                                {(item as any).product?.codigo && (
-                                 <span className="text-[10px] text-text-muted mt-0.5 font-mono uppercase">
+                                 <span className="text-[10px] text-text-muted mt-0.5 font-mono uppercase truncate">
                                    SKU: {(item as any).product.codigo}
                                  </span>
                                )}
@@ -548,24 +733,119 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                <div className="text-xs text-brand-warning">Custo de ref. inexistente</div>
                              )}
                            </td>
-                           <td className="px-4 py-3">
-                             <Input 
-                               type="number" 
-                               value={item.quantidade_no_kit} 
-                               onChange={(e) => updateItemQty(idx, parseFloat(e.target.value) || 1)} 
-                               className="w-full h-8 text-sm"
-                             />
-                           </td>
-                           <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
-                             {fmtC(summary?.difal_unitario || 0)}
-                           </td>
-                           <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
-                             {fmtC(summary?.custo_base_unitario_item)}
-                           </td>
-                           <td className="px-4 py-3 text-right tabular-nums text-text-primary font-medium">
-                             {fmtC(summary?.custo_total_item_no_kit)}
-                           </td>
-                           <td className="px-4 py-3">
+                           {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                             <>
+                               <td className="px-1.5 py-3">
+                                 <Input 
+                                   type="number" 
+                                   value={item.quantidade_no_kit} 
+                                   onChange={(e) => updateItemQty(idx, parseFloat(e.target.value) || 1)} 
+                                   className="w-full h-8 px-1 text-sm text-center"
+                                 />
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 <Tooltip content={
+                                   <div className="w-64">
+                                     <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                       <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                       Detalhamento de Custo
+                                     </div>
+                                     <div className="space-y-1.5 font-mono text-text-muted">
+                                       <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
+                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
+                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
+                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
+                                       <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                         <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || 0)}</span>
+                                       </div>
+                                     </div>
+                                   </div>
+                                 }>
+                                   <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.custo_base_unitario_item)}</span>
+                                 </Tooltip>
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
+                                 {fmtC((summary?.custo_base_unitario_item || 0) * item.quantidade_no_kit)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {summary?.fator_item ? Number(summary.fator_item).toFixed(2) : '-'}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums font-medium text-text-primary">
+                                 {fmtC(summary?.venda_unitario_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {fmtC(summary?.frete_venda_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 <Tooltip content={
+                                   <div className="w-72 text-left">
+                                     <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                       <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                       Detalhamento de Impostos
+                                     </div>
+                                     <div className="space-y-1.5 font-mono text-text-muted text-sm">
+                                       <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC(summary?.pis_unit || 0)}</span></div>
+                                       <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC(summary?.cofins_unit || 0)}</span></div>
+                                       <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC(summary?.csll_unit || 0)}</span></div>
+                                       <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC(summary?.irpj_unit || 0)}</span></div>
+                                       {['SERVICO', 'LICENCA'].includes(summary?.tipo_item) ? (
+                                         <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC(summary?.iss_unit || 0)}</span></div>
+                                       ) : (
+                                         <div className="flex justify-between">
+                                           <span>ICMS ({(summary?.perc_icms || 0).toFixed(2)}%){summary?.tem_st ? ' — ST isento' : ''}</span>
+                                           <span>{fmtC(summary?.icms_unit || 0)}</span>
+                                         </div>
+                                       )}
+                                       <div className="border-t border-white/20 mt-2 pt-2 flex justify-between font-bold text-text-primary">
+                                         <span>Total Impostos</span><span>{fmtC(summary?.imposto_venda_item || 0)}</span>
+                                       </div>
+                                     </div>
+                                   </div>
+                                 }>
+                                   <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.imposto_venda_item)}</span>
+                                 </Tooltip>
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {fmtC(summary?.desp_adm_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {fmtC(summary?.comissao_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums font-medium text-text-primary">
+                                 {fmtC(summary?.lucro_unitario_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-success">
+                                 {summary?.margem_item ? Number(summary.margem_item).toFixed(2) + '%' : '0.00%'}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-primary">
+                                 {fmtC(summary?.venda_total_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-success">
+                                 {fmtC(summary?.lucro_total_item)}
+                               </td>
+                             </>
+                           ) : (
+                             <>
+                               <td className="px-1.5 py-3">
+                                 <Input 
+                                   type="number" 
+                                   value={item.quantidade_no_kit} 
+                                   onChange={(e) => updateItemQty(idx, parseFloat(e.target.value) || 1)} 
+                                   className="w-full h-8 text-sm"
+                                 />
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {fmtC(summary?.difal_unitario || 0)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                 {fmtC(summary?.custo_base_unitario_item)}
+                               </td>
+                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
+                                 {fmtC(summary?.custo_total_item_no_kit)}
+                               </td>
+                             </>
+                           )}
+                           <td className="px-1.5 py-3 text-center">
                              <Button 
                                variant="ghost" 
                                size="sm" 
@@ -582,9 +862,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                    <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
                      <tr>
                        <td colSpan={2} className="px-4 py-3 text-right text-text-muted">Totalizadores:</td>
-                       <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
-                       <td className="px-4 py-3"></td>
-                       <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
+                       {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                         <>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.icms_st_total || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.frete_venda_item || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.imposto_venda_item || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.desp_adm_item || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.comissao_item || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3 text-right tabular-nums text-text-primary font-bold">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.venda_total_item || 0), 0) || 0)}</td>
+                           <td className="px-4 py-3 text-right tabular-nums text-brand-success font-bold">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.lucro_total_item || 0), 0) || 0)}</td>
+                         </>
+                       ) : (
+                         <>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
+                           <td className="px-4 py-3"></td>
+                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
+                         </>
+                       )}
                        <td></td>
                      </tr>
                    </tfoot>
@@ -597,166 +896,361 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                onSelect={handleAddProduct} 
             />
           </section>
+
+           {showBlock31 && (
+             <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
+               <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
+                 <h2 className="text-xl font-semibold">5. Custos de Instalação (Serviços independentes)</h2>
+                 <Button variant="outline" size="sm" onClick={() => setCostSearchType('inst')}>
+                   <Plus className="w-4 h-4 mr-2" />
+                   Adicionar Serviço
+                 </Button>
+               </div>
+
+              {instCosts.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle rounded-xl bg-bg-deep/50 hover:bg-bg-deep/80 transition-colors">
+                  <p className="text-sm text-text-muted">Nenhum custo de instalação independente adicionado.</p>
+                </div>
+              ) : (
+                 <div className="overflow-x-auto rounded-xl border border-border-subtle">
+                   <table className="w-full text-sm text-left">
+                     <thead className="bg-bg-deep/50 text-text-muted font-medium border-b border-border-subtle">
+                       <tr>
+                         <th className="px-4 py-3">Serviço</th>
+                         <th className="px-4 py-3">Tipo de Custo</th>
+                         {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                           <>
+                             <th className="px-4 py-3 text-right">Custo Un.</th>
+                             <th className="px-4 py-3 w-32">Quantidade</th>
+                             <th className="px-4 py-3 text-right">MKP</th>
+                             <th className="px-4 py-3 text-right">Venda Un.</th>
+                             <th className="px-4 py-3 text-right">Frete</th>
+                             <th className="px-4 py-3 text-right">Impostos</th>
+                             <th className="px-4 py-3 text-right">Desp. Adm</th>
+                             <th className="px-4 py-3 text-right">Comissão</th>
+                             <th className="px-4 py-3 text-right">Lucro Un.</th>
+                             <th className="px-4 py-3 text-right">Margem</th>
+                             <th className="px-4 py-3 text-right">Venda Total</th>
+                             <th className="px-4 py-3 text-right">Lucro Total</th>
+                           </>
+                         ) : (
+                           <>
+                             <th className="px-4 py-3 text-right">Vlr. Unitário</th>
+                             <th className="px-4 py-3 text-right">Qtd</th>
+                             <th className="px-4 py-3 text-right">Total</th>
+                           </>
+                         )}
+                         <th className="px-4 py-3 w-16"></th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
+                       {instCosts.map((c, idx) => {
+                         const summary = financials?.cost_summaries?.find((cs: any) => cs.product_id === c.product_id && cs.tipo_custo === c.tipo_custo);
+                         const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_instalacao || 1) : c.valor_unitario;
+                         const totalItem = vendaUnit * c.quantidade;
+                         return (
+                           <tr key={`inst-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
+                             <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
+                             <td className="px-4 py-3 text-text-secondary">{c.tipo_custo === 'INSTALACAO' ? 'Instalação' : c.tipo_custo}</td>
+                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                               <>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</td>
+                                 <td className="px-2 py-3 text-right tabular-nums">
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    className="w-16 text-right h-8 ml-auto"
+                                    value={c.quantidade || 1}
+                                    onChange={(e) => updateCostQuantity(c, Number(e.target.value))}
+                                  />
+                                </td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{summary?.fator_item ? Number(summary.fator_item).toFixed(2) : '-'}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.venda_unitario_item || vendaUnit)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.frete_venda_item || 0)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.imposto_venda_item || 0)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.desp_adm_item || 0)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.comissao_item || 0)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.lucro_unitario_item || 0)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{summary?.margem_item ? Number(summary.margem_item).toFixed(2) + '%' : '0.00%'}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums font-medium text-text-primary">{fmtC(summary?.venda_total_item || totalItem)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums font-medium text-brand-success">{fmtC(summary?.lucro_total_item || 0)}</td>
+                               </>
+                             ) : (
+                               <>
+                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
+                                 <td className="px-2 py-3 text-right tabular-nums">
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    className="w-16 text-right h-8 ml-auto"
+                                    value={c.quantidade || 1}
+                                    onChange={(e) => updateCostQuantity(c, Number(e.target.value))}
+                                  />
+                                </td>
+                                 <td className="px-4 py-3 text-right tabular-nums font-medium text-brand-secondary">{fmtC(totalItem)}</td>
+                               </>
+                             )}
+                             <td className="px-4 py-3 text-right">
+                               <Button variant="ghost" size="sm" onClick={() => removeCostByProps(c)} className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                     <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
+                       <tr>
+                         <td colSpan={2} className="px-4 py-3 text-right text-text-muted">Total Instalação:</td>
+                         {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (() => {
+                           const insts = financials?.cost_summaries?.filter((cs: any) => cs.tipo_custo === 'INSTALACAO') || [];
+                           return (
+                             <>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(insts.reduce((a: any, b: any) => a + (b.frete_venda_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(insts.reduce((a: any, b: any) => a + (b.imposto_venda_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(insts.reduce((a: any, b: any) => a + (b.desp_adm_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(insts.reduce((a: any, b: any) => a + (b.comissao_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3 text-right tabular-nums text-brand-secondary">
+                                 {fmtC(insts.reduce((a: any, b: any) => a + (b.venda_total_item || 0), 0) || 0)}
+                               </td>
+                               <td className="px-4 py-3 text-right tabular-nums text-brand-success">
+                                 {fmtC(insts.reduce((a: any, b: any) => a + (b.lucro_total_item || 0), 0) || 0)}
+                               </td>
+                             </>
+                           );
+                         })() : (
+                           <>
+                             <td colSpan={2} className="px-4 py-3 text-right"></td>
+                             <td className="px-4 py-3 text-right tabular-nums text-brand-secondary">
+                               {fmtC(instCosts.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
+                             </td>
+                           </>
+                         )}
+                         <td></td>
+                       </tr>
+                     </tfoot>
+                   </table>
+                 </div>
+              )}
+            </section>
+           )}
+
+           {showBlock3 && (
+             <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
+               <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
+                 <h2 className="text-xl font-semibold">6. Custos Operacionais Mensais (R$)</h2>
+                 <Button variant="outline" size="sm" onClick={() => setCostSearchType('op')}>
+                   <Plus className="w-4 h-4 mr-2" />
+                   Adicionar Custo (Serviço)
+                 </Button>
+               </div>
+
+              {opCosts.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle rounded-xl bg-bg-deep/50 hover:bg-bg-deep/80 transition-colors">
+                  <p className="text-sm text-text-muted">Nenhum custo operacional adicionado.</p>
+                </div>
+              ) : (
+                 <div className="overflow-x-auto rounded-xl border border-border-subtle">
+                   <table className="w-full text-sm text-left">
+                     <thead className="bg-bg-deep/50 text-text-muted font-medium border-b border-border-subtle">
+                       <tr>
+                         <th className="px-4 py-3">Serviço</th>
+                         <th className="px-4 py-3">Tipo de Custo</th>
+                         {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                           <>
+                             <th className="px-4 py-3 text-right">Custo Un.</th>
+                             <th className="px-4 py-3 w-32">Quantidade</th>
+                             <th className="px-4 py-3 text-right">MKP</th>
+                             <th className="px-4 py-3 text-right">Venda Un.</th>
+                             <th className="px-4 py-3 text-right">V. Mensal</th>
+                             <th className="px-4 py-3 text-right">Impostos</th>
+                             <th className="px-4 py-3 text-right">Desp. Adm</th>
+                             <th className="px-4 py-3 text-right">Comissão</th>
+                             <th className="px-4 py-3 text-right">Lucro Un.</th>
+                             <th className="px-4 py-3 text-right">Margem</th>
+                             <th className="px-4 py-3 text-right">Venda Total</th>
+                             <th className="px-4 py-3 text-right">Lucro Total</th>
+                           </>
+                         ) : (
+                           <>
+                             <th className="px-4 py-3 text-right">Vlr. Unitário</th>
+                             <th className="px-4 py-3 text-right">Qtd</th>
+                             <th className="px-4 py-3 text-right">Total</th>
+                           </>
+                         )}
+                         <th className="px-4 py-3 w-16"></th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
+                       {opCosts.map((c, idx) => {
+                         const summary = financials?.cost_summaries?.find((cs: any) => cs.product_id === c.product_id && cs.tipo_custo === c.tipo_custo);
+                         const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_manutencao || 1) : c.valor_unitario;
+                         const totalItem = vendaUnit * c.quantidade;
+                         return (
+                           <tr key={`op-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
+                             <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
+                             <td className="px-4 py-3 text-text-secondary">{c.tipo_custo}</td>
+                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                               <>
+                                 <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                   <Tooltip content={
+                                     <div className="w-64 text-left">
+                                       <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                         <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                         Detalhamento de Custo
+                                       </div>
+                                       <div className="space-y-1.5 font-mono text-text-muted">
+                                         <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
+                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
+                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
+                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}                                         <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                           <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   }>
+                                     <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
+                                   </Tooltip>
+                                 </td>
+                                  <td className="px-1.5 py-3 text-center tabular-nums">
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      className="w-16 text-right h-8 mx-auto"
+                                      value={c.quantidade || 1}
+                                      onChange={(e) => updateCostQuantity(c, Number(e.target.value))}
+                                    />
+                                  </td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{summary?.fator_item ? Number(summary.fator_item).toFixed(2) : '-'}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.venda_unitario_item || vendaUnit)}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-brand-primary font-medium">{fmtC((summary?.venda_unitario_item || vendaUnit) * c.quantidade)}</td>
+                                 <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                   <Tooltip content={
+                                     <div className="w-72 text-left">
+                                       <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                         <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                         Detalhamento de Impostos
+                                       </div>
+                                       <div className="space-y-1.5 font-mono text-text-muted text-sm">
+                                         <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC(summary?.pis_unit || 0)}</span></div>
+                                         <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC(summary?.cofins_unit || 0)}</span></div>
+                                         <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC(summary?.csll_unit || 0)}</span></div>
+                                         <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC(summary?.irpj_unit || 0)}</span></div>
+                                         {['SERVICO', 'LICENCA'].includes(summary?.tipo_item) ? (
+                                           <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC(summary?.iss_unit || 0)}</span></div>
+                                         ) : (
+                                           <div className="flex justify-between">
+                                             <span>ICMS ({(summary?.perc_icms || 0).toFixed(2)}%){summary?.tem_st ? ' — ST isento' : ''}</span>
+                                             <span>{fmtC(summary?.icms_unit || 0)}</span>
+                                           </div>
+                                         )}
+                                         <div className="border-t border-white/20 mt-2 pt-2 flex justify-between font-bold text-text-primary">
+                                           <span>Total Impostos</span><span>{fmtC(summary?.imposto_venda_item || 0)}</span>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   }>
+                                     <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.imposto_venda_item || 0)}</span>
+                                   </Tooltip>
+                                 </td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.desp_adm_item || 0)}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.comissao_item || 0)}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.lucro_unitario_item || 0)}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-success">{summary?.margem_item ? Number(summary.margem_item).toFixed(2) + '%' : '0.00%'}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-primary">{fmtC(summary?.venda_total_item || totalItem)}</td>
+                                  <td className="px-1.5 py-3 text-right tabular-nums font-bold text-brand-success">{fmtC(summary?.lucro_total_item || 0)}</td>
+                                </>
+                             ) : (
+                               <>
+                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
+                                 <td className="px-2 py-3 text-right tabular-nums">
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    className="w-16 text-right h-8 ml-auto"
+                                    value={c.quantidade || 1}
+                                    onChange={(e) => updateCostQuantity(c, Number(e.target.value))}
+                                  />
+                                </td>
+                                 <td className="px-4 py-3 text-right tabular-nums font-medium text-brand-warning">{fmtC(totalItem)}</td>
+                               </>
+                             )}
+                             <td className="px-4 py-3 text-right">
+                               <Button variant="ghost" size="sm" onClick={() => removeCostByProps(c)} className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             </td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                     <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
+                       <tr>
+                         <td colSpan={2} className="px-4 py-3 text-right text-text-muted">Total Operacional:</td>
+                         {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (() => {
+                           const manuts = financials?.cost_summaries?.filter((cs: any) => cs.tipo_custo === 'MANUTENCAO') || [];
+                           return (
+                             <>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3 text-right tabular-nums text-brand-primary font-bold">{fmtC(opCosts.reduce((acc, cost) => {
+                                 const cs = financials?.cost_summaries?.find((x: any) => x.product_id === cost.product_id && x.tipo_custo === cost.tipo_custo);
+                                 const vUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? cost.valor_unitario * (form.fator_margem_manutencao || 1) : cost.valor_unitario;
+                                 return acc + ((cs?.venda_unitario_item || vUnit) * cost.quantidade);
+                               }, 0))}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(manuts.reduce((a: any, b: any) => a + (b.imposto_venda_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(manuts.reduce((a: any, b: any) => a + (b.desp_adm_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(manuts.reduce((a: any, b: any) => a + (b.comissao_item || 0), 0) || 0)}</td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3"></td>
+                               <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
+                                 {fmtC(manuts.reduce((a: any, b: any) => a + (b.venda_total_item || 0), 0) || 0)}
+                               </td>
+                               <td className="px-4 py-3 text-right tabular-nums text-brand-success">
+                                 {fmtC(manuts.reduce((a: any, b: any) => a + (b.lucro_total_item || 0), 0) || 0)}
+                               </td>
+                             </>
+                           );
+                         })() : (
+                           <>
+                             <td colSpan={2} className="px-4 py-3 text-right"></td>
+                             <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
+                               {fmtC(opCosts.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
+                             </td>
+                           </>
+                         )}
+                         <td></td>
+                       </tr>
+                     </tfoot>
+                   </table>
+                 </div>
+              )}
+            </section>
+           )}
+
+           
+
+           <AddOperationalCostModal 
+              isOpen={costSearchType !== null} 
+              onClose={() => setCostSearchType(null)} 
+              onConfirm={handleAddCost} 
+              defaultType={costSearchType === 'inst' ? 'INSTALACAO' : 'MANUTENCAO'}
+           />
         </div>
 
-        {/* RIGHT SIDE: STICKY SUMMARY */}
-        <div className="xl:col-span-4 sticky top-24">
-          <div className="bg-brand-primary/[0.02] border border-brand-primary/10 rounded-2xl p-6 shadow-sm overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
-            
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-bold text-text-primary tracking-tight">Cálculo Simultâneo</h3>
-              {isCalculating ? (
-                <span className="flex items-center text-xs font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
-                  <Calculator className="w-3 h-3 mr-1" /> Calculando
-                </span>
-              ) : (
-                <span className="text-xs font-medium text-brand-success bg-brand-success/10 px-2 py-1 rounded-full border border-brand-success/20">Atualizado</span>
-              )}
-            </div>
-
-            <div className="space-y-6">
-              <div className="space-y-3">
-                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border-subtle pb-2">Custos de Formação</h4>
-                 <div className="flex justify-between items-center text-sm">
-                   <span 
-                     className="text-text-muted font-semibold flex items-center cursor-help"
-                     title={`DIFAL Embutido: ${fmtC(financials?.summary?.total_difal_kit || 0)}`}
-                   >
-                     Custo de Aquisição (Total) <HelpCircle className="w-3 h-3 ml-1 text-brand-primary/50" />
-                   </span>
-                   <span className="font-bold text-text-primary">{fmtC(financials?.summary?.custo_aquisicao_kit)}</span>
-                 </div>
-                 {Number(financials?.summary?.custo_aquisicao_produtos) > 0 && (
-                   <div className="flex justify-between items-center text-xs pl-3 mt-1 border-l-2 border-brand-primary/20 ml-1">
-                     <span className="text-text-muted">↳ Produtos</span>
-                     <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.custo_aquisicao_produtos)}</span>
-                   </div>
-                 )}
-                 {Number(financials?.summary?.custo_aquisicao_servicos) > 0 && (
-                   <div className="flex justify-between items-center text-xs pl-3 mt-1 border-l-2 border-brand-primary/20 ml-1">
-                     <span className="text-text-muted">↳ Serviços</span>
-                     <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.custo_aquisicao_servicos)}</span>
-                   </div>
-                 )}
-                 <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted">Custos Operacionais <span className="text-[10px] bg-bg-deep px-1 rounded">(Mês)</span></span>
-                   <span className="font-medium text-brand-warning">{fmtC(financials?.summary?.custo_operacional_mensal_kit || 0)}</span>
-                 </div>
-                 {form.costs && form.costs.length > 0 && form.costs.map((c, idx) => (
-                   <div key={`cost-line-${idx}`} className="flex justify-between items-center text-xs pl-3 mt-1 border-l-2 border-brand-warning/20 ml-1">
-                     <span className="text-text-muted flex items-center">
-                       <span className="text-[10px] opacity-50 mr-1">↳</span> {c.tipo_custo} <span className="text-[10px] ml-1 opacity-50 truncate max-w-[100px]" title={c.descricao_item}>({c.descricao_item})</span>
-                     </span>
-                     <span className="font-medium text-text-secondary">{fmtC(c.valor_unitario * c.quantidade)}</span>
-                   </div>
-                 ))}
-              </div>
-
-               <div className="space-y-3 pt-2">
-                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border-subtle pb-2">Formação de Preço Mensal</h4>
-                 <div className="flex justify-between items-center text-sm">
-                   <span className="text-text-muted whitespace-nowrap">Valor Total</span>
-                   <span className="font-bold text-text-primary">
-                     {fmtC((financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0))}
-                   </span>
-                 </div>
-                 <div className="flex justify-between items-center text-xs pl-3 border-l-2 border-brand-primary/20 ml-1">
-                   <span className="text-text-muted" title={`Fator: R$ ${Number(financials?.summary?.tx_locacao || 0).toFixed(6)} por real financiado`}>
-                     ↳ vlr loc prod. (tx_locação: {(Number(financials?.summary?.tx_locacao || 0) * 100).toFixed(4)}%)
-                   </span>
-                   <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.valor_mensal_locacao_base)}</span>
-                 </div>
-                 {Number(financials?.summary?.vlt_manut) > 0 && (
-                   <div className="flex justify-between items-center text-xs pl-3 border-l-2 border-brand-warning/20 ml-1">
-                     <span className="text-text-muted">↳ vlr Manut (tx_manut)</span>
-                     <span className="font-medium text-text-secondary">{fmtC(financials?.summary?.vlt_manut)}</span>
-                   </div>
-                 )}
-
-                 {/* Seção de Impostos */}
-                 <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-border-subtle">
-                   <span className="text-text-muted whitespace-nowrap">Total de Impostos</span>
-                   <span className="font-bold text-brand-danger">
-                     {fmtC(financials?.summary?.valor_impostos)}
-                   </span>
-                 </div>
-                 <div className="flex flex-col text-xs pl-3 border-l-2 border-brand-danger/20 ml-1 mt-1 space-y-1">
-                   <span className="text-text-muted">
-                     ↳ Alíquota Total: {(financials?.summary?.aliq_total_impostos || 0).toFixed(2)}%
-                   </span>
-                   <span className="text-[10px] text-text-muted opacity-80 uppercase tracking-tighter">
-                     (PIS, COFINS, CSLL, IRPJ, ISS)
-                   </span>
-                 </div>
-              </div>
-
-              <div className="pt-6 border-t border-brand-primary/10">
-                <div className="bg-gradient-to-br from-brand-primary to-brand-primary-dark text-white p-5 rounded-2xl shadow-lg shadow-brand-primary/20 space-y-1 mb-4 overflow-hidden relative">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none" />
-                  <span className="block text-brand-primary-light text-sm font-medium">Faturamento Mensal Estimado</span>
-                  <div className="text-3xl font-extrabold tracking-tight">
-                    {fmtC((financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0))}
-                  </div>
-                  <div className="text-sm font-medium text-brand-primary-light pt-3 mt-3 border-t border-white/20 flex justify-between">
-                    <span>Prazo Tarifa:</span>
-                    <span>{financials?.summary?.prazo_mensalidades || 0} meses faturados</span>
-                  </div>
-                </div>
-
-                {(() => {
-                  const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
-                  const faturamentoMensal = (financials?.summary?.valor_mensal_locacao_base || 0) + (financials?.summary?.vlt_manut || 0);
-                  const impostosMensais = financials?.summary?.valor_impostos || 0;
-                  const custoAq = financials?.summary?.custo_aquisicao_kit || 0;
-                  const custoOperacionalMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
-
-                  const totalFaturamentoContrato = faturamentoMensal * mesesFaturados;
-                  const custoTotalContrato = custoAq + (custoOperacionalMensal * mesesFaturados);
-                  const receitaLiquida = faturamentoMensal - impostosMensais;
-                  const roiMeses = receitaLiquida > 0 ? (custoTotalContrato / receitaLiquida) : 0;
-
-                  return (
-                    <div className="space-y-4">
-                      <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
-                        <span className="block text-xs font-medium text-text-muted mb-1">Total Faturamento Anual</span>
-                        <div className="text-xl font-bold text-text-primary tabular-nums">
-                          {fmtC(totalFaturamentoContrato)}
-                        </div>
-                        <div className="text-[10px] text-text-muted mt-1 leading-tight">
-                          ({mesesFaturados} meses faturados x {fmtC(faturamentoMensal)})
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
-                          <span className="block text-xs font-medium text-text-muted mb-1">Custo Total</span>
-                          <div className="text-xl font-bold text-brand-warning tabular-nums">
-                            {fmtC(custoTotalContrato)}
-                          </div>
-                          <div className="text-[10px] text-text-muted mt-1 leading-tight line-clamp-2" title={`Custo de aquisição total + (${fmtC(custoOperacionalMensal)} x ${mesesFaturados})`}>
-                            CA + (C.Op x {mesesFaturados})
-                          </div>
-                        </div>
-                        <div className="bg-bg-surface border border-border-subtle p-4 rounded-xl">
-                          <span className="block text-xs font-medium text-text-muted mb-1">ROI (Retorno)</span>
-                          <div className="text-xl font-bold text-brand-secondary tabular-nums">
-                            {roiMeses.toFixed(1)} {roiMeses === 1 ? 'mês' : 'meses'}
-                          </div>
-                          <div className="text-[10px] text-text-muted mt-1 leading-tight">
-                            CT / ({fmtC(faturamentoMensal)} - Imp)
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-            </div>
-          </div>
         </div>
       </div>
-    </div>
   );
 };

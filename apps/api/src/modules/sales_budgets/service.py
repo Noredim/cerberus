@@ -24,21 +24,22 @@ def _round(val: Decimal, places: int = 4) -> Decimal:
     return val.quantize(Decimal(10) ** -places, rounding=ROUND_HALF_UP)
 
 
-def get_next_numero(db: Session, tenant_id: str) -> str:
-    """Generate next sequential budget number OV-XXXX."""
-    last = db.query(SalesBudget).filter(
-        SalesBudget.tenant_id == tenant_id,
-        SalesBudget.numero_orcamento.isnot(None)
-    ).order_by(SalesBudget.created_at.desc()).first()
-
-    if last and last.numero_orcamento and last.numero_orcamento.startswith("OV-"):
-        try:
-            num = int(last.numero_orcamento.split("-")[1]) + 1
-        except (ValueError, IndexError):
-            num = 1
-    else:
-        num = 1
-    return f"OV-{num:04d}"
+def get_next_numero(db: Session, tenant_id: str, company_id: str) -> str:
+    """Generate next sequential budget number [NOMENCLATURA]-[NUM]/[ANO]."""
+    from datetime import datetime
+    ano_vigente = datetime.now().year
+    
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return f"OV-001/{ano_vigente}"
+        
+    nom = company.nomenclatura_orcamento or "OV"
+    num = company.numero_proposta or 1
+    
+    company.numero_proposta = num + 1
+    db.add(company)
+    
+    return f"{nom}-{num:03d}/{ano_vigente}"
 
 
 def check_st_flag(db: Session, tenant_id: str, ncm_codigo: Optional[str], company_uf: str) -> bool:
@@ -434,7 +435,8 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         tenant_id=tenant_id,
         company_id=company_id,
         customer_id=data.customer_id,
-        numero_orcamento=get_next_numero(db, tenant_id),
+        vendedor_id=data.vendedor_id,
+        numero_orcamento=get_next_numero(db, tenant_id, company_id),
         titulo=data.titulo,
         observacoes=data.observacoes,
         data_orcamento=data.data_orcamento,
@@ -585,7 +587,7 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
         tenant_id=original.tenant_id,
         company_id=original.company_id,
         customer_id=original.customer_id,
-        numero_orcamento=get_next_numero(db, tenant_id),
+        numero_orcamento=get_next_numero(db, tenant_id, str(original.company_id)),
         titulo=f"{original.titulo} (Cópia)",
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
@@ -717,3 +719,170 @@ def delete_budget(db: Session, tenant_id: str, budget_id: str) -> bool:
     db.delete(budget)
     db.commit()
     return True
+
+def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA") -> dict:
+    from src.modules.products.models import Product
+    from src.modules.products.service import ProductService
+    from src.modules.ncm.services.ncm_service import NcmService
+    from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.tenant_id == tenant_id
+    ).first()
+    if not product:
+        return None
+
+    # Select reference price + budget based on tipo
+    uso_consumo = tipo.upper() == "USO_CONSUMO"
+    if uso_consumo:
+        custo_ref = float(product.vlr_referencia_uso_consumo or 0)
+        ref_budget_id = product.orcamento_referencia_uso_consumo_id
+    else:
+        custo_ref = float(product.vlr_referencia_revenda or 0)
+        ref_budget_id = product.orcamento_referencia_revenda_id
+
+    result = {
+        "base_unitario": custo_ref,
+        "ipi_percent": 0.0,
+        "ipi_unitario": 0.0,
+        "frete_cif_unitario": 0.0,
+        "has_st": False,
+        "icms_st_normal": 0.0,
+        "cred_outorgado_percent": 0.0,
+        "cred_outorgado_valor": 0.0,
+        "icms_st_final": 0.0,
+        "is_bit": False,
+        "is_intrastate": True,
+        "uf_origem": "",
+        "uf_destino": "",
+        "difal_unitario": 0.0,
+        "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
+        "custo_unit_final": custo_ref,
+    }
+
+    if not ref_budget_id:
+        return result
+
+    budget_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+        PurchaseBudgetItem.product_id == product_id,
+        PurchaseBudget.id == ref_budget_id
+    ).first()
+
+    if not budget_item:
+        return result
+
+    budget = budget_item.budget
+    qtd = float(budget_item.quantidade) if float(budget_item.quantidade) > 0 else 1
+
+    base_unitario = float(budget_item.valor_unitario)
+    if budget.negotiations:
+        latest_neg = sorted(budget.negotiations, key=lambda x: x.data_negociacao, reverse=True)[0]
+        for n_item in latest_neg.items:
+            if n_item.budget_item_id == budget_item.id:
+                base_unitario = float(n_item.valor_final) / qtd
+
+    ipi_unitario = float(budget_item.ipi_valor) / qtd if qtd > 0 else 0
+    frete_unitario = float(budget_item.frete_valor) / qtd if qtd > 0 else 0
+
+    ALIQ_INTERNA_DESTINO = 0.17
+    FATOR_BIT = 0.4117
+    DESCONTO_CREDITO_OUTORGADO = 0.12
+
+    st_flag = False
+    mva_percent = 0.0
+    bit_flag = False
+    icms_st_normal = 0.0
+    cred_outorgado_valor = 0.0
+    calc_icms_st_final = 0.0
+
+    prod_service = ProductService(db)
+    ncm_service = NcmService(db)
+
+    if product.ncm_codigo:
+        mva_data = prod_service.get_product_mva(
+            budget.tenant_id, product.ncm_codigo, str(budget.company_id), "USO_CONSUMO" if uso_consumo else "REVENDA"
+        )
+        if mva_data:
+            st_flag = True
+            mva_percent = float(mva_data.get("mva_percent", 0))
+
+        benefits = ncm_service.get_linked_benefits(product.ncm_codigo)
+        benefits = [b for b in benefits if str(b.tenant_id) == str(budget.tenant_id)]
+        if any("BIT" in (b.nome or "").upper() for b in benefits):
+            bit_flag = True
+
+    icms_from_budget = float(budget_item.icms_percent)
+    icms_entrada_effective = icms_from_budget if icms_from_budget <= 4 else 7
+
+    from src.modules.companies.models import Company
+    from src.modules.catalog.models import State
+    company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
+    uf_destino = "MT"
+    if company and company.state_id:
+        state_rec = db.query(State).filter(State.id == company.state_id).first()
+        if state_rec:
+            uf_destino = state_rec.sigla.upper()
+    uf_origem = budget.supplier.uf.upper() if (budget.supplier and budget.supplier.uf) else "SP"
+    op_interestadual = (uf_origem != uf_destino)
+
+    if st_flag and op_interestadual:
+        cred = icms_entrada_effective / 100.0
+        base_com_mva = (base_unitario + ipi_unitario) * (1 + (mva_percent / 100.0))
+
+        if bit_flag:
+            icms_st_saida = base_com_mva * FATOR_BIT * ALIQ_INTERNA_DESTINO
+            icms_credito = base_unitario * FATOR_BIT * cred
+            calc_icms_st_final = max(0.0, icms_st_saida - icms_credito)
+            icms_st_normal = calc_icms_st_final
+        else:
+            icms_st_bruto = base_com_mva * ALIQ_INTERNA_DESTINO - base_unitario * cred
+            icms_st_normal = max(0.0, icms_st_bruto)
+            cred_outorgado_valor = icms_st_normal * DESCONTO_CREDITO_OUTORGADO
+            calc_icms_st_final = max(0.0, icms_st_normal - cred_outorgado_valor)
+
+    ALIQUOTA_INTERESTADUAL_PADRAO = 0.12
+    difal_unitario = 0.0
+
+    if op_interestadual:
+        base_com_ipi_e_frete = base_unitario + ipi_unitario + frete_unitario
+        c_icms_origem = base_com_ipi_e_frete * ALIQUOTA_INTERESTADUAL_PADRAO
+        base_sem_icms = base_com_ipi_e_frete - c_icms_origem
+        divisor = 1 - ALIQ_INTERNA_DESTINO
+        if divisor > 0:
+            c_base_calculo_difal = base_sem_icms / divisor
+            c_icms_destino = c_base_calculo_difal * ALIQ_INTERNA_DESTINO
+            c_valor_difal_base = c_icms_destino - c_icms_origem
+
+            if uso_consumo:
+                difal_unitario = max(0.0, c_valor_difal_base)
+            else:
+                diff_difal_st = c_valor_difal_base - calc_icms_st_final
+                if diff_difal_st > 0:
+                    difal_unitario = calc_icms_st_final + diff_difal_st
+                else:
+                    difal_unitario = max(0.0, c_valor_difal_base)
+
+    if uso_consumo:
+        custo_unit_final = base_unitario + ipi_unitario + frete_unitario + difal_unitario
+    else:
+        custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
+
+    return {
+        "base_unitario": round(base_unitario, 2),
+        "ipi_percent": float(budget_item.ipi_percent or 0),
+        "ipi_unitario": round(ipi_unitario, 2),
+        "frete_cif_unitario": round(frete_unitario, 2),
+        "has_st": st_flag and op_interestadual,
+        "icms_st_normal": round(icms_st_normal, 2),
+        "cred_outorgado_percent": DESCONTO_CREDITO_OUTORGADO * 100 if (st_flag and op_interestadual and not bit_flag) else 0,
+        "cred_outorgado_valor": round(cred_outorgado_valor, 2),
+        "icms_st_final": round(calc_icms_st_final, 2),
+        "is_bit": bit_flag,
+        "is_intrastate": not op_interestadual,
+        "uf_origem": uf_origem,
+        "uf_destino": uf_destino,
+        "difal_unitario": round(difal_unitario, 2),
+        "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
+        "custo_unit_final": round(custo_unit_final, 2),
+    }

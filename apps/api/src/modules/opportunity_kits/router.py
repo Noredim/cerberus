@@ -17,11 +17,17 @@ router = APIRouter(prefix="/opportunity-kits", tags=["Opportunity Kits"])
 def list_kits_by_company(
     company_id: UUID,
     sales_budget_id: Optional[UUID] = None,
+    tipo_contrato: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     service = OpportunityKitService(db)
-    return service.list_kits(current_user.tenant_id, str(company_id), str(sales_budget_id) if sales_budget_id else None)
+    return service.list_kits(
+        current_user.tenant_id, 
+        str(company_id), 
+        str(sales_budget_id) if sales_budget_id else None,
+        tipo_contrato
+    )
 @router.get("/{kit_id}", response_model=OpportunityKitResponse)
 def get_kit(
     kit_id: UUID,

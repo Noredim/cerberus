@@ -89,6 +89,7 @@ class RentalBudgetItemOut(RentalBudgetItemBase):
 class SalesBudgetItemBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     product_id: Optional[UUID] = None
+    opportunity_kit_id: Optional[UUID] = None
     tipo_item: ItemTypeEnum
     descricao_servico: Optional[str] = None
     usa_parametros_padrao: bool = True
@@ -137,6 +138,7 @@ class SalesBudgetItemOut(SalesBudgetItemBase):
 class SalesBudgetBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     customer_id: str
+    vendedor_id: Optional[str] = None
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime

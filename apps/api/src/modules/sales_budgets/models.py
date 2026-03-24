@@ -13,6 +13,7 @@ class SalesBudget(Base):
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    vendedor_id = Column(String, ForeignKey("professionals.id", ondelete="SET NULL"), nullable=True, index=True)
 
     numero_orcamento = Column(String(50), nullable=True)
     titulo = Column(String(255), nullable=False)
@@ -56,6 +57,7 @@ class SalesBudget(Base):
     # Relationships
     company = relationship("Company")
     customer = relationship("Customer")
+    vendedor = relationship("Professional")
     items = relationship("SalesBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     rental_items = relationship("RentalBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     responsaveis = relationship("SalesBudgetResponsavel", back_populates="budget", cascade="all, delete-orphan")
@@ -78,6 +80,7 @@ class SalesBudgetItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    opportunity_kit_id = Column(UUID(as_uuid=True), ForeignKey("opportunity_kits.id", ondelete="SET NULL"), nullable=True, index=True)
 
     tipo_item = Column(String(30), nullable=False)  # MERCADORIA, SERVICO_INSTALACAO, SERVICO_MANUTENCAO
     descricao_servico = Column(String(255), nullable=True)
@@ -129,13 +132,18 @@ class SalesBudgetItem(Base):
     # Relationships
     budget = relationship("SalesBudget", back_populates="items")
     product = relationship("Product")
+    opportunity_kit = relationship("OpportunityKit")
 
     @property
     def product_nome(self):
+        if self.opportunity_kit:
+            return f"Kit: {self.opportunity_kit.nome_kit or 'Personalizado'}"
         return self.product.nome if self.product else self.descricao_servico
 
     @property
     def product_codigo(self):
+        if self.opportunity_kit:
+            return "KIT-GLOBAL"
         return self.product.codigo if self.product else None
 
 

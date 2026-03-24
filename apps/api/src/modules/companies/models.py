@@ -52,6 +52,9 @@ class Company(Base):
     cnpj_status_ultima_consulta = Column(String(50))
     cnpj_mensagem_ultima_consulta = Column(String(255))
     
+    nomenclatura_orcamento = Column(String(20), default="OV")
+    numero_proposta = Column(Integer, default=1)
+    
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

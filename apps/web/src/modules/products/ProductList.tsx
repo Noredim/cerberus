@@ -12,7 +12,8 @@ import {
     Trash2,
     Activity,
     Briefcase,
-    ArrowRight
+    ArrowRight,
+    Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -113,6 +114,7 @@ const ProductList: React.FC = () => {
                             <option value="">Todos os Tipos</option>
                             <option value="EQUIPAMENTO">Equipamento</option>
                             <option value="SERVICO">Serviço</option>
+                            <option value="LICENCA">Licença</option>
                         </select>
                         <button className="p-1.5 rounded-md hover:bg-bg-deep text-text-muted border border-border-subtle transition-colors cursor-pointer" title="Configurações de Filtro">
                             <Filter className="w-5 h-5" />
@@ -162,9 +164,11 @@ const ProductList: React.FC = () => {
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${product.tipo === 'EQUIPAMENTO'
                                                     ? 'bg-brand-primary/10 text-brand-primary'
-                                                    : 'bg-indigo-500/10 text-indigo-500'
+                                                    : product.tipo === 'SERVICO'
+                                                    ? 'bg-indigo-500/10 text-indigo-500'
+                                                    : 'bg-emerald-500/10 text-emerald-500'
                                                     }`}>
-                                                    {product.tipo === 'EQUIPAMENTO' ? <Package className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+                                                    {product.tipo === 'EQUIPAMENTO' ? <Package className="w-5 h-5" /> : product.tipo === 'SERVICO' ? <Activity className="w-5 h-5" /> : <Key className="w-5 h-5" />}
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="font-semibold text-text-primary text-sm">{product.nome}</span>
@@ -206,10 +210,15 @@ const ProductList: React.FC = () => {
                                                     <span className="font-medium text-text-primary">{product.ncm_codigo || '-'}</span>
                                                     <span className="text-[10px] text-text-muted">CEST: {product.cest_codigo || 'N/A'}</span>
                                                 </div>
-                                            ) : (
+                                            ) : product.tipo === 'SERVICO' ? (
                                                 <div className="flex flex-col">
                                                     <span className="font-medium text-text-primary">{product.cmt_codigo || '-'}</span>
                                                     <span className="text-[10px] text-indigo-500 font-bold uppercase">Serviço Municipal</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-text-primary">{product.ncm_codigo || '-'}</span>
+                                                    <span className="text-[10px] text-emerald-500 font-bold uppercase">Software / Licença</span>
                                                 </div>
                                             )}
                                         </td>

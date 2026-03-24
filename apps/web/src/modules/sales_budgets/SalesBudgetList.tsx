@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Receipt, Search, Copy, Eye, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
+import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 
 interface SalesBudgetSummary {
   id: string;
@@ -46,6 +47,7 @@ export function SalesBudgetList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     loadBudgets();
@@ -98,13 +100,13 @@ export function SalesBudgetList() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
             <Receipt className="w-7 h-7 text-brand-primary" />
-            Orçamentos de Venda
+            Oportunidades
           </h1>
-          <p className="text-text-muted text-sm mt-1">Gerencie seus orçamentos de venda de mercadorias e serviços</p>
+          <p className="text-text-muted text-sm mt-1">Gerencie suas oportunidades de negócio empresariais</p>
         </div>
-        <Button onClick={() => navigate('/orcamentos-vendas/novo')} className="flex items-center gap-2">
+        <Button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
-          Novo Orçamento
+          Nova Oportunidade
         </Button>
       </div>
 
@@ -139,11 +141,11 @@ export function SalesBudgetList() {
         <div className="text-center py-16 space-y-3">
           <Receipt className="w-12 h-12 text-text-muted mx-auto opacity-40" />
           <p className="text-text-muted">
-            {budgets.length === 0 ? 'Nenhum orçamento criado ainda.' : 'Nenhum resultado encontrado.'}
+            {budgets.length === 0 ? 'Nenhuma oportunidade criada ainda.' : 'Nenhum resultado encontrado.'}
           </p>
           {budgets.length === 0 && (
-            <Button onClick={() => navigate('/orcamentos-vendas/novo')} variant="outline" className="mt-2">
-              <Plus className="w-4 h-4 mr-1" /> Criar primeiro orçamento
+            <Button onClick={() => setIsCreateModalOpen(true)} variant="outline" className="mt-2">
+              <Plus className="w-4 h-4 mr-1" /> Criar primeira oportunidade
             </Button>
           )}
         </div>
@@ -217,6 +219,15 @@ export function SalesBudgetList() {
           </table>
         </div>
       )}
+
+      <OpportunityCreateModal 
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={(id) => {
+          setIsCreateModalOpen(false);
+          navigate(`/orcamentos-vendas/${id}`);
+        }}
+      />
     </div>
   );
 }

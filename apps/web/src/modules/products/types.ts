@@ -1,4 +1,4 @@
-export type ProductType = 'EQUIPAMENTO' | 'SERVICO';
+export type ProductType = 'EQUIPAMENTO' | 'SERVICO' | 'LICENCA';
 export type ProductFinalidade = 'REVENDA' | 'ATIVO';
 
 export interface ProductFormData {

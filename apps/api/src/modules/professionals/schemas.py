@@ -44,6 +44,7 @@ class ProfessionalUpdate(BaseModel):
 class RoleNestedResponse(BaseModel):
     id: str
     name: str
+    can_perform_sale: bool = False
 
     class Config:
         from_attributes = True

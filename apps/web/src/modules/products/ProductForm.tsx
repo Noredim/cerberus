@@ -15,7 +15,8 @@ import {
     Truck,
     Plus,
     Trash2,
-    Calculator
+    Calculator,
+    Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -415,7 +416,7 @@ const ProductForm: React.FC = () => {
                                         <div className="flex bg-bg-deep p-1 rounded-md border border-border-subtle h-11">
                                             <button
                                                 type="button"
-                                                disabled={lockCoreFields}
+                                                disabled={isReadOnly}
                                                 onClick={() => setFormData({ ...formData, tipo: 'EQUIPAMENTO' })}
                                                 className={`flex-1 flex items-center justify-center gap-2 rounded-md transition-all text-xs font-bold ${formData.tipo === 'EQUIPAMENTO'
                                                     ? 'bg-surface text-brand-primary shadow-sm'
@@ -426,7 +427,7 @@ const ProductForm: React.FC = () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                disabled={lockCoreFields}
+                                                disabled={isReadOnly}
                                                 onClick={() => setFormData({ ...formData, tipo: 'SERVICO' })}
                                                 className={`flex-1 flex items-center justify-center gap-2 rounded-md transition-all text-xs font-bold ${formData.tipo === 'SERVICO'
                                                     ? 'bg-surface text-brand-primary shadow-sm'
@@ -434,6 +435,17 @@ const ProductForm: React.FC = () => {
                                                     }`}
                                             >
                                                 <Activity className="w-4 h-4" /> SERVIÇO
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={isReadOnly}
+                                                onClick={() => setFormData({ ...formData, tipo: 'LICENCA' })}
+                                                className={`flex-1 flex items-center justify-center gap-2 rounded-md transition-all text-xs font-bold ${formData.tipo === 'LICENCA'
+                                                    ? 'bg-surface text-brand-primary shadow-sm'
+                                                    : 'text-text-muted hover:text-text-primary'
+                                                    }`}
+                                            >
+                                                <Key className="w-4 h-4" /> LICENÇA
                                             </button>
                                         </div>
                                     </div>
@@ -521,32 +533,32 @@ const ProductForm: React.FC = () => {
                                                 Métricas de Referência (Automáticas via Orçamento)
                                             </h4>
                                         </div>
-                                        <div className="space-y-1.5 p-4 rounded-xl border border-border-subtle bg-surface shadow-sm">
-                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Custo Ref. Revenda</label>
-                                            <div className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono">
+                                        <div className="space-y-1 p-5 rounded-xl border border-border-subtle bg-surface shadow-sm">
+                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Custo Ref. Revenda</label>
+                                            <div className="inline-block bg-[#4c6bf4] text-white font-black text-xl px-2 py-0.5 rounded shadow-sm mb-3">
                                                 {formatCurrency(formData.vlr_referencia_revenda)}
                                             </div>
                                             {formData.data_atualizacao_revenda && (
-                                                <p className="text-[10px] text-text-muted mt-2">
-                                                    Última Atualização: <span className="font-semibold text-text-primary">{new Date(formData.data_atualizacao_revenda).toLocaleDateString()}</span>
+                                                <p className="text-[10px] text-text-muted font-medium">
+                                                    Última Atualização: <span className="font-bold text-text-primary">{new Date(formData.data_atualizacao_revenda + 'T12:00:00Z').toLocaleDateString('pt-BR')}</span>
                                                 </p>
                                             )}
                                         </div>
-                                        <div className="space-y-1.5 p-4 rounded-xl border border-border-subtle bg-surface shadow-sm">
-                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Custo Ref. Uso/Consumo</label>
-                                            <div className="flex items-center gap-3">
-                                                <div className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                                        <div className="space-y-1 p-5 rounded-xl border border-border-subtle bg-surface shadow-sm">
+                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Custo Ref. Uso/Consumo</label>
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="text-xl font-black text-[#f59e0b]"> 
                                                     {formatCurrency(formData.vlr_referencia_uso_consumo)}
                                                 </div>
                                                 {formData.origem_valor_uso_consumo && (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 mt-1 uppercase">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold text-[#f59e0b] border border-[#f59e0b]/30 bg-[#f59e0b]/10 uppercase tracking-wide">
                                                         {formData.origem_valor_uso_consumo.replace('_', ' ')}
                                                     </span>
                                                 )}
                                             </div>
                                             {formData.data_atualizacao_uso_consumo && (
-                                                <p className="text-[10px] text-text-muted mt-2">
-                                                    Última Atualização: <span className="font-semibold text-text-primary">{new Date(formData.data_atualizacao_uso_consumo).toLocaleDateString()}</span>
+                                                <p className="text-[10px] text-text-muted font-medium">
+                                                    Última Atualização: <span className="font-bold text-text-primary">{new Date(formData.data_atualizacao_uso_consumo + 'T12:00:00Z').toLocaleDateString('pt-BR')}</span>
                                                 </p>
                                             )}
                                         </div>
@@ -571,7 +583,7 @@ const ProductForm: React.FC = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {formData.tipo === 'EQUIPAMENTO' ? (
+                                    {formData.tipo !== 'SERVICO' ? (
                                         <>
                                             <div className="space-y-1.5 lg:col-span-2">
                                                 <label className="text-xs font-bold text-text-muted uppercase tracking-wider">NCM (Código Fiscal)</label>

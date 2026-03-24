@@ -10,9 +10,10 @@ interface OpportunityKitSearchModalProps {
   onSelect: (kit: any) => void;
   title?: string;
   salesBudgetId?: string;
+  tipoContrato?: string;
 }
 
-export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId }: OpportunityKitSearchModalProps) {
+export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId, tipoContrato }: OpportunityKitSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -33,7 +34,7 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
     setIsSearching(true);
     try {
       const res = await api.get(`/opportunity-kits/company/${activeCompanyId}`, {
-        params: { sales_budget_id: salesBudgetId }
+        params: { sales_budget_id: salesBudgetId, tipo_contrato: tipoContrato }
       });
       setResults(res.data);
     } catch (err) {

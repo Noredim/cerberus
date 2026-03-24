@@ -14,6 +14,7 @@ import { Building2 } from 'lucide-react';
 import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportModal';
 import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
+import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 
 interface CostComposition {
   base_unitario: number;
@@ -73,6 +74,7 @@ const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
 
 interface SalesBudgetItem {
   id?: string;
+  opportunity_kit_id?: string | null;
   product_id: string | null;
   product_nome: string;
   product_codigo: string;
@@ -357,6 +359,7 @@ export function SalesBudgetForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -373,7 +376,7 @@ export function SalesBudgetForm() {
       const isTabClick = target && target.role === 'tab'; // Don't block tab switching inside the same screen
 
       if (isInternalNav && !isTabClick) {
-        if (!window.confirm('Existem alterações não salvas no orçamento. Deseja realmente sair e perder as alterações?')) {
+        if (!window.confirm('Existem alterações não salvas na oportunidade. Deseja realmente sair e perder as alterações?')) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -452,7 +455,9 @@ export function SalesBudgetForm() {
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
   const [showAddRentalItemModal, setShowAddRentalItemModal] = useState(false);
   const [showKitSearchModal, setShowKitSearchModal] = useState(false);
+  const [showKitSearchVenda, setShowKitSearchVenda] = useState(false);
   const [showCreateKitModal, setShowCreateKitModal] = useState(false);
+  const [novoKitTipoContrato, setNovoKitTipoContrato] = useState<string | undefined>(undefined);
   const [showOverwriteModal, setShowOverwriteModal] = useState(false);
   const [showEvolutivoChart, setShowEvolutivoChart] = useState(false);
   const [viewingKitId, setViewingKitId] = useState<string | null>(null);
@@ -461,6 +466,9 @@ export function SalesBudgetForm() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [professionals, setProfessionals] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [vendedorId, setVendedorId] = useState('');
   const [showProductSearch, setShowProductSearch] = useState(false);
 
   const isReadonly = status !== 'RASCUNHO';
@@ -508,14 +516,18 @@ export function SalesBudgetForm() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [custRes, prodRes, supRes] = await Promise.all([
+        const [custRes, prodRes, supRes, profRes, usersRes] = await Promise.all([
           api.get('/cadastro/clientes', { params: { limit: 200 } }),
           api.get('/cadastro/produtos', { params: { limit: 500 } }),
           api.get('/cadastro/fornecedores', { params: { limit: 200 } }),
+          api.get('/professionals', { params: { limit: 500 } }),
+          api.get('/users', { params: { limit: 500 } }),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data.items || []);
         setSuppliers(Array.isArray(supRes.data) ? supRes.data : supRes.data.items || []);
+        setProfessionals(Array.isArray(profRes.data) ? profRes.data : profRes.data.items || []);
+        setUsers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.items || []);
       } catch (err) {
         console.error(err);
       }
@@ -553,6 +565,7 @@ export function SalesBudgetForm() {
       const d = res.data;
       setTitulo(d.titulo);
       setCustomerId(d.customer_id);
+      setVendedorId(d.vendedor_id || '');
       setObservacoes(d.observacoes || '');
       setDataOrcamento(d.data_orcamento?.slice(0, 10) || '');
       setStatus(d.status);
@@ -880,6 +893,54 @@ export function SalesBudgetForm() {
     });
   };
 
+  const handleAddKitVenda = (kit: any) => {
+    if (!kit) return;
+    setHasUnsavedChanges(true);
+    setItems(prev => {
+      const q = Number(kit.quantidade_kits || 1);
+      const newItem: SalesBudgetItem = {
+        opportunity_kit_id: kit.id,
+        product_id: null,
+        product_nome: `Kit: ${kit.nome_kit || 'Personalizado'}`,
+        product_codigo: 'KIT-GLOBAL',
+        ncm_codigo: '',
+        tipo_item: 'MERCADORIA',
+        descricao_servico: `Kit de Venda: ${kit.nome_kit || ''}`,
+        usa_parametros_padrao: true,
+        custo_unit_base: Number(kit.summary?.custo_aquisicao_total || 0),
+        markup: markupPadrao || 1,
+        venda_unit: Number(kit.summary?.valor_mensal_kit || 0),
+        quantidade: q,
+        perc_frete_venda: Number(kit.perc_frete_venda || percFreteVenda || 0),
+        frete_venda_unit: 0,
+        perc_pis: Number(kit.aliq_pis || percPis || 0), pis_unit: 0,
+        perc_cofins: Number(kit.aliq_cofins || percCofins || 0), cofins_unit: 0,
+        perc_csll: Number(kit.aliq_csll || percCsll || 0), csll_unit: 0,
+        perc_irpj: Number(kit.aliq_irpj || percIrpj || 0), irpj_unit: 0,
+        perc_icms: Number(kit.aliq_icms || percIcmsInterno || 0), icms_unit: 0,
+        tem_st: false,
+        perc_iss: Number(kit.aliq_iss || 0), iss_unit: 0,
+        perc_despesa_adm: Number(kit.perc_despesas_adm || percDespesaAdm || 0), despesa_adm_unit: 0,
+        perc_comissao: Number(kit.perc_comissao || percComissao || 0), comissao_unit: 0,
+        lucro_unit: 0,
+        margem_unit: 0,
+        total_venda: 0
+      };
+      return [...prev, calcItem(newItem, {
+        markup_padrao: markupPadrao,
+        perc_despesa_adm: percDespesaAdm,
+        perc_comissao: percComissao,
+        perc_frete_venda: percFreteVenda,
+        perc_pis: percPis,
+        perc_cofins: percCofins,
+        perc_csll: percCsll,
+        perc_irpj: percIrpj,
+        perc_iss: percIss,
+        perc_icms_interno: percIcmsInterno
+      })];
+    });
+  };
+
   const updateRentalItem = (idx: number, field: string, value: any) => {
     setRentalItems(prev => {
       const updated = [...prev];
@@ -1060,13 +1121,13 @@ export function SalesBudgetForm() {
 
   const handleGlobalKitOverwrite = async () => {
     if (!id) {
-      alert("Salve o orçamento primeiro antes de sobrescrever kits globais.");
+      alert("Salve a oportunidade primeiro antes de sobrescrever kits globais.");
       setShowOverwriteModal(false);
       return;
     }
     const kitIds = Array.from(new Set(rentalItems.filter(ri => ri.opportunity_kit_id).map(ri => ri.opportunity_kit_id)));
     if (kitIds.length === 0) {
-      alert("Não há kits lançados neste orçamento para atualizar.");
+      alert("Não há kits lançados nesta oportunidade para atualizar.");
       setShowOverwriteModal(false);
       return;
     }
@@ -1301,7 +1362,7 @@ export function SalesBudgetForm() {
           <button
             onClick={() => {
               if (hasUnsavedChanges) {
-                if (!window.confirm('Existem alterações não salvas no orçamento. Deseja realmente sair sem salvar?')) return;
+                if (!window.confirm('Existem alterações não salvas na oportunidade. Deseja realmente sair sem salvar?')) return;
               }
               navigate('/orcamentos-vendas');
             }}
@@ -1312,7 +1373,7 @@ export function SalesBudgetForm() {
           <div>
             <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Receipt className="w-5 h-5 text-brand-primary" />
-              {isEditing ? `Orçamento ${numeroOrcamento}` : 'Novo Orçamento de Venda'}
+              {isEditing ? `Oportunidade ${numeroOrcamento}` : 'Nova Oportunidade'}
             </h1>
             {isEditing && (
               <div className="flex items-center gap-2 mt-1">
@@ -1345,16 +1406,23 @@ export function SalesBudgetForm() {
 
       {/* Header */}
       <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-        <h2 className="font-semibold text-text-primary text-lg">Cabeçalho</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <h2 className="font-semibold text-text-primary text-lg">Cabeçalho</h2>
+          {!isReadonly && id && (
+            <Button variant="outline" size="sm" onClick={() => setIsHeaderModalOpen(true)}>
+              Editar dados da proposta
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="md:col-span-2">
             <label className="block text-sm font-medium text-text-muted mb-1">Título *</label>
-            <input value={titulo} onChange={e => setTitulo(e.target.value)} disabled={isReadonly}
+            <input value={titulo} onChange={() => {}} disabled={true}
               className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
           </div>
-          <div>
+          <div className="md:col-span-2">
             <label className="block text-sm font-medium text-text-muted mb-1">Cliente *</label>
-            <select value={customerId} onChange={e => setCustomerId(e.target.value)} disabled={isReadonly}
+            <select value={customerId} onChange={() => {}} disabled={true}
               className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60">
               <option value="">Selecionar...</option>
               {customers.map(c => <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>)}
@@ -1364,6 +1432,19 @@ export function SalesBudgetForm() {
             <label className="block text-sm font-medium text-text-muted mb-1">Data</label>
             <input type="date" value={dataOrcamento} onChange={e => setDataOrcamento(e.target.value)} disabled={isReadonly}
               className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
+            <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
+              <option value="">Nenhum associado</option>
+              {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-muted mb-1">Responsável</label>
+            <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
           </div>
         </div>
         <div>
@@ -1638,7 +1719,8 @@ export function SalesBudgetForm() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
-                  {items.map((item, idx) => {
+                  {items.filter(i => !i.opportunity_kit_id).map((item, originalIdx) => {
+                    const idx = items.findIndex(x => x === item); // Find true index in the global items state
                     const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
                     const custoTotal = item.custo_unit_base * item.quantidade;
                     const lucroTotal = item.lucro_unit * item.quantidade;
@@ -1833,6 +1915,170 @@ export function SalesBudgetForm() {
                               onClick={() => removeItem(idx)}
                               className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                               title="Remover item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        
+        {/* Kits de Venda */}
+        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+                <Package className="w-5 h-5 text-brand-primary" />
+                Kits de Oportunidade
+              </h2>
+              <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">
+                Kits globais de Venda de Equipamentos
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => {
+                setNovoKitTipoContrato('VENDA_EQUIPAMENTOS');
+                setShowNewKitModal(true);
+              }} disabled={isReadonly}>
+                <Plus className="w-4 h-4 mr-1" /> Criar Novo Kit
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowKitSearchVenda(true)} disabled={isReadonly}>
+                <Search className="w-4 h-4 mr-1" /> Adicionar Kit
+              </Button>
+            </div>
+          </div>
+
+          {items.filter(i => i.opportunity_kit_id).length === 0 ? (
+            <div className="text-center py-12 text-text-muted text-sm">Nenhum kit adicionado.</div>
+          ) : (
+            <div>
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                  <tr>
+                    <th className="px-1.5 py-2 whitespace-nowrap">Kit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
+                  {items.filter(i => i.opportunity_kit_id).map((item, originalIdx) => {
+                    const idx = items.findIndex(x => x === item);
+                    const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
+                    const custoTotal = item.custo_unit_base * item.quantidade;
+                    const lucroTotal = item.lucro_unit * item.quantidade;
+                    const vendaTotal = item.venda_unit * item.quantidade;
+                    const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
+
+                    return (
+                      <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
+                        {/* Kit */}
+                        <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
+                          <div className="flex flex-col truncate">
+                            <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || '—'}</span>
+                            <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>
+                          </div>
+                        </td>
+
+                        {/* QTD — editable */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                          <input
+                            type="number" step="1" min="1" value={item.quantidade}
+                            onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
+                            disabled={isReadonly}
+                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                          />
+                        </td>
+
+                        {/* Custo Unit */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
+                          <span>{fmt(item.custo_unit_base)}</span>
+                        </td>
+
+                        {/* Custo Total */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                          {fmt(custoTotal)}
+                        </td>
+
+                        {/* MKP — editable */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                          <input
+                            type="number" step="0.01" value={item.markup}
+                            onChange={e => updateItem(idx, 'markup', +e.target.value)}
+                            disabled={isReadonly}
+                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                          />
+                        </td>
+
+                        {/* Venda Unit */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
+                          {fmt(item.venda_unit)}
+                        </td>
+
+                        {/* Frete Venda */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.frete_venda_unit)}
+                        </td>
+
+                        {/* Impostos */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(totalImpostos)}
+                        </td>
+
+                        {/* Desp. Adm */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.despesa_adm_unit)}
+                        </td>
+
+                        {/* Comissão */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.comissao_unit)}
+                        </td>
+
+                        {/* Lucro Unit */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
+                          {fmt(item.lucro_unit)}
+                        </td>
+
+                        {/* Margem */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                          {fmtPct(item.margem_unit)}
+                        </td>
+
+                        {/* Venda Total */}
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
+                          {fmt(vendaTotal)}
+                        </td>
+
+                        {/* Lucro Total */}
+                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                          {fmt(lucroTotal)}
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-1 py-2 whitespace-nowrap text-center">
+                          {!isReadonly && (
+                            <button
+                              onClick={() => removeItem(idx)}
+                              className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Remover kit"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -2434,7 +2680,7 @@ export function SalesBudgetForm() {
                 </Button>
               )}
               {!isReadonly && (
-                <Tooltip content={!id ? "Salve o orçamento primeiro para criar um kit específico" : ""}>
+                <Tooltip content={!id ? "Salve a oportunidade primeiro para criar um kit específico" : ""}>
                   <div>
                     <Button
                       variant="outline"
@@ -2672,7 +2918,7 @@ export function SalesBudgetForm() {
           <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
             <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-base font-semibold text-text-primary">Itens do Orçamento</h2>
+                <h2 className="text-base font-semibold text-text-primary">Itens da Oportunidade</h2>
                 <p className="text-xs text-text-muted mt-0.5">Adicione os produtos manualmente ou importe via planilha.</p>
               </div>
               <div className="flex items-center gap-2">
@@ -2776,8 +3022,8 @@ export function SalesBudgetForm() {
 
       {/* Create Kit Modal Overlay */}
       {showCreateKitModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Criar Kit Exclusivo</h3>
               <button onClick={() => setShowCreateKitModal(false)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
@@ -2787,6 +3033,7 @@ export function SalesBudgetForm() {
                 isModal={true}
                 onClose={() => setShowCreateKitModal(false)}
                 initialSalesBudgetId={id}
+                initialTipoContrato={novoKitTipoContrato}
                 onSuccess={(savedKit) => {
                   setShowCreateKitModal(false);
                   if (savedKit) handleAddKit(savedKit);
@@ -2803,12 +3050,12 @@ export function SalesBudgetForm() {
           <div className="bg-bg-deep rounded-2xl shadow-2xl p-6 w-full max-w-md border border-border-subtle">
             <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substituição</h3>
             <p className="text-text-muted mb-6">
-              Esta ação irá <b>salvar o orçamento atual</b> e aplicar os valores de <br /><br />
+              Esta ação irá <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
               • Prazo de contrato<br />
               • Prazo de instalação (Carência)<br />
               • Fator margem<br />
               • Fator margem manut.<br /><br />
-              em <b>todos os kits lançados</b> neste orçamento, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
+              em <b>todos os kits lançados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
             </p>
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setShowOverwriteModal(false)} disabled={saving}>Cancelar</Button>
@@ -2837,7 +3084,7 @@ export function SalesBudgetForm() {
           onConfirm={handleAddRentalItem}
         />
       )}
-      {/* Kit Search Modal */}
+      {/* Kit Search Modal - Rental */}
       {showKitSearchModal && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchModal}
@@ -2846,26 +3093,21 @@ export function SalesBudgetForm() {
           salesBudgetId={id}
         />
       )}
-      {/* Kit Search Modal */}
-      {showKitSearchModal && (
+      
+      {/* Kit Search Modal - Sale */}
+      {showKitSearchVenda && (
         <OpportunityKitSearchModal
-          isOpen={showKitSearchModal}
-          onClose={() => setShowKitSearchModal(false)}
-          onSelect={handleAddKit}
-        />
-      )}
-      {/* Kit Search Modal */}
-      {showKitSearchModal && (
-        <OpportunityKitSearchModal
-          isOpen={showKitSearchModal}
-          onClose={() => setShowKitSearchModal(false)}
-          onSelect={handleAddKit}
+          isOpen={showKitSearchVenda}
+          tipoContrato="VENDA_EQUIPAMENTOS"
+          onClose={() => setShowKitSearchVenda(false)}
+          onSelect={handleAddKitVenda}
+          salesBudgetId={id}
         />
       )}
       {/* Kit Items Edit Modal */}
       {viewingKitId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Editar Kit na Oportunidade</h3>
               <button onClick={() => setViewingKitId(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
@@ -2920,6 +3162,19 @@ export function SalesBudgetForm() {
             </div>
           </div>
         </div>
+      )}
+
+      {id && (
+        <OpportunityCreateModal
+          isOpen={isHeaderModalOpen}
+          onClose={() => setIsHeaderModalOpen(false)}
+          onSuccess={(modId, newTitle, newCust) => {
+            if (newTitle) setTitulo(newTitle);
+            if (newCust) setCustomerId(newCust);
+            setIsHeaderModalOpen(false);
+          }}
+          initialData={{ id, titulo, customerId }}
+        />
       )}
     </div>
   );

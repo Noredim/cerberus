@@ -20,6 +20,7 @@ def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
 class ProductType(str, Enum):
     EQUIPAMENTO = "EQUIPAMENTO"
     SERVICO = "SERVICO"
+    LICENCA = "LICENCA"
 
 class ProductFinalidade(str, Enum):
     REVENDA = "REVENDA"

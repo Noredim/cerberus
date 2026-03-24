@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Users, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Users, Trash2, Edit2, MoreVertical } from 'lucide-react';
 import { professionalApi } from '../../services/professionalApi';
 import type { Professional } from '../../services/professionalApi';
 import ProfessionalsForm from './ProfessionalsForm';
@@ -13,6 +13,7 @@ const ProfessionalsDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
+    const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -57,7 +58,7 @@ const ProfessionalsDashboard: React.FC = () => {
     };
 
     return (
-        <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 relative min-h-[calc(100vh-4rem)]">
+        <div className="p-6 md:p-8 w-full space-y-8 relative min-h-[calc(100vh-4rem)]">
             {/* Header Area */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="space-y-1">
@@ -80,74 +81,90 @@ const ProfessionalsDashboard: React.FC = () => {
             </div>
 
             {/* Grid */}
-            {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-48 bg-bg-surface rounded-xl border border-border-subtle" />
-                    ))}
-                </div>
-            ) : professionals.length === 0 ? (
-                <div className="text-center py-12 bg-bg-surface rounded-xl border border-border-subtle">
-                    <p className="text-text-muted">Nenhum profissional cadastrado.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {professionals.map(prof => (
-                        <div 
-                            key={prof.id}
-                            className="group relative bg-bg-surface rounded-xl border border-border-subtle p-6 hover:border-brand-primary/30 transition-all hover:shadow-lg flex flex-col h-full"
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 className="text-lg font-bold text-text-primary capitalize truncate pr-4">
-                                        {prof.name}
-                                    </h3>
-                                    <p className="text-sm font-medium text-text-muted mt-1">
-                                        {formatCpf(prof.cpf)}
-                                    </p>
-                                </div>
-                            </div>
+            <div className="bg-surface rounded-lg border border-border-subtle shadow-sm flex flex-col">
+                <div className="w-full overflow-visible">
+                    <table className="w-full text-left">
+                        <thead className="bg-[#f8f9fa] dark:bg-bg-deep">
+                            <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                                <th className="px-6 py-3 font-semibold">Profissional</th>
+                                <th className="px-6 py-3 font-semibold">CPF</th>
+                                <th className="px-6 py-3 font-semibold">Cargo Atribuído</th>
+                                <th className="px-6 py-3 font-semibold">Usuário do Sistema</th>
+                                <th className="px-6 py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-subtle bg-surface">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-10 text-center text-text-muted animate-pulse">
+                                        Carregando profissionais...
+                                    </td>
+                                </tr>
+                            ) : professionals.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-10 text-center text-text-muted">
+                                        Nenhum profissional cadastrado.
+                                    </td>
+                                </tr>
+                            ) : (
+                                professionals.map(prof => (
+                                    <tr key={prof.id} className="group hover:bg-bg-deep transition-colors">
+                                        <td className="px-6 py-4">
+                                            <span className="font-bold text-text-primary capitalize">{prof.name}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-text-muted">
+                                            {formatCpf(prof.cpf)}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm font-semibold text-text-primary">
+                                            {prof.role?.name || <span className="text-text-muted font-normal italic">Cargo não localizado</span>}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-text-primary">
+                                            {prof.user ? prof.user.name : <span className="text-text-muted italic">Sem usuário vinculado</span>}
+                                        </td>
+                                        <td className="px-6 py-4 text-right relative">
+                                            <button
+                                                onClick={() => setOpenDropdown(openDropdown === prof.id ? null : prof.id)}
+                                                className="p-2 rounded-md hover:bg-bg-deep text-text-muted hover:text-text-primary transition-all cursor-pointer"
+                                                title="Ações"
+                                            >
+                                                <MoreVertical className="w-4 h-4" />
+                                            </button>
 
-                            <div className="space-y-4 flex-1">
-                                <div className="bg-bg-deep p-3 rounded-lg border border-border-subtle">
-                                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">
-                                        Cargo Atribuído
-                                    </p>
-                                    <p className="text-sm font-bold text-text-primary truncate">
-                                        {prof.role?.name || 'Cargo não localizado'}
-                                    </p>
-                                </div>
-
-                                <div className="bg-bg-deep p-3 rounded-lg border border-border-subtle">
-                                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-1">
-                                        Usuário do Sistema
-                                    </p>
-                                    <p className="text-sm font-bold text-text-primary truncate">
-                                        {prof.user ? prof.user.name : <span className="text-text-muted italic">Sem usuário vinculado</span>}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="pt-5 mt-5 border-t border-border-subtle flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                <button
-                                    onClick={() => handleEdit(prof)}
-                                    className="p-2 text-text-muted hover:text-brand-primary bg-bg-deep hover:bg-brand-primary/10 rounded-md transition-colors"
-                                    title="Editar"
-                                >
-                                    <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(prof.id, prof.name)}
-                                    className="p-2 text-text-muted hover:text-brand-danger bg-bg-deep hover:bg-brand-danger/10 rounded-md transition-colors"
-                                    title="Excluir"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                                            {openDropdown === prof.id && (
+                                                <>
+                                                    <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                                                    <div className="absolute right-8 top-10 mt-2 w-48 bg-surface rounded-md shadow-lg z-20 border border-border-subtle overflow-hidden">
+                                                        <div className="py-1 flex flex-col">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setOpenDropdown(null);
+                                                                    handleEdit(prof);
+                                                                }}
+                                                                className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
+                                                            >
+                                                                <Edit2 className="w-4 h-4" /> Editar Profissional
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setOpenDropdown(null);
+                                                                    handleDelete(prof.id, prof.name);
+                                                                }}
+                                                                className="flex items-center gap-2 px-4 py-2 text-sm text-brand-danger hover:bg-brand-danger/10 transition-colors w-full text-left"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" /> Excluir
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            )}
+            </div>
 
             {/* Side Drawer */}
             {isDrawerOpen && (

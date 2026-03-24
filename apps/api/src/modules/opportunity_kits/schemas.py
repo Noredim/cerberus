@@ -62,11 +62,22 @@ class OpportunityKitBase(BaseModel):
     manutencao_inclusa: bool = Field(default=False)
     fator_manutencao: Optional[Decimal] = None
     
+    fator_margem_instalacao: Decimal = Field(default=Decimal(1.0))
+    fator_margem_manutencao: Decimal = Field(default=Decimal(1.0))
+    fator_margem_servicos_produtos: Decimal = Field(default=Decimal(1.0))
+    havera_manutencao: bool = Field(default=False)
+    qtd_meses_manutencao: Optional[int] = None
+    
     aliq_pis: Decimal = Field(default=Decimal(0.0))
     aliq_cofins: Decimal = Field(default=Decimal(0.0))
     aliq_csll: Decimal = Field(default=Decimal(0.0))
     aliq_irpj: Decimal = Field(default=Decimal(0.0))
     aliq_iss: Decimal = Field(default=Decimal(0.0))
+    aliq_icms: Decimal = Field(default=Decimal(0.0))
+    
+    perc_frete_venda: Decimal = Field(default=Decimal(0.0))
+    perc_despesas_adm: Decimal = Field(default=Decimal(0.0))
+    perc_comissao: Decimal = Field(default=Decimal(0.0))
     
     custo_manut_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_suporte_mensal_kit: Decimal = Field(default=Decimal(0.0))
@@ -99,11 +110,22 @@ class OpportunityKitUpdate(BaseModel):
     manutencao_inclusa: Optional[bool] = None
     fator_manutencao: Optional[Decimal] = None
     
+    fator_margem_instalacao: Optional[Decimal] = None
+    fator_margem_manutencao: Optional[Decimal] = None
+    fator_margem_servicos_produtos: Optional[Decimal] = None
+    havera_manutencao: Optional[bool] = None
+    qtd_meses_manutencao: Optional[int] = None
+    
     aliq_pis: Optional[Decimal] = None
     aliq_cofins: Optional[Decimal] = None
     aliq_csll: Optional[Decimal] = None
     aliq_irpj: Optional[Decimal] = None
     aliq_iss: Optional[Decimal] = None
+    aliq_icms: Optional[Decimal] = None
+    
+    perc_frete_venda: Optional[Decimal] = None
+    perc_despesas_adm: Optional[Decimal] = None
+    perc_comissao: Optional[Decimal] = None
     
     custo_manut_mensal_kit: Optional[Decimal] = None
     custo_suporte_mensal_kit: Optional[Decimal] = None
@@ -142,6 +164,11 @@ class OpportunityKitItemFinancialSummary(BaseModel):
     product_id: UUID
     custo_base_unitario_item: Decimal
     custo_total_item_no_kit: Decimal
+    difal_unitario: Decimal = Field(default=Decimal(0))
+    difal_total_item: Decimal = Field(default=Decimal(0))
+    venda_unitario_item: Decimal = Field(default=Decimal(0))
+    venda_total_item: Decimal = Field(default=Decimal(0))
+    imposto_venda_item: Decimal = Field(default=Decimal(0))
 
 class OpportunityKitResponse(OpportunityKitBase):
     id: UUID

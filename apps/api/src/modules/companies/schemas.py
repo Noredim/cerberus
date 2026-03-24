@@ -127,6 +127,9 @@ class CompanyCreate(BaseModel):
     municipality_id: str
     state_id: str
     
+    nomenclatura_orcamento: str = Field("OV", max_length=20)
+    numero_proposta: int = 1
+    
     # Nested relations during creation
     cnaes: List[CompanyCnaeBase]
     initial_tax_profile: CompanyTaxProfileBase
@@ -164,6 +167,9 @@ class CompanyUpdate(BaseModel):
     cep: Optional[str] = None
     municipality_id: Optional[str] = None
     state_id: Optional[str] = None
+    
+    nomenclatura_orcamento: Optional[str] = Field(None, max_length=20)
+    numero_proposta: Optional[int] = None
     
     cnaes: Optional[List[CompanyCnaeBase]] = None
     initial_tax_profile: Optional[CompanyTaxProfileBase] = None
@@ -204,6 +210,8 @@ class CompanyOut(BaseModel):
     municipality_id: str
     state_id: str
     logo_url: Optional[str] = None
+    nomenclatura_orcamento: str
+    numero_proposta: int
     
     # We optionally include lists inside Company payload
     # It depends on how much hydration is needed.

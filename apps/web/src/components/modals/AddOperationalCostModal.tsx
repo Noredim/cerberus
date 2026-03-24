@@ -7,9 +7,10 @@ interface AddOperationalCostModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (data: { product: any; quantidade: number; tipo_custo: string; valor_unitario: number }) => void;
+  defaultType?: string;
 }
 
-export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOperationalCostModalProps) {
+export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultType }: AddOperationalCostModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -18,14 +19,15 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOpera
 
   // Form states
   const [quantidade, setQuantidade] = useState(1);
-  const [tipoCusto, setTipoCusto] = useState('Manut. pred./corretiva');
+  const [tipoCusto, setTipoCusto] = useState('MANUTENCAO');
   const [valorUnitario, setValorUnitario] = useState(0);
 
   const COST_TYPES = [
-    'Seguro apólice',
-    'Logística/veículos',
-    'Loc. software',
-    'Manut. pred./corretiva'
+    { value: 'Seguro apólice', label: 'Seguro apólice' },
+    { value: 'Logística/veículos', label: 'Logística/veículos' },
+    { value: 'Loc. software', label: 'Loc. software' },
+    { value: 'MANUTENCAO', label: 'Manut. pred./corretiva' },
+    { value: 'INSTALACAO', label: 'Instalação' }
   ];
 
   useEffect(() => {
@@ -33,17 +35,26 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOpera
       setSearchTerm('');
       setResults([]);
       setSelectedProduct(null);
+      if (defaultType) {
+        setTipoCusto(defaultType);
+      } else {
+        setTipoCusto('MANUTENCAO');
+      }
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultType]);
 
   useEffect(() => {
     if (selectedProduct) {
       setQuantidade(1);
       setValorUnitario(selectedProduct.vlr_referencia_uso_consumo || selectedProduct.vlr_referencia_revenda || 0);
-      setTipoCusto('Manut. pred./corretiva');
+      // Mantém o tipoCusto atual (se foi pre-setado pelo defaultType) 
+      // ao invés de forçar 'Manut. pred./corretiva' se defaultType existe.
+      if (!defaultType) {
+        setTipoCusto('MANUTENCAO');
+      }
     }
-  }, [selectedProduct]);
+  }, [selectedProduct, defaultType]);
 
   useEffect(() => {
     if (selectedProduct) return;
@@ -56,8 +67,9 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOpera
         setIsSearching(true);
         try {
           // Fetch only services
-          const res = await api.get('/cadastro/produtos', { params: { q: searchTerm, limit: 20, tipo: 'SERVICO' } });
-          setResults(res.data);
+          const res = await api.get('/cadastro/produtos', { params: { q: searchTerm, limit: 50 } });
+          const filtered = res.data.filter((p: any) => p.tipo === 'SERVICO' || p.tipo === 'LICENCA').slice(0, 20);
+          setResults(filtered);
         } catch (err) {
           console.error('Erro ao buscar produtos', err);
         } finally {
@@ -162,7 +174,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOpera
                 {searchTerm.length >= 2 && results.length === 0 && !isSearching && (
                   <div className="flex flex-col items-center justify-center py-10 text-center bg-white border border-dashed border-border-subtle rounded-lg">
                     <p className="text-text-primary font-medium mb-1">Nenhum serviço encontrado</p>
-                    <p className="text-text-muted text-sm mb-4">Apenas produtos do tipo SERVIÇO são listados.</p>
+                    <p className="text-text-muted text-sm mb-4">Apenas produtos do tipo SERVIÇO e LICENÇA são listados.</p>
                   </div>
                 )}
               </div>
@@ -192,7 +204,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm }: AddOpera
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 text-text-primary"
                 >
                   {COST_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                    <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
               </div>

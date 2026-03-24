@@ -87,7 +87,9 @@ const EmpresaForm: React.FC = () => {
             contribuinte_iss: true,
             regime_iss: 'FIXO',
             regime_icms: 'NAO_APLICA'
-        }
+        },
+        nomenclatura_orcamento: 'OV',
+        numero_proposta: 1
     });
 
     const [salesParameters, setSalesParameters] = useState<any>({
@@ -1180,6 +1182,36 @@ const EmpresaForm: React.FC = () => {
                                         className="space-y-6"
                                     >
                                         <div className="flex flex-col gap-2">
+                                            <h2 className="text-xl font-bold text-text-primary">Controle de Oportunidades</h2>
+                                            <p className="text-sm text-text-muted">Parâmetros de nomenclatura e numeração contínua para as propostas geradas.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Nomenclatura Orçamento</label>
+                                                <input
+                                                    type="text"
+                                                    maxLength={20}
+                                                    value={formData.nomenclatura_orcamento || ''}
+                                                    onChange={e => setFormData({ ...formData, nomenclatura_orcamento: e.target.value })}
+                                                    disabled={isReadOnly}
+                                                    className={getFieldClass('nomenclatura_orcamento')}
+                                                    placeholder="Ex: OV"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Número de Proposta (Próximo)</label>
+                                                <input
+                                                    type="number"
+                                                    value={formData.numero_proposta || 1}
+                                                    onChange={e => setFormData({ ...formData, numero_proposta: parseInt(e.target.value) || 1 })}
+                                                    disabled={isReadOnly}
+                                                    className={getFieldClass('numero_proposta')}
+                                                    placeholder="Ex: 1"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2 mt-8 pt-8 border-t border-border-subtle">
                                             <h2 className="text-xl font-bold text-text-primary">Parâmetros Mínimos de Margem e Tributos (%)</h2>
                                             <p className="text-sm text-text-muted">Estes campos servem como métricas ideais base no sistema de precificação desta empresa.</p>
                                         </div>
