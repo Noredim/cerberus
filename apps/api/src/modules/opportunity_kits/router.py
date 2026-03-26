@@ -55,6 +55,7 @@ def create_kit(
 
 
 @router.put("/{kit_id}", response_model=OpportunityKitResponse)
+@router.patch("/{kit_id}", response_model=OpportunityKitResponse)
 def update_kit(
     kit_id: UUID,
     data: OpportunityKitUpdate,

@@ -34,6 +34,14 @@ class SalesBudget(Base):
     perc_icms_interno = Column(Numeric(6, 4), nullable=False, default=0)
     perc_icms_externo = Column(Numeric(6, 4), nullable=False, default=0)
 
+    # Venda margin factors (markup)
+    venda_markup_produtos = Column(Numeric(10, 4), nullable=False, default=1.0)
+    venda_markup_servicos = Column(Numeric(10, 4), nullable=False, default=1.0)
+    venda_markup_instalacao = Column(Numeric(10, 4), nullable=False, default=1.0)
+    venda_markup_manutencao = Column(Numeric(10, 4), nullable=False, default=1.0)
+    venda_havera_manutencao = Column(Boolean, nullable=False, default=False)
+    venda_qtd_meses_manutencao = Column(Integer, nullable=False, default=0)
+
     # ── Rental/Comodato tab defaults ──
     prazo_contrato_meses = Column(Integer, nullable=False, default=36)
     prazo_instalacao_meses = Column(Integer, nullable=False, default=1)

@@ -64,20 +64,20 @@ class RentalBudgetItemCreate(RentalBudgetItemBase):
 
 class RentalBudgetItemOut(RentalBudgetItemBase):
     id: UUID
-    custo_total_aquisicao: Decimal = 0
-    custo_manut_mensal: Decimal = 0
-    custo_total_mensal: Decimal = 0
-    valor_venda_equipamento: Decimal = 0
-    parcela_locacao: Decimal = 0
-    manutencao_locacao: Decimal = 0
-    valor_mensal: Decimal = 0
-    perc_impostos_total: Decimal = 0
-    impostos_mensal: Decimal = 0
-    receita_liquida_mensal: Decimal = 0
-    perc_comissao: Decimal = 0
-    comissao_mensal: Decimal = 0
-    lucro_mensal: Decimal = 0
-    margem: Decimal = 0
+    custo_total_aquisicao: Decimal = Decimal('0.00')
+    custo_manut_mensal: Decimal = Decimal('0.00')
+    custo_total_mensal: Decimal = Decimal('0.00')
+    valor_venda_equipamento: Decimal = Decimal('0.00')
+    parcela_locacao: Decimal = Decimal('0.00')
+    manutencao_locacao: Decimal = Decimal('0.00')
+    valor_mensal: Decimal = Decimal('0.00')
+    perc_impostos_total: Decimal = Decimal('0.00')
+    impostos_mensal: Decimal = Decimal('0.00')
+    receita_liquida_mensal: Decimal = Decimal('0.00')
+    perc_comissao: Decimal = Decimal('0.00')
+    comissao_mensal: Decimal = Decimal('0.00')
+    lucro_mensal: Decimal = Decimal('0.00')
+    margem: Decimal = Decimal('0.00')
     product_nome: Optional[str] = None
     product_codigo: Optional[str] = None
 
@@ -114,19 +114,19 @@ class SalesBudgetItemCreate(SalesBudgetItemBase):
 
 class SalesBudgetItemOut(SalesBudgetItemBase):
     id: UUID
-    venda_unit: Decimal = 0
-    frete_venda_unit: Decimal = 0
-    pis_unit: Decimal = 0
-    cofins_unit: Decimal = 0
-    csll_unit: Decimal = 0
-    irpj_unit: Decimal = 0
-    icms_unit: Decimal = 0
-    iss_unit: Decimal = 0
-    despesa_adm_unit: Decimal = 0
-    comissao_unit: Decimal = 0
-    lucro_unit: Decimal = 0
-    margem_unit: Decimal = 0
-    total_venda: Decimal = 0
+    venda_unit: Decimal = Decimal('0.00')
+    frete_venda_unit: Decimal = Decimal('0.00')
+    pis_unit: Decimal = Decimal('0.00')
+    cofins_unit: Decimal = Decimal('0.00')
+    csll_unit: Decimal = Decimal('0.00')
+    irpj_unit: Decimal = Decimal('0.00')
+    icms_unit: Decimal = Decimal('0.00')
+    iss_unit: Decimal = Decimal('0.00')
+    despesa_adm_unit: Decimal = Decimal('0.00')
+    comissao_unit: Decimal = Decimal('0.00')
+    lucro_unit: Decimal = Decimal('0.00')
+    margem_unit: Decimal = Decimal('0.00')
+    total_venda: Decimal = Decimal('0.00')
     product_nome: Optional[str] = None
     product_codigo: Optional[str] = None
 
@@ -156,6 +156,14 @@ class SalesBudgetBase(BaseModel):
     perc_icms_interno: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_icms_externo: Decimal = Field(default=0, max_digits=6, decimal_places=4)
 
+    # Venda margin factors (markup)
+    venda_markup_produtos: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
+    venda_markup_servicos: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
+    venda_markup_instalacao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
+    venda_markup_manutencao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
+    venda_havera_manutencao: bool = False
+    venda_qtd_meses_manutencao: int = 0
+
     # Rental tab defaults
     prazo_contrato_meses: int = 36
     prazo_instalacao_meses: int = 1
@@ -184,6 +192,11 @@ class SalesBudgetUpdate(SalesBudgetBase):
     responsavel_ids: List[UUID] = []
     items: List[SalesBudgetItemCreate] = []
     rental_items: List[RentalBudgetItemCreate] = []
+
+
+class SalesBudgetHeaderUpdate(BaseModel):
+    titulo: Optional[str] = None
+    customer_id: Optional[str] = None
 
 
 class SalesBudgetStatusUpdate(BaseModel):

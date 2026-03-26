@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -15,6 +15,7 @@ import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportMo
 import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
+import { RentalROIAnalysis } from './components/RentalROIAnalysis';
 
 interface CostComposition {
   base_unitario: number;
@@ -101,6 +102,40 @@ interface SalesBudgetItem {
   margem_unit: number;
   total_venda: number;
   cost_composition?: CostComposition;
+}
+
+interface VendaKitItem {
+  id?: string;
+  opportunity_kit_id: string;
+  nome_kit: string;
+  quantidade: number;
+  
+  fator_margem_locacao: number;
+  fator_margem_servicos_produtos: number;
+  fator_margem_instalacao: number;
+  fator_margem_manutencao: number;
+  
+  custo_aquisicao_equip_unit: number;
+  custo_manutencao_unit: number;
+  
+  venda_equip_unit: number;
+  venda_manut_unit: number;
+  
+  faturamento_total: number;
+  
+  lucro_venda: number;
+  margem_venda: number;
+  
+  lucro_manutencao: number;
+  margem_manutencao: number;
+  
+  lucro_final: number;
+  margem_geral: number;
+  
+  summary?: any;
+  kit_raw?: any;
+  havera_manutencao?: boolean;
+  qtd_meses_manutencao?: number | null;
 }
 
 interface RentalBudgetItem {
@@ -413,9 +448,25 @@ export function SalesBudgetForm() {
   const [percIss, setPercIss] = useState(0);
   const [percIcmsInterno, setPercIcmsInterno] = useState(0);
   const [percIcmsExterno, setPercIcmsExterno] = useState(0);
+  // Venda tab — 4 separate fator margem fields
+  const [fatorMargemProdutos, setFatorMargemProdutos] = useState(1.35);
+  const [fatorMargemServicos, setFatorMargemServicos] = useState(1.35);
+  const [fatorMargemInstalacao, setFatorMargemInstalacao] = useState(1.35);
+  const [fatorMargemManutencao, setFatorMargemManutencao] = useState(1.35);
+  const [vendaHaveraManutencao, setVendaHaveraManutencao] = useState(false);
+  const [vendaQtdMesesManutencao, setVendaQtdMesesManutencao] = useState(0);
+  // Controls the tax-detail info modal in Parâmetros Padrão (Venda)
+  const [showTaxModal, setShowTaxModal] = useState(false);
+  // Company _venda taxes — always reflects current company config, used only by the modal (read-only)
+  const [companyVendaTaxes, setCompanyVendaTaxes] = useState({ pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms_interno: 0, icms_externo: 0 });
+  // Company MKP for Venda — drives the 4 fatorMargem fields reactively (race-condition safe)
 
   // Items
   const [items, setItems] = useState<SalesBudgetItem[]>([]);
+
+  // Venda Kits State
+  const [vendaKits, setVendaKits] = useState<VendaKitItem[]>([]);
+  const [showApplyKitsModal, setShowApplyKitsModal] = useState(false);
 
   // Purchase Budget State
   const [purchaseBudgetId, setPurchaseBudgetId] = useState<string | null>(null);
@@ -450,8 +501,8 @@ export function SalesBudgetForm() {
   const [percIrpjRental, setPercIrpjRental] = useState(0);
   const [percIssRental, setPercIssRental] = useState(0);
   const [percComissaoDiretoria, setPercComissaoDiretoria] = useState(0);
-  const [taxaInvestimentoMensal, setTaxaInvestimentoMensal] = useState<number | ''>(1.10);
-  const [isComparativoExpanded, setIsComparativoExpanded] = useState(true);
+  const [isComparativoExpanded, setIsComparativoExpanded] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
   const [showAddRentalItemModal, setShowAddRentalItemModal] = useState(false);
   const [showKitSearchModal, setShowKitSearchModal] = useState(false);
@@ -513,6 +564,7 @@ export function SalesBudgetForm() {
     setRentalItems(prev => prev.map(item => calcRentalItem(item, rentalDefaults)));
   }, [rentalDefaults]);
 
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -535,28 +587,44 @@ export function SalesBudgetForm() {
     loadData();
   }, []);
 
-  // Load company sales parameters as defaults for new budgets
+  // Always load company _venda taxes for the modal display, regardless of isEditing
   useEffect(() => {
-    if (isEditing || !activeCompanyId) return;
-    const loadSalesParams = async () => {
-      try {
-        const { data } = await api.get(`/companies/${activeCompanyId}/sales-parameters`);
-        setMarkupPadrao(Number(data.mkp_padrao) || 1.35);
-        setPercDespesaAdm(Number(data.despesa_administrativa) || 0);
-        setPercComissao(Number(data.comissionamento) || 0);
-        setPercPis(Number(data.pis) || 0);
-        setPercCofins(Number(data.cofins) || 0);
-        setPercCsll(Number(data.csll) || 0);
-        setPercIrpj(Number(data.irpj) || 0);
-        setPercIss(Number(data.iss) || 0);
-        setPercIcmsInterno(Number(data.icms_interno) || 0);
-        setPercIcmsExterno(Number(data.icms_externo) || 0);
-      } catch (err) {
-        console.error('Failed to load company sales parameters:', err);
+    if (!activeCompanyId) return;
+    api.get(`/companies/${activeCompanyId}/sales-parameters`).then(({ data }) => {
+      const pick = (key: string) => Number(data[`${key}_venda`] || data[key] || 0);
+      const mkp = pick('mkp_padrao') || 1.35;
+
+      setCompanyVendaTaxes({
+        pis:          pick('pis'),
+        cofins:       pick('cofins'),
+        csll:         pick('csll'),
+        irpj:         pick('irpj'),
+        iss:          pick('iss'),
+        icms_interno: pick('icms_interno'),
+        icms_externo: pick('icms_externo'),
+      });
+
+      // For NEW budgets only: also pre-fill the other editable budget-level defaults
+      if (!isEditing) {
+        setFatorMargemProdutos(mkp);
+        setFatorMargemServicos(mkp);
+        setFatorMargemInstalacao(mkp);
+        setFatorMargemManutencao(mkp);
+        setMarkupPadrao(mkp);
+        setPercDespesaAdm(pick('despesa_administrativa'));
+        setPercComissao(pick('comissionamento'));
+        setPercPis(pick('pis'));
+        setPercCofins(pick('cofins'));
+        setPercCsll(pick('csll'));
+        setPercIrpj(pick('irpj'));
+        setPercIss(pick('iss'));
+        setPercIcmsInterno(pick('icms_interno'));
+        setPercIcmsExterno(pick('icms_externo'));
       }
-    };
-    loadSalesParams();
+    }).catch(err => console.error('Failed to load company sales parameters:', err));
   }, [activeCompanyId, isEditing]);
+
+
 
   useEffect(() => {
     if (!id) return;
@@ -571,7 +639,13 @@ export function SalesBudgetForm() {
       setStatus(d.status);
       setNumeroOrcamento(d.numero_orcamento || '');
       setResponsavelIds(d.responsavel_ids || []);
-      setMarkupPadrao(d.markup_padrao);
+      if (d.markup_padrao) setMarkupPadrao(d.markup_padrao);
+      if (d.venda_markup_produtos) setFatorMargemProdutos(d.venda_markup_produtos);
+      if (d.venda_markup_servicos) setFatorMargemServicos(d.venda_markup_servicos);
+      if (d.venda_markup_instalacao) setFatorMargemInstalacao(d.venda_markup_instalacao);
+      if (d.venda_markup_manutencao) setFatorMargemManutencao(d.venda_markup_manutencao);
+      setVendaHaveraManutencao(!!d.venda_havera_manutencao);
+      setVendaQtdMesesManutencao(d.venda_qtd_meses_manutencao || 0);
       setPercDespesaAdm(d.perc_despesa_adm);
       setPercComissao(d.perc_comissao);
       setPercFreteVenda(d.perc_frete_venda);
@@ -600,20 +674,66 @@ export function SalesBudgetForm() {
       setPercIssRental(Number(d.perc_iss_rental) || 0);
       setPercComissaoDiretoria(Number(d.perc_comissao_diretoria) || 0);
 
-      // Load sale items and re-fetch cost_composition
+      // Load sale items and separate kits from regular items
       const loadedItems: SalesBudgetItem[] = d.items || [];
-      const enriched = await Promise.all(
-        loadedItems.map(async (item: SalesBudgetItem) => {
-          if (item.product_id) {
-            try {
-              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}`);
-              return { ...item, cost_composition: cc };
-            } catch { /* fallback: no composition */ }
+      const vKits: VendaKitItem[] = [];
+      const regularItems: SalesBudgetItem[] = [];
+
+      for (const item of loadedItems) {
+        if (item.opportunity_kit_id) {
+          try {
+            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true`);
+            const q = item.quantidade || kit.quantidade_kits || 1;
+            vKits.push({
+              opportunity_kit_id: item.opportunity_kit_id,
+              nome_kit: kit.nome_kit || 'Kit Venda',
+              quantidade: q,
+              fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+              fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+              fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+              fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+              
+              custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+              custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+              
+              venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+              venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+              
+              faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+              
+              lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+              margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+              
+              lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+              margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+              
+              lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
+              margem_geral: Number(kit.summary?.margem_kit || 0),
+              
+              havera_manutencao: kit.havera_manutencao,
+              qtd_meses_manutencao: kit.qtd_meses_manutencao,
+              summary: kit.summary,
+              kit_raw: kit
+            });
+          } catch (err) {
+            console.error('Error loading kit in Venda:', err);
           }
-          return item;
-        })
-      );
-      setItems(enriched);
+        } else {
+          try {
+            if (item.product_id) {
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}`);
+              regularItems.push({ ...item, cost_composition: cc });
+            } else {
+              regularItems.push(item);
+            }
+          } catch {
+            regularItems.push(item);
+          }
+        }
+      }
+
+      setItems(regularItems);
+      setVendaKits(vKits);
 
       // Load rental items and re-fetch cost_composition (USO_CONSUMO)
       const loadedRental: RentalBudgetItem[] = d.rental_items || [];
@@ -678,7 +798,7 @@ export function SalesBudgetForm() {
       };
 
       setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
-      
+
       // Load Purchase Budget
       try {
         const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
@@ -690,7 +810,7 @@ export function SalesBudgetForm() {
           setPurchaseFreteTipo(pb.frete_tipo);
           setPurchaseFretePercent(pb.frete_percent);
           setPurchaseIpiCalculado(pb.ipi_calculado);
-          
+
           if (pb.items) {
             setPurchaseItems(pb.items.map((i: any) => ({
               product_id: i.product_id,
@@ -712,7 +832,7 @@ export function SalesBudgetForm() {
       } catch (err) {
         console.error('Failed to load purchase budget associated with sales budget', err);
       }
-      
+
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [id]);
@@ -896,49 +1016,40 @@ export function SalesBudgetForm() {
   const handleAddKitVenda = (kit: any) => {
     if (!kit) return;
     setHasUnsavedChanges(true);
-    setItems(prev => {
-      const q = Number(kit.quantidade_kits || 1);
-      const newItem: SalesBudgetItem = {
-        opportunity_kit_id: kit.id,
-        product_id: null,
-        product_nome: `Kit: ${kit.nome_kit || 'Personalizado'}`,
-        product_codigo: 'KIT-GLOBAL',
-        ncm_codigo: '',
-        tipo_item: 'MERCADORIA',
-        descricao_servico: `Kit de Venda: ${kit.nome_kit || ''}`,
-        usa_parametros_padrao: true,
-        custo_unit_base: Number(kit.summary?.custo_aquisicao_total || 0),
-        markup: markupPadrao || 1,
-        venda_unit: Number(kit.summary?.valor_mensal_kit || 0),
-        quantidade: q,
-        perc_frete_venda: Number(kit.perc_frete_venda || percFreteVenda || 0),
-        frete_venda_unit: 0,
-        perc_pis: Number(kit.aliq_pis || percPis || 0), pis_unit: 0,
-        perc_cofins: Number(kit.aliq_cofins || percCofins || 0), cofins_unit: 0,
-        perc_csll: Number(kit.aliq_csll || percCsll || 0), csll_unit: 0,
-        perc_irpj: Number(kit.aliq_irpj || percIrpj || 0), irpj_unit: 0,
-        perc_icms: Number(kit.aliq_icms || percIcmsInterno || 0), icms_unit: 0,
-        tem_st: false,
-        perc_iss: Number(kit.aliq_iss || 0), iss_unit: 0,
-        perc_despesa_adm: Number(kit.perc_despesas_adm || percDespesaAdm || 0), despesa_adm_unit: 0,
-        perc_comissao: Number(kit.perc_comissao || percComissao || 0), comissao_unit: 0,
-        lucro_unit: 0,
-        margem_unit: 0,
-        total_venda: 0
-      };
-      return [...prev, calcItem(newItem, {
-        markup_padrao: markupPadrao,
-        perc_despesa_adm: percDespesaAdm,
-        perc_comissao: percComissao,
-        perc_frete_venda: percFreteVenda,
-        perc_pis: percPis,
-        perc_cofins: percCofins,
-        perc_csll: percCsll,
-        perc_irpj: percIrpj,
-        perc_iss: percIss,
-        perc_icms_interno: percIcmsInterno
-      })];
-    });
+    const q = Number(kit.quantidade_kits || 1);
+    const newKit: VendaKitItem = {
+      opportunity_kit_id: kit.id,
+      nome_kit: kit.nome_kit || 'Kit Venda',
+      quantidade: q,
+      fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+      fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+      fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+      fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+      
+      custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+      custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+      
+      venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+      venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+      
+      faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+      
+      lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+      margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+      
+      lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+      margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+      
+      lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
+      margem_geral: Number(kit.summary?.margem_kit || 0),
+      
+      summary: kit.summary,
+      kit_raw: kit,
+      havera_manutencao: !!kit.havera_manutencao,
+      qtd_meses_manutencao: kit.qtd_meses_manutencao ?? null
+    };
+    setVendaKits(prev => [...prev, newKit]);
+    setShowKitSearchVenda(false);
   };
 
   const updateRentalItem = (idx: number, field: string, value: any) => {
@@ -948,6 +1059,148 @@ export function SalesBudgetForm() {
       updated[idx] = calcRentalItem(item, rentalDefaults);
       return updated;
     });
+  };
+
+  const updateVendaKit = (idx: number, field: keyof VendaKitItem, value: any) => {
+    setVendaKits(prev => {
+      const updated = [...prev];
+      const item = { ...updated[idx], [field]: value };
+      
+      // Not storing pre-multiplied totals in state anymore to ensure React reactivity safely
+      // Only the unit is stored, the grid component handles Qtd calculations.
+      
+      updated[idx] = item;
+      return updated;
+    });
+  };
+
+  const removeVendaKit = (idx: number) => {
+    setHasUnsavedChanges(true);
+    setVendaKits(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleApplyKitsParams = (e?: any) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (vendaKits.length === 0) return;
+    setShowApplyKitsModal(true);
+  };
+
+  const proceedApplyKits = async () => {
+    setSaving(true);
+    setShowApplyKitsModal(false);
+    console.log('Applying params to kits...', vendaKits.length);
+    try {
+      const updatedKits = [...vendaKits];
+      for (let i = 0; i < updatedKits.length; i++) {
+        const vk = updatedKits[i];
+        const isGlobal = !vk.kit_raw?.sales_budget_id;
+        
+        const payload = {
+          fator_margem_locacao: fatorMargemProdutos,
+          fator_margem_servicos_produtos: fatorMargemServicos,
+          fator_margem_instalacao: fatorMargemInstalacao,
+          fator_margem_manutencao: fatorMargemManutencao,
+          aliq_pis: percPis,
+          aliq_cofins: percCofins,
+          aliq_csll: percCsll,
+          aliq_irpj: percIrpj,
+          aliq_iss: percIss,
+          aliq_icms: percIcmsInterno,
+          perc_frete_venda: percFreteVenda,
+          perc_despesas_adm: percDespesaAdm,
+          perc_comissao: percComissao,
+          havera_manutencao: vendaHaveraManutencao,
+          qtd_meses_manutencao: vendaQtdMesesManutencao,
+          sales_budget_id: id // Ensure link to current budget
+        };
+        
+        let finalKitId = vk.opportunity_kit_id;
+        let finalKitData = null;
+
+        if (isGlobal) {
+          console.log(`Cloning global kit ${vk.opportunity_kit_id} for budget ${id}`);
+          const raw = vk.kit_raw || {};
+          
+          const itemsPayload = (raw.items || []).map((item: any) => ({
+            product_id: item.product_id || item.produto?.id,
+            descricao_item: item.descricao_item,
+            quantidade_no_kit: Number(item.quantidade_no_kit || 1)
+          }));
+          
+          const costsPayload = (raw.costs || []).map((c: any) => ({
+            product_id: c.product_id || c.produto?.id,
+            tipo_custo: c.tipo_custo,
+            quantidade: Number(c.quantidade || 1),
+            valor_unitario: Number(c.valor_unitario || 0)
+          }));
+
+          const clonePayload = {
+            nome_kit: raw.nome_kit || vk.nome_kit || 'Kit Personalizado',
+            descricao_kit: raw.descricao_kit || null,
+            quantidade_kits: raw.quantidade_kits || 1,
+            tipo_contrato: raw.tipo_contrato || 'VENDA_EQUIPAMENTOS',
+            prazo_contrato_meses: raw.prazo_contrato_meses || 36,
+            prazo_instalacao_meses: raw.prazo_instalacao_meses || 0,
+            instalacao_inclusa: !!raw.instalacao_inclusa,
+            manutencao_inclusa: !!raw.manutencao_inclusa,
+            ...payload,
+            items: itemsPayload,
+            costs: costsPayload
+          };
+          const { data } = await api.post(`/opportunity-kits/company/${activeCompanyId}`, clonePayload);
+          finalKitId = data.id;
+          finalKitData = data;
+        } else {
+          console.log(`Updating budget kit ${vk.opportunity_kit_id}`);
+          await api.patch(`/opportunity-kits/${vk.opportunity_kit_id}`, payload);
+          const { data } = await api.get(`/opportunity-kits/${vk.opportunity_kit_id}?include_financials=true`);
+          finalKitId = data.id;
+          finalKitData = data;
+        }
+        
+        updatedKits[i] = {
+          ...vk,
+          opportunity_kit_id: finalKitId,
+          fator_margem_locacao: Number(finalKitData.fator_margem_locacao || 1),
+          fator_margem_servicos_produtos: Number(finalKitData.fator_margem_servicos_produtos || 1),
+          fator_margem_instalacao: Number(finalKitData.fator_margem_instalacao || 1),
+          fator_margem_manutencao: Number(finalKitData.fator_margem_manutencao || 1),
+          
+          custo_aquisicao_equip_unit: Number(finalKitData.summary?.custo_aquisicao_total || 0) + Number(finalKitData.summary?.vlr_instal_calc || 0),
+          custo_manutencao_unit: Number(finalKitData.summary?.vlt_manut || 0),
+          
+          venda_equip_unit: Number(finalKitData.summary?.venda_equipamentos_total ?? finalKitData.summary?.valor_mensal_kit ?? 0),
+          venda_manut_unit: Number(finalKitData.summary?.venda_manutencao_total ?? 0),
+          
+          faturamento_total: Number(finalKitData.summary?.faturamento_total_venda ?? (Number(finalKitData.summary?.venda_equipamentos_total || 0) + Number(finalKitData.summary?.venda_manutencao_total || 0))),
+          
+          lucro_venda: Number(finalKitData.summary?.lucro_equipamentos || 0),
+          margem_venda: Number(finalKitData.summary?.margem_equipamentos || 0),
+          
+          lucro_manutencao: Number(finalKitData.summary?.lucro_manutencao || 0),
+          margem_manutencao: Number(finalKitData.summary?.margem_manutencao || 0),
+          
+          lucro_final: Number(finalKitData.summary?.lucro_mensal_kit || 0),
+          margem_geral: Number(finalKitData.summary?.margem_kit || 0),
+          
+          summary: finalKitData.summary,
+          kit_raw: finalKitData,
+          havera_manutencao: !!finalKitData.havera_manutencao,
+          qtd_meses_manutencao: finalKitData.qtd_meses_manutencao ?? null
+        };
+      }
+      setVendaKits(updatedKits);
+      setHasUnsavedChanges(true);
+      alert('Parâmetros aplicados aos kits com sucesso!');
+    } catch (err) {
+      console.error('Failed to apply kit params:', err);
+      alert('Erro ao aplicar parâmetros aos kits.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const removeRentalItem = (idx: number) => {
@@ -1038,8 +1291,37 @@ export function SalesBudgetForm() {
       t.total_icms += i.icms_unit * q;
       t.total_iss += i.iss_unit * q;
     });
+
+    // Add Venda Kits to totals
+    vendaKits.forEach(vk => {
+      const q = vk.quantidade;
+      const s = vk.summary;
+      if (!s) {
+        // Fallback to local properties if summary is missing (though it shouldn't be)
+        t.custo += (vk.custo_aquisicao_equip_unit + vk.custo_manutencao_unit) * q;
+        t.venda += vk.faturamento_total * q;
+        t.lucro += vk.lucro_final * q;
+        return;
+      }
+      
+      t.custo += (s.custo_equip_total_calc + s.custo_manut_total_calc) * q;
+      t.venda += (s.faturamento_total_venda ?? (s.venda_equipamentos_total + s.venda_manutencao_total)) * q;
+      t.frete += (s.vlt_frete_venda || 0) * q;
+      t.impostos += (s.vlt_pis + s.vlt_cofins + s.vlt_csll + s.vlt_irpj + s.vlt_icms + s.vlt_iss) * q;
+      t.despAdm += (s.vlt_despesas_adm || 0) * q;
+      t.comissao += (s.vlt_comissao || 0) * q;
+      t.lucro += s.lucro_mensal_kit * q;
+      
+      t.total_pis += s.vlt_pis * q;
+      t.total_cofins += s.vlt_cofins * q;
+      t.total_csll += s.vlt_csll * q;
+      t.total_irpj += s.vlt_irpj * q;
+      t.total_icms += s.vlt_icms * q;
+      t.total_iss += (s.vlt_iss || 0) * q;
+    });
+
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
-  }, [items]);
+  }, [items, vendaKits]);
 
   // Rental totals
   const rentalTotals = useMemo(() => {
@@ -1213,6 +1495,12 @@ export function SalesBudgetForm() {
         perc_iss: +percIss,
         perc_icms_interno: +percIcmsInterno,
         perc_icms_externo: +percIcmsExterno,
+        venda_markup_produtos: +fatorMargemProdutos,
+        venda_markup_servicos: +fatorMargemServicos,
+        venda_markup_instalacao: +fatorMargemInstalacao,
+        venda_markup_manutencao: +fatorMargemManutencao,
+        venda_havera_manutencao: vendaHaveraManutencao,
+        venda_qtd_meses_manutencao: +vendaQtdMesesManutencao,
         // Rental defaults
         tipo_receita_rental: tipoReceitaRental,
         prazo_contrato_meses: +prazoContratoMeses,
@@ -1230,25 +1518,48 @@ export function SalesBudgetForm() {
         perc_iss_rental: +percIssRental,
         perc_comissao_diretoria: +percComissaoDiretoria,
         responsavel_ids: responsavelIds,
-        items: items.map(i => ({
-          product_id: i.product_id || null,
-          tipo_item: i.tipo_item,
-          descricao_servico: i.descricao_servico || null,
-          usa_parametros_padrao: i.usa_parametros_padrao,
-          custo_unit_base: +i.custo_unit_base,
-          markup: +i.markup,
-          quantidade: +i.quantidade,
-          perc_frete_venda: +i.perc_frete_venda,
-          perc_pis: +i.perc_pis,
-          perc_cofins: +i.perc_cofins,
-          perc_csll: +i.perc_csll,
-          perc_irpj: +i.perc_irpj,
-          perc_icms: +i.perc_icms,
-          perc_iss: +i.perc_iss,
-          perc_despesa_adm: +i.perc_despesa_adm,
-          perc_comissao: +i.perc_comissao,
-          tem_st: i.tem_st,
-        })),
+        items: [
+          ...items.map(i => ({
+            product_id: i.product_id || null,
+            tipo_item: i.tipo_item,
+            descricao_servico: i.descricao_servico || null,
+            usa_parametros_padrao: i.usa_parametros_padrao,
+            custo_unit_base: +i.custo_unit_base,
+            markup: +i.markup,
+            quantidade: +i.quantidade,
+            perc_frete_venda: +i.perc_frete_venda,
+            perc_pis: +i.perc_pis,
+            perc_cofins: +i.perc_cofins,
+            perc_csll: +i.perc_csll,
+            perc_irpj: +i.perc_irpj,
+            perc_icms: +i.perc_icms,
+            perc_iss: +i.perc_iss,
+            perc_despesa_adm: +i.perc_despesa_adm,
+            perc_comissao: +i.perc_comissao,
+            tem_st: i.tem_st,
+          })),
+          ...vendaKits.map(vk => ({
+            opportunity_kit_id: vk.opportunity_kit_id,
+            product_id: null,
+            tipo_item: 'MERCADORIA', // Default for kits in Venda
+            descricao_servico: vk.nome_kit,
+            usa_parametros_padrao: false,
+            custo_unit_base: +(vk.custo_aquisicao_equip_unit + vk.custo_manutencao_unit),
+            markup: 1, // Pricing is internal to kit
+            quantidade: +vk.quantidade,
+            // Perc values are derived from kit summary but these fields are optional/ignored for kits by the engine
+            perc_frete_venda: 0,
+            perc_pis: 0,
+            perc_cofins: 0,
+            perc_csll: 0,
+            perc_irpj: 0,
+            perc_icms: 0,
+            perc_iss: 0,
+            perc_despesa_adm: 0,
+            perc_comissao: 0,
+            tem_st: false,
+          }))
+        ],
         rental_items: (overriddenRentalItems || rentalItems).map(i => ({
           product_id: i.product_id || null,
           opportunity_kit_id: i.opportunity_kit_id || null,
@@ -1323,7 +1634,7 @@ export function SalesBudgetForm() {
             const pbRes = await api.post('/purchase-budgets', pbPayload);
             setPurchaseBudgetId(pbRes.data.id);
           }
-        } catch(err) {
+        } catch (err) {
           console.error('Failed to save purchase budget', err);
           alert('Erro ao salvar aba de orçamento de compra.');
         }
@@ -1375,13 +1686,23 @@ export function SalesBudgetForm() {
               <Receipt className="w-5 h-5 text-brand-primary" />
               {isEditing ? `Oportunidade ${numeroOrcamento}` : 'Nova Oportunidade'}
             </h1>
-            {isEditing && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${status === 'RASCUNHO' ? 'bg-amber-100 text-amber-800' : status === 'APROVADO' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
-                  {status === 'RASCUNHO' ? 'Rascunho' : status === 'APROVADO' ? 'Aprovado' : 'Arquivado'}
-                </span>
-              </div>
-            )}
+            {isEditing && (() => {
+              const clienteName = customers.find(c => c.id === customerId);
+              const clienteLabel = clienteName ? (clienteName.nome_fantasia || clienteName.razao_social) : null;
+              return (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${status === 'RASCUNHO' ? 'bg-amber-100 text-amber-800' : status === 'APROVADO' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+                    {status === 'RASCUNHO' ? 'Rascunho' : status === 'APROVADO' ? 'Aprovado' : 'Arquivado'}
+                  </span>
+                  {clienteLabel && (
+                    <span className="flex items-center gap-1 text-xs text-text-muted">
+                      <Building2 className="w-3 h-3" />
+                      {clienteLabel}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1405,53 +1726,70 @@ export function SalesBudgetForm() {
       </div>
 
       {/* Header */}
-      <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h2 className="font-semibold text-text-primary text-lg">Cabeçalho</h2>
-          {!isReadonly && id && (
-            <Button variant="outline" size="sm" onClick={() => setIsHeaderModalOpen(true)}>
-              Editar dados da proposta
-            </Button>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-text-muted mb-1">Título *</label>
-            <input value={titulo} onChange={() => {}} disabled={true}
-              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-text-muted mb-1">Cliente *</label>
-            <select value={customerId} onChange={() => {}} disabled={true}
-              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60">
-              <option value="">Selecionar...</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-muted mb-1">Data</label>
-            <input type="date" value={dataOrcamento} onChange={e => setDataOrcamento(e.target.value)} disabled={isReadonly}
-              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+      <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden">
+        {/* Header toggle bar */}
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-5 cursor-pointer select-none hover:bg-white/[0.02] transition-colors"
+          onClick={() => setIsHeaderCollapsed(prev => !prev)}
+        >
+          <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+            Cabeçalho
+            {isHeaderCollapsed
+              ? <ChevronDown className="w-4 h-4 text-text-muted" />
+              : <ChevronUp className="w-4 h-4 text-text-muted" />}
+          </h2>
+          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            {!isReadonly && id && (
+              <Button variant="outline" size="sm" onClick={() => setIsHeaderModalOpen(true)}>
+                Editar dados da proposta
+              </Button>
+            )}
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <div>
-            <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
-            <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
-              <option value="">Nenhum associado</option>
-              {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+
+        {/* Collapsible body */}
+        {!isHeaderCollapsed && (
+          <div className="px-5 pb-5 space-y-4 border-t border-border-subtle">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-text-muted mb-1">Título *</label>
+                <input value={titulo} onChange={() => { }} disabled={true}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-text-muted mb-1">Cliente *</label>
+                <select value={customerId} onChange={() => { }} disabled={true}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60">
+                  <option value="">Selecionar...</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Data</label>
+                <input type="date" value={dataOrcamento} onChange={e => setDataOrcamento(e.target.value)} disabled={isReadonly}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
+                <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
+                  <option value="">Nenhum associado</option>
+                  {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Responsável</label>
+                <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-muted mb-1">Observações</label>
+              <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadonly} rows={2}
+                className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-text-muted mb-1">Responsável</label>
-            <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text-muted mb-1">Observações</label>
-          <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadonly} rows={2}
-            className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
-        </div>
+        )}
       </div>
 
       {/* Tab Bar */}
@@ -1656,32 +1994,126 @@ export function SalesBudgetForm() {
 
         {/* Pricing Defaults */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-          <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-brand-primary" />
-            Parâmetros Padrão
-          </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-brand-primary" />
+                Parâmetros Padrão
+              </h2>
+              <div className="flex items-center gap-2">
+                {vendaKits.length > 0 && (
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleApplyKitsParams}
+                    disabled={isReadonly || saving}
+                    className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
+                    Aplicar aos Kits
+                  </Button>
+                )}
+                {/* Info button — opens read-only tax breakdown modal */}
+                <button
+                  type="button"
+                  onClick={() => setShowTaxModal(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-lg px-3 py-1.5 hover:bg-brand-primary/20 transition-all h-8"
+                >
+                  <Info className="w-4 h-4" /> Impostos Incidentes
+                </button>
+              </div>
+            </div>
+
+          {/* Row 1 — Fator Margem (4 fields) + Maintenance */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
-              { label: 'Markup', val: markupPadrao, set: setMarkupPadrao, step: '0.01' },
-              { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
-              { label: 'Comissão %', val: percComissao, set: setPercComissao },
-              { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
-              { label: 'PIS %', val: percPis, set: setPercPis },
-              { label: 'COFINS %', val: percCofins, set: setPercCofins },
-              { label: 'CSLL %', val: percCsll, set: setPercCsll },
-              { label: 'IRPJ %', val: percIrpj, set: setPercIrpj },
-              { label: 'ISS %', val: percIss, set: setPercIss },
-              { label: 'ICMS Int. %', val: percIcmsInterno, set: setPercIcmsInterno },
-              { label: 'ICMS Ext. %', val: percIcmsExterno, set: setPercIcmsExterno },
+              { label: 'Fator Margem (Produtos)', val: fatorMargemProdutos, set: setFatorMargemProdutos },
+              { label: 'Fator Margem Serviços', val: fatorMargemServicos, set: setFatorMargemServicos },
+              { label: 'Fator Margem Instalação', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
+              { label: 'Fator Margem Manutenção', val: fatorMargemManutencao, set: setFatorMargemManutencao },
             ].map(p => (
               <div key={p.label}>
                 <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
-                <input type="number" step={p.step || '0.01'} value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
+                <input type="number" step="0.01" value={p.val} onChange={e => { p.set(+e.target.value); setMarkupPadrao(+e.target.value); }} disabled={isReadonly}
+                  className="w-full px-2 py-1.5 border border-brand-primary/30 rounded-lg bg-brand-primary/5 text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+              </div>
+            ))}
+            <div className="flex items-center gap-2 pt-6">
+              <input
+                type="checkbox"
+                id="vendaHaveraManutencao"
+                checked={!!vendaHaveraManutencao}
+                onChange={e => { setVendaHaveraManutencao(e.target.checked); setHasUnsavedChanges(true); }}
+                disabled={isReadonly}
+                className="w-4 h-4 rounded border-brand-primary/30 text-brand-primary focus:ring-brand-primary/30"
+              />
+              <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manutenção Mensal</label>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Qtd. Meses Manut.</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                disabled={isReadonly || !vendaHaveraManutencao}
+                value={vendaQtdMesesManutencao ?? 0}
+                onChange={e => { setVendaQtdMesesManutencao(+e.target.value); setHasUnsavedChanges(true); }}
+                className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+
+          {/* Row 2 — Desp. Adm., Comissão, Frete */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
+              { label: 'Comissão %', val: percComissao, set: setPercComissao },
+              { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
+            ].map(p => (
+              <div key={p.label}>
+                <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+                <input type="number" step="0.01" value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
                   className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
             ))}
           </div>
         </div>
+
+        {/* Tax Info Modal */}
+        {showTaxModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowTaxModal(false)}>
+            <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-rose-400" /> Impostos Incidentes — Venda de Equipamentos
+                </h3>
+                <button onClick={() => setShowTaxModal(false)} className="text-text-muted hover:text-text-primary transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <p className="text-xs text-text-muted mb-4">Tributação padrão do bloco <strong>Venda de Equipamentos e Serviços</strong> configurada nos Parâmetros da empresa. Estes valores são aplicados automaticamente e somente podem ser alterados no cadastro da empresa.</p>
+              <div className="space-y-2">
+                {[
+                  { label: 'PIS', val: companyVendaTaxes.pis },
+                  { label: 'COFINS', val: companyVendaTaxes.cofins },
+                  { label: 'CSLL', val: companyVendaTaxes.csll },
+                  { label: 'IRPJ', val: companyVendaTaxes.irpj },
+                  { label: 'ISS', val: companyVendaTaxes.iss },
+                  { label: 'ICMS Interno', val: companyVendaTaxes.icms_interno },
+                  { label: 'ICMS Externo', val: companyVendaTaxes.icms_externo },
+                ].map(t => (
+                  <div key={t.label} className="flex justify-between items-center py-1.5 border-b border-border-subtle last:border-0">
+                    <span className="text-sm font-medium text-text-muted">{t.label}</span>
+                    <span className="text-sm font-bold text-rose-400">{t.val.toFixed(2)}%</span>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-sm font-bold text-text-primary">Total de Impostos</span>
+                  <span className="text-base font-black text-rose-500">{(companyVendaTaxes.pis + companyVendaTaxes.cofins + companyVendaTaxes.csll + companyVendaTaxes.irpj + companyVendaTaxes.iss + companyVendaTaxes.icms_interno).toFixed(2)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Items - Flat Data Table */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -1719,7 +2151,7 @@ export function SalesBudgetForm() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
-                  {items.filter(i => !i.opportunity_kit_id).map((item, originalIdx) => {
+                  {items.filter(i => !i.opportunity_kit_id).map((item) => {
                     const idx = items.findIndex(x => x === item); // Find true index in the global items state
                     const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
                     const custoTotal = item.custo_unit_base * item.quantidade;
@@ -1928,7 +2360,7 @@ export function SalesBudgetForm() {
             </div>
           )}
         </div>
-        
+
         {/* Kits de Venda */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
@@ -1944,7 +2376,7 @@ export function SalesBudgetForm() {
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => {
                 setNovoKitTipoContrato('VENDA_EQUIPAMENTOS');
-                setShowNewKitModal(true);
+                setShowCreateKitModal(true);
               }} disabled={isReadonly}>
                 <Plus className="w-4 h-4 mr-1" /> Criar Novo Kit
               </Button>
@@ -1954,134 +2386,150 @@ export function SalesBudgetForm() {
             </div>
           </div>
 
-          {items.filter(i => i.opportunity_kit_id).length === 0 ? (
-            <div className="text-center py-12 text-text-muted text-sm">Nenhum kit adicionado.</div>
+          {vendaKits.length === 0 ? (
+            <div className="text-center py-12 text-text-muted text-sm border-2 border-dashed border-border-subtle rounded-xl">Nenhum kit adicionado.</div>
           ) : (
-            <div>
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto overflow-y-visible">
+              <table className="w-full text-left border-collapse min-w-[1250px]">
                 <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
                   <tr>
-                    <th className="px-1.5 py-2 whitespace-nowrap">Kit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
+                    <th className="px-1.5 py-3 whitespace-nowrap pl-4">Nome do Kit</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-center w-14">Qtd</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisição (Equipamentos e Instalação)">Custo Aq. (Equip/Inst)</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manutenção Projetada">Custo Manut.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-center w-16">Fator</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Venda de Equipamentos">Venda Equip.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Manutenção">Total Manutenção</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary" title="Faturamento Total (Venda + Manutenção)">Fat. Total</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Venda</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right">Marg. Vda</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Manut.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right">Marg. Manut.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Final</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right border-l border-border-subtle bg-bg-deep/30 pr-4">Marg. Geral</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-center w-10 pr-4"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
-                  {items.filter(i => i.opportunity_kit_id).map((item, originalIdx) => {
-                    const idx = items.findIndex(x => x === item);
-                    const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
-                    const custoTotal = item.custo_unit_base * item.quantidade;
-                    const lucroTotal = item.lucro_unit * item.quantidade;
-                    const vendaTotal = item.venda_unit * item.quantidade;
-                    const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
+                  {vendaKits.map((item, idx) => {
+                    const avgFator = (item.fator_margem_locacao + item.fator_margem_servicos_produtos + item.fator_margem_instalacao + item.fator_margem_manutencao) / 4;
+                    const q = item.quantidade;
+                    
+                    const margemColor = item.margem_geral >= 15 ? 'text-emerald-600' : item.margem_geral >= 5 ? 'text-amber-600' : 'text-rose-600';
+                    const margemVendaColor = item.margem_venda >= 15 ? 'text-emerald-600' : item.margem_venda >= 5 ? 'text-amber-600' : 'text-rose-600';
+                    const margemManutColor = item.margem_manutencao >= 15 ? 'text-emerald-600' : item.margem_manutencao >= 5 ? 'text-amber-600' : 'text-rose-600';
 
                     return (
                       <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
-                        {/* Kit */}
-                        <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
+                        {/* Nome do Kit */}
+                        <td className="px-1.5 py-3 whitespace-nowrap max-w-[200px] pl-4">
                           <div className="flex flex-col truncate">
-                            <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || '—'}</span>
-                            <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>
+                            <span className="font-semibold text-text-primary truncate">{item.nome_kit}</span>
+                            <span className="text-[10px] font-mono text-text-muted">ID: {item.opportunity_kit_id.split('-')[0]}...</span>
                           </div>
                         </td>
 
-                        {/* QTD — editable */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
+                        {/* Qtd — editable */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-center">
                           <input
                             type="number" step="1" min="1" value={item.quantidade}
-                            onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
+                            onChange={e => updateVendaKit(idx, 'quantidade', +e.target.value)}
                             disabled={isReadonly}
-                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
+                            className="w-12 px-1 py-1 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
                           />
                         </td>
 
-                        {/* Custo Unit */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                          <span>{fmt(item.custo_unit_base)}</span>
+                        {/* Custo Aq. (Equip/Inst) */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.custo_aquisicao_equip_unit * q)}
                         </td>
 
-                        {/* Custo Total */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                          {fmt(custoTotal)}
+                        {/* Custo Manut. */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-right text-text-muted">
+                          {fmt(item.custo_manutencao_unit * q)}
                         </td>
 
-                        {/* MKP — editable */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
-                          <input
-                            type="number" step="0.01" value={item.markup}
-                            onChange={e => updateItem(idx, 'markup', +e.target.value)}
-                            disabled={isReadonly}
-                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
-                          />
+                        {/* Fator — average with tooltip */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-center">
+                          <Tooltip content={
+                            <div className="w-48 space-y-1">
+                              <div className="font-bold border-b border-white/20 pb-1 mb-1">Composição de Margem</div>
+                              <div className="flex justify-between"><span>Produtos:</span> <span className="font-mono">{item.fator_margem_locacao.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Serviços:</span> <span className="font-mono">{item.fator_margem_servicos_produtos.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Instalação:</span> <span className="font-mono">{item.fator_margem_instalacao.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Manutenção:</span> <span className="font-mono">{item.fator_margem_manutencao.toFixed(2)}</span></div>
+                            </div>
+                          }>
+                            <div className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded-full text-[10px] font-bold cursor-help inline-block">
+                              {avgFator.toFixed(2)}
+                            </div>
+                          </Tooltip>
                         </td>
 
-                        {/* Venda Unit */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                          {fmt(item.venda_unit)}
+                        {/* Venda Equipamentos */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-right font-semibold text-text-primary">
+                          {fmt(item.venda_equip_unit * q)}
                         </td>
 
-                        {/* Frete Venda */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.frete_venda_unit)}
+                        {/* Total Manutenção */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-right font-semibold text-text-primary">
+                          {fmt(item.venda_manut_unit * q)}
                         </td>
 
-                        {/* Impostos */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(totalImpostos)}
+                        {/* Fat. Total */}
+                        <td className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary">
+                          {fmt(item.faturamento_total * q)}
                         </td>
 
-                        {/* Desp. Adm */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.despesa_adm_unit)}
+                        {/* Lucro Venda */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-bold ${margemVendaColor}`}>
+                          {fmt(item.lucro_venda * q)}
                         </td>
 
-                        {/* Comissão */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.comissao_unit)}
+                        {/* Margem Venda */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-medium ${margemVendaColor}`}>
+                          {fmtPct(item.margem_venda)}
                         </td>
 
-                        {/* Lucro Unit */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
-                          {fmt(item.lucro_unit)}
+                        {/* Lucro Manut. */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-bold ${margemManutColor}`}>
+                          {fmt(item.lucro_manutencao * q)}
                         </td>
 
-                        {/* Margem */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                          {fmtPct(item.margem_unit)}
+                        {/* Margem Manut. */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-medium ${margemManutColor}`}>
+                          {fmtPct(item.margem_manutencao)}
                         </td>
 
-                        {/* Venda Total */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
-                          {fmt(vendaTotal)}
+                        {/* Lucro Final */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-bold ${margemColor}`}>
+                          {fmt(item.lucro_final * q)}
                         </td>
 
-                        {/* Lucro Total */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                          {fmt(lucroTotal)}
+                        {/* Margem Geral */}
+                        <td className={`px-1.5 py-3 whitespace-nowrap text-right font-bold pr-4 border-l border-border-subtle bg-bg-deep/30 ${margemColor}`}>
+                          {fmtPct(item.margem_geral)}
                         </td>
 
                         {/* Ações */}
-                        <td className="px-1 py-2 whitespace-nowrap text-center">
+                        <td className="px-1 py-3 whitespace-nowrap text-center pr-4">
                           {!isReadonly && (
-                            <button
-                              onClick={() => removeItem(idx)}
-                              className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                              title="Remover kit"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 justify-center">
+                              <button
+                                onClick={() => setViewingKitId(item.opportunity_kit_id)}
+                                className="p-1 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
+                                title="Editar kit"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => removeVendaKit(idx)}
+                                className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title="Remover kit"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -2325,155 +2773,31 @@ export function SalesBudgetForm() {
                   </Tooltip>
                 </div>
 
-                {/* Novo Recurso: Comparativo de Rentabilidade do Valor Investido */}
+                {/* Decision Engine: Rentabilidade de Capital */}
                 <div className="mt-8 pt-6 border-t border-border-subtle">
                   <div
                     className="flex items-center justify-between mb-2 cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => setIsComparativoExpanded(!isComparativoExpanded)}
                   >
                     <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
-                      Comparativo de Rentabilidade do Valor Investido
+                      Análise de Rentabilidade de Capital
                       {isComparativoExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
                     </h3>
                   </div>
 
                   {isComparativoExpanded && (
-                    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div>
-                          <p className="text-[11px] text-text-muted leading-relaxed max-w-2xl">
-                            Este comparativo utiliza a taxa mensal informada manualmente abaixo e os prazos já existentes nos campos <span className="text-brand-primary font-medium">ROI Final</span> e <span className="text-brand-primary font-medium">Prazo de Contrato</span>.
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
-                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
-                            Taxa Mensal (%)
-                          </label>
-                          <div className="relative w-[120px]">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              disabled={isReadonly}
-                              value={taxaInvestimentoMensal === '' ? '' : taxaInvestimentoMensal}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setTaxaInvestimentoMensal(val === '' ? '' : +val);
-                              }}
-                              className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
-                            />
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {(() => {
-                        const taxaManual = typeof taxaInvestimentoMensal === 'number' ? taxaInvestimentoMensal : 0;
-                        const investimento = rentalTotals.investimento || 0;
-                        const prazoContrato = prazoContratoMeses || 0;
-                        const roiFinalMeses = diretor_roi || 0;
-
-                        if (investimento <= 0 || taxaManual < 0 || roiFinalMeses <= 0 || prazoContrato <= 0) {
-                          return (
-                            <div className="bg-bg-deep/50 border border-border-subtle rounded-lg p-6 text-center">
-                              <p className="text-sm font-medium text-text-muted">Preencha corretamente valor investido, taxa e prazos para calcular o comparativo.</p>
-                            </div>
-                          );
-                        }
-
-                        const taxaDecimal = taxaManual / 100;
-
-                        // Opção 1 (ROI Final)
-                        const vfRoi = investimento * Math.pow((1 + taxaDecimal), roiFinalMeses);
-                        const lucroRoiValue = vfRoi - investimento;
-                        
-                        // Opção 2 (Prazo Contrato)
-                        const vfContrato = investimento * Math.pow((1 + taxaDecimal), prazoContrato);
-                        const lucroContratoValue = vfContrato - investimento;
-
-                        // Identify highest profit
-                        const bestRoi = lucroRoiValue > lucroContratoValue;
-                        const bestContrato = lucroContratoValue >= lucroRoiValue;
-
-                        const saldoContrato = diretor_saldo || 0;
-                        
-                        // Dif Roi
-                        const difReaisRoi = lucroRoiValue - saldoContrato;
-                        const difPctRoi = saldoContrato > 0 ? (lucroRoiValue / saldoContrato) * 100 : 0;
-
-                        // Dif Contrato
-                        const difReaisContrato = lucroContratoValue - saldoContrato;
-                        const difPctContrato = saldoContrato > 0 ? (lucroContratoValue / saldoContrato) * 100 : 0;
-
-                        return (
-                          <div className="border border-border-subtle rounded-lg overflow-x-auto bg-bg-deep">
-                            {/* Desktop Header */}
-                            <div className="hidden lg:grid grid-cols-12 gap-1 border-b border-border-subtle bg-white/[0.02] min-w-[900px]">
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider border-r border-border-subtle">Base</div>
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Meses</div>
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Investimento</div>
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle hover:text-white transition-colors cursor-help tooltip-trigger relative group">
-                                Taxa
-                                <span className="hidden group-hover:block absolute top-[110%] left-0 w-48 bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Informada manualmente</span>
-                              </div>
-                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle group relative">
-                                <span className="flex items-center justify-end gap-1 cursor-help hover:text-white transition-colors">
-                                  V. Futuro
-                                  <HelpCircle className="w-3 h-3 text-text-muted opacity-70" />
-                                </span>
-                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-64 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Calculado via Juros Compostos: Valor Atual × (1 + taxa) ^ meses</span>
-                              </div>
-                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Lucro (R$)</div>
-                              <div className="col-span-2 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle">Saldo Ctt.</div>
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right border-r border-border-subtle group relative cursor-help">
-                                Dif. R$
-                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-48 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Lucro da Aplicação - Saldo do Contrato</span>
-                              </div>
-                              <div className="col-span-1 p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider text-right group relative cursor-help">
-                                Dif. %
-                                <span className="hidden group-hover:block absolute top-[110%] right-0 w-48 text-left bg-black/90 p-2 border border-gray-600 rounded normal-case text-gray-300 font-normal z-10 shadow-xl">Lucro da Aplicação / Saldo do Contrato</span>
-                              </div>
-                            </div>
-
-                            {/* Rows */}
-                            <div className="divide-y divide-border-subtle min-w-[900px]">
-                              {/* Opção 1: ROI Final */}
-                              <div className={`grid grid-cols-2 lg:grid-cols-12 hover:bg-white/[0.015] transition-colors ${bestRoi ? 'bg-amber-400/5' : ''}`}>
-                                <div className="col-span-2 lg:col-span-1 p-2 border-b lg:border-b-0 lg:border-r border-border-subtle flex items-center">
-                                  <span className="font-semibold text-text-primary text-[11px] flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-brand-primary"></span>ROI Final</span>
-                                </div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{roiFinalMeses.toFixed(1)}</div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(investimento)}</div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{taxaManual.toFixed(2)}%</div>
-                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-semibold text-text-primary font-mono whitespace-nowrap">{fmt(vfRoi)}</div>
-                                <div className={`lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${bestRoi ? 'font-bold text-amber-400' : 'text-teal-400'}`}>{fmt(lucroRoiValue)}</div>
-                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(saldoContrato)}</div>
-                                <div className={`lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${difReaisRoi >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(difReaisRoi)}</div>
-                                <div className="lg:col-span-1 p-2 text-right text-xs text-text-secondary">{difPctRoi.toFixed(2)}%</div>
-                              </div>
-
-                              {/* Opção 2: Prazo de Contrato */}
-                              <div className={`grid grid-cols-2 lg:grid-cols-12 hover:bg-white/[0.015] transition-colors ${bestContrato ? 'bg-amber-400/5' : ''}`}>
-                                <div className="col-span-2 lg:col-span-1 p-2 border-b lg:border-b-0 lg:border-r border-border-subtle flex items-center">
-                                  <span className="font-semibold text-text-primary text-[11px] flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>Prazo Ctt.</span>
-                                </div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{prazoContrato}</div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(investimento)}</div>
-                                <div className="lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary">{taxaManual.toFixed(2)}%</div>
-                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-semibold text-text-primary font-mono whitespace-nowrap">{fmt(vfContrato)}</div>
-                                <div className={`lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${bestContrato ? 'font-bold text-amber-400' : 'text-teal-400'}`}>{fmt(lucroContratoValue)}</div>
-                                <div className="lg:col-span-2 p-2 lg:border-r border-border-subtle text-right text-xs text-text-secondary font-mono whitespace-nowrap">{fmt(saldoContrato)}</div>
-                                <div className={`lg:col-span-1 p-2 lg:border-r border-border-subtle text-right text-xs font-mono whitespace-nowrap ${difReaisContrato >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(difReaisContrato)}</div>
-                                <div className="lg:col-span-1 p-2 text-right text-xs text-text-secondary">{difPctContrato.toFixed(2)}%</div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
+                    <div className="mt-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <RentalROIAnalysis
+                        custoAquisicaoTotal={rentalTotals.investimento}
+                        valorLocacaoMensal={rentalTotals.faturamentoMensal}
+                        prazoContratoMeses={prazoContratoMeses}
+                        roiFinalMeses={diretor_roi}
+                        saldoContratoReal={diretor_saldo}
+                      />
                     </div>
                   )}
                 </div>
-              </div>
+              </div >
               <EvolutivoChartModal
                 isOpen={showEvolutivoChart}
                 onClose={() => setShowEvolutivoChart(false)}
@@ -2493,150 +2817,189 @@ export function SalesBudgetForm() {
               />
 
               {/* Rental Consolidation */}
-              <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4 mt-6">
-                <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Fechamento de proposta</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {/* Rental Consolidation */}
+              <div className="mt-10 mb-6">
+                <h2 className="font-black text-text-primary text-xs uppercase tracking-[0.15em] mb-3 flex items-center gap-3">
+                  <span className="w-3 h-3 bg-brand-primary block rounded-sm"></span>
+                  Fechamento de Proposta
+                </h2>
 
-                  {/* Row 1 */}
-                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Valor Locação/Comodato Mensal</span>
-                    <p className="text-2xl font-black text-brand-primary">{fmt(rentalTotals.faturamentoMensal)}</p>
+                <div className="grid grid-cols-1 lg:grid-cols-12 border-y md:border border-border-subtle bg-bg-deep shadow-sm">
+
+                  {/* Left Main Metrics (8 cols) */}
+                  <div className="lg:col-span-8 grid grid-cols-2 lg:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border-subtle">
+
+                    {/* Mensal */}
+                    <Tooltip content={
+                      <div className="w-64 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Valores Mensais Unitários</div>
+                        {rentalItems.filter(ri => !ri.is_kit_instalacao).map((ri, idx) => (
+                          <div key={ri.id || idx} className="flex justify-between text-[11px] mb-0.5">
+                            <span className="truncate pr-2">{ri.product_nome}</span>
+                            <span className="font-medium text-brand-primary whitespace-nowrap">{fmt(ri.faturamento_mensal || ri.valor_mensal)}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 mt-1">
+                          <span>Total Unitário:</span>
+                          <span className="text-brand-primary">
+                            {fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}
+                          </span>
+                        </div>
+                      </div>
+                    }>
+                      <div className="p-4 md:p-6 hover:bg-surface/50 transition-colors cursor-help group flex flex-col justify-between h-full border-b md:border-b-0 border-border-subtle lg:col-span-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          Mensal Locação
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </span>
+                        <p className="text-2xl sm:text-3xl font-black text-brand-primary tracking-tight">{fmt(rentalTotals.faturamentoMensal)}</p>
+                      </div>
+                    </Tooltip>
+
+                    {/* Faturamento Total */}
+                    <div className="p-4 md:p-6 bg-surface/30 flex flex-col justify-between h-full border-b md:border-b-0 border-border-subtle lg:col-span-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-4 block opacity-80">Fat. Total</span>
+                      <p className="text-2xl sm:text-3xl font-black text-teal-600 tracking-tight">{fmt(rentalTotals.faturamentoTotal)}</p>
+                    </div>
+
+                    {/* Total Instalação (Only if exists) OR Prazo */}
+                    <div className="p-4 md:p-6 bg-bg-deep flex flex-col justify-between h-full lg:col-span-1">
+                      {rentalTotals.totalInstalacao > 0 ? (
+                        <>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500/80 mb-4 block opacity-80">Total Instalação</span>
+                          <p className="text-2xl sm:text-3xl font-black text-teal-500 tracking-tight">{fmt(rentalTotals.totalInstalacao)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-4 block opacity-80">Prazo</span>
+                          <div className="flex items-baseline gap-1">
+                            <p className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">{prazoContratoMeses}</p>
+                            <span className="text-sm font-bold text-text-muted uppercase tracking-widest">meses</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Prazo de Contrato</span>
-                    <p className="text-2xl font-black text-text-primary">{prazoContratoMeses} <span className="text-sm font-medium text-text-muted">meses</span></p>
+                  {/* Right Costs Breakdown Grid (4 cols) */}
+                  <div className="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-border-subtle grid grid-cols-2 divide-x divide-y divide-border-subtle bg-surface/20">
+
+                    {/* Custo Aq */}
+                    <Tooltip content={
+                      <div className="w-64 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
+                        <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Impostos Compra:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
+                      </div>
+                    }>
+                      <div className="p-4 hover:bg-surface transition-colors cursor-help group">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          Custo Aquisição
+                          <HelpCircle className="w-3" />
+                        </span>
+                        <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.investimento)}</p>
+                      </div>
+                    </Tooltip>
+
+                    {/* Impostos */}
+                    <Tooltip content={
+                      <div className="w-max min-w-[340px] space-y-2 text-gray-200 pr-2">
+                        <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2">Desmembramento de Impostos</div>
+                        <table className="w-full text-sm text-right border-collapse">
+                          <thead>
+                            <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
+                              <th className="text-left pb-1 font-bold">Imposto</th>
+                              <th className="pb-1 font-bold pl-3">Alíq.</th>
+                              {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Inst.</th>}
+                              <th className="pb-1 font-bold pl-4">Mensal</th>
+                              <th className="pb-1 font-bold pl-4">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700/50">
+                            {[
+                              { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis },
+                              { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins },
+                              { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll },
+                              { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj },
+                              { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss }
+                            ].map(imp => {
+                              const rFat = rentalTotals.faturamentoMensal > 0 ? rentalTotals.faturamentoMensal : rentalTotals.totalInstalacao;
+                              const rVal = rentalTotals.faturamentoMensal > 0 ? imp.valMen : imp.valInst;
+                              const pct = rFat > 0 ? (rVal / rFat) * 100 : 0;
+                              const totMensalPrazo = imp.valMen * prazoContratoMeses;
+                              const tot = totMensalPrazo + imp.valInst;
+                              if (pct === 0 && tot === 0) return null;
+                              return (
+                                <tr key={imp.label} className="hover:bg-white/5 transition-colors">
+                                  <td className="text-left font-medium text-white py-1">{imp.label}</td>
+                                  <td className="text-xs text-amber-400 pl-3">{fmtPct(pct)}</td>
+                                  {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pl-4">{fmt(imp.valInst)}</td>}
+                                  <td className="text-gray-300 pl-4">{fmt(imp.valMen)}</td>
+                                  <td className="text-white font-medium pl-4">{fmt(tot)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-gray-600 font-bold">
+                              <td className="text-left text-white pt-1.5">Total</td>
+                              <td className="pt-1.5"></td>
+                              {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosInstalacaoTotal)}</td>}
+                              <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosMensal)}</td>
+                              <td className="text-amber-400 pt-1.5 pl-4">{fmt(rentalTotals.impostosTotal)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    }>
+                      <div className="p-4 hover:bg-surface transition-colors cursor-help group">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          Impostos Totais
+                          <HelpCircle className="w-3" />
+                        </span>
+                        <p className="text-lg font-bold text-amber-500">{fmt(rentalTotals.impostosTotal)}</p>
+                      </div>
+                    </Tooltip>
+
+                    {/* Custo Operacional */}
+                    <Tooltip content={
+                      <div className="w-56 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Operacional</div>
+                        <div className="flex justify-between text-sm"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpMensalTotal)}</span></div>
+                      </div>
+                    }>
+                      <div className="col-span-2 p-4 hover:bg-surface transition-colors cursor-help group border-t-0">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          Custos Operacionais
+                          <HelpCircle className="w-3" />
+                        </span>
+                        <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.custoOpTotal)}</p>
+                      </div>
+                    </Tooltip>
+
+                    {/* ROI Final */}
+                    <Tooltip content={
+                      <div className="w-72 space-y-1 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
+                      </div>
+                    }>
+                      <div className="col-span-2 p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          ROI Final
+                          <HelpCircle className="w-3" />
+                        </span>
+                        <p className="text-lg font-black text-brand-secondary">
+                          {base_roi.toFixed(1)} <span className="text-[10px] font-semibold text-brand-primary/60 ml-0.5 uppercase tracking-widest">meses</span>
+                        </p>
+                      </div>
+                    </Tooltip>
+
                   </div>
-
-                  {rentalTotals.totalInstalacao > 0 && (
-                    <div className="bg-bg-deep rounded-xl p-4 border border-brand-primary/30 shadow-[0_0_15px_rgba(20,184,166,0.1)]">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-brand-secondary mb-1 block text-teal-400">Total Instalação</span>
-                      <p className="text-2xl font-black text-teal-500">{fmt(rentalTotals.totalInstalacao)}</p>
-                    </div>
-                  )}
-
-                  <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 block">Faturamento Total</span>
-                    <p className="text-2xl font-black text-teal-600">{fmt(rentalTotals.faturamentoTotal)}</p>
-                  </div>
-
-                  {/* Row 2 */}
-                  <Tooltip content={
-                    <div className="w-64 space-y-2 text-gray-200">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
-                      <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Impostos de compras:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                        Custo de Aquisição Total
-                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                      </span>
-                      <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.investimento)}</p>
-                    </div>
-                  </Tooltip>
-
-                  <Tooltip content={
-                    <div className="w-max min-w-[340px] space-y-2 text-gray-200 pr-2">
-                      <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2">Desmembramento de Impostos</div>
-
-                      <table className="w-full text-sm text-right border-collapse">
-                        <thead>
-                          <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
-                            <th className="text-left pb-1 font-bold">Imposto</th>
-                            <th className="pb-1 font-bold pl-3">Alíq.</th>
-                            {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Instalação</th>}
-                            <th className="pb-1 font-bold pl-4">Mensal</th>
-                            <th className="pb-1 font-bold pl-4">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-700/50">
-                          {[
-                            { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis },
-                            { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins },
-                            { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll },
-                            { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj },
-                            { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss }
-                          ].map(imp => {
-                            const rFat = rentalTotals.faturamentoMensal > 0 ? rentalTotals.faturamentoMensal : rentalTotals.totalInstalacao;
-                            const rVal = rentalTotals.faturamentoMensal > 0 ? imp.valMen : imp.valInst;
-                            const pct = rFat > 0 ? (rVal / rFat) * 100 : 0;
-
-                            const totMensalPrazo = imp.valMen * prazoContratoMeses;
-                            const tot = totMensalPrazo + imp.valInst;
-
-                            if (pct === 0 && tot === 0) return null;
-
-                            return (
-                              <tr key={imp.label} className="hover:bg-white/5 transition-colors">
-                                <td className="text-left font-medium text-white py-1">{imp.label}</td>
-                                <td className="text-xs text-amber-400 pl-3">{fmtPct(pct)}</td>
-                                {rentalTotals.totalInstalacao > 0 && (
-                                  <td className="text-gray-300 pl-4">{fmt(imp.valInst)}</td>
-                                )}
-                                <td className="text-gray-300 pl-4">{fmt(imp.valMen)}</td>
-                                <td className="text-white font-medium pl-4">{fmt(tot)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t border-gray-600 font-bold">
-                            <td className="text-left text-white pt-1.5">Total</td>
-                            <td className="pt-1.5"></td>
-                            {rentalTotals.totalInstalacao > 0 && (
-                              <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosInstalacaoTotal)}</td>
-                            )}
-                            <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosMensal)}</td>
-                            <td className="text-amber-400 pt-1.5 pl-4">{fmt(rentalTotals.impostosTotal)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                        Impostos Totais
-                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                      </span>
-                      <p className="text-2xl font-black text-amber-500">{fmt(rentalTotals.impostosTotal)}</p>
-                    </div>
-                  </Tooltip>
-
-                  <Tooltip content={
-                    <div className="w-56 space-y-2 text-gray-200">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Operacional</div>
-                      <div className="flex justify-between text-sm"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpMensalTotal)}</span></div>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                        Custos Operacionais Totais
-                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                      </span>
-                      <p className="text-2xl font-black text-text-primary">{fmt(rentalTotals.custoOpTotal)}</p>
-                    </div>
-                  </Tooltip>
-
-                  <Tooltip content={
-                    <div className="w-64 space-y-1 text-gray-200">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
-                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês calculando quando o fluxo "Faturamento - Impostos - Custos Operacionais" amortiza o Investimento inicial. Não inclui Comissões (Calculada apenas na área da Diretoria).</div>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-xl p-4 border border-border-subtle hover:border-brand-primary/50 transition-colors cursor-help">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                        ROI em Meses
-                        <HelpCircle className="w-3.5 h-3.5 text-text-muted" />
-                      </span>
-                      <p className="text-2xl font-black text-brand-secondary">{base_roi.toFixed(1)} <span className="text-sm font-medium text-text-muted">meses</span></p>
-                    </div>
-                  </Tooltip>
-
                 </div>
               </div>
+
             </>
           );
         })()}
@@ -2843,6 +3206,20 @@ export function SalesBudgetForm() {
                     );
                   })}
                 </tbody>
+                <tfoot className="bg-bg-subtle/50 font-bold border-t-2 border-border-subtle">
+                  <tr>
+                    <td colSpan={3} className="px-1.5 py-2 text-right">Total:</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_aquisicao_unit * ri.quantidade), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_op_mensal_kit || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.custo_op_mensal_kit || 0) * ri.quantidade), 0))}</td>
+                    <td colSpan={3}></td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) : (((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * Math.max(0, (ri.prazo_contrato || 0) - (rentalDefaults.prazo_instalacao_meses || 0)))), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-brand-danger/90">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.impostos_mensal * ri.quantidade), 0))}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
@@ -2864,7 +3241,7 @@ export function SalesBudgetForm() {
                     <Building2 className="w-4 h-4 text-text-muted" />
                     Fornecedor
                   </label>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setIsQuickSupplierModalOpen(true)}
                     className="text-xs text-brand-primary hover:text-brand-primary-hover font-medium flex items-center gap-1"
@@ -2873,9 +3250,9 @@ export function SalesBudgetForm() {
                     <Plus className="w-3 h-3" /> Novo
                   </button>
                 </div>
-                <select 
-                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
-                  value={purchaseSupplierId} 
+                <select
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
+                  value={purchaseSupplierId}
                   onChange={e => { setPurchaseSupplierId(e.target.value); setHasUnsavedChanges(true); }}
                   disabled={isReadonly}
                 >
@@ -2885,7 +3262,7 @@ export function SalesBudgetForm() {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5">Tipo de Frete</label>
                 <div className="flex bg-bg-deep rounded-lg p-1 border border-border-subtle">
@@ -2895,7 +3272,7 @@ export function SalesBudgetForm() {
                     className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${purchaseFreteTipo === 'CIF' ? 'bg-blue-500 text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}>CIF</button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5">% Frete Fixo</label>
                 <div className="relative">
@@ -2904,17 +3281,17 @@ export function SalesBudgetForm() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-bold text-sm">%</span>
                 </div>
               </div>
-              
+
               <div className="flex items-center pt-6">
                 <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100">
-                  <input type="checkbox" checked={purchaseIpiCalculado} onChange={e => { setPurchaseIpiCalculado(e.target.checked); setHasUnsavedChanges(true); }} disabled={isReadonly} 
+                  <input type="checkbox" checked={purchaseIpiCalculado} onChange={e => { setPurchaseIpiCalculado(e.target.checked); setHasUnsavedChanges(true); }} disabled={isReadonly}
                     className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" />
                   Calcular IPI na Base do ICMS
                 </label>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
             <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
@@ -2939,7 +3316,7 @@ export function SalesBudgetForm() {
                 </Button>
               </div>
             </div>
-            
+
             <div className="p-6 pt-2">
               <BudgetItemsGrid
                 items={purchaseItems}
@@ -2954,7 +3331,7 @@ export function SalesBudgetForm() {
       )}
 
       {/* COMPRA IMPORT/RECONCILIATION MODALS */}
-      <BudgetImportModal 
+      <BudgetImportModal
         isOpen={isPurchaseImportModalOpen}
         onClose={() => setIsPurchaseImportModalOpen(false)}
         supplierId={purchaseSupplierId}
@@ -2962,16 +3339,16 @@ export function SalesBudgetForm() {
           const safeFoundItems = foundItems || [];
           const safeNotFoundItems = notFoundItems || [];
           const mapped = safeFoundItems.map(item => ({
-             product_id: item.product.id,
-             product_nome: item.product.nome,
-             product_codigo: item.product.codigo || '',
-             codigo_fornecedor: item.codigo_fornecedor || '',
-             ncm: item.ncm || item.product.ncm || '',
-             quantidade: item.quantidade || 1,
-             valor_unitario: item.valor_unitario || 0,
-             frete_percent: item.frete_percent || 0,
-             ipi_percent: item.ipi_percent || 0,
-             icms_percent: item.icms_percent || 0
+            product_id: item.product.id,
+            product_nome: item.product.nome,
+            product_codigo: item.product.codigo || '',
+            codigo_fornecedor: item.codigo_fornecedor || '',
+            ncm: item.ncm || item.product.ncm || '',
+            quantidade: item.quantidade || 1,
+            valor_unitario: item.valor_unitario || 0,
+            frete_percent: item.frete_percent || 0,
+            ipi_percent: item.ipi_percent || 0,
+            icms_percent: item.icms_percent || 0
           }));
           setPurchaseItems(prev => {
             setHasUnsavedChanges(true);
@@ -2983,7 +3360,7 @@ export function SalesBudgetForm() {
           }
         }}
       />
-      
+
       <BudgetReconciliationModal
         isOpen={isPurchaseReconciliationModalOpen}
         onClose={() => setIsPurchaseReconciliationModalOpen(false)}
@@ -2991,23 +3368,23 @@ export function SalesBudgetForm() {
         notFoundItems={purchaseUnresolvedItems}
         onResolved={(resolvedItem) => {
           const mapped = {
-             product_id: resolvedItem.product.id,
-             product_nome: resolvedItem.product.nome,
-             product_codigo: resolvedItem.product.codigo || '',
-             codigo_fornecedor: resolvedItem.codigo_fornecedor || '',
-             ncm: resolvedItem.product.ncm_codigo || '',
-             quantidade: resolvedItem.quantidade || 1,
-             valor_unitario: resolvedItem.valor_unitario || 0,
-             frete_percent: resolvedItem.frete_percent || 0,
-             ipi_percent: resolvedItem.ipi_percent || 0,
-             icms_percent: resolvedItem.icms_percent || 0
+            product_id: resolvedItem.product.id,
+            product_nome: resolvedItem.product.nome,
+            product_codigo: resolvedItem.product.codigo || '',
+            codigo_fornecedor: resolvedItem.codigo_fornecedor || '',
+            ncm: resolvedItem.product.ncm_codigo || '',
+            quantidade: resolvedItem.quantidade || 1,
+            valor_unitario: resolvedItem.valor_unitario || 0,
+            frete_percent: resolvedItem.frete_percent || 0,
+            ipi_percent: resolvedItem.ipi_percent || 0,
+            icms_percent: resolvedItem.icms_percent || 0
           };
           setPurchaseItems(prev => {
             setHasUnsavedChanges(true);
             return [...prev, mapped];
           });
         }}
-        onIgnored={() => {}}
+        onIgnored={() => { }}
       />
 
       <QuickSupplierCreateModal
@@ -3090,10 +3467,9 @@ export function SalesBudgetForm() {
           isOpen={showKitSearchModal}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
-          salesBudgetId={id}
         />
       )}
-      
+
       {/* Kit Search Modal - Sale */}
       {showKitSearchVenda && (
         <OpportunityKitSearchModal
@@ -3101,7 +3477,6 @@ export function SalesBudgetForm() {
           tipoContrato="VENDA_EQUIPAMENTOS"
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
-          salesBudgetId={id}
         />
       )}
       {/* Kit Items Edit Modal */}
@@ -3121,11 +3496,12 @@ export function SalesBudgetForm() {
                 onSuccess={(savedKit) => {
                   setViewingKitId(null);
                   if (savedKit) {
-                    // Update the existing grid item with the newly saved kit values
+                    // Update Rental Items
                     setRentalItems(prev => prev.map(item => {
-                      if (item.opportunity_kit_id === savedKit.id) {
+                      if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
                         return calcRentalItem({
                           ...item,
+                          opportunity_kit_id: savedKit.id,
                           product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
                           custo_op_mensal_kit: Number(savedKit.summary?.custo_operacional_mensal_kit || 0),
                           is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
@@ -3156,9 +3532,63 @@ export function SalesBudgetForm() {
                       }
                       return item;
                     }));
+
+                    // Update Venda Kits
+                    setVendaKits(prev => prev.map(item => {
+                      if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
+                        const q = item.quantidade;
+                        return {
+                          ...item,
+                          opportunity_kit_id: savedKit.id,
+                          nome_kit: savedKit.nome_kit,
+                          custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
+                          venda_unit: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0),
+                          total_venda: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0) * q,
+                          margem_venda: Number(savedKit.summary?.margem_equipamentos ?? savedKit.summary?.margem_kit ?? 0),
+                          total_manutencao: Number(savedKit.summary?.venda_manutencao_total ?? (Number(savedKit.summary?.vlt_manut || 0) * (savedKit.qtd_meses_manutencao || 1))) * q,
+                          margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
+                          lucro_final: Number(savedKit.summary?.lucro_mensal_kit || 0) * q,
+                          margem_geral: Number(savedKit.summary?.margem_kit || 0),
+                          fator_margem_locacao: Number(savedKit.fator_margem_locacao || 1),
+                          fator_margem_servicos_produtos: Number(savedKit.fator_margem_servicos_produtos || 1),
+                          fator_margem_instalacao: Number(savedKit.fator_margem_instalacao || 1),
+                          fator_margem_manutencao: Number(savedKit.fator_margem_manutencao || 1),
+                          summary: savedKit.summary,
+                          kit_raw: savedKit,
+                          havera_manutencao: !!savedKit.havera_manutencao,
+                          qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null
+                        };
+                      }
+                      return item;
+                    }));
                   }
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showApplyKitsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-border-subtle animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border-subtle">
+              <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-brand-primary" />
+                Aplicar aos Kits
+              </h2>
+            </div>
+            <div className="p-6 text-text-muted text-sm space-y-4">
+              <p>Deseja aplicar os fatores de margem e impostos atuais a todos os kits lançados para esta venda?</p>
+              <p>Isso atualizará os valores de venda dos kits. <strong>Kits globais serão clonados para esta oportunidade</strong> para preservar os originais.</p>
+            </div>
+            <div className="p-6 bg-bg-deep border-t border-border-subtle flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setShowApplyKitsModal(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => proceedApplyKits()}>
+                Sim, aplicar agora
+              </Button>
             </div>
           </div>
         </div>
@@ -3168,7 +3598,7 @@ export function SalesBudgetForm() {
         <OpportunityCreateModal
           isOpen={isHeaderModalOpen}
           onClose={() => setIsHeaderModalOpen(false)}
-          onSuccess={(modId, newTitle, newCust) => {
+          onSuccess={(_modId: string, newTitle?: string, newCust?: string) => {
             if (newTitle) setTitulo(newTitle);
             if (newCust) setCustomerId(newCust);
             setIsHeaderModalOpen(false);

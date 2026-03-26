@@ -8,7 +8,7 @@ from src.modules.users.models import User
 from src.modules.sales_budgets import service
 from src.modules.sales_budgets.schemas import (
     SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetOut,
-    SalesBudgetStatusUpdate
+    SalesBudgetStatusUpdate, SalesBudgetHeaderUpdate
 )
 
 
@@ -23,6 +23,19 @@ def list_budgets(
     budgets = service.list_budgets(db, current_user.tenant_id)
     result = []
     for b in budgets:
+        mv = _calc_margem_venda(b.items)
+        mr = _calc_margem_rental(b.rental_items)
+        
+        # Margem Geral: average of non-zero margins
+        if mv > 0 and mr > 0:
+            mg = float(round((mv + mr) / 2, 2))
+        else:
+            mg = float(mv if mv > 0 else mr)
+            
+        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * int(ri.prazo_contrato or 0) for ri in b.rental_items)
+        valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in b.rental_items)
+        prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in b.rental_items]) if b.rental_items else 0
+        
         result.append({
             "id": b.id,
             "numero_orcamento": b.numero_orcamento,
@@ -31,18 +44,31 @@ def list_budgets(
             "data_orcamento": b.data_orcamento,
             "customer_nome": b.customer.nome_fantasia or b.customer.razao_social if b.customer else None,
             "total_venda": sum(float(i.total_venda or 0) for i in b.items),
-            "margem_media": _calc_margem(b.items),
+            "margem_venda": mv,
+            "total_faturamento_rental": total_faturamento_rental,
+            "valor_mensal_total_rental": valor_mensal_total_rental,
+            "prazo_max_rental": prazo_max_rental,
+            "margem_rental": mr,
+            "margem_geral": mg,
             "created_at": b.created_at,
         })
     return result
 
 
-def _calc_margem(items) -> float:
+def _calc_margem_venda(items) -> float:
     total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items)
     total_venda = sum(float(i.venda_unit or 0) * float(i.quantidade or 1) for i in items)
     if total_venda == 0:
-        return 0
-    return round(total_lucro / total_venda * 100, 2)
+        return 0.0
+    return float(round(total_lucro / total_venda * 100, 2))
+
+
+def _calc_margem_rental(rental_items) -> float:
+    total_lucro_mensal = sum(float(ri.lucro_mensal or 0) * float(ri.quantidade or 1) for ri in rental_items)
+    total_faturamento_mensal = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in rental_items)
+    if total_faturamento_mensal == 0:
+        return 0.0
+    return float(round(total_lucro_mensal / total_faturamento_mensal * 100, 2))
 
 
 @router.get("/check-st")
@@ -112,6 +138,19 @@ def update_budget(
         budget = service.update_budget(db, current_user.tenant_id, str(budget_id), data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    return _budget_to_dict(budget)
+
+
+@router.patch("/{budget_id}/header")
+def update_header(
+    budget_id: UUID,
+    data: SalesBudgetHeaderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    budget = service.update_header(db, current_user.tenant_id, str(budget_id), data)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget)

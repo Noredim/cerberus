@@ -1,5 +1,6 @@
 from uuid import UUID
 from datetime import datetime
+from typing import Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -17,7 +18,7 @@ class OpportunityKitService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_product_info(self, product_id: str, tenant_id: str, tipo_contrato: str = None) -> dict:
+    def get_product_info(self, product_id: str, tenant_id: str, tipo_contrato: Optional[str] = None) -> dict:
         from src.modules.sales_budgets.service import calculate_product_cost_composition
 
         comp = calculate_product_cost_composition(self.db, product_id, tenant_id, "REVENDA" if tipo_contrato == "VENDA_EQUIPAMENTOS" else "USO_CONSUMO")
@@ -139,18 +140,18 @@ class OpportunityKitService:
                     "id": str(cost.id) if cost.id else None,
                     "product_id": str(cost.product_id),
                     "tipo_custo": cost_tipo_custo,
-                    "custo_base_unitario_item": round(vl_un, 2),
-                    "custo_total_item_no_kit": round(custo_total_final, 2),
-                    "fator_item": round(fator_cost, 2),
-                    "venda_unitario_item": round(venda_unitario_item, 2),
-                    "venda_total_item": round(venda_total_item, 2),
-                    "imposto_venda_item": round(imposto_venda_item, 2),
-                    "frete_venda_item": round(frete_venda_item, 2),
-                    "desp_adm_item": round(desp_adm_item, 2),
-                    "comissao_item": round(comissao_item, 2),
-                    "lucro_unitario_item": round(lucro_unitario_item, 2),
-                    "lucro_total_item": round(lucro_total_item, 2),
-                    "margem_item": round(margem_item, 2),
+                    "custo_base_unitario_item": round(vl_un, 2),  # type: ignore
+                    "custo_total_item_no_kit": round(custo_total_final, 2),  # type: ignore
+                    "fator_item": round(fator_cost, 2),  # type: ignore
+                    "venda_unitario_item": round(venda_unitario_item, 2),  # type: ignore
+                    "venda_total_item": round(venda_total_item, 2),  # type: ignore
+                    "imposto_venda_item": round(imposto_venda_item, 2),  # type: ignore
+                    "frete_venda_item": round(frete_venda_item, 2),  # type: ignore
+                    "desp_adm_item": round(desp_adm_item, 2),  # type: ignore
+                    "comissao_item": round(comissao_item, 2),  # type: ignore
+                    "lucro_unitario_item": round(lucro_unitario_item, 2),  # type: ignore
+                    "lucro_total_item": round(lucro_total_item, 2),  # type: ignore
+                    "margem_item": round(margem_item, 2),  # type: ignore
                     # Para match com Tooltip do array
                     "tipo_item": "SERVICO",
                     "perc_pis": float(kit.aliq_pis or 0),
@@ -158,11 +159,11 @@ class OpportunityKitService:
                     "perc_csll": float(kit.aliq_csll or 0),
                     "perc_irpj": float(kit.aliq_irpj or 0),
                     "perc_iss": float(kit.aliq_iss or 0),
-                    "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),
-                    "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),
-                    "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),
-                    "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),
-                    "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2),
+                    "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),  # type: ignore
+                    "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),  # type: ignore
+                    "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),  # type: ignore
+                    "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),  # type: ignore
+                    "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2),  # type: ignore
                 })
 
         custo_aquisicao_kit = Decimal("0.0")
@@ -245,26 +246,26 @@ class OpportunityKitService:
                 "id": str(item.id) if item.id else None,
                 "product_id": str(item.product_id),
                 "tipo_item": tipo_produto,
-                "custo_base_unitario_item": round(custo_base_unitario_item, 2),
-                "custo_total_item_no_kit": round(custo_total_item_no_kit, 2),
-                "difal_unitario": round(difal_unitario, 2),
-                "difal_total_item": round(difal_total_item, 2),
-                "fator_item": round(locals().get("fator_item", fator_margem), 2),
-                "venda_unitario_item": round(venda_unitario_item, 2),
-                "venda_total_item": round(venda_total_item, 2),
-                "imposto_venda_item": round(imposto_venda_item, 2),
-                "icms_st_unitario": round(icms_st, 2),
-                "icms_st_total": round(icms_st_total, 2),
-                "frete_venda_item": round(frete_venda_item, 2),
-                "desp_adm_item": round(desp_adm_item, 2),
-                "comissao_item": round(comissao_item, 2),
-                "lucro_unitario_item": round(lucro_unitario_item, 2),
-                "lucro_total_item": round(lucro_total_item, 2),
-                "margem_item": round(margem_item, 2),
+                "custo_base_unitario_item": round(custo_base_unitario_item, 2),  # type: ignore
+                "custo_total_item_no_kit": round(custo_total_item_no_kit, 2),  # type: ignore
+                "difal_unitario": round(difal_unitario, 2),  # type: ignore
+                "difal_total_item": round(difal_total_item, 2),  # type: ignore
+                "fator_item": round(locals().get("fator_item", fator_margem), 2),  # type: ignore
+                "venda_unitario_item": round(venda_unitario_item, 2),  # type: ignore
+                "venda_total_item": round(venda_total_item, 2),  # type: ignore
+                "imposto_venda_item": round(imposto_venda_item, 2),  # type: ignore
+                "icms_st_unitario": round(icms_st, 2),  # type: ignore
+                "icms_st_total": round(icms_st_total, 2),  # type: ignore
+                "frete_venda_item": round(frete_venda_item, 2),  # type: ignore
+                "desp_adm_item": round(desp_adm_item, 2),  # type: ignore
+                "comissao_item": round(comissao_item, 2),  # type: ignore
+                "lucro_unitario_item": round(lucro_unitario_item, 2),  # type: ignore
+                "lucro_total_item": round(lucro_total_item, 2),  # type: ignore
+                "margem_item": round(margem_item, 2),  # type: ignore
                 # Tooltip breakdown details for frontend
-                "base_fornecedor": round(info.get("base_unitario", 0), 2),
-                "ipi_unit": round(info.get("ipi", 0), 2),
-                "frete_cif_unit": round(info.get("frete_cif", 0), 2),
+                "base_fornecedor": round(info.get("base_unitario", 0), 2),  # type: ignore
+                "ipi_unit": round(info.get("ipi", 0), 2),  # type: ignore
+                "frete_cif_unit": round(info.get("frete_cif", 0), 2),  # type: ignore
                 "tem_st": info.get("tem_st", False),
                 "perc_pis": float(kit.aliq_pis or 0),
                 "perc_cofins": float(kit.aliq_cofins or 0),
@@ -272,12 +273,12 @@ class OpportunityKitService:
                 "perc_irpj": float(kit.aliq_irpj or 0),
                 "perc_icms": float(kit.aliq_icms or 0),
                 "perc_iss": float(kit.aliq_iss or 0),
-                "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),
-                "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),
-                "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),
-                "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),
-                "icms_unit": round(venda_total_item * locals().get("perc_icms_aplicado", Decimal(0)), 2) if tipo_produto not in ["SERVICO", "LICENCA"] else 0,
-                "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2) if tipo_produto in ["SERVICO", "LICENCA"] else 0,
+                "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),  # type: ignore
+                "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),  # type: ignore
+                "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),  # type: ignore
+                "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),  # type: ignore
+                "icms_unit": round(venda_total_item * locals().get("perc_icms_aplicado", Decimal(0)), 2) if tipo_produto not in ["SERVICO", "LICENCA"] else 0,  # type: ignore
+                "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2) if tipo_produto in ["SERVICO", "LICENCA"] else 0,  # type: ignore
             })
 
         custo_aquisicao_total = custo_aquisicao_kit * Decimal(kit.quantidade_kits or 1)
@@ -338,8 +339,8 @@ class OpportunityKitService:
             valor_parcela_locacao = valor_venda_produtos + valor_venda_instalacao
             
             # Store real total cost for final profit calculation
-            custo_operacional_mensal_kit += vlt_manut
-            custo_total_mensal_kit = custo_aquisicao_kit + vlr_instal_calc + vlt_manut
+            custo_operacional_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut))
+            custo_total_mensal_kit = custo_aquisicao_kit + vlr_instal_calc + Decimal(str(vlt_manut))
 
         else:
             # Original Locacao/Comodato Logic
@@ -372,7 +373,7 @@ class OpportunityKitService:
             else:
                 valor_base_final = valor_parcela_locacao + manutencao_mensal
 
-            custo_operacional_mensal_kit += vlt_manut
+            custo_operacional_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut))
             custo_total_mensal_kit = custo_operacional_mensal_kit
 
         # 14. Calculo de Impostos
@@ -427,36 +428,84 @@ class OpportunityKitService:
             else:
                 margem_kit = (lucro_mensal_kit / receita_liquida_mensal_kit) * Decimal(100.0)
 
+        # 18. Granular metrics for the summary (Venda vs Manutenção)
+        lucro_manutencao = Decimal("0.0")
+        margem_manutencao = Decimal("0.0")
+        venda_manutencao_total = Decimal("0.0")
+        
+        lucro_equipamentos = Decimal("0.0")
+        margem_equipamentos = Decimal("0.0")
+        venda_equipamentos_total = Decimal("0.0")
+
+        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+            # Maintenance Metrics
+            venda_manutencao_total = valor_venda_manutencao
+            custo_manut_total_calc = vlt_manut
+            imposto_manut_total = impostos_manutencao
+            lucro_manutencao = venda_manutencao_total - custo_manut_total_calc - imposto_manut_total - (venda_manutencao_total * (perc_frete_venda + perc_despesas_adm + perc_comissao))
+            if venda_manutencao_total > 0:
+                margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
+            
+            # Equipment Metrics (Products + Installation)
+            venda_equipamentos_total = valor_venda_produtos + valor_venda_instalacao
+            custo_equipamentos_total = custo_aquisicao_kit + vlr_instal_calc
+            imposto_equipamentos_total = impostos_produtos_base + impostos_instalacao
+            lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao))
+            if venda_equipamentos_total > 0:
+                margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)
+        else:
+            # For Locacao/Comodato, we treat the main rental fee as equipment revenue for this summary logic
+            venda_equipamentos_total = valor_mensal_locacao_base
+            venda_manutencao_total = manutencao_mensal
+            
+            # Simplified profit splits for Locacao
+            imposto_equip_loc = venda_equipamentos_total * aliq_total_impostos
+            lucro_equipamentos = venda_equipamentos_total - (custo_aquisicao_kit + vlr_instal_calc) - imposto_equip_loc
+            if venda_equipamentos_total > 0:
+                margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)
+                
+            imposto_manut_loc = venda_manutencao_total * aliq_total_impostos
+            lucro_manutencao = venda_manutencao_total - custo_operacional_mensal_kit - imposto_manut_loc
+            if venda_manutencao_total > 0:
+                margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
+
         return {
             "summary": {
                 "prazo_mensalidades": prazo_mensalidades,
-                "custo_operacional_mensal_kit": round(custo_operacional_mensal_kit, 2),
-                "custo_aquisicao_kit": round(custo_aquisicao_kit, 2),
-                "custo_aquisicao_produtos": round(custo_aquisicao_produtos, 2),
-                "custo_aquisicao_servicos": round(custo_aquisicao_servicos, 2),
-                "custo_aquisicao_total": round(custo_aquisicao_total, 2),
-                "total_difal_kit": round(total_difal_kit, 2),
-                "custo_total_mensal_kit": round(custo_total_mensal_kit, 2),
-                "tx_locacao": round(tx_locacao, 6),
-                "vlr_instal_calc": round(vlr_instal_calc, 2),
-                "valor_mensal_locacao_base": round(valor_mensal_locacao_base, 2),
-                "vlt_manut": round(vlt_manut, 2),
-                "valor_base_venda": round(valor_base_venda, 2),
-                "valor_parcela_locacao": round(valor_parcela_locacao, 2),
-                "manutencao_mensal": round(manutencao_mensal, 2),
-                "valor_mensal_antes_impostos": round(valor_mensal_antes_impostos, 2),
-                "aliq_total_impostos": round(aliq_total_impostos * Decimal(100.0), 2),
-                "valor_impostos": round(valor_impostos, 2),
-                "valor_mensal_kit": round(valor_mensal_kit, 2),
-                "receita_liquida_mensal_kit": round(receita_liquida_mensal_kit, 2),
-                "lucro_mensal_kit": round(lucro_mensal_kit, 2),
-                "margem_kit": round(margem_kit, 2)
+                "custo_operacional_mensal_kit": round(custo_operacional_mensal_kit, 2),  # type: ignore
+                "custo_aquisicao_kit": round(custo_aquisicao_kit, 2),  # type: ignore
+                "custo_aquisicao_produtos": round(custo_aquisicao_produtos, 2),  # type: ignore
+                "custo_aquisicao_servicos": round(custo_aquisicao_servicos, 2),  # type: ignore
+                "custo_aquisicao_total": round(custo_aquisicao_total, 2),  # type: ignore
+                "total_difal_kit": round(total_difal_kit, 2),  # type: ignore
+                "custo_total_mensal_kit": round(custo_total_mensal_kit, 2),  # type: ignore
+                "tx_locacao": round(tx_locacao, 6),  # type: ignore
+                "vlr_instal_calc": round(vlr_instal_calc, 2),  # type: ignore
+                "valor_mensal_locacao_base": round(valor_mensal_locacao_base, 2),  # type: ignore
+                "vlt_manut": round(vlt_manut, 2),  # type: ignore
+                "valor_base_venda": round(valor_base_venda, 2),  # type: ignore
+                "valor_parcela_locacao": round(valor_parcela_locacao, 2),  # type: ignore
+                "manutencao_mensal": round(manutencao_mensal, 2),  # type: ignore
+                "valor_mensal_antes_impostos": round(valor_mensal_antes_impostos, 2),  # type: ignore
+                "aliq_total_impostos": round(aliq_total_impostos * Decimal(100.0), 2),  # type: ignore
+                "valor_impostos": round(valor_impostos, 2),  # type: ignore
+                "valor_mensal_kit": round(valor_mensal_kit, 2),  # type: ignore
+                "receita_liquida_mensal_kit": round(receita_liquida_mensal_kit, 2),  # type: ignore
+                "lucro_mensal_kit": round(lucro_mensal_kit, 2),  # type: ignore
+                "margem_kit": round(margem_kit, 2),  # type: ignore
+                # New granular fields
+                "venda_equipamentos_total": round(venda_equipamentos_total, 2), # type: ignore
+                "lucro_equipamentos": round(lucro_equipamentos, 2), # type: ignore
+                "margem_equipamentos": round(margem_equipamentos, 2), # type: ignore
+                "venda_manutencao_total": round(venda_manutencao_total, 2), # type: ignore
+                "lucro_manutencao": round(lucro_manutencao, 2), # type: ignore
+                "margem_manutencao": round(margem_manutencao, 2) # type: ignore
             },
             "item_summaries": item_summaries,
             "cost_summaries": cost_summaries
         }
 
-    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: str = None, tipo_contrato: str = None):
+    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None):
         query = self.db.query(OpportunityKit).filter(
             OpportunityKit.tenant_id == tenant_id,
             OpportunityKit.company_id == company_id
@@ -506,6 +555,9 @@ class OpportunityKitService:
             prazo_contrato_meses=data.prazo_contrato_meses,
             prazo_instalacao_meses=data.prazo_instalacao_meses,
             fator_margem_locacao=data.fator_margem_locacao,
+            fator_margem_servicos_produtos=data.fator_margem_servicos_produtos,
+            fator_margem_instalacao=data.fator_margem_instalacao,
+            fator_margem_manutencao=data.fator_margem_manutencao,
             taxa_juros_mensal=data.taxa_juros_mensal,
             taxa_manutencao_anual=data.taxa_manutencao_anual,
             aliq_pis=data.aliq_pis,

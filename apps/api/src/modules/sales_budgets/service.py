@@ -6,7 +6,7 @@ from uuid import UUID
 import re
 
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, SalesBudgetResponsavel, RentalBudgetItem
-from src.modules.sales_budgets.schemas import SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetItemCreate, RentalBudgetItemCreate
+from src.modules.sales_budgets.schemas import SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetItemCreate, RentalBudgetItemCreate, SalesBudgetHeaderUpdate
 from src.modules.products.models import Product
 from src.modules.companies.models import Company, CompanySalesParameter
 from src.modules.customers.models import Customer
@@ -453,6 +453,12 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_iss=data.perc_iss,
         perc_icms_interno=data.perc_icms_interno,
         perc_icms_externo=data.perc_icms_externo,
+        venda_markup_produtos=data.venda_markup_produtos,
+        venda_markup_servicos=data.venda_markup_servicos,
+        venda_markup_instalacao=data.venda_markup_instalacao,
+        venda_markup_manutencao=data.venda_markup_manutencao,
+        venda_havera_manutencao=data.venda_havera_manutencao,
+        venda_qtd_meses_manutencao=data.venda_qtd_meses_manutencao,
         # Rental defaults
         prazo_contrato_meses=data.prazo_contrato_meses,
         prazo_instalacao_meses=data.prazo_instalacao_meses,
@@ -519,6 +525,12 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.perc_iss = data.perc_iss
     budget.perc_icms_interno = data.perc_icms_interno
     budget.perc_icms_externo = data.perc_icms_externo
+    budget.venda_markup_produtos = data.venda_markup_produtos
+    budget.venda_markup_servicos = data.venda_markup_servicos
+    budget.venda_markup_instalacao = data.venda_markup_instalacao
+    budget.venda_markup_manutencao = data.venda_markup_manutencao
+    budget.venda_havera_manutencao = data.venda_havera_manutencao
+    budget.venda_qtd_meses_manutencao = data.venda_qtd_meses_manutencao
 
     # Update rental defaults
     budget.prazo_contrato_meses = data.prazo_contrato_meses
@@ -562,6 +574,24 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     return budget
 
 
+def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetHeaderUpdate) -> Optional[SalesBudget]:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        return None
+        
+    if data.titulo is not None:
+        budget.titulo = data.titulo
+    if data.customer_id is not None:
+        budget.customer_id = data.customer_id
+        
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
 def update_status(db: Session, tenant_id: str, budget_id: str, new_status: str) -> Optional[SalesBudget]:
     budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
@@ -592,8 +622,9 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
         status="RASCUNHO",
+        venda_havera_manutencao=original.venda_havera_manutencao,
+        venda_qtd_meses_manutencao=original.venda_qtd_meses_manutencao,
         # Sale defaults
-        markup_padrao=original.markup_padrao,
         perc_despesa_adm=original.perc_despesa_adm,
         perc_comissao=original.perc_comissao,
         perc_frete_venda=original.perc_frete_venda,
@@ -604,6 +635,10 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
         perc_iss=original.perc_iss,
         perc_icms_interno=original.perc_icms_interno,
         perc_icms_externo=original.perc_icms_externo,
+        venda_markup_produtos=original.venda_markup_produtos,
+        venda_markup_servicos=original.venda_markup_servicos,
+        venda_markup_instalacao=original.venda_markup_instalacao,
+        venda_markup_manutencao=original.venda_markup_manutencao,
         # Rental defaults
         prazo_contrato_meses=original.prazo_contrato_meses,
         prazo_instalacao_meses=original.prazo_instalacao_meses,

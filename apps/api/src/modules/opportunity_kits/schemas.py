@@ -158,6 +158,14 @@ class OpportunityKitFinancialSummary(BaseModel):
     receita_liquida_mensal_kit: Decimal
     lucro_mensal_kit: Decimal
     margem_kit: Decimal
+    
+    # New granular fields
+    venda_equipamentos_total: Optional[Decimal] = Field(default=Decimal(0))
+    lucro_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
+    margem_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
+    venda_manutencao_total: Optional[Decimal] = Field(default=Decimal(0))
+    lucro_manutencao: Optional[Decimal] = Field(default=Decimal(0))
+    margem_manutencao: Optional[Decimal] = Field(default=Decimal(0))
 
 class OpportunityKitItemFinancialSummary(BaseModel):
     id: Optional[UUID] = None

@@ -93,16 +93,20 @@ const EmpresaForm: React.FC = () => {
     });
 
     const [salesParameters, setSalesParameters] = useState<any>({
-        mkp_padrao: 0,
-        despesa_administrativa: 0,
-        comissionamento: 0,
-        pis: 0,
-        cofins: 0,
-        csll: 0,
-        irpj: 0,
-        iss: 0,
-        icms_interno: 0,
-        icms_externo: 0
+        mkp_padrao: 0, despesa_administrativa: 0, comissionamento: 0,
+        pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms_interno: 0, icms_externo: 0,
+        // Venda de Equipamentos e Serviços
+        mkp_padrao_venda: 0, despesa_administrativa_venda: 0, comissionamento_venda: 0,
+        pis_venda: 0, cofins_venda: 0, csll_venda: 0, irpj_venda: 0, iss_venda: 0,
+        icms_interno_venda: 0, icms_externo_venda: 0,
+        // Locação de Equipamentos
+        mkp_padrao_locacao: 0, despesa_administrativa_locacao: 0, comissionamento_locacao: 0,
+        pis_locacao: 0, cofins_locacao: 0, csll_locacao: 0, irpj_locacao: 0, iss_locacao: 0,
+        icms_interno_locacao: 0, icms_externo_locacao: 0,
+        // Comodato de Equipamentos
+        mkp_padrao_comodato: 0, despesa_administrativa_comodato: 0, comissionamento_comodato: 0,
+        pis_comodato: 0, cofins_comodato: 0, csll_comodato: 0, irpj_comodato: 0, iss_comodato: 0,
+        icms_interno_comodato: 0, icms_externo_comodato: 0,
     });
 
     const tabs = [
@@ -1212,36 +1216,79 @@ const EmpresaForm: React.FC = () => {
                                         </div>
 
                                         <div className="flex flex-col gap-2 mt-8 pt-8 border-t border-border-subtle">
-                                            <h2 className="text-xl font-bold text-text-primary">Parâmetros Mínimos de Margem e Tributos (%)</h2>
-                                            <p className="text-sm text-text-muted">Estes campos servem como métricas ideais base no sistema de precificação desta empresa.</p>
+                                            <h2 className="text-xl font-bold text-text-primary">Parâmetros Mínimos de Margem e Tributos</h2>
+                                            <p className="text-sm text-text-muted">Parâmetros base por tipo de operação usados no motor de precificação desta empresa.</p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {[
-                                                { k: 'mkp_padrao', label: 'MKP Padrão (Multiplicador)' },
-                                                { k: 'despesa_administrativa', label: 'Despesa Administrativa (%)' },
-                                                { k: 'comissionamento', label: 'Comissionamento (%)' },
-                                                { k: 'pis', label: 'PIS (%)' },
-                                                { k: 'cofins', label: 'COFINS (%)' },
-                                                { k: 'csll', label: 'CSLL (%)' },
-                                                { k: 'irpj', label: 'IRPJ (%)' },
-                                                { k: 'iss', label: 'ISS (%)' },
-                                                { k: 'icms_interno', label: 'ICMS Interno (%)' },
-                                                { k: 'icms_externo', label: 'ICMS Externo (%)' }
-                                            ].map((field) => (
-                                                <div key={field.k} className="space-y-1.5">
-                                                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">{field.label}</label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={salesParameters[field.k]}
-                                                        onChange={(e) => setSalesParameters({ ...salesParameters, [field.k]: parseFloat(e.target.value) || 0 })}
-                                                        disabled={isReadOnly}
-                                                        className={getFieldClass('sales_params')}
-                                                    />
+                                        {(() => {
+                                            const PARAM_FIELDS = [
+                                                { k: 'mkp_padrao',            label: 'MKP Padrão (Multiplicador)', step: '0.01' },
+                                                { k: 'despesa_administrativa', label: 'Despesa Administrativa (%)', step: '0.01' },
+                                                { k: 'comissionamento',       label: 'Comissionamento (%)', step: '0.01' },
+                                                { k: 'pis',                   label: 'PIS (%)', step: '0.01' },
+                                                { k: 'cofins',                label: 'COFINS (%)', step: '0.01' },
+                                                { k: 'csll',                  label: 'CSLL (%)', step: '0.01' },
+                                                { k: 'irpj',                  label: 'IRPJ (%)', step: '0.01' },
+                                                { k: 'iss',                   label: 'ISS (%)', step: '0.01' },
+                                                { k: 'icms_interno',          label: 'ICMS Interno (%)', step: '0.01' },
+                                                { k: 'icms_externo',          label: 'ICMS Externo (%)', step: '0.01' },
+                                            ];
+
+                                            const MODAL_SECTIONS = [
+                                                {
+                                                    suffix: 'venda',
+                                                    title: 'Venda de Equipamentos e Serviços',
+                                                    color: 'text-brand-primary',
+                                                    border: 'border-brand-primary/30',
+                                                    bg: 'bg-brand-primary/5',
+                                                },
+                                                {
+                                                    suffix: 'locacao',
+                                                    title: 'Locação de Equipamentos',
+                                                    color: 'text-brand-warning',
+                                                    border: 'border-brand-warning/30',
+                                                    bg: 'bg-brand-warning/5',
+                                                },
+                                                {
+                                                    suffix: 'comodato',
+                                                    title: 'Comodato de Equipamentos',
+                                                    color: 'text-brand-success',
+                                                    border: 'border-brand-success/30',
+                                                    bg: 'bg-brand-success/5',
+                                                },
+                                            ];
+
+                                            return (
+                                                <div className="space-y-4">
+                                                    {MODAL_SECTIONS.map(({ suffix, title, color, border, bg }) => (
+                                                        <div key={suffix} className={`rounded-xl border ${border} ${bg} overflow-hidden`}>
+                                                            <div className={`px-5 py-3 border-b ${border}`}>
+                                                                <span className={`text-sm font-bold ${color} uppercase tracking-wide`}>{title}</span>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 p-5">
+                                                                {PARAM_FIELDS.map((field) => {
+                                                                    const key = `${field.k}_${suffix}`;
+                                                                    return (
+                                                                        <div key={key} className="space-y-1.5">
+                                                                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider leading-tight block">{field.label}</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                step={field.step}
+                                                                                value={salesParameters[key] ?? 0}
+                                                                                onChange={(e) => setSalesParameters({ ...salesParameters, [key]: parseFloat(e.target.value) || 0 })}
+                                                                                disabled={isReadOnly}
+                                                                                className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-3 outline-none focus:border-brand-primary transition-colors text-sm"
+                                                                            />
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            ))}
-                                        </div>
+                                            );
+                                        })()}
+
                                     </motion.div>
                                 )}
 

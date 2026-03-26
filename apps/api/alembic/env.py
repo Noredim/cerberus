@@ -1,9 +1,9 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config  # type: ignore
+from sqlalchemy import pool  # type: ignore
 
-from alembic import context
+from alembic import context  # type: ignore
 import os
 import sys
 
@@ -14,27 +14,27 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from src.core.base import Base
+from src.core.base import Base  # type: ignore
 # Import all models here for Alembic auto-discovery
-from src.modules.tenants.models import Tenant, TenantCnae
-from src.modules.users.models import User, UserRole
-from src.modules.fiscal.models import NcmRule
-from src.modules.catalog.models import State, City, IbgeSyncJob
-from src.modules.utils.models.cep import CepCache
-from src.modules.companies.models import Company, CompanyCnae, CompanyBenefit, CompanyCnpjQueryLog, CnpjQueryCache
-from src.modules.ncm.models import Ncm, NcmImportacao
-from src.modules.ncm_st.models import NcmStHeader, NcmStItem
-from src.modules.suppliers.models import Supplier
-from src.modules.products.models import Product, ProductSupplier
-from src.modules.customers.models import Customer
-from src.modules.purchase_budgets.models import PaymentCondition, PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem
-from src.modules.sales_budgets.models import SalesBudget, SalesBudgetResponsavel, SalesBudgetItem
-from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
-from src.modules.profiles.models import FunctionalProfile
-from src.modules.roles.models import Role
-from src.modules.professionals.models import Professional
+from src.modules.tenants.models import Tenant, TenantCnae  # type: ignore
+from src.modules.users.models import User, UserRole  # type: ignore
+from src.modules.fiscal.models import NcmRule  # type: ignore
+from src.modules.catalog.models import State, City, IbgeSyncJob  # type: ignore
+from src.modules.utils.models.cep import CepCache  # type: ignore
+from src.modules.companies.models import Company, CompanyCnae, CompanyBenefit, CompanyCnpjQueryLog, CnpjQueryCache  # type: ignore
+from src.modules.ncm.models import Ncm, NcmImportacao  # type: ignore
+from src.modules.ncm_st.models import NcmStHeader, NcmStItem  # type: ignore
+from src.modules.suppliers.models import Supplier  # type: ignore
+from src.modules.products.models import Product, ProductSupplier  # type: ignore
+from src.modules.customers.models import Customer  # type: ignore
+from src.modules.purchase_budgets.models import PaymentCondition, PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem  # type: ignore
+from src.modules.sales_budgets.models import SalesBudget, SalesBudgetResponsavel, SalesBudgetItem  # type: ignore
+from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem  # type: ignore
+from src.modules.profiles.models import FunctionalProfile  # type: ignore
+from src.modules.roles.models import Role  # type: ignore
+from src.modules.professionals.models import Professional  # type: ignore
 
-from src.core.config import settings
+from src.core.config import settings  # type: ignore
 target_metadata = Base.metadata
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

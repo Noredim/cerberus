@@ -99,7 +99,43 @@ class CompanySalesParameterBase(BaseModel):
     iss: Decimal = Decimal('0.00')
     icms_interno: Decimal = Decimal('0.00')
     icms_externo: Decimal = Decimal('0.00')
-    
+
+    # Venda de Equipamentos e Serviços
+    mkp_padrao_venda: Decimal = Decimal('0.00')
+    despesa_administrativa_venda: Decimal = Decimal('0.00')
+    comissionamento_venda: Decimal = Decimal('0.00')
+    pis_venda: Decimal = Decimal('0.00')
+    cofins_venda: Decimal = Decimal('0.00')
+    csll_venda: Decimal = Decimal('0.00')
+    irpj_venda: Decimal = Decimal('0.00')
+    iss_venda: Decimal = Decimal('0.00')
+    icms_interno_venda: Decimal = Decimal('0.00')
+    icms_externo_venda: Decimal = Decimal('0.00')
+
+    # Locação de Equipamentos
+    mkp_padrao_locacao: Decimal = Decimal('0.00')
+    despesa_administrativa_locacao: Decimal = Decimal('0.00')
+    comissionamento_locacao: Decimal = Decimal('0.00')
+    pis_locacao: Decimal = Decimal('0.00')
+    cofins_locacao: Decimal = Decimal('0.00')
+    csll_locacao: Decimal = Decimal('0.00')
+    irpj_locacao: Decimal = Decimal('0.00')
+    iss_locacao: Decimal = Decimal('0.00')
+    icms_interno_locacao: Decimal = Decimal('0.00')
+    icms_externo_locacao: Decimal = Decimal('0.00')
+
+    # Comodato de Equipamentos
+    mkp_padrao_comodato: Decimal = Decimal('0.00')
+    despesa_administrativa_comodato: Decimal = Decimal('0.00')
+    comissionamento_comodato: Decimal = Decimal('0.00')
+    pis_comodato: Decimal = Decimal('0.00')
+    cofins_comodato: Decimal = Decimal('0.00')
+    csll_comodato: Decimal = Decimal('0.00')
+    irpj_comodato: Decimal = Decimal('0.00')
+    iss_comodato: Decimal = Decimal('0.00')
+    icms_interno_comodato: Decimal = Decimal('0.00')
+    icms_externo_comodato: Decimal = Decimal('0.00')
+
     model_config = ConfigDict(from_attributes=True)
 
 class CompanySalesParameterOut(CompanySalesParameterBase):

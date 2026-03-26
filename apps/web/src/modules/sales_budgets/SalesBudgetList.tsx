@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Receipt, Search, Copy, Eye, Trash2 } from 'lucide-react';
+import { Plus, Receipt, Search, Copy, Eye, Trash2, Info } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
+import { Tooltip } from '../../components/ui/Tooltip';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 
 interface SalesBudgetSummary {
@@ -13,7 +14,12 @@ interface SalesBudgetSummary {
   data_orcamento: string;
   customer_nome: string;
   total_venda: number;
-  margem_media: number;
+  margem_venda: number;
+  total_faturamento_rental: number;
+  valor_mensal_total_rental: number;
+  prazo_max_rental: number;
+  margem_rental: number;
+  margem_geral: number;
   created_at: string;
 }
 
@@ -154,14 +160,13 @@ export function SalesBudgetList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-bg-deep text-text-muted border-b border-border-subtle">
-                <th className="text-left py-3 px-4 font-semibold">Nº</th>
-                <th className="text-left py-3 px-4 font-semibold">Título</th>
-                <th className="text-left py-3 px-4 font-semibold">Cliente</th>
-                <th className="text-left py-3 px-4 font-semibold">Status</th>
-                <th className="text-right py-3 px-4 font-semibold">Total Venda</th>
-                <th className="text-right py-3 px-4 font-semibold">Margem</th>
-                <th className="text-left py-3 px-4 font-semibold">Data</th>
-                <th className="text-center py-3 px-4 font-semibold">Ações</th>
+                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Oportunidade</th>
+                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Cliente</th>
+                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Status</th>
+                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider">Resumo Venda</th>
+                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider">Resumo Locação</th>
+                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider whitespace-nowrap">Margem Geral</th>
+                <th className="text-center py-3 px-4 font-semibold uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -171,22 +176,68 @@ export function SalesBudgetList() {
                   onClick={() => navigate(`/orcamentos-vendas/${b.id}`)}
                   className="border-b border-border-subtle hover:bg-bg-deep/50 cursor-pointer transition-colors"
                 >
-                  <td className="py-3 px-4 font-mono text-xs text-brand-primary font-semibold">{b.numero_orcamento}</td>
-                  <td className="py-3 px-4 text-text-primary font-medium">{b.titulo}</td>
-                  <td className="py-3 px-4 text-text-muted">{b.customer_nome || '—'}</td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusColors[b.status] || ''}`}>
+                  <td className="py-3 px-4 w-1/4 max-w-[250px]">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-semibold text-text-primary line-clamp-2" title={b.titulo}>
+                        {b.titulo}
+                      </span>
+                      <span className="text-xs font-mono text-brand-primary font-medium">
+                        {b.numero_orcamento}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 w-1/5 max-w-[200px]">
+                    <div className="text-sm text-text-muted line-clamp-2" title={b.customer_nome || '—'}>
+                      {b.customer_nome || '—'}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 w-32">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide tracking-wider ${statusColors[b.status] || ''}`}>
                       {statusLabels[b.status] || b.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right font-semibold text-text-primary">
-                    {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className="font-semibold text-text-primary text-sm whitespace-nowrap">
+                        {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                      {b.total_venda > 0 ? (
+                        <MarginBadge margin={b.margem_venda} />
+                      ) : (
+                        <span className="text-xs text-text-muted">—</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <MarginBadge margin={b.margem_media} />
+                    {b.total_faturamento_rental > 0 ? (
+                      <div className="flex flex-col items-end gap-1.5">
+                        <Tooltip content={
+                          <div className="text-left space-y-1">
+                            <p><span className="text-text-muted">Valor Mensal:</span> {b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p><span className="text-text-muted">Prazo:</span> {b.prazo_max_rental} meses</p>
+                          </div>
+                        }>
+                          <div className="flex items-center gap-1 cursor-help">
+                            <span className="font-semibold text-brand-primary text-sm whitespace-nowrap">
+                              {b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                            <Info className="w-3.5 h-3.5 text-text-muted opacity-70" />
+                          </div>
+                        </Tooltip>
+                        <MarginBadge margin={b.margem_rental} />
+                      </div>
+                    ) : (
+                      <span className="text-text-muted">—</span>
+                    )}
                   </td>
-                  <td className="py-3 px-4 text-text-muted text-xs">
-                    {new Date(b.data_orcamento).toLocaleDateString('pt-BR')}
+                  <td className="py-3 px-4 text-right">
+                    {b.margem_geral > 0 ? (
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-bg-deep border border-border-subtle font-bold text-brand-primary text-xs">
+                        {b.margem_geral.toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">—</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1">

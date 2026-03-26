@@ -87,7 +87,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
     try {
        if (initialData?.id) {
          // Edit mode (do not touch vendedor_id or responsavel_ids)
-         await api.put(`/sales-budgets/${initialData.id}`, { titulo, customer_id: customerId });
+         await api.patch(`/sales-budgets/${initialData.id}/header`, { titulo, customer_id: customerId });
          onSuccess(initialData.id, titulo, customerId);
        } else {
          // Create mode

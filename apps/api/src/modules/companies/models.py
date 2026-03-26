@@ -144,11 +144,46 @@ class CompanySalesParameter(Base):
     icms_interno = Column(Numeric(5, 2), default=0.00)
     icms_externo = Column(Numeric(5, 2), default=0.00)
     frete_venda_padrao = Column(Numeric(5, 2), default=0.00)
-    
+
+    # Per-operation-type parameters
+    mkp_padrao_venda = Column(Numeric(10, 2), default=0.00)
+    despesa_administrativa_venda = Column(Numeric(5, 2), default=0.00)
+    comissionamento_venda = Column(Numeric(5, 2), default=0.00)
+    pis_venda = Column(Numeric(5, 2), default=0.00)
+    cofins_venda = Column(Numeric(5, 2), default=0.00)
+    csll_venda = Column(Numeric(5, 2), default=0.00)
+    irpj_venda = Column(Numeric(5, 2), default=0.00)
+    iss_venda = Column(Numeric(5, 2), default=0.00)
+    icms_interno_venda = Column(Numeric(5, 2), default=0.00)
+    icms_externo_venda = Column(Numeric(5, 2), default=0.00)
+
+    mkp_padrao_locacao = Column(Numeric(10, 2), default=0.00)
+    despesa_administrativa_locacao = Column(Numeric(5, 2), default=0.00)
+    comissionamento_locacao = Column(Numeric(5, 2), default=0.00)
+    pis_locacao = Column(Numeric(5, 2), default=0.00)
+    cofins_locacao = Column(Numeric(5, 2), default=0.00)
+    csll_locacao = Column(Numeric(5, 2), default=0.00)
+    irpj_locacao = Column(Numeric(5, 2), default=0.00)
+    iss_locacao = Column(Numeric(5, 2), default=0.00)
+    icms_interno_locacao = Column(Numeric(5, 2), default=0.00)
+    icms_externo_locacao = Column(Numeric(5, 2), default=0.00)
+
+    mkp_padrao_comodato = Column(Numeric(10, 2), default=0.00)
+    despesa_administrativa_comodato = Column(Numeric(5, 2), default=0.00)
+    comissionamento_comodato = Column(Numeric(5, 2), default=0.00)
+    pis_comodato = Column(Numeric(5, 2), default=0.00)
+    cofins_comodato = Column(Numeric(5, 2), default=0.00)
+    csll_comodato = Column(Numeric(5, 2), default=0.00)
+    irpj_comodato = Column(Numeric(5, 2), default=0.00)
+    iss_comodato = Column(Numeric(5, 2), default=0.00)
+    icms_interno_comodato = Column(Numeric(5, 2), default=0.00)
+    icms_externo_comodato = Column(Numeric(5, 2), default=0.00)
+
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     company = relationship("Company", back_populates="sales_parameters")
+
 
 class CompanyCnpjQueryLog(Base):
     __tablename__ = "company_cnpj_query_logs"
