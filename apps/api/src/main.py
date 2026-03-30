@@ -30,6 +30,8 @@ from src.modules.profiles.router import router as profiles_router
 from src.modules.roles.router import router as roles_router
 from src.modules.professionals.router import router as professionals_router
 from src.modules.solution_analysis.router import router as solution_analysis_router
+from src.modules.man_hours.router import router as man_hours_router
+from src.modules.own_services.router import router as own_services_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -150,3 +152,5 @@ app.include_router(profiles_router)
 app.include_router(roles_router)
 app.include_router(professionals_router)
 app.include_router(solution_analysis_router)
+app.include_router(man_hours_router)
+app.include_router(own_services_router)

@@ -30,8 +30,12 @@ import { SalesBudgetForm } from './modules/sales_budgets/SalesBudgetForm';
 import { OpportunityKitList } from './modules/opportunity_kits/OpportunityKitList';
 import { OpportunityKitForm } from './modules/opportunity_kits/OpportunityKitForm';
 import RolesDashboard from './modules/roles/RolesDashboard';
+import ManHoursDashboard from './modules/man_hours/ManHoursDashboard';
+import OwnServicesDashboard from './modules/own_services/OwnServicesDashboard';
 import ProfessionalsDashboard from './modules/professionals/ProfessionalsDashboard';
 import Dashboard from './modules/dashboard/Dashboard';
+import { SolutionAnalysisList } from './modules/solution_analysis/SolutionAnalysisList';
+import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalysisForm';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -50,12 +54,12 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  // Se o usuário já autenticou, mas não tem empresa selecionada ainda (e.g. primeiro login)
+  // Se o usuÃ¡rio jÃ¡ autenticou, mas nÃ£o tem empresa selecionada ainda (e.g. primeiro login)
   if (userCompanies.length > 0 && !activeCompanyId) {
       return <SelectCompany />;
   }
 
-  // Se o usuário não tem nenhuma empresa vinculada
+  // Se o usuÃ¡rio nÃ£o tem nenhuma empresa vinculada
   if (userCompanies.length === 0) {
       return (
          <div className="min-h-screen bg-bg-deep flex items-center justify-center p-4 text-center">
@@ -65,7 +69,7 @@ const ProtectedRoute = () => {
                  </div>
                  <h2 className="text-xl font-bold text-text-primary mb-2">Sem Acesso</h2>
                  <p className="text-sm text-text-muted">
-                     Você não possui nenhuma empresa vinculada ao seu usuário. Solicite acesso ao administrador do sistema para continuar.
+                     VocÃª nÃ£o possui nenhuma empresa vinculada ao seu usuÃ¡rio. Solicite acesso ao administrador do sistema para continuar.
                  </p>
              </div>
          </div>
@@ -94,6 +98,8 @@ function App() {
             <Route path="/cadastros/jobs" element={<SyncJobsList />} />
             <Route path="/cadastros/cargos" element={<RolesDashboard />} />
             <Route path="/cadastros/profissionais" element={<ProfessionalsDashboard />} />
+            <Route path="/cadastros/hora-homem" element={<ManHoursDashboard />} />
+            <Route path="/cadastros/servicos-proprios" element={<OwnServicesDashboard />} />
             <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
 
             {/* Empresas */}
@@ -102,7 +108,7 @@ function App() {
             <Route path="/empresas/editar/:id" element={<EmpresaForm />} />
             <Route path="/empresas/detalhes/:id" element={<EmpresaForm />} />
 
-            {/* Benefícios */}
+            {/* BenefÃ­cios */}
             <Route path="/beneficios" element={<TaxBenefitsList />} />
             <Route path="/beneficios/novo" element={<TaxBenefitForm />} />
             <Route path="/beneficios/editar/:id" element={<TaxBenefitForm />} />
@@ -149,6 +155,11 @@ function App() {
             <Route path="/cadastros/kits" element={<OpportunityKitList />} />
             <Route path="/cadastros/kits/novo" element={<OpportunityKitForm />} />
             <Route path="/cadastros/kits/:kitId" element={<OpportunityKitForm />} />
+
+            {/* Comercial: AnÃ¡lise de SoluÃ§Ãµes */}
+            <Route path="/comercial/comparativos" element={<SolutionAnalysisList />} />
+            <Route path="/comercial/comparativos/novo" element={<SolutionAnalysisForm />} />
+            <Route path="/comercial/comparativos/:id" element={<SolutionAnalysisForm />} />
 
           </Route>
         </Routes>
