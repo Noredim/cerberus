@@ -1,7 +1,10 @@
 {
   "venvPath": "apps/api",
   "venv": ".venv",
+  "pythonPlatform": "Windows",
+  "include": ["apps/api/src"],
   "extraPaths": [
-    "apps/api"
+    "apps/api",
+    "apps/api/src"
   ]
 }

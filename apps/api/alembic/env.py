@@ -33,6 +33,7 @@ from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitIt
 from src.modules.profiles.models import FunctionalProfile  # type: ignore
 from src.modules.roles.models import Role  # type: ignore
 from src.modules.professionals.models import Professional  # type: ignore
+from src.modules.solution_analysis.models import SolutionAnalysis, SolutionAnalysisItem  # type: ignore
 
 from src.core.config import settings  # type: ignore
 target_metadata = Base.metadata

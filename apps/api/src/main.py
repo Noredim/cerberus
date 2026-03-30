@@ -29,6 +29,7 @@ from src.modules.opportunity_kits.router import router as opportunity_kits_route
 from src.modules.profiles.router import router as profiles_router
 from src.modules.roles.router import router as roles_router
 from src.modules.professionals.router import router as professionals_router
+from src.modules.solution_analysis.router import router as solution_analysis_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -148,3 +149,4 @@ app.include_router(opportunity_kits_router)
 app.include_router(profiles_router)
 app.include_router(roles_router)
 app.include_router(professionals_router)
+app.include_router(solution_analysis_router)
