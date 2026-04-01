@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from src.core.search import unaccent_ilike
 from .models import Customer
 from .schemas import CustomerCreate, CustomerUpdate
 from typing import List, Optional
@@ -29,11 +30,10 @@ class CustomerService:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
         
         if q:
-            search_query = f"%{q}%"
             q_clean = re.sub(r'\D', '', q)
             filters = [
-                Customer.razao_social.ilike(search_query),
-                Customer.nome_fantasia.ilike(search_query)
+                unaccent_ilike(Customer.razao_social, q),
+                unaccent_ilike(Customer.nome_fantasia, q)
             ]
             if q_clean:
                 filters.append(Customer.cnpj.ilike(f"%{q_clean}%"))
@@ -44,11 +44,10 @@ class CustomerService:
     def count_customers(self, tenant_id: str, q: Optional[str] = None) -> int:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
         if q:
-            search_query = f"%{q}%"
             q_clean = re.sub(r'\D', '', q)
             filters = [
-                Customer.razao_social.ilike(search_query),
-                Customer.nome_fantasia.ilike(search_query)
+                unaccent_ilike(Customer.razao_social, q),
+                unaccent_ilike(Customer.nome_fantasia, q)
             ]
             if q_clean:
                 filters.append(Customer.cnpj.ilike(f"%{q_clean}%"))

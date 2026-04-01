@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -27,6 +28,7 @@ class OwnService(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
     nome_servico = Column(String(200), nullable=False)
+    unidade = Column(String(10), nullable=True)
     vigencia = Column(Integer, nullable=False)
     descricao = Column(Text, nullable=True)
     tempo_total_minutos = Column(Integer, nullable=False, default=0)
@@ -69,6 +71,9 @@ class OwnServiceItem(Base):
     )
     role_id = Column(String, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
 
+    # fator: decimal time factor (1.0 = 1 hour). Replaces tempo_minutos.
+    fator = Column(Numeric(precision=10, scale=4), nullable=False, default=0)
+    # tempo_minutos kept for backward compatibility; derived from fator
     tempo_minutos = Column(Integer, nullable=False, default=0)
     tempo_total_minutos = Column(Integer, nullable=False, default=0)
 

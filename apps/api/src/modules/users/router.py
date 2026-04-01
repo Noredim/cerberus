@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from src.core.search import unaccent_ilike
 
 from src.core.database import get_db
 from src.core.security import get_password_hash, verify_password
@@ -20,9 +21,8 @@ def list_users(
     query = db.query(User).filter(User.tenant_id == current_user.tenant_id).options(joinedload(User.roles))
 
     if search:
-        filter_term = f"%{search}%"
         query = query.filter(
-            User.name.ilike(filter_term) | User.email.ilike(filter_term)
+            unaccent_ilike(User.name, search) | unaccent_ilike(User.email, search)
         )
 
     users = query.options(joinedload(User.companies)).order_by(User.name).all()

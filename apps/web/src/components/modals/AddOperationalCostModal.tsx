@@ -17,6 +17,10 @@ interface AddOperationalCostModalProps {
     descricao_item?: string;
   }) => void;
   defaultType?: string;
+  isKitBasedExecucao?: boolean;
+  disabledOwnServices?: boolean;
+  kitFormaExecucao?: string;
+  isKitItemFlow?: boolean;
 }
 
 const COST_TYPES = [
@@ -36,7 +40,7 @@ const EXEC_MAP: Record<string, string> = {
 };
 const execOptions = Object.keys(EXEC_MAP);
 
-export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultType }: AddOperationalCostModalProps) {
+export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultType, isKitBasedExecucao, disabledOwnServices, kitFormaExecucao, isKitItemFlow }: AddOperationalCostModalProps) {
   const [tipoItem, setTipoItem] = useState<'PRODUTO' | 'SERVICO_PROPRIO'>('PRODUTO');
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -137,28 +141,41 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
         setValorUnitario(selectedProduct.vlr_referencia_uso_consumo || selectedProduct.vlr_referencia_revenda || 0);
       }
     } else {
-      // In OwnService mode, calculate LIVE
+      // In OwnService mode
       let totalValue = 0;
       let error = '';
-      const field = EXEC_MAP[formaExecucao];
 
-      if (!selectedProduct.items || selectedProduct.items.length === 0) {
-        error = 'Este Serviço Próprio não possui composição de cargos atrelada.';
+      if (isKitBasedExecucao && !kitFormaExecucao) {
+         error = 'Selecione a Forma de Execução no bloco Informações Gerais.';
       } else {
-        for (const item of selectedProduct.items) {
-          const mh = manHours.find(m => m.role_id === item.role_id);
-          if (!mh || !mh[field] || parseFloat(mh[field]) === 0) {
-            error = `Hora/Homem indisponível no sistema para preencher as exigências da forma de execução selecionada.`;
-            break;
-          }
-          const unitPrice = parseFloat(mh[field]);
-          totalValue += (unitPrice / 60) * parseInt(item.tempo_minutos || 0);
-        }
+         const baseExecucao = isKitBasedExecucao && kitFormaExecucao ? kitFormaExecucao : formaExecucao;
+         const field = EXEC_MAP[baseExecucao];
+
+         if (!selectedProduct.items || selectedProduct.items.length === 0) {
+           error = 'Serviço Próprio sem composição de cargos.';
+         } else {
+           for (const item of selectedProduct.items) {
+             // Validar se fator está preenchido no cargo dentro dos itens? 
+             // O fator de cargo vem da tabela de itens na API? No model OwnServiceItem não existe "fator". Existe "tempo_minutos". 
+             // Ah, the user said "Existe cargo sem fator válido no Serviço Próprio." By "fator" they probably meant the hours (tempo_minutos) ? Wait, in their previous inserts, they inserted into "servico_proprio_cargo" the column "fator". Wait! The system model calls it `tempo_minutos` in `OwnServiceItem` but the user thinks of it as "fator".
+             if (!item.tempo_minutos || parseInt(item.tempo_minutos) === 0) {
+                error = 'Existe cargo sem fator válido no Serviço Próprio.';
+                break;
+             }
+             const mh = manHours.find(m => m.role_id === item.role_id);
+             if (!mh || !mh[field] || parseFloat(mh[field]) === 0) {
+               error = 'Cargo sem valor de Hora Homem para a Forma de Execução selecionada.';
+               break;
+             }
+             const unitPrice = parseFloat(mh[field]);
+             totalValue += (unitPrice / 60) * parseInt(item.tempo_minutos);
+           }
+         }
       }
       setCalcError(error);
       if (!error) setValorUnitario(totalValue);
     }
-  }, [selectedProduct, tipoItem, formaExecucao, manHours, isFetchingDetail]);
+  }, [selectedProduct, tipoItem, formaExecucao, manHours, isFetchingDetail, isKitBasedExecucao]);
 
   const handleConfirm = () => {
     if (!selectedProduct || calcError) return;
@@ -167,7 +184,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
       tipo_item: tipoItem,
       product: tipoItem === 'PRODUTO' ? selectedProduct : undefined,
       own_service: tipoItem === 'SERVICO_PROPRIO' ? selectedProduct : undefined,
-      forma_execucao: tipoItem === 'SERVICO_PROPRIO' ? formaExecucao : undefined,
+      forma_execucao: tipoItem === 'SERVICO_PROPRIO' ? (isKitBasedExecucao && kitFormaExecucao ? kitFormaExecucao : formaExecucao) : undefined,
       quantidade,
       tipo_custo: tipoCusto,
       valor_unitario: valorUnitario,
@@ -202,12 +219,14 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
                 >
                   Pesquisar Produto Existente
                 </button>
-                <button
-                  onClick={() => { setTipoItem('SERVICO_PROPRIO'); setSearchTerm(''); setResults([]); }}
-                  className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'SERVICO_PROPRIO' ? 'bg-white shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
-                >
-                  Importar Serviço Próprio
-                </button>
+                {!disabledOwnServices && (
+                  <button
+                    onClick={() => { setTipoItem('SERVICO_PROPRIO'); setSearchTerm(''); setResults([]); }}
+                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'SERVICO_PROPRIO' ? 'bg-white shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
+                  >
+                    Importar Serviço Próprio
+                  </button>
+                )}
               </div>
 
               {/* Search Input */}
@@ -315,20 +334,30 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo de Custo (Escopo)</label>
-                <select
-                  value={tipoCusto}
-                  onChange={(e) => setTipoCusto(e.target.value)}
-                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 text-text-primary"
-                >
-                  {COST_TYPES.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-              </div>
+              {!isKitItemFlow && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo de Custo (Escopo)</label>
+                  <select
+                    value={tipoCusto}
+                    onChange={(e) => setTipoCusto(e.target.value)}
+                    className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 text-text-primary"
+                  >
+                    {COST_TYPES.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-              {tipoItem === 'SERVICO_PROPRIO' && (
+              {isKitItemFlow && tipoItem === 'SERVICO_PROPRIO' && (
+                 <div className="flex flex-col justify-center mb-2">
+                    <span className="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded inline-block self-start border border-blue-200">
+                      O serviço será embutido diretamente na lista de itens do Kit.
+                    </span>
+                 </div>
+              )}
+
+              {tipoItem === 'SERVICO_PROPRIO' && !isKitBasedExecucao && (
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-1">Forma de Execução</label>
                   <select
@@ -341,6 +370,14 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
                     ))}
                   </select>
                 </div>
+              )}
+              
+              {tipoItem === 'SERVICO_PROPRIO' && isKitBasedExecucao && (
+                 <div className="flex flex-col justify-center mt-6">
+                    <span className="text-xs text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded inline-block self-start border border-purple-200">
+                      Custo baseado na Forma de Execução do Kit ({kitFormaExecucao})
+                    </span>
+                 </div>
               )}
               
               <div>

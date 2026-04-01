@@ -38,7 +38,9 @@ const ProductForm: React.FC = () => {
 
     const isReadOnly = location.pathname.includes('/detalhes/');
     const isEditMode = !!id && !isReadOnly;
-    const lockCoreFields = isReadOnly || isEditMode;
+    // Only company_id is locked after creation — all other fields remain editable
+    const lockCompanyField = isReadOnly || isEditMode;
+    const lockCoreFields = isReadOnly;
 
     const [activeTab, setActiveTab] = useState('identification');
     const [loading, setLoading] = useState(false);
@@ -316,9 +318,19 @@ const ProductForm: React.FC = () => {
                                     </button>
                                 )}
                             </div>
-                            <p className="text-text-muted text-sm capitalize">
-                                {id ? `SKU: ${sku}` : 'Criação de novo item no inventário'}
-                            </p>
+                            {/* Product name + SKU always visible for navigation context */}
+                            {id && formData.nome ? (
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-base font-bold text-text-primary truncate max-w-xs" title={formData.nome}>
+                                        {formData.nome}
+                                    </span>
+                                    <span className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary border border-brand-primary/20 rounded text-[11px] font-bold font-mono tracking-wide shrink-0">
+                                        {sku}
+                                    </span>
+                                </div>
+                            ) : !id ? (
+                                <p className="text-text-muted text-sm">Criação de novo item no inventário</p>
+                            ) : null}
                         </div>
 
                         {id && (
@@ -397,10 +409,10 @@ const ProductForm: React.FC = () => {
                                         <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Empresa Vinculada *</label>
                                         <select
                                             required
-                                            disabled={lockCoreFields}
+                                            disabled={lockCompanyField}
                                             value={formData.company_id}
                                             onChange={e => setFormData({ ...formData, company_id: e.target.value })}
-                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary appearance-none cursor-pointer h-11"
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary appearance-none cursor-pointer h-11 disabled:opacity-60"
                                         >
                                             <option value="">Selecione uma empresa...</option>
                                             {companies.map(c => (

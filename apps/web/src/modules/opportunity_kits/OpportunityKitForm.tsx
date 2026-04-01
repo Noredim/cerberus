@@ -45,9 +45,13 @@ interface KitFormValues {
   custo_itens_acessorios_mensal_kit: number;
   sales_budget_id?: string;
   items: Array<{
-    product_id: string;
+    tipo_item?: string;
+    product_id: string | null;
+    own_service_id?: string;
     descricao_item: string;
     quantidade_no_kit: number;
+    product?: any;
+    own_service?: any;
   }>;
   costs: Array<{
     tipo_item?: string;
@@ -59,6 +63,7 @@ interface KitFormValues {
     valor_unitario: number;
     descricao_item?: string;
   }>;
+  forma_execucao?: string;
 }
 
 export interface OpportunityKitFormProps {
@@ -81,6 +86,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
 
   const [form, setForm] = useState<KitFormValues>({
@@ -118,6 +124,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     custo_logistica_mensal_kit: 0,
     custo_software_mensal_kit: 0,
     custo_itens_acessorios_mensal_kit: 0,
+    forma_execucao: 'H. NORMAL',
     items: [],
     costs: [],
   });
@@ -209,12 +216,30 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   }, [form]);
 
   const sanitizePayload = (data: KitFormValues) => {
+    const sanitizedCosts = data.costs.map(c => {
+      const isKitExecType = ['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(data.tipo_contrato);
+      const summary = financials?.cost_summaries?.find((cs: any) => 
+        (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
+        cs.tipo_custo === c.tipo_custo
+      );
+      return {
+        ...c,
+        valor_unitario: (isKitExecType && c.own_service_id && summary?.custo_base_unitario_item !== undefined) 
+          ? summary.custo_base_unitario_item 
+          : c.valor_unitario,
+        forma_execucao: (isKitExecType && c.own_service_id) 
+          ? data.forma_execucao 
+          : c.forma_execucao
+      };
+    });
+
     return {
       ...data,
       nome_kit: data.nome_kit || "PREVIEW_KIT",
       percentual_instalacao: data.percentual_instalacao === '' ? null : data.percentual_instalacao,
       fator_manutencao: data.fator_manutencao === '' ? null : data.fator_manutencao,
       qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
+      costs: sanitizedCosts,
     };
   };
 
@@ -301,6 +326,33 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           quantidade: data.quantidade,
           valor_unitario: data.valor_unitario,
           descricao_item: data.descricao_item,
+        }
+      ]
+    }));
+  };
+
+  const handleAddItemService = (data: { 
+    tipo_item: string;
+    product?: any; 
+    own_service?: any;
+    forma_execucao?: string;
+    quantidade: number; 
+    tipo_custo: string; 
+    valor_unitario: number;
+    descricao_item?: string;
+  }) => {
+    setForm(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          product_id: null,
+          own_service_id: data.own_service?.id,
+          tipo_item: data.tipo_item,
+          descricao_item: data.descricao_item || data.own_service?.nome_servico || 'Serviço Próprio',
+          quantidade_no_kit: data.quantidade,
+          product: null,
+          own_service: data.own_service
         }
       ]
     }));
@@ -775,6 +827,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <label className="block text-sm font-medium mb-1">Qtd. de Kits Iguais</label>
                 <Input type="number" value={form.quantidade_kits} onChange={(e) => handleInputChange('quantidade_kits', parseFloat(e.target.value) || 1)} className="w-full" />
               </div>
+              {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Forma de Execução Principal <span className="text-[10px] text-purple-600 bg-purple-100 px-1 rounded ml-1">Para Serviços Próprios</span></label>
+                  <select
+                    value={form.forma_execucao || 'H. NORMAL'}
+                    onChange={(e) => handleInputChange('forma_execucao', e.target.value)}
+                    className="w-full rounded-lg border border-purple-200 bg-purple-50/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  >
+                    <option value="H. NORMAL">H. NORMAL</option>
+                    <option value="H. EXTRA">H. EXTRA</option>
+                    <option value="H.E. Ad. Noturno">H.E. Ad. Noturno</option>
+                    <option value="H.E. Dom./Fer.">H.E. Dom./Fer.</option>
+                    <option value="H.E. Dom./Fer. Not.">H.E. Dom./Fer. Not.</option>
+                  </select>
+                </div>
+              )}
             </div>
           </section>
 
@@ -944,20 +1012,48 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
              <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
                 <h2 className="text-xl font-semibold">4. Itens do kit (produtos + serviços)</h2>
-                {form.items.length > 0 && (
-                  <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Produto
-                  </Button>
-                )}
+                <div className="flex items-center gap-3">
+                  {form.items.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Produto
+                    </Button>
+                  )}
+                  {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && form.items.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                        if (!form.forma_execucao) {
+                            alert('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
+                            return;
+                        }
+                        setShowItemServiceSearch(true);
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Serviço
+                    </Button>
+                  )}
+                </div>
              </div>
 
             {form.items.length === 0 ? (
               <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-border-subtle rounded-xl bg-bg-deep/50 hover:bg-bg-deep/80 transition-colors">
-                <Button variant="outline" type="button" onClick={() => setShowProductSearch(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Buscar Lupa de Produtos
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" type="button" onClick={() => setShowProductSearch(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Buscar Lupa de Produtos
+                  </Button>
+                  {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && (
+                    <Button variant="outline" type="button" onClick={() => {
+                        if (!form.forma_execucao) {
+                            alert('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
+                            return;
+                        }
+                        setShowItemServiceSearch(true);
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Serviço Próprio
+                    </Button>
+                  )}
+                </div>
                 <p className="text-sm text-text-muted mt-3">Pesquise para compor a lista do kit</p>
               </div>
             ) : (
@@ -995,14 +1091,24 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                    </thead>
                    <tbody className="divide-y divide-border-subtle bg-bg-surface">
                      {form.items.map((item, idx) => {
-                       // Find cost generated by backend /preview matching product_id
-                       const summary = financials?.item_summaries?.find((s: any) => s.product_id === item.product_id);
+                       // Find cost generated by backend /preview matching product_id or own_service_id
+                       const summary = financials?.item_summaries?.find((s: any) => 
+                           (item.product_id && s.product_id === item.product_id) || 
+                           (item.own_service_id && s.own_service_id === item.own_service_id)
+                       );
                        
                        return (
                          <tr key={idx} className="hover:bg-bg-deep/20 transition-colors group">
                            <td className="px-1.5 py-3 font-medium text-text-primary max-w-[200px] truncate" title={item.descricao_item}>
                              <div className="flex flex-col truncate">
-                               <span className="truncate">{item.descricao_item}</span>
+                               <div className="flex items-center gap-2">
+                                 <span className="truncate">{item.descricao_item}</span>
+                                 {item.tipo_item === 'SERVICO_PROPRIO' && (
+                                    <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase whitespace-nowrap">
+                                      Serviço Próprio
+                                    </span>
+                                 )}
+                               </div>
                                {(item as any).product?.codigo && (
                                  <span className="text-[10px] text-text-muted mt-0.5 font-mono uppercase truncate">
                                    SKU: {(item as any).product.codigo}
@@ -1236,9 +1342,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                              <td className="px-4 py-3 font-medium text-text-primary">
                                <div className="flex flex-col gap-0.5">
                                  <span>{c.descricao_item || 'Serviço'}</span>
-                                 {c.own_service_id && c.forma_execucao && (
+                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
                                    <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
-                                     {c.forma_execucao}
+                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
                                    </span>
                                  )}
                                </div>
@@ -1270,7 +1376,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                </>
                              ) : (
                                <>
-                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario)}</td>
                                  <td className="px-2 py-3 text-right tabular-nums">
                                   <Input
                                     type="number"
@@ -1322,7 +1428,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                            <>
                              <td colSpan={2} className="px-4 py-3 text-right"></td>
                              <td className="px-4 py-3 text-right tabular-nums text-brand-secondary">
-                               {fmtC(instCosts.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
+                               {fmtC(instCosts.reduce((acc, c) => {
+                                 const summary = financials?.cost_summaries?.find((cs: any) => 
+                                   (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
+                                   cs.tipo_custo === c.tipo_custo
+                                 );
+                                 const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;
+                                 return acc + (custoUnit * c.quantidade);
+                               }, 0))}
                              </td>
                            </>
                          )}
@@ -1387,16 +1500,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                            (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
                            cs.tipo_custo === c.tipo_custo
                          );
-                         const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_manutencao || 1) : c.valor_unitario;
+                         const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;
+                         const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? custoUnit * (form.fator_margem_manutencao || 1) : custoUnit;
                          const totalItem = vendaUnit * c.quantidade;
                          return (
                            <tr key={`op-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
                              <td className="px-4 py-3 font-medium text-text-primary">
                                <div className="flex flex-col gap-0.5">
                                  <span>{c.descricao_item || 'Serviço'}</span>
-                                 {c.own_service_id && c.forma_execucao && (
+                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
                                    <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
-                                     {c.forma_execucao}
+                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
                                    </span>
                                  )}
                                </div>
@@ -1475,7 +1589,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 </>
                              ) : (
                                <>
-                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(c.valor_unitario)}</td>
+                                 <td className="px-4 py-3 text-right tabular-nums">{fmtC(custoUnit)}</td>
                                  <td className="px-2 py-3 text-right tabular-nums">
                                   <Input
                                     type="number"
@@ -1531,7 +1645,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                            <>
                              <td colSpan={2} className="px-4 py-3 text-right"></td>
                              <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
-                               {fmtC(opCosts.reduce((acc, c) => acc + (c.valor_unitario * c.quantidade), 0))}
+                               {fmtC(opCosts.reduce((acc, c) => {
+                                 const summary = financials?.cost_summaries?.find((cs: any) => 
+                                   (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
+                                   cs.tipo_custo === c.tipo_custo
+                                 );
+                                 const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;
+                                 return acc + (custoUnit * c.quantidade);
+                               }, 0))}
                              </td>
                            </>
                          )}
@@ -1544,13 +1665,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             </section>
            )}
 
-           
-
            <AddOperationalCostModal 
               isOpen={costSearchType !== null} 
               onClose={() => setCostSearchType(null)} 
               onConfirm={handleAddCost} 
               defaultType={costSearchType === 'inst' ? 'INSTALACAO' : 'MANUTENCAO'}
+              isKitBasedExecucao={['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato)}
+              disabledOwnServices={costSearchType === 'inst' && ['LOCACAO', 'COMODATO'].includes(form.tipo_contrato)}
+              kitFormaExecucao={form.forma_execucao || 'H. NORMAL'}
+           />
+
+           <AddOperationalCostModal 
+              isOpen={showItemServiceSearch} 
+              onClose={() => setShowItemServiceSearch(false)} 
+              onConfirm={(data) => {
+                handleAddItemService(data);
+                setShowItemServiceSearch(false);
+              }}
+              defaultType="SERVICO_PROPRIO"
+              isKitBasedExecucao={true}
+              isKitItemFlow={true}
+              kitFormaExecucao={form.forma_execucao || 'H. NORMAL'}
            />
         </div>
 

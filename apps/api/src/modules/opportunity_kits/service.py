@@ -98,6 +98,53 @@ class OpportunityKitService:
                 vl_un = Decimal(cost.valor_unitario or 0)
                 vl_tot = vl_un * qtde
                 
+                # Recalculo dinamico p/ VENDA_EQUIPAMENTOS, LOCACAO, e COMODATO + SERVICO_PROPRIO + Forma de Execucao
+                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "LOCACAO", "COMODATO", "INSTALACAO"] and getattr(cost, "own_service_id", None) and getattr(kit, "forma_execucao", None):
+                    EXEC_MAP = {
+                        'H. NORMAL': 'hora_normal',
+                        'H. EXTRA': 'hora_extra',
+                        'H.E. Ad. Noturno': 'hora_extra_adicional_noturno',
+                        'H.E. Dom./Fer.': 'hora_extra_domingos_feriados',
+                        'H.E. Dom./Fer. Not.': 'hora_extra_domingos_feriados_noturno',
+                    }
+                    field_name = EXEC_MAP.get(kit.forma_execucao)
+                    if field_name:
+                        from src.modules.own_services.models import OwnServiceItem
+                        from src.modules.man_hours.models import ManHour
+                        
+                        current_year = datetime.utcnow().year
+                        comp_id = str(kit.company_id) if kit.company_id else None
+                        
+                        if comp_id:
+                            # Busca as horas homems de toda a base da company
+                            man_hours = self.db.query(ManHour).filter(
+                                ManHour.tenant_id == tenant_id,
+                                ManHour.company_id == comp_id,
+                                ManHour.vigencia <= current_year,
+                                ManHour.ativo == True
+                            ).order_by(ManHour.vigencia.desc()).all()
+                            
+                            # Pega valor da coluna por CARGO
+                            mh_by_role = {}
+                            for mh in man_hours:
+                                if str(mh.role_id) not in mh_by_role:
+                                    mh_by_role[str(mh.role_id)] = Decimal(getattr(mh, field_name, 0))
+                                    
+                            os_items = self.db.query(OwnServiceItem).filter(
+                                OwnServiceItem.own_service_id == cost.own_service_id
+                            ).all()
+                            
+                            if os_items:
+                                dyn_total = Decimal("0.0")
+                                for os_item in os_items:
+                                    role_rate = mh_by_role.get(str(os_item.role_id), Decimal("0.0"))
+                                    minutes = Decimal(os_item.tempo_minutos or 0)
+                                    dyn_total += (role_rate / Decimal(60.0)) * minutes
+                                
+                                if dyn_total > 0:
+                                    vl_un = dyn_total
+                                    vl_tot = vl_un * qtde
+
                 if cost_tipo_custo == "INSTALACAO":
                     custo_instalacao_avulso += vl_tot
                 else:
@@ -187,12 +234,64 @@ class OpportunityKitService:
         total_imposto_itens_venda = Decimal("0.0")
         
         for item in kit.items:
-            # For each item we fetch its active data
-            info = self.get_product_info(str(item.product_id), tenant_id, kit.tipo_contrato)
-            custo_base_unitario_item = info["cost"]
-            tipo_produto = info["tipo"]
-            difal_unitario = info["difal"]
-            icms_st = info.get("icms_st", Decimal("0.0"))
+            tipo_item_entity = getattr(item, "tipo_item", "PRODUTO")
+            
+            custo_base_unitario_item = Decimal("0.0")
+            tipo_produto = "MERCADORIA"
+            difal_unitario = Decimal("0.0")
+            icms_st = Decimal("0.0")
+            info = {}  # fallback for tooltip details; populated only for product items
+            
+            if tipo_item_entity == "SERVICO_PROPRIO" and getattr(item, "own_service_id", None):
+                tipo_produto = "SERVICO"
+                if getattr(kit, "forma_execucao", None):
+                    EXEC_MAP = {
+                        'H. NORMAL': 'hora_normal',
+                        'H. EXTRA': 'hora_extra',
+                        'H.E. Ad. Noturno': 'hora_extra_adicional_noturno',
+                        'H.E. Dom./Fer.': 'hora_extra_domingos_feriados',
+                        'H.E. Dom./Fer. Not.': 'hora_extra_domingos_feriados_noturno',
+                    }
+                    field_name = EXEC_MAP.get(kit.forma_execucao)
+                    if field_name:
+                        from src.modules.own_services.models import OwnServiceItem
+                        from src.modules.man_hours.models import ManHour
+                        
+                        current_year = datetime.utcnow().year
+                        comp_id = str(kit.company_id) if kit.company_id else None
+                        
+                        if comp_id:
+                            man_hours = self.db.query(ManHour).filter(
+                                ManHour.tenant_id == tenant_id,
+                                ManHour.company_id == comp_id,
+                                ManHour.vigencia <= current_year,
+                                ManHour.ativo == True
+                            ).order_by(ManHour.vigencia.desc()).all()
+                            
+                            mh_by_role = {}
+                            for mh in man_hours:
+                                if str(mh.role_id) not in mh_by_role:
+                                    mh_by_role[str(mh.role_id)] = Decimal(getattr(mh, field_name, 0))
+                                    
+                            os_items = self.db.query(OwnServiceItem).filter(
+                                OwnServiceItem.own_service_id == item.own_service_id
+                            ).all()
+                            
+                            if os_items:
+                                dyn_total = Decimal("0.0")
+                                for os_item in os_items:
+                                    role_rate = mh_by_role.get(str(os_item.role_id), Decimal("0.0"))
+                                    minutes = Decimal(os_item.tempo_minutos or 0)
+                                    dyn_total += (role_rate / Decimal(60.0)) * minutes
+                                
+                                if dyn_total > 0:
+                                    custo_base_unitario_item = dyn_total
+            else:
+                info = self.get_product_info(str(item.product_id), tenant_id, kit.tipo_contrato)
+                custo_base_unitario_item = info["cost"]
+                tipo_produto = info["tipo"]
+                difal_unitario = info["difal"]
+                icms_st = info.get("icms_st", Decimal("0.0"))
             
             custo_total_item_no_kit = custo_base_unitario_item * Decimal(item.quantidade_no_kit or 1)
             difal_total_item = difal_unitario * Decimal(item.quantidade_no_kit or 1)
@@ -245,7 +344,9 @@ class OpportunityKitService:
 
             item_summaries.append({
                 "id": str(item.id) if item.id else None,
-                "product_id": str(item.product_id),
+                "tipo_item_entity": getattr(item, "tipo_item", "PRODUTO"),
+                "product_id": str(item.product_id) if item.product_id else None,
+                "own_service_id": str(getattr(item, "own_service_id", None)) if getattr(item, "own_service_id", None) else None,
                 "tipo_item": tipo_produto,
                 "custo_base_unitario_item": round(custo_base_unitario_item, 2),  # type: ignore
                 "custo_total_item_no_kit": round(custo_total_item_no_kit, 2),  # type: ignore
@@ -577,7 +678,9 @@ class OpportunityKitService:
         for item_data in data.items:
             item = OpportunityKitItem(
                 kit_id=kit.id,
+                tipo_item=item_data.tipo_item,
                 product_id=item_data.product_id,
+                own_service_id=item_data.own_service_id,
                 descricao_item=item_data.descricao_item,
                 quantidade_no_kit=item_data.quantidade_no_kit
             )
@@ -620,7 +723,9 @@ class OpportunityKitService:
             for item in items_data:
                 new_item = OpportunityKitItem(
                     kit_id=kit.id,
-                    product_id=item["product_id"],
+                    tipo_item=item.get("tipo_item", "PRODUTO"),
+                    product_id=item.get("product_id"),
+                    own_service_id=item.get("own_service_id"),
                     descricao_item=item["descricao_item"],
                     quantidade_no_kit=item["quantidade_no_kit"]
                 )
@@ -658,10 +763,11 @@ class OpportunityKitService:
         kit.item_summaries = fin["item_summaries"]
         return kit
     
-    def recalculate_kit_preview(self, tenant_id: str, data: OpportunityKitCreate) -> dict:
+    def recalculate_kit_preview(self, tenant_id: str, company_id: str, data: OpportunityKitCreate) -> dict:
         """Endpoint used to preview financials without saving to DB"""
         # Create a mock objects
         kit = OpportunityKit(**data.model_dump(exclude={"items", "costs"}))
+        kit.company_id = company_id
         kit.items = [OpportunityKitItem(**item_data.model_dump()) for item_data in data.items]
         kit.costs = [OpportunityKitCost(**cost_data.model_dump()) for cost_data in data.costs]
         

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, desc
+from src.core.search import unaccent_ilike
 from .models import Product, ProductSupplier
 from .schemas import ProductCreate, ProductUpdate
 from src.modules.companies.models import Company
@@ -60,11 +61,10 @@ class ProductService:
         query = self.db.query(Product).filter(Product.tenant_id == tenant_id)
         
         if q:
-            search = f"%{q}%"
             q_clean = re.sub(r'\D', '', q)
             filters = [
-                Product.nome.ilike(search),
-                Product.codigo.ilike(search)
+                unaccent_ilike(Product.nome, q),
+                unaccent_ilike(Product.codigo, q)
             ]
             if q_clean:
                 filters.append(Product.ncm_codigo.ilike(f"%{q_clean}%"))

@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import select, delete, func
+from src.core.search import unaccent_ilike
 from .models import NcmStHeader, NcmStItem
 from .schemas import NcmStHeaderCreate, NcmStHeaderUpdate, NcmStItemCreate
 from src.modules.catalog.models import State
@@ -78,11 +79,10 @@ class NcmStService:
         query = db.query(NcmStItem).filter(NcmStItem.cad_ncm_st_id == header_id)
         
         if q:
-            search = f"%{q}%"
             query = query.filter(
-                (NcmStItem.ncm_normalizado.ilike(search)) |
-                (NcmStItem.cest_normalizado.ilike(search)) |
-                (NcmStItem.descricao.ilike(search))
+                unaccent_ilike(NcmStItem.ncm_normalizado, q) |
+                unaccent_ilike(NcmStItem.cest_normalizado, q) |
+                unaccent_ilike(NcmStItem.descricao, q)
             )
             
         return query.offset(skip).limit(limit).all()
@@ -92,11 +92,10 @@ class NcmStService:
         query = db.query(func.count(NcmStItem.id)).filter(NcmStItem.cad_ncm_st_id == header_id)
         
         if q:
-            search = f"%{q}%"
             query = query.filter(
-                (NcmStItem.ncm_normalizado.ilike(search)) |
-                (NcmStItem.cest_normalizado.ilike(search)) |
-                (NcmStItem.descricao.ilike(search))
+                unaccent_ilike(NcmStItem.ncm_normalizado, q) |
+                unaccent_ilike(NcmStItem.cest_normalizado, q) |
+                unaccent_ilike(NcmStItem.descricao, q)
             )
             
         return query.scalar()

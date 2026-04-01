@@ -4,7 +4,7 @@ from uuid import UUID
 from typing import List, Optional
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from src.modules.opportunity_kits.schemas import (
     OpportunityKitCreate, OpportunityKitUpdate, OpportunityKitResponse, OpportunityKitFinancialSummary
@@ -75,7 +75,9 @@ def update_kit(
 def preview_kit_financials(
     data: OpportunityKitCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     service = OpportunityKitService(db)
-    return service.recalculate_kit_preview(current_user.tenant_id, data)
+    return service.recalculate_kit_preview(current_user.tenant_id, str(company_id), data)
+

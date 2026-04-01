@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Minus, Plus, X } from 'lucide-react';
+import { AlertCircle, Clock, Loader2, Minus, Plus, X } from 'lucide-react';
 import type { OwnServiceResponse, OwnServiceItemCreate } from '../../services/ownServicesApi';
-import { ownServicesApi, formatMinutes } from '../../services/ownServicesApi';
+import { ownServicesApi, fatorToHHMMSS, calcFatorConsolidado } from '../../services/ownServicesApi';
 import { api } from '../../services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,13 +21,14 @@ interface OwnServicesModalProps {
 }
 
 interface ItemRow {
-  _key: string; // internal stable key
+  _key: string;
   role_id: string;
-  tempo_minutos: string;
+  fator: string; // decimal string input
 }
 
 interface FormErrors {
   nome_servico?: string;
+  unidade?: string;
   vigencia?: string;
   items?: string;
   [key: string]: string | undefined;
@@ -37,19 +38,17 @@ interface FormErrors {
 
 const TITLE: Record<ModalMode, string> = {
   create: 'Novo Serviço Próprio',
-  edit: 'Editar Serviço Próprio',
-  view: 'Visualizar Serviço Próprio',
+  edit:   'Editar Serviço Próprio',
+  view:   'Visualizar Serviço Próprio',
 };
 
 function newRow(): ItemRow {
-  return { _key: crypto.randomUUID(), role_id: '', tempo_minutos: '0' };
+  return { _key: crypto.randomUUID(), role_id: '', fator: '' };
 }
 
-function calcTotal(rows: ItemRow[]): number {
-  return rows.reduce((acc, r) => {
-    const m = parseInt(r.tempo_minutos || '0', 10) || 0;
-    return acc + m;
-  }, 0);
+function parseFator(v: string): number {
+  const n = parseFloat(v.replace(',', '.'));
+  return isNaN(n) ? 0 : n;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -60,6 +59,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
 
   // Form state
   const [nomeServico, setNomeServico] = useState('');
+  const [unidade, setUnidade] = useState('');
   const [vigencia, setVigencia] = useState('');
   const [descricao, setDescricao] = useState('');
   const [rows, setRows] = useState<ItemRow[]>([newRow()]);
@@ -76,7 +76,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
     api.get('/roles').then((r: any) => setRoles(r.data)).catch(() => setRoles([]));
   }, []);
 
-  // ── Load existing record for edit/view ─────────────────────────────────────
+  // ── Load existing record ────────────────────────────────────────────────────
   useEffect(() => {
     if ((mode === 'edit' || mode === 'view') && serviceId) {
       setDataLoading(true);
@@ -84,6 +84,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
         .get(serviceId)
         .then((svc: OwnServiceResponse) => {
           setNomeServico(svc.nome_servico);
+          setUnidade(svc.unidade || '');
           setVigencia(String(svc.vigencia));
           setDescricao(svc.descricao ?? '');
           setRows(
@@ -91,7 +92,10 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
               ? svc.items.map((i) => ({
                   _key: crypto.randomUUID(),
                   role_id: i.role_id,
-                  tempo_minutos: String(i.tempo_minutos),
+                  // If fator exists use it; otherwise fall back to converting old tempo_minutos
+                  fator: i.fator != null
+                    ? String(i.fator)
+                    : String(parseFloat((i.tempo_minutos / 60).toFixed(4))),
                 }))
               : [newRow()],
           );
@@ -101,17 +105,14 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
     }
   }, [mode, serviceId]);
 
-  // ── Close on backdrop click ─────────────────────────────────────────────────
+  // ── Backdrop click ──────────────────────────────────────────────────────────
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === backdropRef.current) onClose();
   };
 
   // ── Row management ──────────────────────────────────────────────────────────
-
   const usedRoleIds = rows.map((r) => r.role_id).filter(Boolean);
-
   const addRow = () => setRows((prev) => [...prev, newRow()]);
-
   const removeRow = (key: string) =>
     setRows((prev) => (prev.length > 1 ? prev.filter((r) => r._key !== key) : prev));
 
@@ -121,12 +122,20 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
     setApiError(null);
   };
 
-  // ── Validation ──────────────────────────────────────────────────────────────
+  // ── Computed consolidado ────────────────────────────────────────────────────
+  const validFatores = rows
+    .filter((r) => r.role_id)
+    .map((r) => parseFator(r.fator))
+    .filter((f) => f > 0);
 
+  const consolidado = calcFatorConsolidado(validFatores);
+
+  // ── Validation ──────────────────────────────────────────────────────────────
   const validate = (): boolean => {
     const errs: FormErrors = {};
 
     if (!nomeServico.trim()) errs.nome_servico = 'Nome do serviço é obrigatório.';
+    if (unidade.trim().length > 10) errs.unidade = 'Máximo de 10 caracteres.';
 
     const year = parseInt(vigencia, 10);
     if (!vigencia) {
@@ -144,9 +153,9 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
       if (!r.role_id) {
         errs[`row_${r._key}_role_id`] = 'Selecione um cargo.';
       }
-      const m = parseInt(r.tempo_minutos, 10);
-      if (isNaN(m) || m <= 0) {
-        errs[`row_${r._key}_tempo_minutos`] = 'Tempo deve ser > 0.';
+      const f = parseFator(r.fator);
+      if (!r.fator || f <= 0) {
+        errs[`row_${r._key}_fator`] = 'Fator deve ser > 0.';
       }
     });
 
@@ -155,7 +164,6 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────────
-
   const handleSubmit = async () => {
     if (!validate()) return;
 
@@ -166,11 +174,12 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
       .filter((r) => r.role_id)
       .map((r) => ({
         role_id: r.role_id,
-        tempo_minutos: parseInt(r.tempo_minutos, 10) || 0,
+        fator: parseFator(r.fator),
       }));
 
     const payload = {
       nome_servico: nomeServico.trim(),
+      unidade: unidade.trim() || undefined,
       vigencia: parseInt(vigencia, 10),
       descricao: descricao.trim() || undefined,
       items,
@@ -191,17 +200,13 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
   };
 
   // ── Styles ──────────────────────────────────────────────────────────────────
-
   const inputBase =
     'w-full px-3 py-2 text-sm rounded-md border bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/40 transition-all';
-  const inp = `${inputBase} border-border-subtle`;
+  const inp    = `${inputBase} border-border-subtle`;
   const inpErr = `${inputBase} border-brand-danger bg-brand-danger/5`;
   const inpDis = `${inputBase} border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed`;
 
-  const totalMinutes = calcTotal(rows);
-
   // ── Render ──────────────────────────────────────────────────────────────────
-
   return (
     <div
       ref={backdropRef}
@@ -257,6 +262,24 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                   {errors.nome_servico && <p className="text-xs text-brand-danger">{errors.nome_servico}</p>}
                 </div>
 
+                {/* Unidade */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                    Unidade <span className="text-xs text-text-muted font-normal normal-case">(opcional, máx 10)</span>
+                  </label>
+                  <input
+                    id="own-service-unidade"
+                    type="text"
+                    maxLength={10}
+                    placeholder="Ex: UN, H, KM"
+                    value={unidade}
+                    onChange={(e) => { setUnidade(e.target.value); setErrors((p) => ({ ...p, unidade: undefined })); }}
+                    disabled={isReadOnly}
+                    className={errors.unidade ? inpErr : isReadOnly ? inpDis : inp}
+                  />
+                  {errors.unidade && <p className="text-xs text-brand-danger">{errors.unidade}</p>}
+                </div>
+
                 {/* Vigência */}
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
@@ -277,7 +300,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                 </div>
 
                 {/* Descrição */}
-                <div className="space-y-1">
+                <div className="md:col-span-2 space-y-1">
                   <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
                     Descrição <span className="text-xs text-text-muted font-normal normal-case">(opcional)</span>
                   </label>
@@ -293,7 +316,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                 </div>
               </div>
 
-              {/* ── Seção 2: Composição ────────────────────────────────── */}
+              {/* ── Seção 2: Composição de Cargos ─────────────────────── */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
@@ -315,37 +338,52 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                   <p className="text-xs text-brand-danger">{errors.items}</p>
                 )}
 
-                {/* Item rows */}
+                {/* Grid de itens */}
                 <div className="border border-border-subtle rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-bg-deep text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
                       <tr>
+                        <th className="px-3 py-2.5 text-center font-semibold w-14">ID</th>
                         <th className="px-4 py-2.5 text-left font-semibold">Cargo</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-40">Tempo (minutos)</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-24">Total</th>
+                        <th className="px-3 py-2.5 text-center font-semibold w-36">
+                          Fator <span className="font-normal normal-case">(horas)</span>
+                        </th>
+                        <th className="px-3 py-2.5 text-center font-semibold w-32">Tempo</th>
                         {!isReadOnly && <th className="w-10" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle bg-surface">
-                      {rows.map((row) => {
-                        const rowM = parseInt(row.tempo_minutos, 10) || 0;
-                        const rowTotal = formatMinutes(rowM);
+                      {rows.map((row, idx) => {
+                        const f = parseFator(row.fator);
+                        const hhmmss = f > 0 ? fatorToHHMMSS(f) : '—';
                         const rowRoleErr = errors[`row_${row._key}_role_id`];
-                        const rowMErr = errors[`row_${row._key}_tempo_minutos`];
+                        const rowFatorErr = errors[`row_${row._key}_fator`];
 
-                        // Roles available: exclude those already selected in OTHER rows
                         const availableRoles = roles.filter(
                           (r) => r.id === row.role_id || !usedRoleIds.includes(r.id),
                         );
 
                         return (
                           <tr key={row._key} className="group">
+                            {/* Sequential ID */}
+                            <td className="px-3 py-2 text-center">
+                              <span className="inline-flex items-center justify-center w-8 h-6 rounded text-xs font-bold font-mono bg-bg-deep border border-border-subtle text-text-muted">
+                                C{idx + 1}
+                              </span>
+                            </td>
+                            {/* Cargo */}
                             <td className="px-4 py-2">
                               <select
                                 value={row.role_id}
                                 onChange={(e) => updateRow(row._key, 'role_id', e.target.value)}
                                 disabled={isReadOnly}
-                                className={`w-full text-sm rounded-md px-2 py-1.5 border focus:outline-none focus:ring-2 focus:ring-brand-primary/40 bg-surface text-text-primary transition-all ${rowRoleErr ? 'border-brand-danger bg-brand-danger/5' : isReadOnly ? 'border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed' : 'border-border-subtle'}`}
+                                className={`w-full text-sm rounded-md px-2 py-1.5 border focus:outline-none focus:ring-2 focus:ring-brand-primary/40 bg-surface text-text-primary transition-all ${
+                                  rowRoleErr
+                                    ? 'border-brand-danger bg-brand-danger/5'
+                                    : isReadOnly
+                                    ? 'border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed'
+                                    : 'border-border-subtle'
+                                }`}
                               >
                                 <option value="">Selecione...</option>
                                 {availableRoles.map((r) => (
@@ -354,19 +392,36 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                               </select>
                               {rowRoleErr && <p className="text-xs text-brand-danger mt-0.5">{rowRoleErr}</p>}
                             </td>
+
+                            {/* Fator decimal */}
                             <td className="px-3 py-2">
                               <input
                                 type="number"
-                                min={1}
-                                value={row.tempo_minutos}
-                                onChange={(e) => updateRow(row._key, 'tempo_minutos', e.target.value)}
+                                step="0.01"
+                                min="0.01"
+                                placeholder="Ex: 1.5"
+                                value={row.fator}
+                                onChange={(e) => updateRow(row._key, 'fator', e.target.value)}
                                 disabled={isReadOnly}
-                                className={`w-full text-center text-sm rounded-md px-2 py-1.5 border focus:outline-none focus:ring-2 focus:ring-brand-primary/40 bg-surface text-text-primary transition-all ${rowMErr ? 'border-brand-danger' : isReadOnly ? 'border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed' : 'border-border-subtle'}`}
+                                className={`w-full text-center text-sm rounded-md px-2 py-1.5 border focus:outline-none focus:ring-2 focus:ring-brand-primary/40 bg-surface text-text-primary transition-all ${
+                                  rowFatorErr
+                                    ? 'border-brand-danger bg-brand-danger/5'
+                                    : isReadOnly
+                                    ? 'border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed'
+                                    : 'border-border-subtle'
+                                }`}
                               />
+                              {rowFatorErr && <p className="text-xs text-brand-danger mt-0.5">{rowFatorErr}</p>}
                             </td>
+
+                            {/* Tempo convertido HH:MM:SS */}
                             <td className="px-3 py-2 text-center">
-                              <span className="font-mono text-sm text-text-muted">{rowTotal}</span>
+                              <span className="inline-flex items-center gap-1 font-mono text-sm text-text-muted">
+                                <Clock className="w-3.5 h-3.5 opacity-50" />
+                                {hhmmss}
+                              </span>
                             </td>
+
                             {!isReadOnly && (
                               <td className="px-2 py-2 text-center">
                                 <button
@@ -385,14 +440,27 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                   </table>
                 </div>
 
-                {/* Total time highlight */}
-                <div className="flex items-center justify-end gap-3 pt-1">
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                    Tempo Total do Serviço
-                  </span>
-                  <span className="inline-flex items-center px-4 py-1.5 rounded-lg bg-brand-primary/10 border border-brand-primary/30 font-mono text-lg font-bold text-brand-primary tracking-widest">
-                    {formatMinutes(totalMinutes)}
-                  </span>
+                {/* Tempo Consolidado */}
+                <div className="flex items-center justify-between pt-2 px-1">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                      Tempo Consolidado
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Média dos fatores ({validFatores.length > 0 ? validFatores.length : '—'} cargo{validFatores.length !== 1 ? 's' : ''})
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {consolidado.fator > 0 && (
+                      <span className="text-xs text-text-muted font-mono">
+                        fator {consolidado.fator.toFixed(4)}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-primary/10 border border-brand-primary/30 font-mono text-lg font-bold text-brand-primary tracking-widest">
+                      <Clock className="w-4 h-4 opacity-70" />
+                      {validFatores.length > 0 ? consolidado.hhmmss : '—'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </>

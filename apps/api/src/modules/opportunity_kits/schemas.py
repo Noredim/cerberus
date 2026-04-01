@@ -5,7 +5,9 @@ from datetime import datetime
 from decimal import Decimal
 
 class OpportunityKitItemBase(BaseModel):
-    product_id: UUID
+    tipo_item: str = Field(default="PRODUTO")
+    product_id: Optional[UUID] = None
+    own_service_id: Optional[UUID] = None
     descricao_item: str
     quantidade_no_kit: Decimal = Field(default=Decimal(1))
 
@@ -18,18 +20,19 @@ class ProductSimpleResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class OpportunityKitItemResponse(OpportunityKitItemBase):
-    id: UUID
-    kit_id: UUID
-    product: Optional[ProductSimpleResponse] = None
-    
-    class Config:
-        from_attributes = True
-
 class OwnServiceSimpleResponse(BaseModel):
     id: UUID
     nome_servico: str
 
+    class Config:
+        from_attributes = True
+
+class OpportunityKitItemResponse(OpportunityKitItemBase):
+    id: UUID
+    kit_id: UUID
+    product: Optional[ProductSimpleResponse] = None
+    own_service: Optional[OwnServiceSimpleResponse] = None
+    
     class Config:
         from_attributes = True
 
@@ -60,6 +63,7 @@ class OpportunityKitBase(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: int = Field(default=1)
     tipo_contrato: str
+    forma_execucao: Optional[str] = None
     
     prazo_contrato_meses: int
     prazo_instalacao_meses: int = Field(default=0)
@@ -108,6 +112,7 @@ class OpportunityKitUpdate(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: Optional[int] = None
     tipo_contrato: Optional[str] = None
+    forma_execucao: Optional[str] = None
     
     prazo_contrato_meses: Optional[int] = None
     prazo_instalacao_meses: Optional[int] = None
@@ -180,7 +185,9 @@ class OpportunityKitFinancialSummary(BaseModel):
 
 class OpportunityKitItemFinancialSummary(BaseModel):
     id: Optional[UUID] = None
-    product_id: UUID
+    tipo_item: str = Field(default="PRODUTO")
+    product_id: Optional[UUID] = None
+    own_service_id: Optional[UUID] = None
     custo_base_unitario_item: Decimal
     custo_total_item_no_kit: Decimal
     difal_unitario: Decimal = Field(default=Decimal(0))

@@ -14,6 +14,7 @@ from src.modules.own_services.schemas import (
     OwnServiceListItem,
     OwnServiceResponse,
     OwnServiceUpdate,
+    _fator_to_hhmmss,
 )
 from src.modules.users.models import User
 
@@ -44,8 +45,14 @@ def _load_service(service_id: str, company_id: str, tenant_id: str, db: Session)
     return svc
 
 
-def _calc_total(items_data) -> int:
-    return sum(i.tempo_minutos for i in items_data)
+def _calc_consolidated(items_data) -> tuple[float, int]:
+    """Returns (fator_consolidado, tempo_total_minutos) as average-of-factors."""
+    if not items_data:
+        return 0.0, 0
+    fatores = [float(i.fator) for i in items_data]
+    fator_medio = sum(fatores) / len(fatores)
+    tempo_minutos = round(fator_medio * 60)
+    return round(fator_medio, 4), tempo_minutos
 
 
 def _build_items(service_id, items_data) -> list:
@@ -54,8 +61,9 @@ def _build_items(service_id, items_data) -> list:
             id=_uuid.uuid4(),
             own_service_id=service_id,
             role_id=item.role_id,
-            tempo_minutos=item.tempo_minutos,
-            tempo_total_minutos=item.tempo_minutos,
+            fator=item.fator,
+            tempo_minutos=round(item.fator * 60),
+            tempo_total_minutos=round(item.fator * 60),
         )
         for item in items_data
     ]
@@ -63,17 +71,28 @@ def _build_items(service_id, items_data) -> list:
 
 def _to_response(svc: OwnService) -> OwnServiceResponse:
     resp = OwnServiceResponse.model_validate(svc)
+    fator_consolidado, _ = _calc_consolidated(svc.items)
+    resp.fator_consolidado = fator_consolidado
+    resp.tempo_consolidado_hhmmss = _fator_to_hhmmss(fator_consolidado)
+
     for r_schema, r_orm in zip(resp.items, svc.items):
         r_schema.role_name = r_orm.role.name if r_orm.role else None
+        r_schema.fator = float(r_orm.fator)
+        r_schema.tempo_hhmmss = _fator_to_hhmmss(r_schema.fator)
+
     return resp
 
 
 def _to_list_item(svc: OwnService) -> OwnServiceListItem:
+    fator_consolidado, _ = _calc_consolidated(svc.items)
     return OwnServiceListItem(
         id=svc.id,
         nome_servico=svc.nome_servico,
+        unidade=svc.unidade,
         vigencia=svc.vigencia,
         tempo_total_minutos=svc.tempo_total_minutos,
+        fator_consolidado=fator_consolidado,
+        tempo_consolidado_hhmmss=_fator_to_hhmmss(fator_consolidado),
         qt_cargos=len(svc.items),
     )
 
@@ -130,7 +149,7 @@ def create_own_service(
     company_id = _require_company(company_id)
 
     new_id = _uuid.uuid4()
-    total = _calc_total(payload.items)
+    _, total_minutos = _calc_consolidated(payload.items)
 
     svc = OwnService(
         id=new_id,
@@ -139,13 +158,13 @@ def create_own_service(
         nome_servico=payload.nome_servico,
         vigencia=payload.vigencia,
         descricao=payload.descricao,
-        tempo_total_minutos=total,
+        tempo_total_minutos=total_minutos,
         ativo=True,
         created_by=current_user.id,
         updated_by=current_user.id,
     )
     db.add(svc)
-    db.flush()  # get PK before inserting items
+    db.flush()
 
     for item in _build_items(new_id, payload.items):
         db.add(item)
@@ -174,14 +193,12 @@ def update_own_service(
     if not svc.ativo:
         raise HTTPException(status_code=400, detail="Não é possível editar um serviço inativo.")
 
-    # Update header fields
     update_data = payload.model_dump(exclude_unset=True, exclude={"items"})
     for field, value in update_data.items():
         setattr(svc, field, value)
     svc.updated_by = current_user.id
     svc.updated_at = datetime.utcnow()
 
-    # Replace all items if provided
     if payload.items is not None:
         db.query(OwnServiceItem).filter(OwnServiceItem.own_service_id == svc.id).delete()
         db.flush()
@@ -189,7 +206,8 @@ def update_own_service(
         for item in _build_items(svc.id, payload.items):
             db.add(item)
 
-        svc.tempo_total_minutos = _calc_total(payload.items)
+        _, total_minutos = _calc_consolidated(payload.items)
+        svc.tempo_total_minutos = total_minutos
 
     try:
         db.commit()

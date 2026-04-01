@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from src.core.search import unaccent_ilike
 from typing import List, Optional
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user
@@ -35,7 +36,7 @@ def list_states(
     query = db.query(State).filter(State.tenant_id == current_user.tenant_id)
     
     if search:
-        query = query.filter(or_(State.nome.ilike(f"%{search}%"), State.sigla.ilike(f"%{search}%")))
+        query = query.filter(or_(unaccent_ilike(State.nome, search), unaccent_ilike(State.sigla, search)))
     if sigla:
         query = query.filter(State.sigla == sigla.upper())
     if is_active is not None:
@@ -122,7 +123,7 @@ def list_cities(
     query = db.query(City).options(joinedload(City.state)).filter(City.tenant_id == current_user.tenant_id)
     
     if search:
-        query = query.filter(City.nome.ilike(f"%{search}%"))
+        query = query.filter(unaccent_ilike(City.nome, search))
     if state_id:
         query = query.filter(City.state_id == state_id)
     if is_active is not None:

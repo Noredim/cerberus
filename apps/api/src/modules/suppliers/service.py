@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from src.core.search import unaccent_ilike
 from .models import Supplier
 from .schemas import SupplierCreate, SupplierUpdate
 from typing import List, Optional
@@ -29,11 +30,10 @@ class SupplierService:
         query = self.db.query(Supplier).filter(Supplier.tenant_id == tenant_id)
         
         if q:
-            search_query = f"%{q}%"
             q_clean = re.sub(r'\D', '', q)
             filters = [
-                Supplier.razao_social.ilike(search_query),
-                Supplier.nome_fantasia.ilike(search_query)
+                unaccent_ilike(Supplier.razao_social, q),
+                unaccent_ilike(Supplier.nome_fantasia, q)
             ]
             if q_clean:
                 filters.append(Supplier.cnpj.ilike(f"%{q_clean}%"))
@@ -44,11 +44,10 @@ class SupplierService:
     def count_suppliers(self, tenant_id: str, q: Optional[str] = None) -> int:
         query = self.db.query(Supplier).filter(Supplier.tenant_id == tenant_id)
         if q:
-            search_query = f"%{q}%"
             q_clean = re.sub(r'\D', '', q)
             filters = [
-                Supplier.razao_social.ilike(search_query),
-                Supplier.nome_fantasia.ilike(search_query)
+                unaccent_ilike(Supplier.razao_social, q),
+                unaccent_ilike(Supplier.nome_fantasia, q)
             ]
             if q_clean:
                 filters.append(Supplier.cnpj.ilike(f"%{q_clean}%"))

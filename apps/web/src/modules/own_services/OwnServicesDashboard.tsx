@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, Edit2, Eye, MoreVertical, Plus, Trash2 } from 'lucide-react';
-import { ownServicesApi, formatMinutes } from '../../services/ownServicesApi';
+import { ownServicesApi } from '../../services/ownServicesApi';
 import type { OwnServiceListItem } from '../../services/ownServicesApi';
 import OwnServicesModal from './OwnServicesModal';
 
@@ -95,23 +95,25 @@ const OwnServicesDashboard: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-[#f8f9fa] dark:bg-bg-deep border-b border-border-subtle">
               <tr className="text-xs text-text-muted uppercase tracking-wider">
+                <th className="px-5 py-3 font-semibold w-24">ID</th>
                 <th className="px-5 py-3 font-semibold">Nome do Serviço</th>
+                <th className="px-5 py-3 font-semibold">Unidade</th>
                 <th className="px-5 py-3 font-semibold">Vigência</th>
                 <th className="px-5 py-3 font-semibold text-center">Qtd. Cargos</th>
-                <th className="px-5 py-3 font-semibold text-center">Tempo Total</th>
+                <th className="px-5 py-3 font-semibold text-center">Tempo Consolidado</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle bg-surface">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-text-muted animate-pulse">
+                  <td colSpan={7} className="px-5 py-10 text-center text-text-muted animate-pulse">
                     Carregando registros...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-text-muted">
+                  <td colSpan={7} className="px-5 py-10 text-center text-text-muted">
                     <div className="flex flex-col items-center gap-2">
                       <ClipboardList className="w-8 h-8 opacity-30" />
                       <span>Nenhum serviço próprio cadastrado.</span>
@@ -119,9 +121,15 @@ const OwnServicesDashboard: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                records.map((r) => (
+                records.map((r, idx) => (
                   <tr key={r.id} className="group hover:bg-bg-deep transition-colors">
+                    <td className="px-5 py-3">
+                      <span className="inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold font-mono bg-bg-deep border border-border-subtle text-text-muted">
+                        SP{String(idx + 1).padStart(3, '0')}
+                      </span>
+                    </td>
                     <td className="px-5 py-3 font-semibold text-text-primary">{r.nome_servico}</td>
+                    <td className="px-5 py-3 text-sm text-text-muted">{r.unidade || '—'}</td>
                     <td className="px-5 py-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-brand-primary/10 text-brand-primary">
                         {r.vigencia}
@@ -134,7 +142,7 @@ const OwnServicesDashboard: React.FC = () => {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <span className="font-mono text-sm font-semibold text-text-primary">
-                        {formatMinutes(r.tempo_total_minutos)}
+                        {r.tempo_consolidado_hhmmss || '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">

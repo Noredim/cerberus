@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from src.core.search import unaccent_ilike
 from datetime import datetime, date, timedelta
 from uuid import UUID
 from typing import List, Optional
@@ -27,7 +28,7 @@ class NcmService:
             codigo_clean = "".join(filter(str.isdigit, codigo))
             query = query.filter(Ncm.codigo.ilike(f"{codigo_clean}%"))
         if descricao:
-            query = query.filter(Ncm.descricao.ilike(f"%{descricao}%"))
+            query = query.filter(unaccent_ilike(Ncm.descricao, descricao))
             
         total = query.count()
         items = query.order_by(Ncm.codigo).offset(skip).limit(limit).all()

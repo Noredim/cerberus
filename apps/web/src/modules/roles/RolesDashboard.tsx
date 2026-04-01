@@ -92,6 +92,7 @@ const RolesDashboard: React.FC = () => {
                     <table className="w-full text-left">
                         <thead className="bg-[#f8f9fa] dark:bg-bg-deep">
                             <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                                <th className="px-6 py-3 font-semibold w-24">ID</th>
                                 <th className="px-6 py-3 font-semibold">Cargo</th>
                                 <th className="px-6 py-3 font-semibold">Empresa Associada</th>
                                 <th className="px-6 py-3 font-semibold">Permissão</th>
@@ -101,19 +102,24 @@ const RolesDashboard: React.FC = () => {
                         <tbody className="divide-y divide-border-subtle bg-surface">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-10 text-center text-text-muted animate-pulse">
+                                    <td colSpan={5} className="px-6 py-10 text-center text-text-muted animate-pulse">
                                         Carregando cargos...
                                     </td>
                                 </tr>
                             ) : roles.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-10 text-center text-text-muted">
+                                    <td colSpan={5} className="px-6 py-10 text-center text-text-muted">
                                         Nenhum cargo cadastrado.
                                     </td>
                                 </tr>
                             ) : (
-                                roles.map(role => (
+                                roles.map((role, idx) => (
                                     <tr key={role.id} className="group hover:bg-bg-deep transition-colors">
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold font-mono bg-bg-deep border border-border-subtle text-text-muted">
+                                                C{String(idx + 1).padStart(3, '0')}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-4">
                                             <span className="font-bold text-text-primary capitalize">{role.name}</span>
                                         </td>

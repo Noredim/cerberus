@@ -6,11 +6,24 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fator_to_hhmmss(fator: float) -> str:
+    """Convert a decimal factor (hours) to HH:MM:SS string.
+    e.g. fator=1.5 → '01:30:00', fator=0.25 → '00:15:00'
+    """
+    total_seconds = round(fator * 3600)
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    s = total_seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
 # ── Item schemas ──────────────────────────────────────────────────────────────
 
 class OwnServiceItemCreate(BaseModel):
     role_id: str
-    tempo_minutos: int = Field(..., gt=0, description="Tempo total em minutos (> 0)")
+    fator: float = Field(..., gt=0, description="Fator de tempo em horas (ex: 1.5 = 1h30m)")
 
 
 class OwnServiceItemResponse(BaseModel):
@@ -18,6 +31,9 @@ class OwnServiceItemResponse(BaseModel):
     own_service_id: UUID
     role_id: str
     role_name: Optional[str] = None
+    fator: float
+    tempo_hhmmss: str = ""
+    # Legacy fields kept for compatibility
     tempo_minutos: int
     tempo_total_minutos: int
 
@@ -28,6 +44,7 @@ class OwnServiceItemResponse(BaseModel):
 
 class OwnServiceCreate(BaseModel):
     nome_servico: str = Field(..., min_length=1, max_length=200)
+    unidade: Optional[str] = Field(None, max_length=10)
     vigencia: int = Field(..., ge=2000, le=2099)
     descricao: Optional[str] = None
     items: List[OwnServiceItemCreate] = Field(..., min_length=1)
@@ -51,6 +68,7 @@ class OwnServiceCreate(BaseModel):
 
 class OwnServiceUpdate(BaseModel):
     nome_servico: Optional[str] = Field(default=None, max_length=200)
+    unidade: Optional[str] = Field(default=None, max_length=10)
     vigencia: Optional[int] = Field(default=None, ge=2000, le=2099)
     descricao: Optional[str] = None
     items: Optional[List[OwnServiceItemCreate]] = None
@@ -79,9 +97,12 @@ class OwnServiceResponse(BaseModel):
     tenant_id: str
     company_id: UUID
     nome_servico: str
+    unidade: Optional[str] = None
     vigencia: int
     descricao: Optional[str] = None
     tempo_total_minutos: int
+    fator_consolidado: float = 0.0
+    tempo_consolidado_hhmmss: str = "00:00:00"
     ativo: bool
     items: List[OwnServiceItemResponse] = []
 
@@ -92,8 +113,11 @@ class OwnServiceListItem(BaseModel):
     """Lightweight response for the main grid."""
     id: UUID
     nome_servico: str
+    unidade: Optional[str] = None
     vigencia: int
     tempo_total_minutos: int
+    fator_consolidado: float = 0.0
+    tempo_consolidado_hhmmss: str = "00:00:00"
     qt_cargos: int = 0
 
     model_config = {"from_attributes": True}
