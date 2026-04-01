@@ -23,7 +23,6 @@ interface OwnServicesModalProps {
 interface ItemRow {
   _key: string; // internal stable key
   role_id: string;
-  tempo_horas: string;
   tempo_minutos: string;
 }
 
@@ -43,14 +42,13 @@ const TITLE: Record<ModalMode, string> = {
 };
 
 function newRow(): ItemRow {
-  return { _key: crypto.randomUUID(), role_id: '', tempo_horas: '0', tempo_minutos: '0' };
+  return { _key: crypto.randomUUID(), role_id: '', tempo_minutos: '0' };
 }
 
 function calcTotal(rows: ItemRow[]): number {
   return rows.reduce((acc, r) => {
-    const h = parseInt(r.tempo_horas || '0', 10) || 0;
     const m = parseInt(r.tempo_minutos || '0', 10) || 0;
-    return acc + h * 60 + m;
+    return acc + m;
   }, 0);
 }
 
@@ -93,7 +91,6 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
               ? svc.items.map((i) => ({
                   _key: crypto.randomUUID(),
                   role_id: i.role_id,
-                  tempo_horas: String(i.tempo_horas),
                   tempo_minutos: String(i.tempo_minutos),
                 }))
               : [newRow()],
@@ -148,12 +145,8 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
         errs[`row_${r._key}_role_id`] = 'Selecione um cargo.';
       }
       const m = parseInt(r.tempo_minutos, 10);
-      if (isNaN(m) || m < 0 || m > 59) {
-        errs[`row_${r._key}_tempo_minutos`] = 'Minutos: 0–59.';
-      }
-      const h = parseInt(r.tempo_horas, 10);
-      if (isNaN(h) || h < 0) {
-        errs[`row_${r._key}_tempo_horas`] = 'Horas: >= 0.';
+      if (isNaN(m) || m <= 0) {
+        errs[`row_${r._key}_tempo_minutos`] = 'Tempo deve ser > 0.';
       }
     });
 
@@ -173,7 +166,6 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
       .filter((r) => r.role_id)
       .map((r) => ({
         role_id: r.role_id,
-        tempo_horas: parseInt(r.tempo_horas, 10) || 0,
         tempo_minutos: parseInt(r.tempo_minutos, 10) || 0,
       }));
 
@@ -329,19 +321,16 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                     <thead className="bg-bg-deep text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
                       <tr>
                         <th className="px-4 py-2.5 text-left font-semibold">Cargo</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-24">Horas</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-24">Minutos</th>
-                        <th className="px-3 py-2.5 text-center font-semibold w-20">Total</th>
+                        <th className="px-3 py-2.5 text-center font-semibold w-40">Tempo (minutos)</th>
+                        <th className="px-3 py-2.5 text-center font-semibold w-24">Total</th>
                         {!isReadOnly && <th className="w-10" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle bg-surface">
                       {rows.map((row) => {
-                        const rowH = parseInt(row.tempo_horas, 10) || 0;
                         const rowM = parseInt(row.tempo_minutos, 10) || 0;
-                        const rowTotal = formatMinutes(rowH * 60 + rowM);
+                        const rowTotal = formatMinutes(rowM);
                         const rowRoleErr = errors[`row_${row._key}_role_id`];
-                        const rowHErr = errors[`row_${row._key}_tempo_horas`];
                         const rowMErr = errors[`row_${row._key}_tempo_minutos`];
 
                         // Roles available: exclude those already selected in OTHER rows
@@ -368,18 +357,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                             <td className="px-3 py-2">
                               <input
                                 type="number"
-                                min={0}
-                                value={row.tempo_horas}
-                                onChange={(e) => updateRow(row._key, 'tempo_horas', e.target.value)}
-                                disabled={isReadOnly}
-                                className={`w-full text-center text-sm rounded-md px-2 py-1.5 border focus:outline-none focus:ring-2 focus:ring-brand-primary/40 bg-surface text-text-primary transition-all ${rowHErr ? 'border-brand-danger' : isReadOnly ? 'border-border-subtle bg-bg-deep text-text-muted cursor-not-allowed' : 'border-border-subtle'}`}
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="number"
-                                min={0}
-                                max={59}
+                                min={1}
                                 value={row.tempo_minutos}
                                 onChange={(e) => updateRow(row._key, 'tempo_minutos', e.target.value)}
                                 disabled={isReadOnly}

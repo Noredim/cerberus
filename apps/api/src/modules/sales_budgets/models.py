@@ -178,6 +178,14 @@ class RentalBudgetItem(Base):
     kit_irpj = Column(Numeric(6, 4), nullable=True)
     kit_iss = Column(Numeric(6, 4), nullable=True)
 
+    # Kit calculated override values — persisted to survive reloads without re-fetching kit financials
+    kit_vlt_manut = Column(Numeric(15, 4), nullable=True)
+    kit_valor_mensal = Column(Numeric(15, 4), nullable=True)
+    kit_valor_impostos = Column(Numeric(15, 4), nullable=True)
+    kit_receita_liquida = Column(Numeric(15, 4), nullable=True)
+    kit_lucro_mensal = Column(Numeric(15, 4), nullable=True)
+    kit_margem = Column(Numeric(10, 4), nullable=True)
+
     quantidade = Column(Numeric(15, 4), nullable=False, default=1)
 
     # ── Acquisition cost breakdown ──

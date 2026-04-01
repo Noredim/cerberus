@@ -75,7 +75,12 @@ class OpportunityKitCost(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     kit_id = Column(UUID(as_uuid=True), ForeignKey("opportunity_kits.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
+    
+    tipo_item = Column(String(50), nullable=False, default="PRODUTO") # 'PRODUTO' ou 'SERVICO_PROPRIO'
+    forma_execucao = Column(String(50), nullable=True) # Ex: 'H. NORMAL', aplicável somente se SERVICO_PROPRIO
+    
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=True, index=True)
+    own_service_id = Column(UUID(as_uuid=True), ForeignKey("own_services.id", ondelete="RESTRICT"), nullable=True, index=True)
     
     tipo_custo = Column(String(50), nullable=False) # Seguro apólice, Logística/veículos, Loc. software, Manut pred./corretiva
     quantidade = Column(Numeric(15, 4), nullable=False, default=1.0)
@@ -86,6 +91,7 @@ class OpportunityKitCost(Base):
 
     kit = relationship("OpportunityKit", back_populates="costs")
     product = relationship("Product")
+    own_service = relationship("OwnService")
 
 
 class OpportunityKitItem(Base):

@@ -69,7 +69,6 @@ class OwnServiceItem(Base):
     )
     role_id = Column(String, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
 
-    tempo_horas = Column(Integer, nullable=False, default=0)
     tempo_minutos = Column(Integer, nullable=False, default=0)
     tempo_total_minutos = Column(Integer, nullable=False, default=0)
 

@@ -45,7 +45,7 @@ def _load_service(service_id: str, company_id: str, tenant_id: str, db: Session)
 
 
 def _calc_total(items_data) -> int:
-    return sum(i.tempo_horas * 60 + i.tempo_minutos for i in items_data)
+    return sum(i.tempo_minutos for i in items_data)
 
 
 def _build_items(service_id, items_data) -> list:
@@ -54,9 +54,8 @@ def _build_items(service_id, items_data) -> list:
             id=_uuid.uuid4(),
             own_service_id=service_id,
             role_id=item.role_id,
-            tempo_horas=item.tempo_horas,
             tempo_minutos=item.tempo_minutos,
-            tempo_total_minutos=item.tempo_horas * 60 + item.tempo_minutos,
+            tempo_total_minutos=item.tempo_minutos,
         )
         for item in items_data
     ]

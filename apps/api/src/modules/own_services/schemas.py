@@ -10,15 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class OwnServiceItemCreate(BaseModel):
     role_id: str
-    tempo_horas: int = Field(..., ge=0, description="Horas (>= 0)")
-    tempo_minutos: int = Field(..., ge=0, le=59, description="Minutos (0–59)")
-
-    @field_validator("tempo_horas", "tempo_minutos")
-    @classmethod
-    def must_be_non_negative(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("O tempo não pode ser negativo.")
-        return v
+    tempo_minutos: int = Field(..., gt=0, description="Tempo total em minutos (> 0)")
 
 
 class OwnServiceItemResponse(BaseModel):
@@ -26,7 +18,6 @@ class OwnServiceItemResponse(BaseModel):
     own_service_id: UUID
     role_id: str
     role_name: Optional[str] = None
-    tempo_horas: int
     tempo_minutos: int
     tempo_total_minutos: int
 

@@ -138,7 +138,8 @@ class OpportunityKitService:
 
                 cost_summaries.append({
                     "id": str(cost.id) if cost.id else None,
-                    "product_id": str(cost.product_id),
+                    "product_id": str(cost.product_id) if cost.product_id else None,
+                    "own_service_id": str(cost.own_service_id) if cost.own_service_id else None,
                     "tipo_custo": cost_tipo_custo,
                     "custo_base_unitario_item": round(vl_un, 2),  # type: ignore
                     "custo_total_item_no_kit": round(custo_total_final, 2),  # type: ignore
@@ -354,16 +355,13 @@ class OpportunityKitService:
 
             # Manutenção
             vlt_manut = Decimal("0.0")
-            tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
             
             if kit.manutencao_inclusa:
-                if kit.instalacao_inclusa:
-                    vlt_manut = ((custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem) * tx_manut
-                else:
-                    fator_manut = Decimal(kit.fator_manutencao or 1)
-                    vlt_manut = custo_operacional_mensal_kit * fator_manut
+                tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
+                vlt_manut = (custo_aquisicao_kit + vlr_instal_calc_base_manut) * tx_manut
             else:
-                vlt_manut = ((custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem) * tx_manut
+                fator_manut = Decimal(kit.fator_manutencao or 1)
+                vlt_manut = custo_operacional_mensal_kit * fator_manut
                     
             valor_parcela_locacao = valor_mensal_locacao_base
             manutencao_mensal = vlt_manut
@@ -588,6 +586,9 @@ class OpportunityKitService:
         for cost_data in data.costs:
             cost = OpportunityKitCost(
                 kit_id=kit.id,
+                tipo_item=cost_data.tipo_item,
+                forma_execucao=cost_data.forma_execucao,
+                own_service_id=cost_data.own_service_id,
                 product_id=cost_data.product_id,
                 tipo_custo=cost_data.tipo_custo,
                 quantidade=cost_data.quantidade,
@@ -634,7 +635,10 @@ class OpportunityKitService:
             for cost in costs_data:
                 new_cost = OpportunityKitCost(
                     kit_id=kit.id,
-                    product_id=cost["product_id"],
+                    tipo_item=cost.get("tipo_item", "PRODUTO"),
+                    forma_execucao=cost.get("forma_execucao"),
+                    own_service_id=cost.get("own_service_id"),
+                    product_id=cost.get("product_id"),
                     tipo_custo=cost["tipo_custo"],
                     quantidade=cost["quantidade"],
                     valor_unitario=cost["valor_unitario"]

@@ -5,14 +5,12 @@ export interface OwnServiceItem {
   own_service_id: string;
   role_id: string;
   role_name: string | null;
-  tempo_horas: number;
   tempo_minutos: number;
   tempo_total_minutos: number;
 }
 
 export interface OwnServiceItemCreate {
   role_id: string;
-  tempo_horas: number;
   tempo_minutos: number;
 }
 

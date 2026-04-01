@@ -183,13 +183,13 @@ class SalesBudgetBase(BaseModel):
 
 
 class SalesBudgetCreate(SalesBudgetBase):
-    responsavel_ids: List[UUID] = []
+    responsavel_ids: List[str] = []
     items: List[SalesBudgetItemCreate] = []
     rental_items: List[RentalBudgetItemCreate] = []
 
 
 class SalesBudgetUpdate(SalesBudgetBase):
-    responsavel_ids: List[UUID] = []
+    responsavel_ids: List[str] = []
     items: List[SalesBudgetItemCreate] = []
     rental_items: List[RentalBudgetItemCreate] = []
 
@@ -211,7 +211,7 @@ class SalesBudgetOut(SalesBudgetBase):
     status: BudgetStatusEnum
     items: List[SalesBudgetItemOut] = []
     rental_items: List[RentalBudgetItemOut] = []
-    responsavel_ids: List[UUID] = []
+    responsavel_ids: List[str] = []
     created_at: datetime
     updated_at: datetime
 

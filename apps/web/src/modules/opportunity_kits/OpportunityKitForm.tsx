@@ -50,7 +50,10 @@ interface KitFormValues {
     quantidade_no_kit: number;
   }>;
   costs: Array<{
-    product_id: string;
+    tipo_item?: string;
+    own_service_id?: string;
+    product_id?: string;
+    forma_execucao?: string;
     tipo_custo: string;
     quantidade: number;
     valor_unitario: number;
@@ -275,17 +278,29 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     });
   };
 
-  const handleAddCost = (data: { product: any; quantidade: number; tipo_custo: string; valor_unitario: number }) => {
+  const handleAddCost = (data: { 
+    tipo_item: string;
+    product?: any; 
+    own_service?: any;
+    forma_execucao?: string;
+    quantidade: number; 
+    tipo_custo: string; 
+    valor_unitario: number;
+    descricao_item?: string;
+  }) => {
     setForm(prev => ({
       ...prev,
       costs: [
         ...prev.costs,
         {
-          product_id: data.product.id,
+          tipo_item: data.tipo_item,
+          product_id: data.product?.id,
+          own_service_id: data.own_service?.id,
+          forma_execucao: data.forma_execucao,
           tipo_custo: data.tipo_custo,
           quantidade: data.quantidade,
           valor_unitario: data.valor_unitario,
-          descricao_item: data.product.nome,
+          descricao_item: data.descricao_item,
         }
       ]
     }));
@@ -293,7 +308,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const updateCostQuantity = (costToUpdate: any, qty: number) => {
     setForm(prev => {
-      const idx = prev.costs.findIndex(c => c.product_id === costToUpdate.product_id && c.tipo_custo === costToUpdate.tipo_custo);
+      const idx = prev.costs.findIndex(c => 
+        c.product_id === costToUpdate.product_id && 
+        c.own_service_id === costToUpdate.own_service_id && 
+        c.tipo_custo === costToUpdate.tipo_custo
+      );
       if (idx > -1) {
         const newCosts = [...prev.costs];
         newCosts[idx].quantidade = qty;
@@ -305,7 +324,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const removeCostByProps = (cToRemove: any) => {
     setForm(prev => {
-      const idx = prev.costs.findIndex(c => c.product_id === cToRemove.product_id && c.tipo_custo === cToRemove.tipo_custo);
+      const idx = prev.costs.findIndex(c => 
+        c.product_id === cToRemove.product_id && 
+        c.own_service_id === cToRemove.own_service_id && 
+        c.tipo_custo === cToRemove.tipo_custo
+      );
       if (idx > -1) {
         const newCosts = [...prev.costs];
         newCosts.splice(idx, 1);
@@ -781,6 +804,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 </label>
                 <Input type="number" step="0.01" value={form.fator_margem_locacao} onChange={(e) => handleInputChange('fator_margem_locacao', parseFloat(e.target.value) || 0)} className="w-full" />
               </div>
+
+              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
+                  <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
+                </div>
+              )}
               
               {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && (
                 <>
@@ -874,18 +904,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <label htmlFor="chk-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Manutenção Inclusa na Mensalidade</label>
                     </div>
                     {form.manutencao_inclusa && (
-                      <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 gap-4">
                         <div>
                           <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
                           <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
                           <p className="text-[10px] text-text-muted mt-1">% s/ custo total anual.</p>
                         </div>
-                        {!form.instalacao_inclusa && (
-                          <div>
-                            <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
-                            <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
-                          </div>
-                        )}
                       </div>
                     )}
                   </>
@@ -1201,12 +1225,24 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                      </thead>
                      <tbody className="divide-y divide-border-subtle bg-bg-surface">
                        {instCosts.map((c, idx) => {
-                         const summary = financials?.cost_summaries?.find((cs: any) => cs.product_id === c.product_id && cs.tipo_custo === c.tipo_custo);
+                         const summary = financials?.cost_summaries?.find((cs: any) => 
+                           (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
+                           cs.tipo_custo === c.tipo_custo
+                         );
                          const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_instalacao || 1) : c.valor_unitario;
                          const totalItem = vendaUnit * c.quantidade;
                          return (
                            <tr key={`inst-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
-                             <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
+                             <td className="px-4 py-3 font-medium text-text-primary">
+                               <div className="flex flex-col gap-0.5">
+                                 <span>{c.descricao_item || 'Serviço'}</span>
+                                 {c.own_service_id && c.forma_execucao && (
+                                   <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
+                                     {c.forma_execucao}
+                                   </span>
+                                 )}
+                               </div>
+                             </td>
                              <td className="px-4 py-3 text-text-secondary">{c.tipo_custo === 'INSTALACAO' ? 'Instalação' : c.tipo_custo}</td>
                              {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                                <>
@@ -1299,7 +1335,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             </section>
            )}
 
-           {showBlock3 && (
+           {showBlock3 && (!(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') || !form.manutencao_inclusa) && (
              <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
                <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
                  <h2 className="text-xl font-semibold">6. Custos Operacionais Mensais (R$)</h2>
@@ -1347,12 +1383,24 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                      </thead>
                      <tbody className="divide-y divide-border-subtle bg-bg-surface">
                        {opCosts.map((c, idx) => {
-                         const summary = financials?.cost_summaries?.find((cs: any) => cs.product_id === c.product_id && cs.tipo_custo === c.tipo_custo);
+                         const summary = financials?.cost_summaries?.find((cs: any) => 
+                           (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) && 
+                           cs.tipo_custo === c.tipo_custo
+                         );
                          const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_manutencao || 1) : c.valor_unitario;
                          const totalItem = vendaUnit * c.quantidade;
                          return (
                            <tr key={`op-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
-                             <td className="px-4 py-3 font-medium text-text-primary">{c.descricao_item || 'Serviço'}</td>
+                             <td className="px-4 py-3 font-medium text-text-primary">
+                               <div className="flex flex-col gap-0.5">
+                                 <span>{c.descricao_item || 'Serviço'}</span>
+                                 {c.own_service_id && c.forma_execucao && (
+                                   <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
+                                     {c.forma_execucao}
+                                   </span>
+                                 )}
+                               </div>
+                             </td>
                              <td className="px-4 py-3 text-text-secondary">{c.tipo_custo}</td>
                              {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                                <>

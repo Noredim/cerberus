@@ -26,8 +26,18 @@ class OpportunityKitItemResponse(OpportunityKitItemBase):
     class Config:
         from_attributes = True
 
+class OwnServiceSimpleResponse(BaseModel):
+    id: UUID
+    nome_servico: str
+
+    class Config:
+        from_attributes = True
+
 class OpportunityKitCostBase(BaseModel):
-    product_id: UUID
+    tipo_item: str = Field(default="PRODUTO")
+    product_id: Optional[UUID] = None
+    own_service_id: Optional[UUID] = None
+    forma_execucao: Optional[str] = None
     tipo_custo: str
     quantidade: Decimal = Field(default=Decimal(1))
     valor_unitario: Decimal = Field(default=Decimal(0))
@@ -39,6 +49,7 @@ class OpportunityKitCostResponse(OpportunityKitCostBase):
     id: UUID
     kit_id: UUID
     product: Optional[ProductSimpleResponse] = None
+    own_service: Optional[OwnServiceSimpleResponse] = None
     
     class Config:
         from_attributes = True

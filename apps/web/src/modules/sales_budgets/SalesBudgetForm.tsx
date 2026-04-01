@@ -1644,10 +1644,20 @@ export function SalesBudgetForm() {
       if (!isEditing && !preventNavigate) navigate(`/orcamentos-vendas/${currentSalesBudgetId}?tab=${activeTab}`, { replace: true });
       return true;
     } catch (err: any) {
-      console.error('Save error:', err.response?.data || err);
-      const detail = err.response?.data?.detail;
-      const msg = Array.isArray(detail) ? detail.map((d: any) => d.msg).join(', ') : (typeof detail === 'string' ? detail : err.message);
-      alert('Erro ao salvar: ' + msg);
+      const errData = err.response?.data;
+      console.error('Save error (full):', JSON.stringify(errData || err, null, 2));
+      const detail = errData?.detail;
+      let msg: string;
+      if (Array.isArray(detail)) {
+        msg = detail.map((d: any) => `[${(d.loc || []).slice(1).join('.')}] ${d.msg}`).join('\n');
+      } else if (typeof detail === 'string') {
+        msg = detail;
+      } else {
+        msg = err.message || 'Erro desconhecido';
+      }
+      alert('Erro ao salvar:\n' + msg);
+      // Allow back button to work after failed save
+      setHasUnsavedChanges(false);
       return false;
     } finally {
       setSaving(false);
@@ -1666,7 +1676,7 @@ export function SalesBudgetForm() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
 
   return (
-    <div className="p-6 space-y-6 w-full" onChange={() => setHasUnsavedChanges(true)}>
+    <div className="p-6 space-y-6 w-full">
       {/* Top Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
