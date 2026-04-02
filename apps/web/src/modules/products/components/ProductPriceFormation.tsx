@@ -30,6 +30,7 @@ interface PriceFormationProps {
   bitFlag: boolean;
   importadoFlag: boolean;
   mvaFromProduct?: number;
+  productType?: string; // New: 'EQUIPAMENTO', 'SERVICO', 'LICENCA'
   budgets?: BudgetItem[];
 }
 
@@ -47,6 +48,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
   bitFlag,
   importadoFlag,
   mvaFromProduct = 0,
+  productType = 'EQUIPAMENTO',
   budgets = [],
 }) => {
   // Sort budgets descending by date
@@ -132,7 +134,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
     const _isInterstate = ufOrigem.toUpperCase() !== ufDestino.toUpperCase();
     setIsInterstate(_isInterstate);
 
-    if (stFlag && _isInterstate && ufDestino === "MT") {
+    if (stFlag && _isInterstate && ufDestino === "MT" && productType === 'EQUIPAMENTO') {
       // P = valorUnitario, IPI = ipiUnit
       // CRED = ICMS entrada cap (4% importado, 7% nacional — já calculado em icmsEntradaEffective)
       const ALIQUOTA_INTERNA = 0.17;
@@ -211,6 +213,11 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
       }
     }
 
+    // --- Business Rule: Only apply DIFAL corrections for Products (EQUIPAMENTO) ---
+    if (productType !== 'EQUIPAMENTO') {
+      c_valorDifal = 0;
+    }
+
     setValorDifal(c_valorDifal);
 
     const custoF = valorUnitario + ipiUnit + freteUnit + calcIcmsStFinal;
@@ -242,6 +249,7 @@ export const ProductPriceFormation: React.FC<PriceFormationProps> = ({
     ufOrigem,
     aliquotaOrcamento,
     aliquotaInternaDestino,
+    productType,
   ]);
 
   const fmt = (val: number) =>

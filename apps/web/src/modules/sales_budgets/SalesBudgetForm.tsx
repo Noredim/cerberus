@@ -325,71 +325,19 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   };
 }
 
-
-
-function calcItem(item: SalesBudgetItem, defaults: any): SalesBudgetItem {
-  const isService = item.tipo_item !== 'MERCADORIA';
-  const useDef = item.usa_parametros_padrao;
-
-  const pFreteVenda = useDef ? defaults.perc_frete_venda : item.perc_frete_venda;
-  const pPis = useDef ? defaults.perc_pis : item.perc_pis;
-  const pCofins = useDef ? defaults.perc_cofins : item.perc_cofins;
-  const pCsll = useDef ? defaults.perc_csll : item.perc_csll;
-  const pIrpj = useDef ? defaults.perc_irpj : item.perc_irpj;
-  const pIss = useDef ? defaults.perc_iss : item.perc_iss;
-  const pDesp = useDef ? defaults.perc_despesa_adm : item.perc_despesa_adm;
-  const pCom = useDef ? defaults.perc_comissao : item.perc_comissao;
-  const pIcms = useDef ? defaults.perc_icms_interno : item.perc_icms;
-  const mk = item.markup || (useDef ? defaults.markup_padrao : 1);
-
-  const custo = item.custo_unit_base;
-  const venda = +(custo * mk).toFixed(4);
-  const frete = isService ? 0 : +(venda * pFreteVenda / 100).toFixed(4);
-
-  let pis_u = 0, cofins_u = 0, csll_u = 0, irpj_u = 0, icms_u = 0, iss_u = 0;
-  if (isService) {
-    iss_u = +(venda * pIss / 100).toFixed(4);
-  } else {
-    pis_u = +(venda * pPis / 100).toFixed(4);
-    cofins_u = +(venda * pCofins / 100).toFixed(4);
-    csll_u = +(venda * pCsll / 100).toFixed(4);
-    irpj_u = +(venda * pIrpj / 100).toFixed(4);
-    icms_u = item.tem_st ? 0 : +(venda * pIcms / 100).toFixed(4);
-  }
-
-  const impostos = pis_u + cofins_u + csll_u + irpj_u + icms_u + iss_u;
-  const desp = +(venda * pDesp / 100).toFixed(4);
-  const com = +(venda * pCom / 100).toFixed(4);
-  const lucro = +(venda - custo - frete - impostos - desp - com).toFixed(4);
-  const margem = venda > 0 ? +(lucro / venda * 100).toFixed(2) : 0;
-  const total = +(venda * item.quantidade).toFixed(2);
-
-  return {
-    ...item,
-    markup: mk,
-    venda_unit: venda,
-    perc_frete_venda: pFreteVenda, frete_venda_unit: frete,
-    perc_pis: pPis, pis_unit: pis_u,
-    perc_cofins: pCofins, cofins_unit: cofins_u,
-    perc_csll: pCsll, csll_unit: csll_u,
-    perc_irpj: pIrpj, irpj_unit: irpj_u,
-    perc_icms: pIcms, icms_unit: icms_u,
-    perc_iss: pIss, iss_unit: iss_u,
-    perc_despesa_adm: pDesp, despesa_adm_unit: desp,
-    perc_comissao: pCom, comissao_unit: com,
-    lucro_unit: lucro, margem_unit: margem,
-    total_venda: total,
-  };
-}
-
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 
 export function SalesBudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { activeCompanyId } = useAuth();
+  const [searchParams] = useSearchParams();
+
+  // Dialog states
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const isEditing = Boolean(id);
+
+  const { activeCompanyId } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -411,10 +359,9 @@ export function SalesBudgetForm() {
       const isTabClick = target && target.role === 'tab'; // Don't block tab switching inside the same screen
 
       if (isInternalNav && !isTabClick) {
-        if (!window.confirm('Existem alterações não salvas na oportunidade. Deseja realmente sair e perder as alterações?')) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        setShowDiscardDialog(true);
       }
     };
 
@@ -482,7 +429,6 @@ export function SalesBudgetForm() {
   const [isQuickSupplierModalOpen, setIsQuickSupplierModalOpen] = useState(false);
 
   // Tab
-  const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'venda';
 
   // Rental defaults
@@ -520,7 +466,6 @@ export function SalesBudgetForm() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
-  const [showProductSearch, setShowProductSearch] = useState(false);
 
   const isReadonly = status !== 'RASCUNHO';
 
@@ -555,11 +500,6 @@ export function SalesBudgetForm() {
     perc_iss_rental: percIssRental,
   }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, fatorMargemPadrao, fatorManutencaoPadrao, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
 
-  // Recalculate items when defaults change
-  useEffect(() => {
-    setItems(prev => prev.map(item => item.usa_parametros_padrao ? calcItem(item, defaults) : item));
-  }, [defaults]);
-
   useEffect(() => {
     setRentalItems(prev => prev.map(item => calcRentalItem(item, rentalDefaults)));
   }, [rentalDefaults]);
@@ -592,7 +532,11 @@ export function SalesBudgetForm() {
     if (!activeCompanyId) return;
     api.get(`/companies/${activeCompanyId}/sales-parameters`).then(({ data }) => {
       const pick = (key: string) => Number(data[`${key}_venda`] || data[key] || 0);
-      const mkp = pick('mkp_padrao') || 1.35;
+
+      // Mapping for Locação de Equipamentos as per requirement
+      const mkpLocacao = Number(data.mkp_padrao_locacao || data.mkp_padrao || 1.35);
+      const despAdmLocacao = Number(data.despesa_administrativa_locacao || data.despesa_administrativa || 0);
+      const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
 
       setCompanyVendaTaxes({
         pis:          pick('pis'),
@@ -606,13 +550,13 @@ export function SalesBudgetForm() {
 
       // For NEW budgets only: also pre-fill the other editable budget-level defaults
       if (!isEditing) {
-        setFatorMargemProdutos(mkp);
-        setFatorMargemServicos(mkp);
-        setFatorMargemInstalacao(mkp);
-        setFatorMargemManutencao(mkp);
-        setMarkupPadrao(mkp);
-        setPercDespesaAdm(pick('despesa_administrativa'));
-        setPercComissao(pick('comissionamento'));
+        setFatorMargemProdutos(mkpLocacao);
+        setFatorMargemServicos(mkpLocacao);
+        setFatorMargemInstalacao(mkpLocacao);
+        setFatorMargemManutencao(mkpLocacao);
+        setMarkupPadrao(mkpLocacao);
+        setPercDespesaAdm(despAdmLocacao);
+        setPercComissao(comissaoLocacao);
         setPercPis(pick('pis'));
         setPercCofins(pick('cofins'));
         setPercCsll(pick('csll'));
@@ -837,96 +781,6 @@ export function SalesBudgetForm() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const addProduct = async (product: any) => {
-    setHasUnsavedChanges(true);
-    // Parallel: check ST + fetch cost composition
-    let hasSt = false;
-    let costComp: CostComposition | undefined;
-
-    const promises: Promise<void>[] = [];
-
-    if (product.ncm_codigo && activeCompanyId) {
-      promises.push(
-        api.get(`/sales-budgets/check-st`, {
-          params: { ncm_codigo: product.ncm_codigo, company_id: activeCompanyId }
-        }).then(({ data }) => { hasSt = data.has_st === true; })
-          .catch(err => console.error('ST check failed:', err))
-      );
-    }
-
-    if (product.id) {
-      promises.push(
-        api.get(`/sales-budgets/product-cost-composition/${product.id}`)
-          .then(({ data }) => { costComp = data; })
-          .catch(err => console.error('Cost composition fetch failed:', err))
-      );
-    }
-
-    await Promise.all(promises);
-
-    const newItem: SalesBudgetItem = {
-      product_id: product.id,
-      product_nome: product.nome,
-      product_codigo: product.codigo,
-      ncm_codigo: product.ncm_codigo || '',
-      tipo_item: 'MERCADORIA',
-      descricao_servico: '',
-      usa_parametros_padrao: true,
-      custo_unit_base: product.vlr_referencia_revenda || 0,
-      markup: markupPadrao,
-      venda_unit: 0, quantidade: 1,
-      perc_frete_venda: 0, frete_venda_unit: 0,
-      perc_pis: 0, pis_unit: 0, perc_cofins: 0, cofins_unit: 0,
-      perc_csll: 0, csll_unit: 0, perc_irpj: 0, irpj_unit: 0,
-      perc_icms: 0, icms_unit: 0, tem_st: hasSt,
-      perc_iss: 0, iss_unit: 0,
-      perc_despesa_adm: 0, despesa_adm_unit: 0,
-      perc_comissao: 0, comissao_unit: 0,
-      lucro_unit: 0, margem_unit: 0, total_venda: 0,
-      cost_composition: costComp,
-    };
-    setItems(prev => [...prev, calcItem(newItem, defaults)]);
-    setShowProductSearch(false);
-  };
-
-  // @ts-expect-error — kept for future service items implementation
-  const addService = (tipo: 'SERVICO_INSTALACAO' | 'SERVICO_MANUTENCAO') => {
-    const newItem: SalesBudgetItem = {
-      product_id: null,
-      product_nome: '',
-      product_codigo: '',
-      ncm_codigo: '',
-      tipo_item: tipo,
-      descricao_servico: '',
-      usa_parametros_padrao: true,
-      custo_unit_base: 0,
-      markup: markupPadrao,
-      venda_unit: 0, quantidade: 1,
-      perc_frete_venda: 0, frete_venda_unit: 0,
-      perc_pis: 0, pis_unit: 0, perc_cofins: 0, cofins_unit: 0,
-      perc_csll: 0, csll_unit: 0, perc_irpj: 0, irpj_unit: 0,
-      perc_icms: 0, icms_unit: 0, tem_st: false,
-      perc_iss: 0, iss_unit: 0,
-      perc_despesa_adm: 0, despesa_adm_unit: 0,
-      perc_comissao: 0, comissao_unit: 0,
-      lucro_unit: 0, margem_unit: 0, total_venda: 0,
-    };
-    setItems(prev => [...prev, calcItem(newItem, defaults)]);
-  };
-
-  const updateItem = (idx: number, field: string, value: any) => {
-    setItems(prev => {
-      const updated = [...prev];
-      const item = { ...updated[idx], [field]: value };
-      updated[idx] = calcItem(item, defaults);
-      return updated;
-    });
-  };
-
-  const removeItem = (idx: number) => {
-    setHasUnsavedChanges(true);
-    setItems(prev => prev.filter((_, i) => i !== idx));
-  };
 
   // ── Rental item functions ──
   const handleAddRentalItem = (modalOutput: any) => {
@@ -1088,7 +942,7 @@ export function SalesBudgetForm() {
     setShowApplyKitsModal(true);
   };
 
-  const proceedApplyKits = async () => {
+  const proceedApplyKits = async (overriddenParams?: any) => {
     setSaving(true);
     setShowApplyKitsModal(false);
     console.log('Applying params to kits...', vendaKits.length);
@@ -1098,26 +952,16 @@ export function SalesBudgetForm() {
         const vk = updatedKits[i];
         const isGlobal = !vk.kit_raw?.sales_budget_id;
         
-        const payload = {
+        const payload = overriddenParams || {
           fator_margem_locacao: fatorMargemProdutos,
           fator_margem_servicos_produtos: fatorMargemServicos,
           fator_margem_instalacao: fatorMargemInstalacao,
-          fator_margem_manutencao: fatorMargemManutencao,
-          aliq_pis: percPis,
-          aliq_cofins: percCofins,
-          aliq_csll: percCsll,
-          aliq_irpj: percIrpj,
-          aliq_iss: percIss,
-          aliq_icms: percIcmsInterno,
-          perc_frete_venda: percFreteVenda,
-          perc_despesas_adm: percDespesaAdm,
-          perc_comissao: percComissao,
-          havera_manutencao: vendaHaveraManutencao,
-          qtd_meses_manutencao: vendaQtdMesesManutencao,
-          sales_budget_id: id // Ensure link to current budget
+          fator_margem_manutencao: fatorMargemManutencao
+          // RN02: Alterar apenas os campos de parâmetros financeiros equivalentes
         };
         
         let finalKitId = vk.opportunity_kit_id;
+
         let finalKitData = null;
 
         if (isGlobal) {
@@ -1126,12 +970,17 @@ export function SalesBudgetForm() {
           
           const itemsPayload = (raw.items || []).map((item: any) => ({
             product_id: item.product_id || item.produto?.id,
+            own_service_id: item.own_service_id,
+            tipo_item: item.tipo_item,
             descricao_item: item.descricao_item,
             quantidade_no_kit: Number(item.quantidade_no_kit || 1)
           }));
           
           const costsPayload = (raw.costs || []).map((c: any) => ({
             product_id: c.product_id || c.produto?.id,
+            own_service_id: c.own_service_id,
+            tipo_item: c.tipo_item,
+            forma_execucao: c.forma_execucao,
             tipo_custo: c.tipo_custo,
             quantidade: Number(c.quantidade || 1),
             valor_unitario: Number(c.valor_unitario || 0)
@@ -1146,10 +995,23 @@ export function SalesBudgetForm() {
             prazo_instalacao_meses: raw.prazo_instalacao_meses || 0,
             instalacao_inclusa: !!raw.instalacao_inclusa,
             manutencao_inclusa: !!raw.manutencao_inclusa,
+            aliq_pis: raw.aliq_pis,
+            aliq_cofins: raw.aliq_cofins,
+            aliq_csll: raw.aliq_csll,
+            aliq_irpj: raw.aliq_irpj,
+            aliq_iss: raw.aliq_iss,
+            aliq_icms: raw.aliq_icms,
+            perc_frete_venda: raw.perc_frete_venda,
+            perc_despesas_adm: raw.perc_despesas_adm,
+            perc_comissao: raw.perc_comissao,
+            havera_manutencao: raw.havera_manutencao,
+            qtd_meses_manutencao: raw.qtd_meses_manutencao,
+            sales_budget_id: id,
             ...payload,
             items: itemsPayload,
             costs: costsPayload
           };
+
           const { data } = await api.post(`/opportunity-kits/company/${activeCompanyId}`, clonePayload);
           finalKitId = data.id;
           finalKitData = data;
@@ -1192,12 +1054,81 @@ export function SalesBudgetForm() {
           qtd_meses_manutencao: finalKitData.qtd_meses_manutencao ?? null
         };
       }
-      setVendaKits(updatedKits);
-      setHasUnsavedChanges(true);
+      
+      const success = await handleSave(true, undefined, updatedKits);
+      if (!success) return;
+
       alert('Parâmetros aplicados aos kits com sucesso!');
+      window.location.reload();
     } catch (err) {
       console.error('Failed to apply kit params:', err);
       alert('Erro ao aplicar parâmetros aos kits.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRefreshParams = async () => {
+    if (!activeCompanyId) return;
+    if (!window.confirm("Deseja atualizar os parâmetros com base no cadastro da empresa? Os valores atuais serão substituídos.")) return;
+
+    try {
+      setSaving(true);
+      const { data } = await api.get(`/companies/${activeCompanyId}/sales-parameters`);
+      
+      const mkpLocacao = Number(data.mkp_padrao_locacao || data.mkp_padrao || 1.35);
+      const despAdmLocacao = Number(data.despesa_administrativa_locacao || data.despesa_administrativa || 0);
+      const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
+      const pick = (key: string) => Number(data[`${key}_venda`] || data[key] || 0);
+
+      // Update basic fields
+      setFatorMargemProdutos(mkpLocacao);
+      setFatorMargemServicos(mkpLocacao);
+      setFatorMargemInstalacao(mkpLocacao);
+      setFatorMargemManutencao(mkpLocacao);
+      setMarkupPadrao(mkpLocacao);
+      setPercDespesaAdm(despAdmLocacao);
+      setPercComissao(comissaoLocacao);
+      
+      const taxes = {
+        aliq_pis: pick('pis'),
+        aliq_cofins: pick('cofins'),
+        aliq_csll: pick('csll'),
+        aliq_irpj: pick('irpj'),
+        aliq_iss: pick('iss'),
+        aliq_icms: pick('icms_interno'),
+        perc_frete_venda: pick('frete_venda_padrao'),
+        perc_despesas_adm: despAdmLocacao,
+        perc_comissao: comissaoLocacao,
+      };
+
+      setPercPis(taxes.aliq_pis);
+      setPercCofins(taxes.aliq_cofins);
+      setPercCsll(taxes.aliq_csll);
+      setPercIrpj(taxes.aliq_irpj);
+      setPercIss(taxes.aliq_iss);
+      setPercIcmsInterno(taxes.aliq_icms);
+      setPercFreteVenda(taxes.perc_frete_venda);
+
+      setHasUnsavedChanges(true);
+
+      // Cascade update to kits
+      if (vendaKits.length > 0) {
+        await proceedApplyKits({
+          fator_margem_locacao: mkpLocacao,
+          fator_margem_servicos_produtos: mkpLocacao,
+          fator_margem_instalacao: mkpLocacao,
+          fator_margem_manutencao: mkpLocacao,
+          ...taxes,
+          havera_manutencao: vendaHaveraManutencao,
+          qtd_meses_manutencao: vendaQtdMesesManutencao,
+          sales_budget_id: id
+        });
+      }
+
+    } catch (err) {
+      console.error('Failed to refresh parameters:', err);
+      alert('Erro ao carregar parâmetros da empresa.');
     } finally {
       setSaving(false);
     }
@@ -1472,7 +1403,7 @@ export function SalesBudgetForm() {
     }
   };
 
-  const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems) => {
+  const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems, overriddenVendaKits?: typeof vendaKits) => {
     if (!titulo || !customerId) {
       alert('Preencha título e cliente.');
       return false;
@@ -1538,7 +1469,7 @@ export function SalesBudgetForm() {
             perc_comissao: +i.perc_comissao,
             tem_st: i.tem_st,
           })),
-          ...vendaKits.map(vk => ({
+          ...(overriddenVendaKits || vendaKits).map(vk => ({
             opportunity_kit_id: vk.opportunity_kit_id,
             product_id: null,
             tipo_item: 'MERCADORIA', // Default for kits in Venda
@@ -1683,9 +1614,10 @@ export function SalesBudgetForm() {
           <button
             onClick={() => {
               if (hasUnsavedChanges) {
-                if (!window.confirm('Existem alterações não salvas na oportunidade. Deseja realmente sair sem salvar?')) return;
+                setShowDiscardDialog(true);
+              } else {
+                navigate('/orcamentos-vendas');
               }
-              navigate('/orcamentos-vendas');
             }}
             className="p-2 rounded-lg hover:bg-bg-deep text-text-muted transition-colors"
           >
@@ -2010,6 +1942,17 @@ export function SalesBudgetForm() {
                 Parâmetros Padrão
               </h2>
               <div className="flex items-center gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRefreshParams}
+                  disabled={isReadonly || saving}
+                  className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
+                  Atualizar Parâmetros
+                </Button>
                 {vendaKits.length > 0 && (
                   <Button 
                     type="button" 
@@ -2125,251 +2068,6 @@ export function SalesBudgetForm() {
           </div>
         )}
 
-        {/* Items - Flat Data Table */}
-        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-text-primary text-lg">Itens de Mercadoria</h2>
-            {!isReadonly && (
-              <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Adicionar Item
-              </Button>
-            )}
-          </div>
-
-          {items.length === 0 ? (
-            <div className="text-center py-12 text-text-muted text-sm">Nenhum item adicionado.</div>
-          ) : (
-            <div>
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
-                  <tr>
-                    <th className="px-1.5 py-2 whitespace-nowrap">Produto</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-12">QTD</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Custo Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-14">MKP</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Frete Vda</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Impostos</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Desp. Adm</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Comissão</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Unit</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Margem</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Venda Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-right">Lucro Total</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap text-center w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
-                  {items.filter(i => !i.opportunity_kit_id).map((item) => {
-                    const idx = items.findIndex(x => x === item); // Find true index in the global items state
-                    const totalImpostos = item.pis_unit + item.cofins_unit + item.csll_unit + item.irpj_unit + item.icms_unit + item.iss_unit;
-                    const custoTotal = item.custo_unit_base * item.quantidade;
-                    const lucroTotal = item.lucro_unit * item.quantidade;
-                    const vendaTotal = item.venda_unit * item.quantidade;
-                    const margemColor = item.margem_unit >= 15 ? 'text-emerald-600' : item.margem_unit >= 5 ? 'text-amber-600' : 'text-rose-600';
-
-                    return (
-                      <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
-                        {/* Produto */}
-                        <td className="px-1.5 py-2 whitespace-nowrap max-w-[200px]">
-                          <div className="flex flex-col truncate">
-                            <span className="font-semibold text-text-primary text-[11px] truncate">{item.product_nome || item.descricao_servico || '—'}</span>
-                            {item.product_codigo && <span className="text-[10px] font-mono text-text-muted">{item.product_codigo}</span>}
-                          </div>
-                        </td>
-
-                        {/* QTD — editable */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
-                          <input
-                            type="number" step="1" min="1" value={item.quantidade}
-                            onChange={e => updateItem(idx, 'quantidade', +e.target.value)}
-                            disabled={isReadonly}
-                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
-                          />
-                        </td>
-
-                        {/* Custo Unit — with composition tooltip */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                          <Tooltip content={
-                            (() => {
-                              const cc = item.cost_composition;
-                              const baseU = cc?.base_unitario ?? item.custo_unit_base;
-                              const ipiPct = cc?.ipi_percent ?? 0;
-                              const ipiU = cc?.ipi_unitario ?? 0;
-                              const freteU = cc?.frete_cif_unitario ?? 0;
-                              const hasSt = cc?.has_st ?? false;
-                              const stNormal = cc?.icms_st_normal ?? 0;
-                              const credPct = cc?.cred_outorgado_percent ?? 0;
-                              const credVal = cc?.cred_outorgado_valor ?? 0;
-                              const stFinal = cc?.icms_st_final ?? 0;
-                              const isBit = cc?.is_bit ?? false;
-                              const custoFinal = cc?.custo_unit_final ?? item.custo_unit_base;
-
-                              return (
-                                <div className="w-72">
-                                  <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
-                                    <Info className="w-3.5 h-3.5 text-brand-primary" />
-                                    Composição do Custo
-                                  </div>
-                                  <div className="space-y-1 font-mono text-text-muted">
-                                    <div className="flex justify-between">
-                                      <span>Base (Unit.):</span>
-                                      <span className="font-semibold text-text-primary">{fmt(baseU)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-amber-300">IPI ({ipiPct.toFixed(0)}%):</span>
-                                      <span className="text-amber-300">+ {fmt(ipiU)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-amber-300">Frete CIF:</span>
-                                      <span className="text-amber-300">+ {fmt(freteU)}</span>
-                                    </div>
-                                    {hasSt && (
-                                      <>
-                                        <div className="border-t border-border-subtle my-1" />
-                                        <div className="flex justify-between">
-                                          <span className="text-amber-300">ICMS-ST {isBit ? '(BIT)' : '(Normal)'} unit.:</span>
-                                          <span className="text-amber-300">+ {fmt(stNormal)}</span>
-                                        </div>
-                                        {!isBit && credPct > 0 && (
-                                          <>
-                                            <div className="flex justify-between">
-                                              <span className="text-green-400">Créd. Outorgado ({credPct.toFixed(0)}%):</span>
-                                              <span className="text-green-400">- {fmt(credVal)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                              <span className="text-amber-300">ICMS-ST Final unit.:</span>
-                                              <span className="text-amber-300">+ {fmt(stFinal)}</span>
-                                            </div>
-                                          </>
-                                        )}
-                                      </>
-                                    )}
-                                    <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5 font-bold text-text-primary">
-                                      <span>Custo Unit. Final:</span>
-                                      <span>{fmt(custoFinal)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()
-                          }>
-                            <span className="cursor-help border-b border-dashed border-text-muted">{fmt(item.custo_unit_base)}</span>
-                          </Tooltip>
-                        </td>
-
-                        {/* Custo Total */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                          {fmt(custoTotal)}
-                        </td>
-
-                        {/* MKP — editable */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-center">
-                          <input
-                            type="number" step="0.01" value={item.markup}
-                            onChange={e => updateItem(idx, 'markup', +e.target.value)}
-                            disabled={isReadonly}
-                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60"
-                          />
-                        </td>
-
-                        {/* Venda Unit */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-text-primary">
-                          {fmt(item.venda_unit)}
-                        </td>
-
-                        {/* Frete Venda */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.frete_venda_unit)}
-                        </td>
-
-                        {/* Impostos — with breakdown tooltip */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                          <Tooltip content={
-                            <div className="w-72">
-                              <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
-                                <Info className="w-3.5 h-3.5 text-brand-primary" />
-                                Detalhamento de Impostos
-                              </div>
-                              <div className="space-y-1.5 font-mono text-text-muted">
-                                {item.tipo_item === 'MERCADORIA' ? (
-                                  <>
-                                    <div className="flex justify-between"><span>PIS ({fmtPct(item.perc_pis)})</span><span>{fmt(item.pis_unit)}</span></div>
-                                    <div className="flex justify-between"><span>COFINS ({fmtPct(item.perc_cofins)})</span><span>{fmt(item.cofins_unit)}</span></div>
-                                    <div className="flex justify-between"><span>CSLL ({fmtPct(item.perc_csll)})</span><span>{fmt(item.csll_unit)}</span></div>
-                                    <div className="flex justify-between"><span>IRPJ ({fmtPct(item.perc_irpj)})</span><span>{fmt(item.irpj_unit)}</span></div>
-                                    <div className="flex justify-between">
-                                      <span>ICMS ({fmtPct(item.perc_icms)}){item.tem_st ? ' — ST isento' : ''}</span>
-                                      <span>{fmt(item.icms_unit)}</span>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="flex justify-between"><span>ISS ({fmtPct(item.perc_iss)})</span><span>{fmt(item.iss_unit)}</span></div>
-                                )}
-                                <div className="border-t border-white/20 mt-2 pt-2">
-                                  <div className="flex justify-between font-bold text-text-primary">
-                                    <span>Total Impostos</span>
-                                    <span>{fmt(totalImpostos)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          }>
-                            <span className="cursor-help border-b border-dashed border-text-muted">{fmt(totalImpostos)}</span>
-                          </Tooltip>
-                        </td>
-
-                        {/* Desp. Adm — valor */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.despesa_adm_unit)}
-                        </td>
-
-                        {/* Comissão — valor */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(item.comissao_unit)}
-                        </td>
-
-                        {/* Lucro Unit */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-semibold ${margemColor}`}>
-                          {fmt(item.lucro_unit)}
-                        </td>
-
-                        {/* Margem */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                          {fmtPct(item.margem_unit)}
-                        </td>
-
-                        {/* Venda Total */}
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-brand-primary">
-                          {fmt(vendaTotal)}
-                        </td>
-
-                        {/* Lucro Total */}
-                        <td className={`px-1.5 py-2 whitespace-nowrap text-right font-bold ${margemColor}`}>
-                          {fmt(lucroTotal)}
-                        </td>
-
-                        {/* Ações */}
-                        <td className="px-1 py-2 whitespace-nowrap text-center">
-                          {!isReadonly && (
-                            <button
-                              onClick={() => removeItem(idx)}
-                              className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                              title="Remover item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
 
         {/* Kits de Venda */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -3423,7 +3121,10 @@ export function SalesBudgetForm() {
                 initialTipoContrato={novoKitTipoContrato}
                 onSuccess={(savedKit) => {
                   setShowCreateKitModal(false);
-                  if (savedKit) handleAddKit(savedKit);
+                  if (savedKit) {
+                    if (activeTab === 'venda') handleAddKitVenda(savedKit);
+                    else handleAddKit(savedKit);
+                  }
                 }}
               />
             </div>
@@ -3454,14 +3155,6 @@ export function SalesBudgetForm() {
         </div>
       )}
 
-      {/* Product Search Modal — Sale */}
-      {showProductSearch && (
-        <ProductSearchModal
-          products={products}
-          onSelect={addProduct}
-          onClose={() => setShowProductSearch(false)}
-        />
-      )}
       {/* Product Search Modal — Rental */}
       {showAddRentalItemModal && (
         <AddRentalItemModal
@@ -3616,6 +3309,32 @@ export function SalesBudgetForm() {
           initialData={{ id, titulo, customerId }}
         />
       )}
+
+      {/* Custom Inline Discard Dialog */}
+      {showDiscardDialog && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface border border-border-subtle rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-amber-500 mb-4">
+              <div className="p-2 bg-amber-500/10 rounded-lg">
+                <HelpCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary">Sair sem salvar?</h3>
+            </div>
+            <p className="text-text-muted mb-6">
+              Existem alterações que não foram salvas nesta oportunidade. Se você sair agora, todas as modificações recentes serão perdidas.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <Button onClick={() => setShowDiscardDialog(false)} variant="outline" className="text-text-secondary border-border-subtle">
+                Continuar editando
+              </Button>
+              <Button onClick={() => navigate('/orcamentos-vendas')} className="bg-red-500 hover:bg-red-600 text-white border-0">
+                Descartar e Sair
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -3662,4 +3381,3 @@ function ProductSearchModal({ products, onSelect, onClose }: { products: any[]; 
     </div>
   );
 }
-

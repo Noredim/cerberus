@@ -32,6 +32,7 @@ export function QuickProductCreateModal({
     company_id: '',
     nome: '',
     ncm_codigo: '',
+    tipo: '', // Initially empty to force selection if NCM is missing
     descricao: '',
     marca: '',
     modelo: '',
@@ -45,6 +46,7 @@ export function QuickProductCreateModal({
         company_id: activeCompanyId || '',
         nome: initialData?.nome || initialData?.descricao || '',
         ncm_codigo: initialData?.ncm || '',
+        tipo: initialData?.ncm ? 'EQUIPAMENTO' : '',
         descricao: initialData?.descricao || '',
         marca: '',
         modelo: '',
@@ -74,7 +76,7 @@ export function QuickProductCreateModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.company_id || !formData.nome) return;
+    if (!formData.company_id || !formData.nome || !formData.tipo) return;
 
     setError('');
     setLoading(true);
@@ -94,7 +96,7 @@ export function QuickProductCreateModal({
         nome: formData.nome,
         descricao: formData.descricao,
         ncm_codigo: formData.ncm_codigo,
-        tipo: 'EQUIPAMENTO' as const,
+        tipo: formData.tipo as any,
         finalidade: 'REVENDA' as const,
         unidade: 'UN',
         categoria: '',
@@ -186,8 +188,22 @@ export function QuickProductCreateModal({
               value={formData.nome}
               onChange={e => setFormData({ ...formData, nome: e.target.value })}
               className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary h-11"
-              placeholder="Ex: Servidor PowerEdge R740"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Tipo de Item *</label>
+            <select
+              required
+              value={formData.tipo}
+              onChange={e => setFormData({ ...formData, tipo: e.target.value })}
+              className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary cursor-pointer h-11"
+            >
+              <option value="">Selecione o tipo...</option>
+              <option value="EQUIPAMENTO">Produto</option>
+              <option value="SERVICO">Serviço</option>
+              <option value="LICENCA">Licença</option>
+            </select>
           </div>
 
           <div className="space-y-1.5">
@@ -273,7 +289,7 @@ export function QuickProductCreateModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !formData.company_id || !formData.nome}
+              disabled={loading || !formData.company_id || !formData.nome || !formData.tipo}
               className="flex items-center gap-2 bg-brand-primary text-white px-6 py-2.5 rounded-lg font-bold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 disabled:opacity-50 cursor-pointer text-sm"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

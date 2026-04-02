@@ -129,6 +129,7 @@ def list_product_budgets(
                 "supplier_nome_fantasia": item.budget.supplier.nome_fantasia if getattr(item.budget, 'supplier', None) else None,
                 "supplier_razao_social": item.budget.supplier.razao_social if getattr(item.budget, 'supplier', None) else None,
                 "supplier_uf": item.budget.supplier.uf if getattr(item.budget, 'supplier', None) else None,
+                "nome_fornecedor_manual": item.budget.vendedor_nome,
             }
         }
         result.append(res)

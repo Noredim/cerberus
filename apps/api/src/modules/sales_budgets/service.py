@@ -1,9 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, literal_column
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple
 from uuid import UUID
+import uuid
 import re
+import logging
 
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, SalesBudgetResponsavel, RentalBudgetItem
 from src.modules.sales_budgets.schemas import SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetItemCreate, RentalBudgetItemCreate, SalesBudgetHeaderUpdate
@@ -396,6 +398,7 @@ def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_
         db_item = SalesBudgetItem(
             budget_id=budget.id,
             product_id=item_data.product_id,
+            opportunity_kit_id=getattr(item_data, "opportunity_kit_id", None),
             tipo_item=item_data.tipo_item,
             descricao_servico=item_data.descricao_servico,
             usa_parametros_padrao=item_data.usa_parametros_padrao,
@@ -442,6 +445,24 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
 # ═══════════════════════════════════════════════════════════════════
 
 def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudgetCreate) -> SalesBudget:
+    company = db.query(Company).filter(Company.id == company_id).first()
+    cp = company.sales_parameters if company else None
+    
+    # Extract defaults from company if available
+    c_pis = cp.pis_venda if cp and cp.pis_venda is not None else data.perc_pis
+    c_cofins = cp.cofins_venda if cp and cp.cofins_venda is not None else data.perc_cofins
+    c_csll = cp.csll_venda if cp and cp.csll_venda is not None else data.perc_csll
+    c_irpj = cp.irpj_venda if cp and cp.irpj_venda is not None else data.perc_irpj
+    c_iss = cp.iss_venda if cp and cp.iss_venda is not None else data.perc_iss
+    c_icms_int = cp.icms_interno_venda if cp and cp.icms_interno_venda is not None else data.perc_icms_interno
+    c_icms_ext = cp.icms_externo_venda if cp and cp.icms_externo_venda is not None else data.perc_icms_externo
+    c_frete = cp.frete_venda_padrao if cp and hasattr(cp, 'frete_venda_padrao') and cp.frete_venda_padrao is not None else data.perc_frete_venda
+    
+    # Locacao fields mapped to default sale values as requested by user
+    c_mkp = cp.mkp_padrao_locacao if cp and cp.mkp_padrao_locacao is not None else data.venda_markup_produtos
+    c_desp = cp.despesa_administrativa_locacao if cp and cp.despesa_administrativa_locacao is not None else data.perc_despesa_adm
+    c_com = cp.comissionamento_locacao if cp and cp.comissionamento_locacao is not None else data.perc_comissao
+
     budget = SalesBudget(
         tenant_id=tenant_id,
         company_id=company_id,
@@ -453,21 +474,21 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         data_orcamento=data.data_orcamento,
         status="RASCUNHO",
         # Sale defaults
-        markup_padrao=data.markup_padrao,
-        perc_despesa_adm=data.perc_despesa_adm,
-        perc_comissao=data.perc_comissao,
-        perc_frete_venda=data.perc_frete_venda,
-        perc_pis=data.perc_pis,
-        perc_cofins=data.perc_cofins,
-        perc_csll=data.perc_csll,
-        perc_irpj=data.perc_irpj,
-        perc_iss=data.perc_iss,
-        perc_icms_interno=data.perc_icms_interno,
-        perc_icms_externo=data.perc_icms_externo,
-        venda_markup_produtos=data.venda_markup_produtos,
-        venda_markup_servicos=data.venda_markup_servicos,
-        venda_markup_instalacao=data.venda_markup_instalacao,
-        venda_markup_manutencao=data.venda_markup_manutencao,
+        markup_padrao=c_mkp,
+        perc_despesa_adm=c_desp,
+        perc_comissao=c_com,
+        perc_frete_venda=c_frete,
+        perc_pis=c_pis,
+        perc_cofins=c_cofins,
+        perc_csll=c_csll,
+        perc_irpj=c_irpj,
+        perc_iss=c_iss,
+        perc_icms_interno=c_icms_int,
+        perc_icms_externo=c_icms_ext,
+        venda_markup_produtos=c_mkp,
+        venda_markup_servicos=c_mkp,
+        venda_markup_instalacao=c_mkp,
+        venda_markup_manutencao=c_mkp,
         venda_havera_manutencao=data.venda_havera_manutencao,
         venda_qtd_meses_manutencao=data.venda_qtd_meses_manutencao,
         # Rental defaults
@@ -493,7 +514,6 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         db.add(SalesBudgetResponsavel(budget_id=budget.id, user_id=uid))
 
     # Sale items
-    company = db.query(Company).filter(Company.id == company_id).first()
     company_uf = company.state_id if company else ""
     customer = db.query(Customer).filter(Customer.id == data.customer_id).first()
     customer_uf = customer.state_id if customer else ""
@@ -579,6 +599,21 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
 
     rental_defaults = _build_rental_defaults(budget)
     _process_rental_items(db, budget, data.rental_items, rental_defaults)
+    db.flush()
+
+    # Clean up orphaned OpportunityKits that are strictly attached to this budget
+    from src.modules.opportunity_kits.models import OpportunityKit
+    active_sale_kit_ids = [item.opportunity_kit_id for item in db.query(SalesBudgetItem).filter(SalesBudgetItem.budget_id == budget.id) if item.opportunity_kit_id]
+    active_rental_kit_ids = [item.opportunity_kit_id for item in db.query(RentalBudgetItem).filter(RentalBudgetItem.budget_id == budget.id) if item.opportunity_kit_id]
+    valid_kit_ids = set(active_sale_kit_ids + active_rental_kit_ids)
+    
+    orphans = db.query(OpportunityKit).filter(
+        OpportunityKit.sales_budget_id == budget.id,
+        OpportunityKit.id.notin_(list(valid_kit_ids) if valid_kit_ids else [uuid.uuid4()])
+    ).all()
+    
+    for orphan in orphans:
+        db.delete(orphan)
 
     db.commit()
     db.refresh(budget)

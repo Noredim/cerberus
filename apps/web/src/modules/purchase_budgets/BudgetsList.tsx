@@ -102,7 +102,7 @@ export function BudgetsList() {
                       {formatDate(row.data_orcamento)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-text-primary font-medium">
-                      {row.supplier_nome_fantasia || 'N/A'}
+                      {row.supplier_nome_fantasia || row.vendedor_nome || 'FORNECEDOR'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">
                       {row.vendedor_nome || '-'}

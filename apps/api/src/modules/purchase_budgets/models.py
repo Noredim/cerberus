@@ -51,7 +51,9 @@ class PurchaseBudget(Base):
 
     @property
     def supplier_nome_fantasia(self):
-        return self.supplier.nome_fantasia if self.supplier else None
+        if self.supplier:
+            return self.supplier.nome_fantasia or self.supplier.razao_social or self.vendedor_nome or "FORNECEDOR"
+        return self.vendedor_nome or "FORNECEDOR"
 
     @property
     def supplier_cnpj(self):

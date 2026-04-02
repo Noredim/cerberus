@@ -126,9 +126,9 @@ class PurchaseBudgetService:
             icms_from_budget = float(item.icms_percent)
             icms_entrada_effective = icms_from_budget if icms_from_budget <= 4 else 7
 
-            # --- CALCULATE ST (only for interstate operations) ---
+            # --- CALCULATE ST (only for interstate operations and products) ---
             calc_icms_st_final = 0.0
-            if st_flag and op_interestadual:
+            if st_flag and op_interestadual and product.tipo == 'EQUIPAMENTO':
                 cred = icms_entrada_effective / 100.0
                 base_com_mva = (final_valor_unitario + ipi_unit) * (1 + (mva_percent / 100.0))
                 
@@ -141,10 +141,10 @@ class PurchaseBudgetService:
                     icms_st_protegido = max(0.0, icms_st_bruto)
                     calc_icms_st_final = max(0.0, icms_st_protegido * (1 - DESCONTO_CREDITO_OUTORGADO))
 
-            # --- CALCULATE DIFAL ---
+            # --- CALCULATE DIFAL (only for products) ---
             c_valor_difal = 0.0
             
-            if op_interestadual:
+            if op_interestadual and product.tipo == 'EQUIPAMENTO':
                 # Use the actual budget item ICMS instead of the hardcoded 12%
                 aliquota_origem = float(item.icms_percent) / 100.0 if item.icms_percent else 0.12
                 

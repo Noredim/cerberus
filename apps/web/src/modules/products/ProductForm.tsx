@@ -151,9 +151,10 @@ const ProductForm: React.FC = () => {
                                 numero_orcamento: b.budget?.numero_orcamento,
                                 tipo_orcamento: b.budget?.tipo_orcamento,
                                 data_cotacao: b.budget?.data_orcamento,
+                                nome_fornecedor_manual: b.budget?.nome_fornecedor_manual,
                                 supplier: {
-                                    nome_fantasia: b.budget?.supplier_nome_fantasia || 'Fornecedor',
-                                    razao_social: b.budget?.supplier_razao_social || 'Fornecedor',
+                                    nome_fantasia: b.budget?.supplier_nome_fantasia,
+                                    razao_social: b.budget?.supplier_razao_social,
                                     uf: b.budget?.supplier_uf || 'SP'
                                 }
                             }
@@ -700,6 +701,7 @@ const ProductForm: React.FC = () => {
                                 bitFlag={benefits.some(b => b.nome?.toUpperCase().includes('BIT'))}
                                 importadoFlag={false}
                                 mvaFromProduct={mvaResult?.mva_percent ?? 0}
+                                productType={formData.tipo}
                                 budgets={budgets}
                             />
                         )}

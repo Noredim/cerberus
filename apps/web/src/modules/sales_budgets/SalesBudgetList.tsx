@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Receipt, Search, Copy, Eye, Trash2, Info } from 'lucide-react';
+import { Plus, Receipt, Search, Eye, Trash2, Info } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
+import Modal from '../../components/modals/Modal';
+import { AlertCircle } from 'lucide-react';
 
 interface SalesBudgetSummary {
   id: string;
@@ -54,6 +56,9 @@ export function SalesBudgetList() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [budgetToDelete, setBudgetToDelete] = useState<SalesBudgetSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     loadBudgets();
@@ -70,24 +75,26 @@ export function SalesBudgetList() {
     }
   };
 
-  const handleDuplicate = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (budget: SalesBudgetSummary, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await api.post(`/sales-budgets/${id}/duplicate`);
-      loadBudgets();
-    } catch (err) {
-      console.error(err);
-    }
+    setBudgetToDelete(budget);
+    setDeleteError(null);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Tem certeza que deseja excluir este orçamento?')) return;
+  const confirmDelete = async () => {
+    if (!budgetToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await api.delete(`/sales-budgets/${id}`);
-      loadBudgets();
-    } catch (err) {
+      await api.delete(`/sales-budgets/${budgetToDelete.id}`);
+      await loadBudgets();
+      setBudgetToDelete(null);
+    } catch (err: any) {
       console.error('Erro ao excluir orçamento:', err);
+      const msg = err.response?.data?.detail || err.message || 'Erro desconhecido';
+      setDeleteError(`Falha ao excluir orçamento: ${msg}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -249,14 +256,7 @@ export function SalesBudgetList() {
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={(e) => handleDuplicate(b.id, e)}
-                        className="p-1.5 rounded hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary transition-colors"
-                        title="Duplicar"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(b.id, e)}
+                        onClick={(e) => handleDeleteClick(b, e)}
                         className="p-1.5 rounded hover:bg-rose-100 text-text-muted hover:text-rose-600 transition-colors"
                         title="Excluir"
                       >
@@ -279,6 +279,48 @@ export function SalesBudgetList() {
           navigate(`/orcamentos-vendas/${id}`);
         }}
       />
+
+      <Modal
+        isOpen={!!budgetToDelete}
+        onClose={() => !isDeleting && setBudgetToDelete(null)}
+        title="Excluir Oportunidade"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-4 p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-800">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600" />
+            <div>
+              <p className="font-semibold text-sm">Tem certeza que deseja excluir esta oportunidade?</p>
+              <p className="text-sm mt-1">Essa ação não poderá ser desfeita. O orçamento <strong>{budgetToDelete?.titulo}</strong> será permanentemente apagado.</p>
+            </div>
+          </div>
+          
+          {deleteError && (
+             <div className="text-sm text-rose-600 bg-rose-50 p-3 rounded font-medium border border-rose-100">
+               {deleteError}
+             </div>
+          )}
+
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border-subtle">
+            <Button
+              variant="outline"
+              onClick={() => setBudgetToDelete(null)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Excluindo...' : 'Sim, Excluir Oportunidade'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 }
