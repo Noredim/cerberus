@@ -109,29 +109,29 @@ interface VendaKitItem {
   opportunity_kit_id: string;
   nome_kit: string;
   quantidade: number;
-  
+
   fator_margem_locacao: number;
   fator_margem_servicos_produtos: number;
   fator_margem_instalacao: number;
   fator_margem_manutencao: number;
-  
+
   custo_aquisicao_equip_unit: number;
   custo_manutencao_unit: number;
-  
+
   venda_equip_unit: number;
   venda_manut_unit: number;
-  
+
   faturamento_total: number;
-  
+
   lucro_venda: number;
   margem_venda: number;
-  
+
   lucro_manutencao: number;
   margem_manutencao: number;
-  
+
   lucro_final: number;
   margem_geral: number;
-  
+
   summary?: any;
   kit_raw?: any;
   havera_manutencao?: boolean;
@@ -331,7 +331,7 @@ const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 export function SalesBudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Dialog states
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
@@ -461,7 +461,7 @@ export function SalesBudgetForm() {
 
   // Lookups
   const [customers, setCustomers] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -469,19 +469,7 @@ export function SalesBudgetForm() {
 
   const isReadonly = status !== 'RASCUNHO';
 
-  const defaults = useMemo(() => ({
-    markup_padrao: markupPadrao,
-    perc_despesa_adm: percDespesaAdm,
-    perc_comissao: percComissao,
-    perc_frete_venda: percFreteVenda,
-    perc_pis: percPis,
-    perc_cofins: percCofins,
-    perc_csll: percCsll,
-    perc_irpj: percIrpj,
-    perc_iss: percIss,
-    perc_icms_interno: percIcmsInterno,
-    perc_icms_externo: percIcmsExterno,
-  }), [markupPadrao, percDespesaAdm, percComissao, percFreteVenda, percPis, percCofins, percCsll, percIrpj, percIss, percIcmsInterno, percIcmsExterno]);
+  // Unused defaults useMemo removed
 
   const rentalDefaults = useMemo(() => ({
     tipo_receita_rental: tipoReceitaRental,
@@ -539,11 +527,11 @@ export function SalesBudgetForm() {
       const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
 
       setCompanyVendaTaxes({
-        pis:          pick('pis'),
-        cofins:       pick('cofins'),
-        csll:         pick('csll'),
-        irpj:         pick('irpj'),
-        iss:          pick('iss'),
+        pis: pick('pis'),
+        cofins: pick('cofins'),
+        csll: pick('csll'),
+        irpj: pick('irpj'),
+        iss: pick('iss'),
         icms_interno: pick('icms_interno'),
         icms_externo: pick('icms_externo'),
       });
@@ -636,24 +624,24 @@ export function SalesBudgetForm() {
               fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
               fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
               fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
-              
+
               custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
               custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
-              
+
               venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
               venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
-              
+
               faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
-              
+
               lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
               margem_venda: Number(kit.summary?.margem_equipamentos || 0),
-              
+
               lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
               margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
-              
+
               lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
               margem_geral: Number(kit.summary?.margem_kit || 0),
-              
+
               havera_manutencao: kit.havera_manutencao,
               qtd_meses_manutencao: kit.qtd_meses_manutencao,
               summary: kit.summary,
@@ -879,24 +867,24 @@ export function SalesBudgetForm() {
       fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
       fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
       fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
-      
+
       custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
       custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
-      
+
       venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
       venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
-      
+
       faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
-      
+
       lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
       margem_venda: Number(kit.summary?.margem_equipamentos || 0),
-      
+
       lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
       margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
-      
+
       lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
       margem_geral: Number(kit.summary?.margem_kit || 0),
-      
+
       summary: kit.summary,
       kit_raw: kit,
       havera_manutencao: !!kit.havera_manutencao,
@@ -919,10 +907,10 @@ export function SalesBudgetForm() {
     setVendaKits(prev => {
       const updated = [...prev];
       const item = { ...updated[idx], [field]: value };
-      
+
       // Not storing pre-multiplied totals in state anymore to ensure React reactivity safely
       // Only the unit is stored, the grid component handles Qtd calculations.
-      
+
       updated[idx] = item;
       return updated;
     });
@@ -951,7 +939,7 @@ export function SalesBudgetForm() {
       for (let i = 0; i < updatedKits.length; i++) {
         const vk = updatedKits[i];
         const isGlobal = !vk.kit_raw?.sales_budget_id;
-        
+
         const payload = overriddenParams || {
           fator_margem_locacao: fatorMargemProdutos,
           fator_margem_servicos_produtos: fatorMargemServicos,
@@ -959,7 +947,7 @@ export function SalesBudgetForm() {
           fator_margem_manutencao: fatorMargemManutencao
           // RN02: Alterar apenas os campos de parâmetros financeiros equivalentes
         };
-        
+
         let finalKitId = vk.opportunity_kit_id;
 
         let finalKitData = null;
@@ -967,7 +955,7 @@ export function SalesBudgetForm() {
         if (isGlobal) {
           console.log(`Cloning global kit ${vk.opportunity_kit_id} for budget ${id}`);
           const raw = vk.kit_raw || {};
-          
+
           const itemsPayload = (raw.items || []).map((item: any) => ({
             product_id: item.product_id || item.produto?.id,
             own_service_id: item.own_service_id,
@@ -975,7 +963,7 @@ export function SalesBudgetForm() {
             descricao_item: item.descricao_item,
             quantidade_no_kit: Number(item.quantidade_no_kit || 1)
           }));
-          
+
           const costsPayload = (raw.costs || []).map((c: any) => ({
             product_id: c.product_id || c.produto?.id,
             own_service_id: c.own_service_id,
@@ -1022,7 +1010,7 @@ export function SalesBudgetForm() {
           finalKitId = data.id;
           finalKitData = data;
         }
-        
+
         updatedKits[i] = {
           ...vk,
           opportunity_kit_id: finalKitId,
@@ -1030,31 +1018,31 @@ export function SalesBudgetForm() {
           fator_margem_servicos_produtos: Number(finalKitData.fator_margem_servicos_produtos || 1),
           fator_margem_instalacao: Number(finalKitData.fator_margem_instalacao || 1),
           fator_margem_manutencao: Number(finalKitData.fator_margem_manutencao || 1),
-          
+
           custo_aquisicao_equip_unit: Number(finalKitData.summary?.custo_aquisicao_total || 0) + Number(finalKitData.summary?.vlr_instal_calc || 0),
           custo_manutencao_unit: Number(finalKitData.summary?.vlt_manut || 0),
-          
+
           venda_equip_unit: Number(finalKitData.summary?.venda_equipamentos_total ?? finalKitData.summary?.valor_mensal_kit ?? 0),
           venda_manut_unit: Number(finalKitData.summary?.venda_manutencao_total ?? 0),
-          
+
           faturamento_total: Number(finalKitData.summary?.faturamento_total_venda ?? (Number(finalKitData.summary?.venda_equipamentos_total || 0) + Number(finalKitData.summary?.venda_manutencao_total || 0))),
-          
+
           lucro_venda: Number(finalKitData.summary?.lucro_equipamentos || 0),
           margem_venda: Number(finalKitData.summary?.margem_equipamentos || 0),
-          
+
           lucro_manutencao: Number(finalKitData.summary?.lucro_manutencao || 0),
           margem_manutencao: Number(finalKitData.summary?.margem_manutencao || 0),
-          
+
           lucro_final: Number(finalKitData.summary?.lucro_mensal_kit || 0),
           margem_geral: Number(finalKitData.summary?.margem_kit || 0),
-          
+
           summary: finalKitData.summary,
           kit_raw: finalKitData,
           havera_manutencao: !!finalKitData.havera_manutencao,
           qtd_meses_manutencao: finalKitData.qtd_meses_manutencao ?? null
         };
       }
-      
+
       const success = await handleSave(true, undefined, updatedKits);
       if (!success) return;
 
@@ -1075,7 +1063,7 @@ export function SalesBudgetForm() {
     try {
       setSaving(true);
       const { data } = await api.get(`/companies/${activeCompanyId}/sales-parameters`);
-      
+
       const mkpLocacao = Number(data.mkp_padrao_locacao || data.mkp_padrao || 1.35);
       const despAdmLocacao = Number(data.despesa_administrativa_locacao || data.despesa_administrativa || 0);
       const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
@@ -1089,7 +1077,7 @@ export function SalesBudgetForm() {
       setMarkupPadrao(mkpLocacao);
       setPercDespesaAdm(despAdmLocacao);
       setPercComissao(comissaoLocacao);
-      
+
       const taxes = {
         aliq_pis: pick('pis'),
         aliq_cofins: pick('cofins'),
@@ -1234,7 +1222,7 @@ export function SalesBudgetForm() {
         t.lucro += vk.lucro_final * q;
         return;
       }
-      
+
       t.custo += (s.custo_equip_total_calc + s.custo_manut_total_calc) * q;
       t.venda += (s.faturamento_total_venda ?? (s.venda_equipamentos_total + s.venda_manutencao_total)) * q;
       t.frete += (s.vlt_frete_venda || 0) * q;
@@ -1242,7 +1230,7 @@ export function SalesBudgetForm() {
       t.despAdm += (s.vlt_despesas_adm || 0) * q;
       t.comissao += (s.vlt_comissao || 0) * q;
       t.lucro += s.lucro_mensal_kit * q;
-      
+
       t.total_pis += s.vlt_pis * q;
       t.total_cofins += s.vlt_cofins * q;
       t.total_csll += s.vlt_csll * q;
@@ -1936,46 +1924,46 @@ export function SalesBudgetForm() {
 
         {/* Pricing Defaults */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-brand-primary" />
-                Parâmetros Padrão
-              </h2>
-              <div className="flex items-center gap-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleRefreshParams}
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-brand-primary" />
+              Parâmetros Padrão
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshParams}
+                disabled={isReadonly || saving}
+                className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
+                Atualizar Parâmetros
+              </Button>
+              {vendaKits.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleApplyKitsParams}
                   disabled={isReadonly || saving}
                   className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
-                  Atualizar Parâmetros
+                  Aplicar aos Kits
                 </Button>
-                {vendaKits.length > 0 && (
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleApplyKitsParams}
-                    disabled={isReadonly || saving}
-                    className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
-                    Aplicar aos Kits
-                  </Button>
-                )}
-                {/* Info button — opens read-only tax breakdown modal */}
-                <button
-                  type="button"
-                  onClick={() => setShowTaxModal(true)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-lg px-3 py-1.5 hover:bg-brand-primary/20 transition-all h-8"
-                >
-                  <Info className="w-4 h-4" /> Impostos Incidentes
-                </button>
-              </div>
+              )}
+              {/* Info button — opens read-only tax breakdown modal */}
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-lg px-3 py-1.5 hover:bg-brand-primary/20 transition-all h-8"
+              >
+                <Info className="w-4 h-4" /> Impostos Incidentes
+              </button>
             </div>
+          </div>
 
           {/* Row 1 — Fator Margem (4 fields) + Maintenance */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -2122,7 +2110,7 @@ export function SalesBudgetForm() {
                   {vendaKits.map((item, idx) => {
                     const avgFator = (item.fator_margem_locacao + item.fator_margem_servicos_produtos + item.fator_margem_instalacao + item.fator_margem_manutencao) / 4;
                     const q = item.quantidade;
-                    
+
                     const margemColor = item.margem_geral >= 15 ? 'text-emerald-600' : item.margem_geral >= 5 ? 'text-amber-600' : 'text-rose-600';
                     const margemVendaColor = item.margem_venda >= 15 ? 'text-emerald-600' : item.margem_venda >= 5 ? 'text-amber-600' : 'text-rose-600';
                     const margemManutColor = item.margem_manutencao >= 15 ? 'text-emerald-600' : item.margem_manutencao >= 5 ? 'text-amber-600' : 'text-rose-600';
@@ -3339,45 +3327,4 @@ export function SalesBudgetForm() {
   );
 }
 
-function ProductSearchModal({ products, onSelect, onClose }: { products: any[]; onSelect: (p: any) => void; onClose: () => void }) {
-  const [search, setSearch] = useState('');
-  const filtered = products.filter(p => {
-    const q = search.toLowerCase();
-    return !q || p.nome?.toLowerCase().includes(q) || p.codigo?.toLowerCase().includes(q);
-  }).slice(0, 20);
-
-  return (
-    <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface rounded-xl shadow-xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-semibold text-text-primary text-lg">Buscar Produto</h3>
-        <input
-          autoFocus
-          type="text"
-          placeholder="Buscar por nome ou código..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
-        />
-        <div className="max-h-60 overflow-y-auto space-y-1">
-          {filtered.length === 0 ? (
-            <p className="text-text-muted text-center py-4 text-sm">Nenhum produto encontrado.</p>
-          ) : (
-            filtered.map(p => (
-              <button
-                key={p.id}
-                onClick={() => onSelect(p)}
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-bg-deep transition-colors flex items-center gap-3"
-              >
-                <span className="font-mono text-xs text-brand-primary">{p.codigo}</span>
-                <span className="text-sm text-text-primary">{p.nome}</span>
-                <span className="text-xs text-text-muted ml-auto">
-                  {p.vlr_referencia_revenda ? `Custo: R$ ${Number(p.vlr_referencia_revenda).toFixed(2)}` : 'Sem custo'}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// ProductSearchModal removed as it is unused
