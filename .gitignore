@@ -76,3 +76,11 @@ coverage.xml
 
 # ─── Alembic ──────────────────────────────────────────────────────────────────
 alembic/versions/__pycache__/
+
+# --- Temporary / Debug Files --------------------------------------------------
+api_logs_debug.txt
+out.txt
+tmp/
+roles_map.txt
+implementation_plan.md
+
