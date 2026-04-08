@@ -32,7 +32,7 @@ from src.modules.professionals.router import router as professionals_router
 from src.modules.solution_analysis.router import router as solution_analysis_router
 from src.modules.man_hours.router import router as man_hours_router
 from src.modules.own_services.router import router as own_services_router
-
+from src.modules.sales_proposals.router import router as sales_proposals_router
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -154,3 +154,4 @@ app.include_router(professionals_router)
 app.include_router(solution_analysis_router)
 app.include_router(man_hours_router)
 app.include_router(own_services_router)
+app.include_router(sales_proposals_router)

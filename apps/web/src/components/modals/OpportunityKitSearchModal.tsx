@@ -131,8 +131,9 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
                       <span className="font-medium">Mensalidades:</span> {kit.summary?.prazo_mensalidades || 0}
                     </span>
                     <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
-                      <span className="font-medium">Valor Estimado:</span> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kit.summary?.valor_mensal_kit || 0)}
+                      <span className="font-medium">Valor Estimado:</span> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0)}
                     </span>
+
                   </div>
                 </div>
                 

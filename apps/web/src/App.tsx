@@ -36,6 +36,8 @@ import ProfessionalsDashboard from './modules/professionals/ProfessionalsDashboa
 import Dashboard from './modules/dashboard/Dashboard';
 import { SolutionAnalysisList } from './modules/solution_analysis/SolutionAnalysisList';
 import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalysisForm';
+import { SalesProposalList } from './modules/sales_proposals/SalesProposalList';
+import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -160,6 +162,11 @@ function App() {
             <Route path="/comercial/comparativos" element={<SolutionAnalysisList />} />
             <Route path="/comercial/comparativos/novo" element={<SolutionAnalysisForm />} />
             <Route path="/comercial/comparativos/:id" element={<SolutionAnalysisForm />} />
+
+            {/* Comercial: Propostas de Venda */}
+            <Route path="/comercial/propostas" element={<SalesProposalList />} />
+            <Route path="/comercial/propostas/:id" element={<SalesProposalForm />} />
+
 
           </Route>
         </Routes>

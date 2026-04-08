@@ -7,8 +7,10 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface KitSummary {
   valor_mensal_kit: number;
+  valor_mensal_antes_impostos: number; // billing value shown in form
   lucro_mensal_kit: number;
   margem_kit: number;
+  roi_meses: number;
 }
 
 interface Kit {
@@ -18,6 +20,11 @@ interface Kit {
   quantidade_kits: number;
   summary?: KitSummary;
 }
+
+const fmtC = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
+
+const RENTAL_TYPES = ['LOCACAO', 'COMODATO'];
 
 export const OpportunityKitList = () => {
   const navigate = useNavigate();
@@ -84,33 +91,69 @@ export const OpportunityKitList = () => {
                   <th className="px-6 py-4 text-right">Valor Mensal</th>
                   <th className="px-6 py-4 text-right">Lucro Mensal</th>
                   <th className="px-6 py-4 text-right">Margem</th>
+                  <th className="px-6 py-4 text-right">ROI</th>
                   <th className="px-6 py-4">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
-                {kits.map((kit) => (
-                  <tr key={kit.id} className="hover:bg-bg-deep/30 transition-colors">
-                    <td className="px-6 py-4 font-medium text-text-primary">{kit.nome_kit}</td>
-                    <td className="px-6 py-4 text-text-secondary">{kit.tipo_contrato}</td>
-                    <td className="px-6 py-4 text-center text-text-secondary">{kit.quantidade_kits}</td>
-                    <td className="px-6 py-4 text-right tabular-nums text-text-primary">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kit.summary?.valor_mensal_kit || 0)}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums text-brand-success font-medium">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kit.summary?.lucro_mensal_kit || 0)}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums text-brand-secondary font-medium">
-                      {(kit.summary?.margem_kit !== undefined && kit.summary?.margem_kit !== null)
-                        ? Number(kit.summary.margem_kit).toFixed(2)
-                        : '0.00'}%
-                    </td>
-                    <td className="px-6 py-4 font-medium">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/cadastros/kits/${kit.id}`)}>
-                        Editar
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {kits.map((kit) => {
+                  const isRental = RENTAL_TYPES.includes(kit.tipo_contrato);
+                  // Grid shows valor_mensal_antes_impostos (the billing value = Locação + Manutenção)
+                  // NOT valor_mensal_kit (which is the tax-grossed-up internal value)
+                  const valorMensal = kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0;
+                  const lucro = kit.summary?.lucro_mensal_kit ?? 0;
+                  const margem = kit.summary?.margem_kit ?? 0;
+                  const roi = kit.summary?.roi_meses ?? 0;
+
+                  return (
+                    <tr key={kit.id} className="hover:bg-bg-deep/30 transition-colors">
+                      <td className="px-6 py-4 font-medium text-text-primary">{kit.nome_kit}</td>
+                      <td className="px-6 py-4 text-text-secondary">{kit.tipo_contrato}</td>
+                      <td className="px-6 py-4 text-center text-text-secondary">{kit.quantidade_kits}</td>
+
+                      {/* Valor Mensal: billing value (pre-tax, as shown in the form HUD) */}
+                      <td className="px-6 py-4 text-right tabular-nums text-text-primary font-medium">
+                        {fmtC(valorMensal)}
+                      </td>
+
+                      {/* Lucro Mensal: hidden (—) for LOCACAO/COMODATO */}
+                      <td className="px-6 py-4 text-right tabular-nums font-medium">
+                        {isRental ? (
+                          <span className="text-text-muted">—</span>
+                        ) : (
+                          <span className="text-brand-success">{fmtC(lucro)}</span>
+                        )}
+                      </td>
+
+                      {/* Margem: hidden (—) for LOCACAO/COMODATO */}
+                      <td className="px-6 py-4 text-right tabular-nums font-medium">
+                        {isRental ? (
+                          <span className="text-text-muted">—</span>
+                        ) : (
+                          <span className="text-brand-secondary">{Number(margem).toFixed(2)}%</span>
+                        )}
+                      </td>
+
+                      {/* ROI: shown only for LOCACAO/COMODATO */}
+                      <td className="px-6 py-4 text-right tabular-nums">
+                        {isRental && roi > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-cyan-600 font-bold">
+                            {Number(roi).toFixed(1)}
+                            <span className="text-[10px] text-text-muted font-normal">m</span>
+                          </span>
+                        ) : (
+                          <span className="text-text-muted">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 font-medium">
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/cadastros/kits/${kit.id}`)}>
+                          Editar
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -182,6 +182,9 @@ class OpportunityKitFinancialSummary(BaseModel):
     venda_manutencao_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_manutencao: Optional[Decimal] = Field(default=Decimal(0))
     margem_manutencao: Optional[Decimal] = Field(default=Decimal(0))
+    # ROI payback period in months (LOCACAO/COMODATO only)
+    roi_meses: Optional[float] = Field(default=0.0)
+
 
 class OpportunityKitItemFinancialSummary(BaseModel):
     id: Optional[UUID] = None

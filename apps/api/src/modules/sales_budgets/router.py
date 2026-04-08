@@ -187,25 +187,6 @@ def delete_budget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from src.modules.sales_budgets.models import SalesBudgetItem, RentalBudgetItem
-    
-    # Check if there are any kits attached to this budget in the UI grids
-    has_sale_kits = db.query(SalesBudgetItem).filter(
-        SalesBudgetItem.budget_id == str(budget_id),
-        SalesBudgetItem.opportunity_kit_id.isnot(None)
-    ).first()
-    
-    has_rental_kits = db.query(RentalBudgetItem).filter(
-        RentalBudgetItem.budget_id == str(budget_id),
-        RentalBudgetItem.opportunity_kit_id.isnot(None)
-    ).first()
-    
-    if has_sale_kits or has_rental_kits:
-        raise HTTPException(
-            status_code=400, 
-            detail="Não é possível excluir a oportunidade pois existem kits vinculados e visíveis. Remova-os primeiro."
-        )
-    
     success = service.delete_budget(db, current_user.tenant_id, str(budget_id))
     if not success:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
@@ -219,6 +200,7 @@ def _budget_to_dict(budget) -> dict:
         items.append({
             "id": i.id,
             "product_id": i.product_id,
+            "opportunity_kit_id": i.opportunity_kit_id,
             "product_nome": i.product_nome,
             "product_codigo": i.product_codigo,
             "tipo_item": i.tipo_item,

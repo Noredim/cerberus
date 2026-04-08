@@ -73,6 +73,52 @@ const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
   );
 };
 
+const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", className = "w-full" }: any) => {
+  const [localStr, setLocalStr] = useState(Number(value || 0).toFixed(4));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalStr(Number(value || 0).toFixed(4));
+    }
+  }, [value, isFocused]);
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    let val = localStr.replace(',', '.');
+    let parsed = parseFloat(val);
+    if (isNaN(parsed)) parsed = 0;
+    setLocalStr(parsed.toFixed(4));
+    onChange(parsed);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(',', '.');
+    if (/^[0-9.]*$/.test(val)) {
+      const parts = val.split('.');
+      if (parts[1] && parts[1].length > 4) return;
+      setLocalStr(val);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={localStr}
+      onChange={handleChange}
+      onFocus={() => {
+        setIsFocused(true);
+        let val = value !== undefined && value !== null && value !== '' ? String(value) : '';
+        setLocalStr(val);
+      }}
+      onBlur={handleBlur}
+      disabled={disabled}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+};
+
 interface SalesBudgetItem {
   id?: string;
   opportunity_kit_id?: string | null;
@@ -210,7 +256,7 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
     if (item.tipo_contrato_kit === 'INSTALACAO') {
       kitFaturamento = Number(item.kit_valor_mensal || 0);
     } else {
-      kitFaturamento = Number(item.kit_valor_mensal || 0) - Number(item.kit_valor_impostos || 0);
+      kitFaturamento = Number(item.kit_valor_mensal || 0);
     }
 
     const impostosKit = Number(item.kit_valor_impostos || 0);
@@ -437,8 +483,7 @@ export function SalesBudgetForm() {
   const [prazoInstalacaoMeses, setPrazoInstalacaoMeses] = useState(1);
   const [taxaJurosMensal, setTaxaJurosMensal] = useState(0);
   const [taxaManutencaoAnual, setTaxaManutencaoAnual] = useState(5);
-  const [fatorMargemPadrao, setFatorMargemPadrao] = useState(1);
-  const [fatorManutencaoPadrao, setFatorManutencaoPadrao] = useState(1);
+
   const [percInstalacaoPadrao, setPercInstalacaoPadrao] = useState(0);
   const [percComissaoRental, setPercComissaoRental] = useState(0);
   const [percPisRental, setPercPisRental] = useState(0);
@@ -477,8 +522,8 @@ export function SalesBudgetForm() {
     prazo_instalacao_meses: prazoInstalacaoMeses,
     taxa_juros_mensal: taxaJurosMensal,
     taxa_manutencao_anual: taxaManutencaoAnual,
-    fator_margem_padrao: fatorMargemPadrao,
-    fator_manutencao_padrao: fatorManutencaoPadrao,
+    fator_margem_padrao: 1,
+    fator_manutencao_padrao: 1,
     perc_instalacao_padrao: percInstalacaoPadrao,
     perc_comissao_rental: percComissaoRental,
     perc_pis_rental: percPisRental,
@@ -486,7 +531,7 @@ export function SalesBudgetForm() {
     perc_csll_rental: percCsllRental,
     perc_irpj_rental: percIrpjRental,
     perc_iss_rental: percIssRental,
-  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, fatorMargemPadrao, fatorManutencaoPadrao, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
+  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
 
   useEffect(() => {
     setRentalItems(prev => prev.map(item => calcRentalItem(item, rentalDefaults)));
@@ -595,8 +640,7 @@ export function SalesBudgetForm() {
       setPrazoInstalacaoMeses(d.prazo_instalacao_meses ?? 1);
       setTaxaJurosMensal(Number(d.taxa_juros_mensal) || 0);
       setTaxaManutencaoAnual(Number(d.taxa_manutencao_anual) || 5);
-      setFatorMargemPadrao(Number(d.fator_margem_padrao) || 1);
-      setFatorManutencaoPadrao(Number(d.fator_manutencao_padrao) || 1);
+
       setPercInstalacaoPadrao(Number(d.perc_instalacao_padrao) || 0);
       setPercComissaoRental(Number(d.perc_comissao_rental) || 0);
       setPercPisRental(Number(d.perc_pis_rental) || 0);
@@ -699,8 +743,8 @@ export function SalesBudgetForm() {
                 difal_unit: Number(kit.summary?.total_difal_kit || 0),
                 taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
                 kit_vlt_manut: Number(kit.summary?.vlt_manut || 0),
-                kit_valor_mensal: Number(kit.summary?.valor_mensal_kit || 0),
-                kit_valor_impostos: Number(kit.summary?.valor_impostos || 0),
+                kit_valor_mensal: kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0),
+                kit_valor_impostos: Number(kit.summary?.valor_impostos ?? 0),
                 kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
                 kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
                 kit_margem: Number(kit.summary?.margem_kit || 0),
@@ -716,8 +760,8 @@ export function SalesBudgetForm() {
         prazo_instalacao_meses: d.prazo_instalacao_meses,
         taxa_juros_mensal: d.taxa_juros_mensal,
         taxa_manutencao_anual: d.taxa_manutencao_anual,
-        fator_margem_padrao: d.fator_margem_padrao,
-        fator_manutencao_padrao: d.fator_manutencao_padrao,
+        fator_margem_padrao: 1,
+        fator_manutencao_padrao: 1,
         perc_instalacao_padrao: d.perc_instalacao_padrao,
         perc_comissao_rental: d.perc_comissao_rental,
         perc_pis_rental: d.perc_pis_rental,
@@ -793,7 +837,7 @@ export function SalesBudgetForm() {
       prazo_contrato: prazoContratoMeses,
       usa_taxa_manut_padrao: true,
       taxa_manutencao_anual_item: null,
-      fator_margem: fatorMargemPadrao || 1,
+      fator_margem: 1,
       custo_manut_mensal: 0, custo_total_mensal: 0,
       valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
       perc_impostos_total: 0, impostos_mensal: 0, receita_liquida_mensal: 0,
@@ -838,10 +882,10 @@ export function SalesBudgetForm() {
         prazo_contrato: Number(kit.prazo_contrato_meses || prazoContratoMeses),
         usa_taxa_manut_padrao: false,
         taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
-        fator_margem: Number(kit.fator_margem_locacao || fatorMargemPadrao || 1),
+        fator_margem: Number(kit.fator_margem_locacao || 1),
         kit_vlt_manut: Number(kit.summary?.vlt_manut || 0),
-        kit_valor_mensal: Number(kit.summary?.valor_mensal_kit || 0),
-        kit_valor_impostos: Number(kit.summary?.valor_impostos || 0),
+        kit_valor_mensal: kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0),
+        kit_valor_impostos: Number(kit.summary?.valor_impostos ?? 0),
         kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
         kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
         kit_margem: Number(kit.summary?.margem_kit || 0),
@@ -982,7 +1026,9 @@ export function SalesBudgetForm() {
             prazo_contrato_meses: raw.prazo_contrato_meses || 36,
             prazo_instalacao_meses: raw.prazo_instalacao_meses || 0,
             instalacao_inclusa: !!raw.instalacao_inclusa,
+            percentual_instalacao: raw.percentual_instalacao,
             manutencao_inclusa: !!raw.manutencao_inclusa,
+            fator_manutencao: raw.fator_manutencao,
             aliq_pis: raw.aliq_pis,
             aliq_cofins: raw.aliq_cofins,
             aliq_csll: raw.aliq_csll,
@@ -1134,7 +1180,6 @@ export function SalesBudgetForm() {
     try {
       const payload: any = {};
       if (field === 'prazo_contrato') payload.prazo_contrato_meses = value;
-      else if (field === 'fator_margem') payload.fator_margem_locacao = value;
       else return; // only sync specific fields
 
       const res = await api.put(`/opportunity-kits/${item.opportunity_kit_id}`, payload);
@@ -1154,8 +1199,8 @@ export function SalesBudgetForm() {
           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
           kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
-          kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
-          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
+          kit_valor_mensal: updatedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(updatedKit.summary?.venda_equipamentos_total || 0) : Number(updatedKit.summary?.valor_mensal_antes_impostos ?? updatedKit.summary?.valor_mensal_kit ?? 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos ?? 0),
           kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
           kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
           kit_margem: Number(updatedKit.summary?.margem_kit || 0),
@@ -1284,13 +1329,14 @@ export function SalesBudgetForm() {
       const tTarget = isInstalacao ? t.impostosInstalacaoDetalhados : t.impostosDetalhados;
 
       if (i.opportunity_kit_id) {
-        const pImp = (i.kit_pis || 0) + (i.kit_cofins || 0) + (i.kit_csll || 0) + (i.kit_irpj || 0) + (i.kit_iss || 0);
+        const isCom = i.tipo_contrato_kit === 'COMODATO' || i.tipo_contrato_kit === 'INSTALACAO';
+        const pImp = (i.kit_pis || 0) + (i.kit_cofins || 0) + (i.kit_csll || 0) + (i.kit_irpj || 0) + (isCom ? (i.kit_iss || 0) : 0);
         if (pImp > 0) {
           tTarget.pis += impostos * ((i.kit_pis || 0) / pImp);
           tTarget.cofins += impostos * ((i.kit_cofins || 0) / pImp);
           tTarget.csll += impostos * ((i.kit_csll || 0) / pImp);
           tTarget.irpj += impostos * ((i.kit_irpj || 0) / pImp);
-          tTarget.iss += (i.kit_iss || 0) > 0 ? (impostos * ((i.kit_iss || 0) / pImp)) : 0;
+          if (isCom) tTarget.iss += impostos * ((i.kit_iss || 0) / pImp);
         }
       } else {
         let pImp = Number(rentalDefaults.perc_pis_rental || 0) + Number(rentalDefaults.perc_cofins_rental || 0) + Number(rentalDefaults.perc_csll_rental || 0) + Number(rentalDefaults.perc_irpj_rental || 0);
@@ -1340,8 +1386,6 @@ export function SalesBudgetForm() {
         const res = await api.put(`/opportunity-kits/${kitId}`, {
           prazo_contrato_meses: prazoContratoMeses,
           prazo_instalacao_meses: prazoInstalacaoMeses,
-          fator_margem_locacao: fatorMargemPadrao,
-          fator_manutencao: fatorManutencaoPadrao
         });
         return { kitId, data: res.data };
       }));
@@ -1354,7 +1398,6 @@ export function SalesBudgetForm() {
         return calcRentalItem({
           ...ri,
           prazo_contrato: prazoContratoMeses,
-          fator_margem: fatorMargemPadrao,
           custo_op_mensal_kit: Number(updatedKit.summary?.custo_operacional_mensal_kit || 0),
           kit_custo_produtos: Number(updatedKit.summary?.custo_aquisicao_produtos || 0),
           kit_custo_servicos: Number(updatedKit.summary?.custo_aquisicao_servicos || 0),
@@ -1370,8 +1413,8 @@ export function SalesBudgetForm() {
           kit_irpj: Number(updatedKit.aliq_irpj || 0),
           kit_iss: Number(updatedKit.aliq_iss || 0),
           kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
-          kit_valor_mensal: Number(updatedKit.summary?.valor_mensal_kit || 0),
-          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
+          kit_valor_mensal: updatedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(updatedKit.summary?.venda_equipamentos_total || 0) : Number(updatedKit.summary?.valor_mensal_antes_impostos ?? updatedKit.summary?.valor_mensal_kit ?? 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos ?? 0),
           kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
           kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
           kit_margem: Number(updatedKit.summary?.margem_kit || 0)
@@ -1426,8 +1469,8 @@ export function SalesBudgetForm() {
         prazo_instalacao_meses: +prazoInstalacaoMeses,
         taxa_juros_mensal: +taxaJurosMensal,
         taxa_manutencao_anual: +taxaManutencaoAnual,
-        fator_margem_padrao: +fatorMargemPadrao,
-        fator_manutencao_padrao: +fatorManutencaoPadrao,
+        fator_margem_padrao: 1,
+        fator_manutencao_padrao: 1,
         perc_instalacao_padrao: +percInstalacaoPadrao,
         perc_comissao_rental: +percComissaoRental,
         perc_pis_rental: +percPisRental,
@@ -1923,103 +1966,105 @@ export function SalesBudgetForm() {
         })()}
 
         {/* Pricing Defaults */}
-        <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-brand-primary" />
-              Parâmetros Padrão
-            </h2>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshParams}
-                disabled={isReadonly || saving}
-                className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
-                Atualizar Parâmetros
-              </Button>
-              {vendaKits.length > 0 && (
+        {false && (
+          <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-brand-primary" />
+                Parâmetros Padrão
+              </h2>
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={handleApplyKitsParams}
+                  onClick={handleRefreshParams}
                   disabled={isReadonly || saving}
                   className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
-                  Aplicar aos Kits
+                  Atualizar Parâmetros
                 </Button>
-              )}
-              {/* Info button — opens read-only tax breakdown modal */}
-              <button
-                type="button"
-                onClick={() => setShowTaxModal(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-lg px-3 py-1.5 hover:bg-brand-primary/20 transition-all h-8"
-              >
-                <Info className="w-4 h-4" /> Impostos Incidentes
-              </button>
-            </div>
-          </div>
-
-          {/* Row 1 — Fator Margem (4 fields) + Maintenance */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {[
-              { label: 'Fator Margem (Produtos)', val: fatorMargemProdutos, set: setFatorMargemProdutos },
-              { label: 'Fator Margem Serviços', val: fatorMargemServicos, set: setFatorMargemServicos },
-              { label: 'Fator Margem Instalação', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
-              { label: 'Fator Margem Manutenção', val: fatorMargemManutencao, set: setFatorMargemManutencao },
-            ].map(p => (
-              <div key={p.label}>
-                <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
-                <input type="number" step="0.01" value={p.val} onChange={e => { p.set(+e.target.value); setMarkupPadrao(+e.target.value); }} disabled={isReadonly}
-                  className="w-full px-2 py-1.5 border border-brand-primary/30 rounded-lg bg-brand-primary/5 text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+                {vendaKits.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleApplyKitsParams}
+                    disabled={isReadonly || saving}
+                    className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
+                    Aplicar aos Kits
+                  </Button>
+                )}
+                {/* Info button — opens read-only tax breakdown modal */}
+                <button
+                  type="button"
+                  onClick={() => setShowTaxModal(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-lg px-3 py-1.5 hover:bg-brand-primary/20 transition-all h-8"
+                >
+                  <Info className="w-4 h-4" /> Impostos Incidentes
+                </button>
               </div>
-            ))}
-            <div className="flex items-center gap-2 pt-6">
-              <input
-                type="checkbox"
-                id="vendaHaveraManutencao"
-                checked={!!vendaHaveraManutencao}
-                onChange={e => { setVendaHaveraManutencao(e.target.checked); setHasUnsavedChanges(true); }}
-                disabled={isReadonly}
-                className="w-4 h-4 rounded border-brand-primary/30 text-brand-primary focus:ring-brand-primary/30"
-              />
-              <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manutenção Mensal</label>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">Qtd. Meses Manut.</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                disabled={isReadonly || !vendaHaveraManutencao}
-                value={vendaQtdMesesManutencao ?? 0}
-                onChange={e => { setVendaQtdMesesManutencao(+e.target.value); setHasUnsavedChanges(true); }}
-                className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
-              />
-            </div>
-          </div>
 
-
-          {/* Row 2 — Desp. Adm., Comissão, Frete */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {[
-              { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
-              { label: 'Comissão %', val: percComissao, set: setPercComissao },
-              { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
-            ].map(p => (
-              <div key={p.label}>
-                <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
-                <input type="number" step="0.01" value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
-                  className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+            {/* Row 1 — Fator Margem (4 fields) + Maintenance */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'Fator Margem (Produtos)', val: fatorMargemProdutos, set: setFatorMargemProdutos },
+                { label: 'Fator Margem Serviços', val: fatorMargemServicos, set: setFatorMargemServicos },
+                { label: 'Fator Margem Instalação', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
+                { label: 'Fator Margem Manutenção', val: fatorMargemManutencao, set: setFatorMargemManutencao },
+              ].map(p => (
+                <div key={p.label}>
+                  <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+                  <Decimal4Input value={p.val} onChange={(val: number) => { p.set(val); setMarkupPadrao(val); }} disabled={isReadonly}
+                    className="w-full px-2 py-1.5 border border-brand-primary/30 rounded-lg bg-brand-primary/5 text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+                </div>
+              ))}
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  type="checkbox"
+                  id="vendaHaveraManutencao"
+                  checked={!!vendaHaveraManutencao}
+                  onChange={e => { setVendaHaveraManutencao(e.target.checked); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly}
+                  className="w-4 h-4 rounded border-brand-primary/30 text-brand-primary focus:ring-brand-primary/30"
+                />
+                <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manutenção Mensal</label>
               </div>
-            ))}
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Qtd. Meses Manut.</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  disabled={isReadonly || !vendaHaveraManutencao}
+                  value={vendaQtdMesesManutencao ?? 0}
+                  onChange={e => { setVendaQtdMesesManutencao(+e.target.value); setHasUnsavedChanges(true); }}
+                  className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
+                />
+              </div>
+            </div>
+
+
+            {/* Row 2 — Desp. Adm., Comissão, Frete */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
+                { label: 'Comissão %', val: percComissao, set: setPercComissao },
+                { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
+              ].map(p => (
+                <div key={p.label}>
+                  <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+                  <input type="number" step="0.01" value={p.val} onChange={e => p.set(+e.target.value)} disabled={isReadonly}
+                    className="w-full px-2 py-1.5 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Tax Info Modal */}
         {showTaxModal && (
@@ -2056,6 +2101,192 @@ export function SalesBudgetForm() {
           </div>
         )}
 
+
+        {/* Bloco de Totalização Venda */}
+        {vendaKits.length > 0 && (() => {
+          const t = vendaKits.reduce((acc, kit) => {
+            const q = kit.quantidade || 1;
+            const s = kit.summary || {};
+
+            // Custo Base
+            acc.custoAquisicao += (kit.custo_aquisicao_equip_unit || 0) * q;
+            acc.mat += (Number(s.custo_aquisicao_total) || 0) * q;
+            acc.mao += (Number(s.vlr_instal_calc) || 0) * q;
+
+            // Custo Quebrado
+            acc.baseFornecedor += (Number(s.custo_aquisicao_produtos) || 0) * q;
+            acc.vltSt += (Number(s.total_st_kit) || 0) * q;
+            acc.vltIpi += (Number(s.total_ipi_kit) || 0) * q;
+            acc.vltDifal += (Number(s.total_difal_kit) || 0) * q;
+            acc.impostosCompra += (Number(s.total_st_kit || 0) + Number(s.total_ipi_kit || 0) + Number(s.total_difal_kit || 0)) * q;
+            acc.freteCompra += (Number(s.total_frete_kit) || 0) * q;
+
+            // Faturamento Bruto
+            acc.totalVenda += (kit.venda_equip_unit || 0) * q;
+            acc.totalManutencao += (kit.venda_manut_unit || 0) * q;
+            acc.vltManutMensal += (Number(s.vlt_manut) || 0) * q;
+
+            acc.lucroManutencao += (kit.lucro_manutencao || 0) * q;
+
+            const manM = Number(kit.qtd_meses_manutencao) || 0;
+            if (manM > acc.maxMesesManut) acc.maxMesesManut = manM;
+
+            return acc;
+          }, {
+            custoAquisicao: 0, mat: 0, mao: 0, totalVenda: 0, totalManutencao: 0, vltManutMensal: 0,
+            lucroManutencao: 0, maxMesesManut: 0,
+            impostosCompra: 0, baseFornecedor: 0, freteCompra: 0,
+            vltSt: 0, vltIpi: 0, vltDifal: 0
+          });
+
+          // Cálculos Consolidados sobre o Total Geral
+          const sumTaxes = (companyVendaTaxes?.icms_interno || 0) + (companyVendaTaxes?.pis || 0) + (companyVendaTaxes?.cofins || 0) + (companyVendaTaxes?.csll || 0) + (companyVendaTaxes?.irpj || 0) + (companyVendaTaxes?.iss || 0);
+
+          const impostosVendaConsolidado = (t.totalVenda * sumTaxes) / 100;
+          const vltDespAdmConsolidado = (t.totalVenda * (percDespesaAdm || 0)) / 100;
+          const vltComissaoConsolidado = (t.totalVenda * (percComissao || 0)) / 100;
+          const vltFreteVendaConsolidado = (t.totalVenda * (percFreteVenda || 0)) / 100;
+
+          const despesasVendaTotal = vltDespAdmConsolidado + vltComissaoConsolidado + vltFreteVendaConsolidado;
+
+          const lucroVendaConsolidado = t.totalVenda - t.custoAquisicao - impostosVendaConsolidado - despesasVendaTotal;
+
+          const faturamentoTotal = t.totalVenda + t.totalManutencao;
+          const margemVenda = t.totalVenda > 0 ? (lucroVendaConsolidado / t.totalVenda) * 100 : 0;
+          const margemManutencao = t.totalManutencao > 0 ? (t.lucroManutencao / t.totalManutencao) * 100 : 0;
+
+          return (
+            <div className="mb-6 bg-surface border border-border-subtle rounded-xl p-6 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border-subtle/50">
+                <Calculator className="w-5 h-5 text-brand-primary" />
+                <h2 className="text-xl font-bold text-text-primary">Fechamento de Venda</h2>
+              </div>
+
+              <div className="space-y-4">
+                {/* Linha Top */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                  <Tooltip content={
+                    <div className="w-56 space-y-1 text-gray-200 p-1">
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Composição de Custo</div>
+                      <div className="flex justify-between text-xs"><span>Base Prod.:</span><span className="font-semibold">{fmt(t.baseFornecedor)}</span></div>
+                      <div className="flex justify-between text-xs"><span>Frete:</span><span className="font-semibold">{fmt(t.freteCompra)}</span></div>
+                      <div className="flex justify-between text-xs text-rose-300"><span>IPI:</span><span className="font-semibold">{fmt(t.vltIpi)}</span></div>
+                      <div className="flex justify-between text-xs text-rose-300"><span>ST:</span><span className="font-semibold">{fmt(t.vltSt)}</span></div>
+                      <div className="flex justify-between text-xs text-rose-300"><span>Difal:</span><span className="font-semibold">{fmt(t.vltDifal)}</span></div>
+                      <div className="flex justify-between text-xs pt-1 mt-1 border-t border-gray-600 font-bold"><span>Total Impostos:</span><span className="text-rose-400">{fmt(t.impostosCompra)}</span></div>
+                      <div className="flex justify-between text-xs pt-1 border-t border-gray-600 mt-1 text-emerald-300"><span>Mão de Obra:</span><span className="font-semibold">{fmt(t.mao)}</span></div>
+                    </div>
+                  }>
+                    <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between cursor-help h-full">
+                      <div>
+                        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisição</div>
+                        <div className="text-2xl font-bold text-text-primary">{fmt(t.custoAquisicao)}</div>
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle">
+                        <span title="Materiais e Mercadorias">Mat: <span className="font-medium text-text-secondary">{fmt(t.mat)}</span></span>
+                        <span title="Impostos Pagos na Compra">Imp: <span className="font-medium text-text-secondary">{fmt(t.impostosCompra)}</span></span>
+                      </div>
+                    </div>
+                  </Tooltip>
+
+                  <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+                    <div>
+                      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total da Venda</div>
+                      <div className="text-2xl font-bold text-brand-primary">{fmt(t.totalVenda)}</div>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle">
+                      <span>Impostos (NF):</span>
+                      <span className="font-medium text-brand-primary">{fmt(impostosVendaConsolidado)}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+                    <div>
+                      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Manutenção</div>
+                      <div className="text-2xl font-bold text-amber-500">{fmt(t.totalManutencao)}</div>
+                    </div>
+                    <div className="text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle flex justify-end">
+                      {vendaHaveraManutencao ? (
+                        <span className="font-medium">{fmt(t.vltManutMensal)} <span className="text-[11px] font-normal">/mês ({t.maxMesesManut}x)</span></span>
+                      ) : (
+                        <span className="text-amber-500/70">Inativo (Desmarcado)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+                    <div>
+                      <div className="text-[11px] font-bold text-brand-primary uppercase tracking-wider mb-1">Faturamento Total</div>
+                      <div className="text-2xl font-bold text-brand-primary">{fmt(faturamentoTotal)}</div>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-brand-primary/70 mt-5 pt-3 border-t border-brand-primary/10">
+                      <span>Venda + Manutenção</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Linha Bottom */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Tooltip content={
+                    <div className="w-56 space-y-1 text-gray-200 p-1">
+                      <div className="font-bold text-emerald-300 border-b border-emerald-800/50 pb-1 mb-2">Detalhamento Financeiro (Venda)</div>
+                      <div className="flex justify-between text-xs text-rose-300"><span>Impostos (NF):</span><span className="font-semibold">{fmt(impostosVendaConsolidado)}</span></div>
+                      <div className="flex justify-between text-xs mt-1 text-amber-300 border-t border-emerald-800/20 pt-1"><span>Comissão:</span><span className="font-semibold">{fmt(vltComissaoConsolidado)}</span></div>
+                      <div className="flex justify-between text-xs text-amber-300"><span>Desp. Adm:</span><span className="font-semibold">{fmt(vltDespAdmConsolidado)}</span></div>
+                      <div className="flex justify-between text-xs text-amber-300"><span>Frete (Entrega):</span><span className="font-semibold">{fmt(vltFreteVendaConsolidado)}</span></div>
+                      <div className="flex justify-between text-xs border-t border-emerald-800/50 pt-1 mt-1 text-gray-400"><span>Custo Prod+Instal:</span><span className="font-semibold">{fmt(t.custoAquisicao)}</span></div>
+                      <div className="flex justify-between text-sm pt-2 mt-1 border-t border-emerald-800/80 font-bold text-emerald-400"><span>Lucro Liquido:</span><span>{fmt(lucroVendaConsolidado)}</span></div>
+                    </div>
+                  }>
+                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-5 flex flex-col justify-between shadow-sm cursor-help relative group h-full">
+                      <div className="flex items-start justify-between w-full">
+                        <div>
+                          <div className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider mb-1">Lucro da Venda (Fechamento)</div>
+                          <div className="text-3xl font-black text-emerald-600 group-hover:text-emerald-700 transition-colors tracking-tight">{fmt(lucroVendaConsolidado)}</div>
+                        </div>
+                        <div className="px-4 py-2 flex flex-col items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 min-w-[80px]">
+                          <span className="text-[9px] font-bold uppercase tracking-widest">Margem</span>
+                          <span className="text-xl font-black leading-none mt-1">{t.totalVenda > 0 ? margemVenda.toFixed(1) : '0.0'}%</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 text-xs text-emerald-800/70 pt-4 mt-4 border-t border-emerald-100/60 w-full">
+                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Faturamento</span> <span className="font-semibold text-emerald-800">{fmt(t.totalVenda)}</span></div>
+                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Custo Aqui.</span> <span className="font-semibold text-emerald-800">{fmt(t.custoAquisicao)}</span></div>
+                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Imp. Venda</span> <span className="font-semibold text-emerald-800">{fmt(impostosVendaConsolidado)}</span></div>
+                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">O. Despesas</span> <span className="font-semibold text-emerald-800">{fmt(despesasVendaTotal)}</span></div>
+                      </div>
+                    </div>
+                  </Tooltip>
+
+                  <div className={`bg-surface border rounded-xl p-5 flex flex-col justify-between shadow-sm h-full ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'border-emerald-100 bg-emerald-50/30' : 'border-border-subtle'}`}>
+                    <div className="flex items-start justify-between w-full">
+                      <div>
+                        <div className={`text-[11px] font-bold uppercase tracking-wider mb-1 ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-emerald-800/60' : 'text-text-muted'}`}>Lucro Manutenção ({t.maxMesesManut || 12}x)</div>
+                        <div className={`text-3xl font-black tracking-tight ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-emerald-600' : 'text-text-primary'}`}>{fmt(t.lucroManutencao)}</div>
+                      </div>
+                      <div className={`px-4 py-2 flex flex-col items-center justify-center rounded-lg min-w-[80px] ${margemManutencao >= 15 ? 'bg-emerald-100 text-emerald-700' : margemManutencao >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                        <span className="text-[9px] font-bold uppercase tracking-widest">Margem</span>
+                        <span className="text-xl font-black leading-none mt-1">{t.totalManutencao > 0 ? margemManutencao.toFixed(1) : '0.0'}%</span>
+                      </div>
+                    </div>
+
+                    <div className={`flex items-center text-xs pt-4 mt-4 border-t w-full ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'border-emerald-100/50 text-emerald-800/70' : 'border-border-subtle text-text-muted'}`}>
+                      {vendaHaveraManutencao ? (
+                        <div className="flex gap-8">
+                          <div className="flex flex-col"><span className="text-[10px] uppercase font-bold opacity-60 mb-0.5">Total Receitas</span> <span className="font-semibold">{fmt(t.totalManutencao)}</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] uppercase font-bold opacity-60 mb-0.5">Total Custos</span> <span className="font-semibold">{fmt(t.totalManutencao - t.lucroManutencao)}</span></div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center">Manutenção desativada para a venda.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Kits de Venda */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -2235,6 +2466,8 @@ export function SalesBudgetForm() {
               </table>
             </div>
           )}
+
+
         </div>
       </>)}
 
@@ -2265,11 +2498,6 @@ export function SalesBudgetForm() {
           let paybackDecimal = 0;
           let lucroAcumuladoGeral = 0;
 
-          // Parâmetros paralelos para o Fechamento (sem comissão)
-          let saldoInvestimentoBv = rentalTotals.investimento;
-          let paybackMesBv: number | null = null;
-          let paybackDecimalBv = 0;
-
           const pCtr = prazoContratoMeses || 1;
           const pInst = prazoInstalacaoMeses || 0;
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
@@ -2283,26 +2511,16 @@ export function SalesBudgetForm() {
               fatMes = rentalTotals.faturamentoMensal;
             }
 
-            // "O correto é: Valor de imposto mensal + custo op. mensal + comissão mes a mes"
             const impMes = rentalTotals.impostosMensal;
             const comMes = comissao_mensal_calc;
 
             const gastosMes = impMes + opMes + comMes;
             const receitaLivre = fatMes - gastosMes;
 
-            const gastosMesBv = impMes + opMes;
-            const receitaLivreBv = fatMes - gastosMesBv;
-
             let quitarMes = 0;
             if (saldoInvestimento > 0 && receitaLivre > 0) {
               quitarMes = Math.min(receitaLivre, saldoInvestimento);
               saldoInvestimento -= quitarMes;
-            }
-
-            let quitarMesBv = 0;
-            if (saldoInvestimentoBv > 0 && receitaLivreBv > 0) {
-              quitarMesBv = Math.min(receitaLivreBv, saldoInvestimentoBv);
-              saldoInvestimentoBv -= quitarMesBv;
             }
 
             const lucroLivreMes = Math.max(0, receitaLivre - quitarMes);
@@ -2312,12 +2530,6 @@ export function SalesBudgetForm() {
               paybackMes = m;
               const fraction = receitaLivre > 0 ? (quitarMes / receitaLivre) : 1;
               paybackDecimal = (m - 1) + fraction;
-            }
-
-            if (saldoInvestimentoBv <= 0 && paybackMesBv === null) {
-              paybackMesBv = m;
-              const fractionBv = receitaLivreBv > 0 ? (quitarMesBv / receitaLivreBv) : 1;
-              paybackDecimalBv = (m - 1) + fractionBv;
             }
 
             chartData.push({
@@ -2335,7 +2547,14 @@ export function SalesBudgetForm() {
 
           // Using exact payback loop simulation to avoid any math mismatch
           const diretor_roi = paybackDecimal > 0 ? paybackDecimal : ((prazoContratoMeses || 1) + 1); // fallback if it never pays off
-          const base_roi = paybackDecimalBv > 0 ? paybackDecimalBv : ((prazoContratoMeses || 1) + 1);
+
+          // ROI Final = Custo Aquisição / (Mensal Locação - Custo Op. Mensal - Imposto Mensal)
+          // Fórmula direta conforme definição: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
+          const _roiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal;
+          const base_roi = _roiDenominador > 0
+            ? rentalTotals.investimento / _roiDenominador
+            : ((prazoContratoMeses || 1) + 1);
+
 
           return (
             <>
@@ -2714,8 +2933,6 @@ export function SalesBudgetForm() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
               { label: 'Prazo Contrato (meses)', val: prazoContratoMeses, set: setPrazoContratoMeses, step: '1' },
-              { label: 'Fator Margem Padrão', val: fatorMargemPadrao, set: setFatorMargemPadrao, step: '0.01' },
-              { label: 'Fator Margem Manut.', val: fatorManutencaoPadrao, set: setFatorManutencaoPadrao, step: '0.01' },
               { label: 'Prazo Instalação (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
               { label: 'Comissão %', val: percComissaoRental, set: setPercComissaoRental },
             ].map(p => (
@@ -2771,7 +2988,6 @@ export function SalesBudgetForm() {
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Operacional Mensal do Kit (1 uni)">Custo Op. Mensal Unit.</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Op. Mensal * Quantidade">Custo Op. Total</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Prazo</th>
-                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">F.Margem</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instalação</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Unit.</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Mensal</th>
@@ -2786,10 +3002,10 @@ export function SalesBudgetForm() {
                     return (
                       <tr key={ri.id || idx} className="hover:bg-bg-deep/50 transition-colors">
                         <td className="px-1.5 py-2">
-                          <div className="max-w-[220px] truncate font-medium text-text-primary flex items-center gap-2">
-                            <span>{ri.product_nome}</span>
+                          <div className="max-w-[220px] font-medium text-text-primary flex items-center gap-2">
+                            <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>
                             {ri.opportunity_kit_id && (
-                              <button onClick={() => setViewingKitId(ri.opportunity_kit_id!)} className="p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors" title="Ver Itens do Kit">
+                              <button onClick={() => setViewingKitId(ri.opportunity_kit_id!)} className="flex-shrink-0 p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer" title="Ver Itens do Kit">
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -2824,13 +3040,6 @@ export function SalesBudgetForm() {
                             disabled={isReadonly}
                             className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
                         </td>
-                        <td className="px-1.5 py-2 text-center">
-                          <input type="number" step="0.01" min="0.01" value={ri.fator_margem}
-                            onChange={e => updateRentalItem(idx, 'fator_margem', +e.target.value)}
-                            onBlur={e => handleBlurRentalItem(idx, 'fator_margem', +e.target.value)}
-                            disabled={isReadonly}
-                            className="w-14 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
-                        </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.faturamento_mensal || ri.valor_mensal) : '-'}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{ri.is_kit_instalacao ? fmt(0) : fmt(ri.faturamento_mensal || ri.valor_mensal)}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{ri.is_kit_instalacao ? fmt(0) : fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)}</td>
@@ -2840,7 +3049,8 @@ export function SalesBudgetForm() {
                             <div className="w-56 space-y-1">
                               <div className="font-semibold text-amber-300 mb-1">Detalhamento de Impostos</div>
                               {ri.opportunity_kit_id ? (() => {
-                                const pImp = (ri.kit_pis || 0) + (ri.kit_cofins || 0) + (ri.kit_csll || 0) + (ri.kit_irpj || 0) + (ri.kit_iss || 0);
+                                const isCom = ri.tipo_contrato_kit === 'COMODATO' || ri.tipo_contrato_kit === 'INSTALACAO';
+                                const pImp = (ri.kit_pis || 0) + (ri.kit_cofins || 0) + (ri.kit_csll || 0) + (ri.kit_irpj || 0) + (isCom ? (ri.kit_iss || 0) : 0);
                                 const vImp = ri.impostos_mensal * ri.quantidade;
                                 return (
                                   <>
@@ -2850,7 +3060,9 @@ export function SalesBudgetForm() {
                                         <div className="flex justify-between"><span>COFINS ({fmtPct(ri.kit_cofins || 0)}):</span> <span>{fmt(vImp * ((ri.kit_cofins || 0) / pImp))}</span></div>
                                         <div className="flex justify-between"><span>CSLL ({fmtPct(ri.kit_csll || 0)}):</span> <span>{fmt(vImp * ((ri.kit_csll || 0) / pImp))}</span></div>
                                         <div className="flex justify-between"><span>IRPJ ({fmtPct(ri.kit_irpj || 0)}):</span> <span>{fmt(vImp * ((ri.kit_irpj || 0) / pImp))}</span></div>
-                                        <div className="flex justify-between"><span>ISS ({fmtPct(ri.kit_iss || 0)}):</span> <span>{fmt(vImp * ((ri.kit_iss || 0) / pImp))}</span></div>
+                                        {isCom && (
+                                          <div className="flex justify-between"><span>ISS ({fmtPct(ri.kit_iss || 0)}):</span> <span>{fmt(vImp * ((ri.kit_iss || 0) / pImp))}</span></div>
+                                        )}
                                       </>
                                     ) : (
                                       <span className="text-text-muted">Sem impostos.</span>
@@ -2908,7 +3120,7 @@ export function SalesBudgetForm() {
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_aquisicao_unit * ri.quantidade), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_op_mensal_kit || 0), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.custo_op_mensal_kit || 0) * ri.quantidade), 0))}</td>
-                    <td colSpan={3}></td>
+                    <td colSpan={2}></td>
                     <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) : (((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * Math.max(0, (ri.prazo_contrato || 0) - (rentalDefaults.prazo_instalacao_meses || 0)))), 0))}</td>
@@ -3128,9 +3340,7 @@ export function SalesBudgetForm() {
             <p className="text-text-muted mb-6">
               Esta ação irá <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
               • Prazo de contrato<br />
-              • Prazo de instalação (Carência)<br />
-              • Fator margem<br />
-              • Fator margem manut.<br /><br />
+              • Prazo de instalação (Carência)<br /><br />
               em <b>todos os kits lançados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
             </p>
             <div className="flex justify-end gap-3">
@@ -3190,11 +3400,23 @@ export function SalesBudgetForm() {
                     // Update Rental Items
                     setRentalItems(prev => prev.map(item => {
                       if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
-                        return calcRentalItem({
+                        const billingValue = savedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(savedKit.summary?.venda_equipamentos_total || 0) : Number(savedKit.summary?.valor_mensal_antes_impostos ?? savedKit.summary?.valor_mensal_kit ?? item.kit_valor_mensal ?? 0);
+                        const aliqTotal = Number(savedKit.summary?.aliq_total_impostos || 0) / 100;
+                        const impostosKit = billingValue * aliqTotal;
+                        const recLiqKit = billingValue - impostosKit;
+                        const prazoMensalidades = Math.max(0,
+                          Number(savedKit.prazo_contrato_meses || item.prazo_contrato || 0) -
+                          Number(rentalDefaults.prazo_instalacao_meses || 0)
+                        );
+                        const custoAqUnit = Number(savedKit.summary?.custo_aquisicao_total || 0);
+                        const custoOpMes = Number(savedKit.summary?.custo_operacional_mensal_kit || 0);
+                        const custoTotalContrato = custoAqUnit + (custoOpMes * prazoMensalidades);
+
+                        return {
                           ...item,
                           opportunity_kit_id: savedKit.id,
                           product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
-                          custo_op_mensal_kit: Number(savedKit.summary?.custo_operacional_mensal_kit || 0),
+                          custo_op_mensal_kit: custoOpMes,
                           is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
                           tipo_contrato_kit: savedKit.tipo_contrato,
                           kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
@@ -3205,21 +3427,32 @@ export function SalesBudgetForm() {
                           kit_csll: Number(savedKit.aliq_csll || 0),
                           kit_irpj: Number(savedKit.aliq_irpj || 0),
                           kit_iss: Number(savedKit.aliq_iss || 0),
-                          custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
+                          custo_aquisicao_unit: custoAqUnit,
                           ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
                           frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
                           icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
                           difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
                           taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
-                          fator_margem: Number(savedKit.fator_margem_locacao || fatorMargemPadrao || 1),
-                          prazo_contrato: Number(savedKit.prazo_contrato_meses || prazoContratoMeses),
+                          fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
+                          prazo_contrato: Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
                           kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
-                          kit_valor_mensal: Number(savedKit.summary?.valor_mensal_kit || 0),
-                          kit_valor_impostos: Number(savedKit.summary?.valor_impostos || 0),
+                          kit_valor_mensal: billingValue,
+                          kit_valor_impostos: impostosKit,
                           kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
                           kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
-                          kit_margem: Number(savedKit.summary?.margem_kit || 0)
-                        }, rentalDefaults);
+                          kit_margem: Number(savedKit.summary?.margem_kit || 0),
+                          // Computed display fields
+                          faturamento_mensal: billingValue,
+                          valor_mensal: billingValue,
+                          impostos_mensal: impostosKit,
+                          receita_liquida_mensal: recLiqKit,
+                          lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
+                          margem: Number(savedKit.summary?.margem_kit || 0),
+                          roi_meses: recLiqKit > 0 ? (custoTotalContrato / recLiqKit) : 0,
+                          custo_total_aquisicao: custoAqUnit,
+                          custo_manut_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
+                          custo_total_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
+                        };
                       }
                       return item;
                     }));
@@ -3227,27 +3460,36 @@ export function SalesBudgetForm() {
                     // Update Venda Kits
                     setVendaKits(prev => prev.map(item => {
                       if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
-                        const q = item.quantidade;
                         return {
                           ...item,
                           opportunity_kit_id: savedKit.id,
-                          nome_kit: savedKit.nome_kit,
-                          custo_aquisicao_unit: Number(savedKit.summary?.custo_aquisicao_total || 0),
-                          venda_unit: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0),
-                          total_venda: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0) * q,
-                          margem_venda: Number(savedKit.summary?.margem_equipamentos ?? savedKit.summary?.margem_kit ?? 0),
-                          total_manutencao: Number(savedKit.summary?.venda_manutencao_total ?? (Number(savedKit.summary?.vlt_manut || 0) * (savedKit.qtd_meses_manutencao || 1))) * q,
-                          margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
-                          lucro_final: Number(savedKit.summary?.lucro_mensal_kit || 0) * q,
-                          margem_geral: Number(savedKit.summary?.margem_kit || 0),
+                          nome_kit: savedKit.nome_kit || 'Kit Venda',
                           fator_margem_locacao: Number(savedKit.fator_margem_locacao || 1),
                           fator_margem_servicos_produtos: Number(savedKit.fator_margem_servicos_produtos || 1),
                           fator_margem_instalacao: Number(savedKit.fator_margem_instalacao || 1),
                           fator_margem_manutencao: Number(savedKit.fator_margem_manutencao || 1),
-                          summary: savedKit.summary,
-                          kit_raw: savedKit,
+
+                          custo_aquisicao_equip_unit: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.vlr_instal_calc || 0),
+                          custo_manutencao_unit: Number(savedKit.summary?.vlt_manut || 0),
+
+                          venda_equip_unit: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0),
+                          venda_manut_unit: Number(savedKit.summary?.venda_manutencao_total ?? 0),
+
+                          faturamento_total: Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0))),
+
+                          lucro_venda: Number(savedKit.summary?.lucro_equipamentos || 0),
+                          margem_venda: Number(savedKit.summary?.margem_equipamentos || 0),
+
+                          lucro_manutencao: Number(savedKit.summary?.lucro_manutencao || 0),
+                          margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
+
+                          lucro_final: Number(savedKit.summary?.lucro_mensal_kit || 0),
+                          margem_geral: Number(savedKit.summary?.margem_kit || 0),
+
                           havera_manutencao: !!savedKit.havera_manutencao,
-                          qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null
+                          qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null,
+                          summary: savedKit.summary,
+                          kit_raw: savedKit
                         };
                       }
                       return item;

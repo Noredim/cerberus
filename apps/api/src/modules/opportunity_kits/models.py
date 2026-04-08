@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from src.core.base import Base
+import src.modules.own_services.models  # ensure OwnService is in registry for mapper
 
 
 class OpportunityKit(Base):
@@ -13,6 +14,7 @@ class OpportunityKit(Base):
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=True, index=True)
+    sales_proposal_id = Column(UUID(as_uuid=True), ForeignKey("sales_proposals.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Dados Gerais
     nome_kit = Column(String(255), nullable=False)

@@ -16,6 +16,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from src.core.base import Base
+import src.modules.roles.models
 
 
 class OwnService(Base):

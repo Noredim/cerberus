@@ -221,13 +221,15 @@ class OpportunityKitService:
         
         fator_margem = Decimal(kit.fator_margem_locacao or 1)
 
+        iss_val = Decimal(kit.aliq_iss or 0) if kit.tipo_contrato in ["COMODATO", "INSTALACAO"] else Decimal("0.0")
+        icms_val = Decimal(kit.aliq_icms or 0) if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else Decimal("0.0")
         aliq_total_impostos = sum([
             Decimal(kit.aliq_pis or 0),
             Decimal(kit.aliq_cofins or 0),
             Decimal(kit.aliq_csll or 0),
             Decimal(kit.aliq_irpj or 0),
-            Decimal(kit.aliq_iss or 0),
-            Decimal(kit.aliq_icms or 0)
+            iss_val,
+            icms_val
         ]) / Decimal(100.0)
         
         item_summaries = []
@@ -461,7 +463,7 @@ class OpportunityKitService:
                 tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
                 vlt_manut = (custo_aquisicao_kit + vlr_instal_calc_base_manut) * tx_manut
             else:
-                fator_manut = Decimal(kit.fator_manutencao or 1)
+                fator_manut = Decimal(kit.fator_manutencao if kit.fator_manutencao is not None else 1)
                 vlt_manut = custo_operacional_mensal_kit * fator_manut
                     
             valor_parcela_locacao = valor_mensal_locacao_base
@@ -472,8 +474,9 @@ class OpportunityKitService:
             else:
                 valor_base_final = valor_parcela_locacao + manutencao_mensal
 
-            custo_operacional_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut))
-            custo_total_mensal_kit = custo_operacional_mensal_kit
+            # custo_operacional_mensal_kit = raw Block 6 cost (DO NOT MUTATE)
+            # custo_total_mensal_kit = all operational costs for profitability calc
+            custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut))
 
         # 14. Calculo de Impostos
         # aliq_total_impostos was calculated at the top
@@ -504,10 +507,10 @@ class OpportunityKitService:
             valor_impostos = impostos_produtos_base + impostos_instalacao + impostos_manutencao
             valor_mensal_antes_impostos = valor_base_final
         else:
-            # Locação adds taxes on top
+            # Locação: Users requested taxes to be calculated statically over the locacao_base and manutencao without 'por dentro'
             valor_mensal_antes_impostos = valor_base_final
-            valor_impostos = valor_mensal_antes_impostos * aliq_total_impostos
-            valor_mensal_kit = valor_mensal_antes_impostos + valor_impostos
+            valor_mensal_kit = valor_base_final
+            valor_impostos = valor_mensal_kit * aliq_total_impostos
 
         # 16. Receita Liquida
         receita_liquida_mensal_kit = valor_mensal_kit - valor_impostos
@@ -568,6 +571,11 @@ class OpportunityKitService:
             if venda_manutencao_total > 0:
                 margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
 
+        # ROI = Investimento / (Faturamento - Custo Op. Bloco6 - Impostos)
+        roi_denominador = valor_mensal_antes_impostos - custo_operacional_mensal_kit - valor_impostos
+        investimento_total = custo_aquisicao_kit + vlr_instal_calc
+        roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
+
         return {
             "summary": {
                 "prazo_mensalidades": prazo_mensalidades,
@@ -592,6 +600,7 @@ class OpportunityKitService:
                 "receita_liquida_mensal_kit": round(receita_liquida_mensal_kit, 2),  # type: ignore
                 "lucro_mensal_kit": round(lucro_mensal_kit, 2),  # type: ignore
                 "margem_kit": round(margem_kit, 2),  # type: ignore
+                "roi_meses": round(roi_meses, 1),  # type: ignore
                 # New granular fields
                 "venda_equipamentos_total": round(venda_equipamentos_total, 2), # type: ignore
                 "lucro_equipamentos": round(lucro_equipamentos, 2), # type: ignore
@@ -659,6 +668,15 @@ class OpportunityKitService:
             fator_margem_manutencao=data.fator_margem_manutencao,
             taxa_juros_mensal=data.taxa_juros_mensal,
             taxa_manutencao_anual=data.taxa_manutencao_anual,
+            instalacao_inclusa=data.instalacao_inclusa,
+            percentual_instalacao=data.percentual_instalacao,
+            manutencao_inclusa=data.manutencao_inclusa,
+            fator_manutencao=data.fator_manutencao,
+            havera_manutencao=data.havera_manutencao,
+            qtd_meses_manutencao=data.qtd_meses_manutencao,
+            perc_frete_venda=data.perc_frete_venda,
+            perc_despesas_adm=data.perc_despesas_adm,
+            perc_comissao=data.perc_comissao,
             aliq_pis=data.aliq_pis,
             aliq_cofins=data.aliq_cofins,
             aliq_csll=data.aliq_csll,

@@ -9,6 +9,52 @@ import { api } from '../../services/api';
 import { ProductSearchModal } from '../../components/modals/ProductSearchModal';
 import { AddOperationalCostModal } from '../../components/modals/AddOperationalCostModal';
 
+const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", className = "w-full" }: any) => {
+  const [localStr, setLocalStr] = useState(Number(value || 0).toFixed(4));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalStr(Number(value || 0).toFixed(4));
+    }
+  }, [value, isFocused]);
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    let val = localStr.replace(',', '.');
+    let parsed = parseFloat(val);
+    if (isNaN(parsed)) parsed = 0;
+    setLocalStr(parsed.toFixed(4));
+    onChange(parsed);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(',', '.');
+    if (/^[0-9.]*$/.test(val)) {
+      const parts = val.split('.');
+      if (parts[1] && parts[1].length > 4) return;
+      setLocalStr(val);
+    }
+  };
+
+  return (
+    <Input
+      type="text"
+      value={localStr}
+      onChange={handleChange}
+      onFocus={() => {
+        setIsFocused(true);
+        let val = value !== undefined && value !== null && value !== '' ? String(value) : '';
+        setLocalStr(val);
+      }}
+      onBlur={handleBlur}
+      disabled={disabled}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+};
+
 interface KitFormValues {
   nome_kit: string;
   descricao_kit: string;
@@ -88,6 +134,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
+  const [isKitLoaded, setIsKitLoaded] = useState(!kitId);
 
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
@@ -145,11 +192,30 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       const data = res.data;
       if (!data.items) data.items = [];
       if (!data.costs) data.costs = [];
+
+      // Safely parse the incoming maintenance factor
+      const loadFm = data.fator_manutencao;
+      // The user wants it to be 1 ONLY if it's explicitly null, undefined, empty string, or zero.
+      // If the user typed 2.5333 or similar, we must preserve it exactly.
+      if (
+        loadFm === null ||
+        loadFm === undefined ||
+        loadFm === '' ||
+        (typeof loadFm === 'number' && loadFm === 0) ||
+        (typeof loadFm === 'string' && parseFloat(loadFm) === 0)
+      ) {
+        data.fator_manutencao = 1;
+      } else {
+        data.fator_manutencao = typeof loadFm === 'string' ? parseFloat(loadFm) : Number(loadFm);
+      }
       data.costs = data.costs.map((c: any) => ({
         ...c,
         descricao_item: c.product?.nome || c.descricao_item || 'Serviço'
       }));
       setForm(data);
+      // Ensure we record the loaded contract type so it doesn't trigger the change detection later
+      prevTipoContratoRef.current = data.tipo_contrato;
+      setIsKitLoaded(true);
     } catch (err) {
       console.error(err);
     }
@@ -168,12 +234,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     const suffix = modalSuffix[form.tipo_contrato] || 'locacao';
 
     // Detect whether the user changed the type (vs. initial mount)
-    const tipoChanged = prevTipoContratoRef.current !== form.tipo_contrato;
+    // Only detect changes if the kit is FULLY LOADED. 
+    // This prevents the 'initial default LOCACAO -> actual DB values (e.g. COMODATO)' change from overwriting factors.
+    const tipoChanged = isKitLoaded && prevTipoContratoRef.current !== form.tipo_contrato;
     prevTipoContratoRef.current = form.tipo_contrato;
 
     // For existing kits on initial load, don't overwrite already-saved taxes.
     // But DO overwrite when the user explicitly switches tipo_contrato.
-    const shouldOverwriteTaxes = !kitId || tipoChanged;
+    const shouldOverwriteTaxes = (!kitId && isKitLoaded) || tipoChanged;
 
     if (!shouldOverwriteTaxes) return;
 
@@ -248,7 +316,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   };
 
   const recalculate = async (data: KitFormValues) => {
-    if (data.prazo_contrato_meses <= 0) return;
+    // Only block recalculate for LOCACAO/COMODATO where prazo is essential for tx_locacao
+    const needsPrazo = ['LOCACAO', 'COMODATO'].includes(data.tipo_contrato);
+    if (needsPrazo && data.prazo_contrato_meses <= 0) return;
     setIsCalculating(true);
     try {
       const payload = sanitizePayload(data);
@@ -507,17 +577,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           const vendaMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0) : 0;
           const lucroMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0) : 0;
           const qtdMeses = Number(form.qtd_meses_manutencao) || 0;
-          const totalManutencao = form.havera_manutencao ? (vendaMensalB6 * qtdMeses) : 0;
-          const lucroManutencao12m = form.havera_manutencao ? (lucroMensalB6 * 12) : 0;
 
-          // ── Totalizadores
+          // ── Totalizadores (SOT no Backend)
           const custoB6Total = custoB6 * qtdMeses;
-          const custoAquisicao = custoB4 + custoB5 + custoB6Total;
-          const totalVenda = vendaB4 + vendaB5;
+          const custoAquisicao = Number(financials?.summary?.custo_aquisicao_total || 0) + custoB6Total;
+          const totalVenda = Number(financials?.summary?.venda_equipamentos_total || 0);
+          const totalManutencao = Number(financials?.summary?.venda_manutencao_total || 0);
           const faturamentoTotal = totalVenda + totalManutencao;
-          const lucroVenda = lucroB4 + lucroB5;
-          const margemVenda = totalVenda > 0 ? (lucroVenda / totalVenda) * 100 : 0;
-          const margemManut12m = (vendaMensalB6 * 12) > 0 ? (lucroManutencao12m / (vendaMensalB6 * 12)) * 100 : 0;
+          const lucroVenda = Number(financials?.summary?.lucro_equipamentos || 0);
+          const margemVenda = Number(financials?.summary?.margem_equipamentos || 0);
+          
+          const lucroManutMensal = totalManutencao > 0 ? Number(financials?.summary?.lucro_manutencao || 0) / qtdMeses : 0;
+          const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
+          const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
+
 
           // ── Impostos B4 + B5 discriminados
           const taxFields = ['pis', 'cofins', 'csll', 'irpj', 'icms', 'iss'] as const;
@@ -699,6 +772,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
                   </div>
                 </div>
+
+                {/* Fator Geral Média */}
+                <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
+                    <div className="text-xl font-black text-text-primary">
+                      {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                      Média: F. Margem + F. Manut. (Demonstrativo)
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           );
@@ -735,18 +822,26 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         const txManutPerc = prazoMeses > 0 ? taxaManutAnual / prazoMeses : 0;
         const manutencaoCalculada = ((custoAq + instalacaoEmbutida) * fatorMargem) * (txManutPerc / 100);
         const custoOpMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
-        const manutencaoMensal = form.manutencao_inclusa ? manutencaoCalculada : custoOpMensal;
+        const fatorManut = Number(form.fator_manutencao) || 1;
+        const manutencaoMensal = form.manutencao_inclusa ? manutencaoCalculada : (custoOpMensal * fatorManut);
         const manutencaoLegenda = form.manutencao_inclusa
           ? `TX manut: ${txManutPerc.toFixed(4)}%`
-          : (custoOpMensal > 0 ? 'Custos Operacionais' : 'Sem custos operacionais');
+          : (fatorManut !== 1
+            ? `FM: ${fatorManut.toFixed(2)} x Custo Op.`
+            : (custoOpMensal > 0 ? 'Custos Operacionais' : 'Sem custos operacionais'));
 
         // Card Faturamento Mensal = Locação Mensal + Manutenção
         const faturamentoMensal = locacaoMensal + manutencaoMensal;
         const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
 
-        // Card ROI — meses para pagar custo de aquisição com o faturamento mensal
+        // ROI = Investimento / (Fat. Mensal - Custo Bloco6 (bruto) - Impostos Mensais)
+        // Manut no denominador = custo real do Bloco 6 (sem fator), nao o valor faturado
+        const totalInvestimento = custoAq + (financials?.summary?.vlr_instal_calc || 0);
+        const impostosMensais = financials?.summary?.valor_impostos || 0;
+        const denominadorROI = faturamentoMensal - custoOpMensal - impostosMensais;
         const totalReceitaContrato = faturamentoMensal * mesesFaturados;
-        const roiMeses = faturamentoMensal > 0 ? (custoAq / faturamentoMensal) : 0;
+        const roiMeses = denominadorROI > 0 ? (totalInvestimento / denominadorROI) : 0;
+
 
         const tipoLabel = form.tipo_contrato === 'LOCACAO' ? 'Locação' : 'Comodato';
 
@@ -767,8 +862,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               )}
             </div>
 
-            {/* 6 Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Cards Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
 
               {/* Card 1: Custo de Aquisição */}
               <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
@@ -840,14 +935,116 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               </div>
 
               {/* Card 6: ROI Previsto */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20' : 'bg-bg-subtle border-border-subtle'}`}>
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">ROI Previsto</span>
-                <div className={`text-xl font-black tabular-nums ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
-                  {roiMeses > 0 ? `${roiMeses.toFixed(1)}m` : '—'}
+              <div className={`border rounded-xl p-3 flex flex-col justify-center min-w-[200px] overflow-hidden relative ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                {roiMeses > 0 && (
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                )}
+                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
+                <div className={`text-xl font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
+                  {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
                 </div>
-                <div className="text-[9px] text-text-muted mt-1.5 space-y-0.5">
-                  <div className="flex justify-between gap-1"><span>Custo aq.</span><span className="font-semibold tabular-nums">{fmtC(custoAq)}</span></div>
-                  <div className="flex justify-between gap-1"><span>Rec. total</span><span className="font-semibold tabular-nums">{fmtC(totalReceitaContrato)}</span></div>
+
+                <div className="text-[10px] text-text-muted mt-2 space-y-1 relative z-10 border-t border-border-subtle pt-2">
+                  <div className="flex justify-between items-center gap-2 group/roi">
+                    <span className="flex items-center gap-1"><span className="text-brand-success font-bold">+</span> Fat. mensal:</span>
+                    <span className="font-mono text-[9px] text-text-primary bg-bg-deep px-1 rounded">
+                      {fmtC(faturamentoMensal)} <span className="opacity-50">x {mesesFaturados}m</span>
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-brand-success pl-4 -mt-1">
+                    <span className="text-[8px] uppercase tracking-tighter opacity-70">Fat. total:</span>
+                    <span>{fmtC(totalReceitaContrato)}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center gap-2 pt-1 border-t border-border-subtle/30">
+                    <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Investimento:</span>
+                    <span className="font-semibold tabular-nums text-text-primary">{fmtC(totalInvestimento)}</span>
+                  </div>
+                  {/* Manut. = custo bruto Bloco 6, sem fator de margem */}
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Manut. (custo):</span>
+                    <span className="font-semibold tabular-nums text-text-primary">{fmtC(custoOpMensal)}</span>
+                  </div>
+                  {/* Impostos com tooltip de aliquotas */}
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="flex items-center gap-1">
+                      <span className="text-brand-danger font-bold">-</span>
+                      <Tooltip content={
+                        <div className="w-64 text-left">
+                          <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 text-cyan-400" />
+                            Impostos sobre Faturamento
+                          </div>
+                          <div className="space-y-1.5 font-mono text-text-muted text-xs">
+                            {(() => {
+                              const baseTributavel = faturamentoMensal;
+                              return (
+                                <>
+                                  {(Number(form.aliq_pis) > 0) && (
+                                    <div className="flex justify-between">
+                                      <span>PIS ({Number(form.aliq_pis).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_pis) / 100))}</span>
+                                    </div>
+                                  )}
+                                  {(Number(form.aliq_cofins) > 0) && (
+                                    <div className="flex justify-between">
+                                      <span>COFINS ({Number(form.aliq_cofins).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_cofins) / 100))}</span>
+                                    </div>
+                                  )}
+                                  {(Number(form.aliq_csll) > 0) && (
+                                    <div className="flex justify-between">
+                                      <span>CSLL ({Number(form.aliq_csll).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_csll) / 100))}</span>
+                                    </div>
+                                  )}
+                                  {(Number(form.aliq_irpj) > 0) && (
+                                    <div className="flex justify-between">
+                                      <span>IRPJ ({Number(form.aliq_irpj).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_irpj) / 100))}</span>
+                                    </div>
+                                  )}
+                                  {(Number(form.aliq_iss) > 0 && ['COMODATO', 'INSTALACAO', 'LOCACAO'].includes(form.tipo_contrato)) && (
+                                    <div className="flex justify-between">
+                                      <span>ISS ({Number(form.aliq_iss).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_iss) / 100))}</span>
+                                    </div>
+                                  )}
+                                  {(Number(form.aliq_icms) > 0 && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') && (
+                                    <div className="flex justify-between">
+                                      <span>ICMS ({Number(form.aliq_icms).toFixed(2)}%)</span>
+                                      <span>{fmtC(baseTributavel * (Number(form.aliq_icms) / 100))}</span>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+
+                            <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                              <span>Total mensal:</span>
+                              <span>{fmtC(impostosMensais)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      }>
+                        <span className="cursor-help border-b border-dashed border-text-muted/50 flex items-center gap-1">
+                          Impostos mensal: <Info className="w-3 h-3 opacity-50" />
+                        </span>
+                      </Tooltip>
+                    </span>
+                    <span className="font-semibold tabular-nums text-rose-400">{fmtC(impostosMensais)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 7: FATOR GERAL */}
+              <div className="border rounded-xl p-3 flex flex-col justify-center bg-bg-subtle border-border-subtle shadow-sm relative overflow-hidden">
+                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 p-0 m-0">Fator Geral</span>
+                <div className="text-xl font-black text-text-primary tabular-nums">
+                  {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
+                </div>
+                <div className="text-[9px] text-text-muted mt-1.5 italic">
+                  Média (Demonstrativo)
                 </div>
               </div>
 
@@ -905,11 +1102,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               </div>
               {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Forma de Execução Principal <span className="text-[10px] text-purple-600 bg-purple-100 px-1 rounded ml-1">Para Serviços Próprios</span></label>
+                  <label className="block text-sm font-medium mb-1">Forma de Execução Principal <span className="text-[10px] text-brand-primary bg-brand-primary/10 px-1 rounded ml-1">Para Serviços Próprios</span></label>
                   <select
                     value={form.forma_execucao || 'H. NORMAL'}
                     onChange={(e) => handleInputChange('forma_execucao', e.target.value)}
-                    className="w-full rounded-lg border border-purple-200 bg-purple-50/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    className="w-full rounded-lg border border-border-strong bg-bg-surface px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50"
                   >
                     <option value="H. NORMAL">H. NORMAL</option>
                     <option value="H. EXTRA">H. EXTRA</option>
@@ -946,13 +1143,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <label className="block text-sm font-medium mb-1">
                   {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Fator Margem (Produtos)' : 'Fator Margem'}
                 </label>
-                <Input type="number" step="0.01" value={form.fator_margem_locacao} onChange={(e) => handleInputChange('fator_margem_locacao', parseFloat(e.target.value) || 0)} className="w-full" />
+                <Decimal4Input value={form.fator_margem_locacao} onChange={(val: number) => handleInputChange('fator_margem_locacao', val)} />
               </div>
 
               {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
-                  <Input type="number" step="0.01" value={form.fator_manutencao} onChange={(e) => handleInputChange('fator_manutencao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 1.70" />
+                  <Decimal4Input value={form.fator_manutencao} onChange={(val: number) => handleInputChange('fator_manutencao', val)} placeholder="Ex: 1.7000" />
                 </div>
               )}
 
@@ -960,15 +1157,15 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
-                    <Input type="number" step="0.01" value={form.fator_margem_servicos_produtos} onChange={(e) => handleInputChange('fator_margem_servicos_produtos', parseFloat(e.target.value) || 0)} className="w-full" />
+                    <Decimal4Input value={form.fator_margem_servicos_produtos} onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Fator Margem Instalação</label>
-                    <Input type="number" step="0.01" value={form.fator_margem_instalacao} onChange={(e) => handleInputChange('fator_margem_instalacao', parseFloat(e.target.value) || 0)} className="w-full" />
+                    <Decimal4Input value={form.fator_margem_instalacao} onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
-                    <Input type="number" step="0.01" value={form.fator_margem_manutencao} onChange={(e) => handleInputChange('fator_margem_manutencao', parseFloat(e.target.value) || 0)} className="w-full" />
+                    <Decimal4Input value={form.fator_margem_manutencao} onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>

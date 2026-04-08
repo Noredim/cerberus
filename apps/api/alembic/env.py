@@ -36,6 +36,7 @@ from src.modules.professionals.models import Professional  # type: ignore
 from src.modules.solution_analysis.models import SolutionAnalysis, SolutionAnalysisItem  # type: ignore
 from src.modules.own_services.models import OwnService, OwnServiceItem  # type: ignore
 from src.modules.man_hours.models import ManHour  # type: ignore
+from src.modules.sales_proposals.models import SalesProposal, SalesProposalKit, SalesProposalLog  # type: ignore
 from src.core.config import settings  # type: ignore
 target_metadata = Base.metadata
 

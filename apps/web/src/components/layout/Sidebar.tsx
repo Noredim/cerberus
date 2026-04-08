@@ -70,6 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Kits (oportunidades)', path: '/cadastros/kits' },
                 { label: 'Orçamento de compra', path: '/orcamentos-compras' },
                 { label: 'Oportunidades', path: '/orcamentos-vendas' },
+                { label: 'Propostas de Venda', path: '/comercial/propostas' },
                 { label: 'Licitações', path: '/comercial/licitacoes' },
                 { label: 'Comparativos de soluções', path: '/comercial/comparativos' },
             ]
