@@ -810,7 +810,7 @@ def delete_budget(db: Session, tenant_id: str, budget_id: str) -> bool:
     db.commit()
     return True
 
-def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA") -> dict:
+def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA", sales_company_id: Optional[str] = None) -> dict:
     from src.modules.products.models import Product
     from src.modules.products.service import ProductService
     from src.modules.ncm.services.ncm_service import NcmService
@@ -905,9 +905,18 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
     icms_from_budget = float(budget_item.icms_percent)
     icms_entrada_effective = icms_from_budget if icms_from_budget <= 4 else 7
 
-    from src.modules.companies.models import Company
+    from src.modules.companies.models import Company, CompanyTaxProfile
     from src.modules.catalog.models import State
-    company = db.query(Company).filter(Company.id == str(budget.company_id)).first()
+    
+    # Check if a custom sales_company_id was passed, otherwise default to the purchase budget company
+    target_company_id = sales_company_id if sales_company_id else str(budget.company_id)
+    
+    company = db.query(Company).filter(Company.id == target_company_id).first()
+    
+    tax_profile = db.query(CompanyTaxProfile).filter(CompanyTaxProfile.company_id == target_company_id).first()
+    perfil_st_ativo = True
+    if tax_profile and tax_profile.perfil_tarifario_st is False:
+        perfil_st_ativo = False
     uf_destino = "MT"
     if company and company.state_id:
         state_rec = db.query(State).filter(State.id == company.state_id).first()
@@ -956,7 +965,10 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
     if uso_consumo:
         custo_unit_final = base_unitario + ipi_unitario + frete_unitario + difal_unitario
     else:
-        custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
+        if not perfil_st_ativo:
+            custo_unit_final = base_unitario + ipi_unitario + frete_unitario
+        else:
+            custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
 
     return {
         "base_unitario": round(base_unitario, 2),
@@ -975,4 +987,5 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
         "difal_unitario": round(difal_unitario, 2),
         "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
         "custo_unit_final": round(custo_unit_final, 2),
+        "perfil_st_ativo": perfil_st_ativo,
     }

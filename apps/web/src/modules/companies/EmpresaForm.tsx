@@ -86,7 +86,8 @@ const EmpresaForm: React.FC = () => {
             contribuinte_icms: false,
             contribuinte_iss: true,
             regime_iss: 'FIXO',
-            regime_icms: 'NAO_APLICA'
+            regime_icms: 'NAO_APLICA',
+            perfil_tarifario_st: true
         },
         nomenclatura_orcamento: 'OV',
         numero_proposta: 1
@@ -154,7 +155,8 @@ const EmpresaForm: React.FC = () => {
                             contribuinte_icms: activeProfile.contribuinte_icms,
                             contribuinte_iss: activeProfile.contribuinte_iss,
                             regime_iss: activeProfile.regime_iss,
-                            regime_icms: activeProfile.regime_icms
+                            regime_icms: activeProfile.regime_icms,
+                            perfil_tarifario_st: activeProfile.perfil_tarifario_st !== undefined ? activeProfile.perfil_tarifario_st : true
                         } : prev.initial_tax_profile,
                         flags: {
                             simples: activeProfile?.regime_tributario === 'SIMPLES_NACIONAL' || activeProfile?.regime_tributario === 'MEI',
@@ -1098,6 +1100,34 @@ const EmpresaForm: React.FC = () => {
                                                 />
                                             </div>
                                         </div>
+
+                                        <div className="pt-6 mt-4 border-t border-border-subtle grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="bg-bg-deep border border-border-subtle p-4 rounded-lg flex items-center justify-between">
+                                                <div className="flex flex-col">
+                                                    <label className="text-sm font-bold text-text-primary mb-1">Perfil Tarifário ST (Revenda)</label>
+                                                    <p className="text-[11px] text-text-muted pr-4">Se inativo, deduz do custo e debita no ICMS da venda agregando no orçamento sem inflar a base.</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={!!id}
+                                                    onClick={() => setFormData({
+                                                        ...formData,
+                                                        initial_tax_profile: {
+                                                            ...formData.initial_tax_profile,
+                                                            perfil_tarifario_st: !(id ? (formData.tax_profiles?.find((p: any) => p.vigencia_fim === null)?.perfil_tarifario_st ?? formData.initial_tax_profile.perfil_tarifario_st) : formData.initial_tax_profile.perfil_tarifario_st)
+                                                        }
+                                                    })}
+                                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2 ${
+                                                        (id ? (formData.tax_profiles?.find((p: any) => p.vigencia_fim === null)?.perfil_tarifario_st ?? true) : formData.initial_tax_profile.perfil_tarifario_st) ? 'bg-brand-primary' : 'bg-bg-deep border border-border-subtle'
+                                                    } ${!!id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                        (id ? (formData.tax_profiles?.find((p: any) => p.vigencia_fim === null)?.perfil_tarifario_st ?? true) : formData.initial_tax_profile.perfil_tarifario_st) ? 'translate-x-5' : 'translate-x-0 bg-text-muted mt-[-1px]'
+                                                    }`} />
+                                                </button>
+                                            </div>
+                                        </div>
+
 
                                         <div className="mt-8 pt-8 border-t border-border-subtle">
                                             <div className="flex flex-col gap-2 mb-6">

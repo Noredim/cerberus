@@ -88,6 +88,7 @@ class CompanyTaxProfile(Base):
     inscricao_municipal = Column(String(50))
     regime_iss = Column(String(50), default='FIXO')
     regime_icms = Column(String(50), default='NAO_APLICA')
+    perfil_tarifario_st = Column(Boolean, default=True)
     observacoes = Column(String)
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

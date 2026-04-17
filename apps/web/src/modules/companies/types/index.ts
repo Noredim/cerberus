@@ -68,6 +68,7 @@ export interface TaxProfile {
     inscricao_municipal?: string;
     regime_iss: string;
     regime_icms: string;
+    perfil_tarifario_st?: boolean;
     observacoes?: string;
     is_active?: boolean; // UI helper
 }

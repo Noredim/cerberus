@@ -53,6 +53,7 @@ class CompanyTaxProfileBase(BaseModel):
     inscricao_municipal: Optional[str] = None
     regime_iss: str = "FIXO"
     regime_icms: str = "NAO_APLICA"
+    perfil_tarifario_st: bool = True
     observacoes: Optional[str] = None
 
 class CompanyTaxProfileOut(CompanyTaxProfileBase):

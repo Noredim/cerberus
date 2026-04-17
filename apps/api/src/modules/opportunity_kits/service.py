@@ -18,10 +18,10 @@ class OpportunityKitService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_product_info(self, product_id: str, tenant_id: str, tipo_contrato: Optional[str] = None) -> dict:
+    def get_product_info(self, product_id: str, tenant_id: str, tipo_contrato: Optional[str] = None, company_id: Optional[str] = None) -> dict:
         from src.modules.sales_budgets.service import calculate_product_cost_composition
 
-        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, "REVENDA" if tipo_contrato == "VENDA_EQUIPAMENTOS" else "USO_CONSUMO")
+        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, "REVENDA" if tipo_contrato == "VENDA_EQUIPAMENTOS" else "USO_CONSUMO", sales_company_id=company_id)
         if not comp:
             product = self.db.query(Product).filter(
                 Product.id == product_id,
@@ -59,10 +59,15 @@ class OpportunityKitService:
             "frete_cif": Decimal(comp.get("frete_cif_final", 0)),
             "difal": Decimal(comp.get("difal_unitario", 0)),
             "icms_st": icms_st,
-            "tem_st": icms_st > 0 or bool(comp.get("has_st", False))
+            "tem_st": icms_st > 0 or bool(comp.get("has_st", False)),
+            "perfil_st_ativo": comp.get("perfil_st_ativo", True)
         }
 
     def calculate_financials(self, kit: OpportunityKit, tenant_id: str) -> dict:
+        from src.modules.sales_budgets.models import SalesBudget
+        sales_budget = self.db.query(SalesBudget).filter(SalesBudget.id == kit.sales_budget_id).first()
+        company_id = str(sales_budget.company_id) if sales_budget else None
+        
         # 2. Prazos do Contrato
         prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
         if kit.prazo_instalacao_meses >= kit.prazo_contrato_meses:
@@ -297,7 +302,7 @@ class OpportunityKitService:
                                 if dyn_total > 0:
                                     custo_base_unitario_item = dyn_total
             else:
-                info = self.get_product_info(str(item.product_id), tenant_id, kit.tipo_contrato)
+                info = self.get_product_info(str(item.product_id), tenant_id, kit.tipo_contrato, company_id)
                 custo_base_unitario_item = info["cost"]
                 tipo_produto = info["tipo"]
                 difal_unitario = info["difal"]
@@ -334,8 +339,11 @@ class OpportunityKitService:
                     fator_item = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + aliq_iss_val
                 else:
-                    if info.get("tem_st"):
+                    perfil_st_ativo = info.get("perfil_st_ativo", True)
+                    if info.get("tem_st") and perfil_st_ativo:
                         perc_icms_aplicado = Decimal("0.0")
+                    # If perfil_st_ativo is False, perc_icms_aplicado remains aliq_icms_val
+                    
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + perc_icms_aplicado
                 
                 venda_unitario_item = custo_base_unitario_item * fator_item
@@ -379,6 +387,7 @@ class OpportunityKitService:
                 "ipi_unit": round(info.get("ipi", 0), 2),  # type: ignore
                 "frete_cif_unit": round(info.get("frete_cif", 0), 2),  # type: ignore
                 "tem_st": info.get("tem_st", False),
+                "perfil_st_ativo": info.get("perfil_st_ativo", True),
                 "perc_pis": float(kit.aliq_pis or 0),
                 "perc_cofins": float(kit.aliq_cofins or 0),
                 "perc_csll": float(kit.aliq_csll or 0),

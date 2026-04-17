@@ -1,9 +1,9 @@
 import uuid, sys, os
 from decimal import Decimal
 sys.path.append('c:/cerberus/apps/api')
-from src.core.database import SessionLocal
-from src.modules.opportunity_kits.service import OpportunityKitService
-from src.modules.opportunity_kits.models import OpportunityKit
+from src.core.database import SessionLocal  # type: ignore
+from src.modules.opportunity_kits.service import OpportunityKitService  # type: ignore
+from src.modules.opportunity_kits.models import OpportunityKit  # type: ignore
 
 db = SessionLocal()
 service = OpportunityKitService(db)
@@ -38,12 +38,12 @@ print(f"Aliq icms is {kit.aliq_icms}")
 print(f"Percentual instalacao is {percentual}")
 print(f"Fator Manutencao is {fm}")
 
-from src.modules.sales_budgets.service import SalesBudgetService
+from src.modules.sales_budgets.service import SalesBudgetService  # type: ignore
 s_service = SalesBudgetService(db)
 if old_id:
     s_budget_obj = db.query(OpportunityKit).filter(OpportunityKit.sales_budget_id == old_id).first()
     if s_budget_obj and s_budget_obj.sales_budget_id:
-        from src.modules.sales_budgets.models import SalesBudget
+        from src.modules.sales_budgets.models import SalesBudget  # type: ignore
         b = db.query(SalesBudget).filter(SalesBudget.id == old_id).first()
         s_budget = s_service.serialize_response(b)
         print('Rental items:')
