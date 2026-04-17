@@ -29,7 +29,7 @@ class OpportunityKit(Base):
     # Parâmetros Financeiros
     fator_margem_locacao = Column(Numeric(10, 4), nullable=False, default=1.0)
     taxa_juros_mensal = Column(Numeric(10, 6), nullable=False, default=0.0)
-    taxa_manutencao_anual = Column(Numeric(6, 4), nullable=False, default=0.0)
+    taxa_manutencao_anual = Column(Numeric(10, 4), nullable=False, default=0.0)
     
     # Flags de Instalação e Manutenção
     instalacao_inclusa = Column(Boolean, nullable=False, default=False)
@@ -41,6 +41,7 @@ class OpportunityKit(Base):
     fator_margem_servicos_produtos = Column(Numeric(10, 4), nullable=False, default=1.0)
     havera_manutencao = Column(Boolean, nullable=False, default=False)
     qtd_meses_manutencao = Column(Integer, nullable=True)
+    faturamento_servico_separado = Column(Boolean, nullable=False, default=False)
     
     # Impostos sobre Receita
     aliq_pis = Column(Numeric(6, 4), nullable=False, default=0.0)
@@ -70,6 +71,7 @@ class OpportunityKit(Base):
     company = relationship("Company")
     items = relationship("OpportunityKitItem", back_populates="kit", cascade="all, delete-orphan")
     costs = relationship("OpportunityKitCost", back_populates="kit", cascade="all, delete-orphan")
+    monthly_costs = relationship("OpportunityKitMonthlyCost", back_populates="kit", cascade="all, delete-orphan")
 
 
 class OpportunityKitCost(Base):
@@ -115,3 +117,20 @@ class OpportunityKitItem(Base):
     kit = relationship("OpportunityKit", back_populates="items")
     product = relationship("Product")
     own_service = relationship("OwnService")
+
+
+class OpportunityKitMonthlyCost(Base):
+    __tablename__ = "kit_custos_mensais"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kit_id = Column(UUID(as_uuid=True), ForeignKey("opportunity_kits.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    servico = Column(String(255), nullable=False)
+    tipo_custo = Column(String(50), nullable=False)
+    quantidade = Column(Numeric(15, 4), nullable=False, default=1.0)
+    valor_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    kit = relationship("OpportunityKit", back_populates="monthly_costs")

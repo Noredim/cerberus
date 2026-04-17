@@ -19,8 +19,11 @@ def list_kits_by_company(
     sales_budget_id: Optional[UUID] = None,
     tipo_contrato: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
+    if not active_company_id or str(company_id) != active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id inválido")
     service = OpportunityKitService(db)
     return service.list_kits(
         current_user.tenant_id, 
@@ -32,10 +35,13 @@ def list_kits_by_company(
 def get_kit(
     kit_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
+    if not active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
     service = OpportunityKitService(db)
-    kit = service.get_kit(str(kit_id), current_user.tenant_id)
+    kit = service.get_kit(str(kit_id), current_user.tenant_id, active_company_id)
     if not kit:
         raise HTTPException(status_code=404, detail="Kit não encontrado")
     return kit
@@ -45,8 +51,11 @@ def create_kit(
     company_id: UUID,
     data: OpportunityKitCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
+    if not active_company_id or str(company_id) != active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id inválido")
     service = OpportunityKitService(db)
     try:
         return service.create_kit(current_user.tenant_id, str(company_id), data)
@@ -60,11 +69,14 @@ def update_kit(
     kit_id: UUID,
     data: OpportunityKitUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
+    if not active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
     service = OpportunityKitService(db)
     try:
-        kit = service.update_kit(str(kit_id), current_user.tenant_id, data)
+        kit = service.update_kit(str(kit_id), current_user.tenant_id, data, active_company_id)
         if not kit:
             raise HTTPException(status_code=404, detail="Kit não encontrado")
         return kit

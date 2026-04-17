@@ -19,8 +19,13 @@ router = APIRouter(prefix="/cadastro/produtos", tags=["Products"])
 def create_product(
     payload: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
+    from uuid import UUID
+    if not active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
+    payload.company_id = UUID(active_company_id)
     service = ProductService(db)
     return service.create_product(current_user.tenant_id, payload)
 
@@ -31,10 +36,11 @@ def list_products(
     skip: int = Query(0),
     limit: int = Query(100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     service = ProductService(db)
-    return service.list_products(current_user.tenant_id, q, tipo, skip, limit)
+    return service.list_products(current_user.tenant_id, q, tipo, skip, limit, company_id)
 
 @router.get("/mva-preview", response_model=MvaLookupResult)
 def preview_mva(
@@ -64,10 +70,11 @@ def preview_mva(
 def get_product(
     product_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     service = ProductService(db)
-    product = service.get_product(current_user.tenant_id, str(product_id))
+    product = service.get_product(current_user.tenant_id, str(product_id), company_id)
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
     return product
@@ -77,10 +84,11 @@ def update_product(
     product_id: UUID,
     payload: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     service = ProductService(db)
-    product = service.update_product(current_user.tenant_id, str(product_id), payload)
+    product = service.update_product(current_user.tenant_id, str(product_id), payload, company_id)
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
     return product
@@ -89,10 +97,11 @@ def update_product(
 def delete_product(
     product_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     service = ProductService(db)
-    success = service.delete_product(current_user.tenant_id, str(product_id))
+    success = service.delete_product(current_user.tenant_id, str(product_id), company_id)
     if not success:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
     return None
@@ -101,13 +110,18 @@ def delete_product(
 def list_product_budgets(
     product_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     # Retornar histórico de itens de orçamento para o produto
-    items = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+    query = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
         PurchaseBudgetItem.product_id == str(product_id),
         PurchaseBudget.tenant_id == current_user.tenant_id
-    ).order_by(PurchaseBudget.data_orcamento.desc()).limit(20).all()
+    )
+    if company_id:
+        query = query.filter(PurchaseBudget.company_id == company_id)
+        
+    items = query.order_by(PurchaseBudget.data_orcamento.desc()).limit(20).all()
     
     print(f"DEBUG_GET_BUDGETS: found {len(items)} for product {product_id} tenant {current_user.tenant_id}", flush=True)
 

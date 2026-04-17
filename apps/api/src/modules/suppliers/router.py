@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from .schemas import SupplierCreate, SupplierUpdate, SupplierOut
 from .service import SupplierService
@@ -14,18 +14,24 @@ router = APIRouter(prefix="/cadastro/fornecedores", tags=["Suppliers"])
 def create_supplier(
     payload: SupplierCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
     service = SupplierService(db)
-    # Check for existing CNPJ in same tenant
+    if not payload.company_id and active_company_id:
+        from uuid import UUID
+        payload.company_id = UUID(active_company_id)
+        
+    # Check for existing CNPJ in same company
     from .models import Supplier
     existing = db.query(Supplier).filter(
         Supplier.tenant_id == current_user.tenant_id,
+        Supplier.company_id == active_company_id,
         Supplier.cnpj == payload.cnpj
     ).first()
     
     if existing:
-        raise HTTPException(status_code=400, detail="Fornecedor já cadastrado com este CNPJ.")
+        raise HTTPException(status_code=400, detail="Fornecedor já cadastrado com este CNPJ para esta empresa.")
         
     return service.create_supplier(current_user.tenant_id, payload)
 
@@ -35,19 +41,21 @@ def list_suppliers(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
     service = SupplierService(db)
-    return service.list_suppliers(current_user.tenant_id, q, skip, limit)
+    return service.list_suppliers(current_user.tenant_id, q, skip, limit, active_company_id)
 
 @router.get("/{supplier_id}", response_model=SupplierOut)
 def get_supplier(
     supplier_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
     service = SupplierService(db)
-    supplier = service.get_supplier(current_user.tenant_id, supplier_id)
+    supplier = service.get_supplier(current_user.tenant_id, supplier_id, active_company_id)
     if not supplier:
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado.")
     return supplier
@@ -57,10 +65,11 @@ def update_supplier(
     supplier_id: str,
     payload: SupplierUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
     service = SupplierService(db)
-    supplier = service.update_supplier(current_user.tenant_id, supplier_id, payload)
+    supplier = service.update_supplier(current_user.tenant_id, supplier_id, payload, active_company_id)
     if not supplier:
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado.")
     return supplier
@@ -69,10 +78,10 @@ def update_supplier(
 def delete_supplier(
     supplier_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
 ):
     service = SupplierService(db)
-    success = service.delete_supplier(current_user.tenant_id, supplier_id)
-    if not success:
+    if not service.delete_supplier(current_user.tenant_id, supplier_id, active_company_id):
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado.")
     return None

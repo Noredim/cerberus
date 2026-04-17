@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List
+from uuid import UUID
 import re
 from datetime import datetime
 from enum import Enum
@@ -25,6 +26,7 @@ class CustomerEsfera(str, Enum):
     AUTARQUIA = "AUTARQUIA"
 
 class CustomerBase(BaseModel):
+    company_id: Optional[UUID] = None
     cnpj: str = Field(..., min_length=14, max_length=14)
     razao_social: str
     nome_fantasia: Optional[str] = None
@@ -45,8 +47,13 @@ class CustomerBase(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def uppercase_all(cls, data):
-        return _uppercase_strings(data) if isinstance(data, dict) else data
+    def process_empty_strings(cls, data):
+        if isinstance(data, dict):
+            for k, v in list(data.items()):
+                if v == "":
+                    data[k] = None
+            return _uppercase_strings(data)
+        return data
 
     @field_validator('cnpj', mode='before')
     @classmethod
@@ -74,8 +81,13 @@ class CustomerUpdate(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def uppercase_all(cls, data):
-        return _uppercase_strings(data) if isinstance(data, dict) else data
+    def process_empty_strings(cls, data):
+        if isinstance(data, dict):
+            for k, v in list(data.items()):
+                if v == "":
+                    data[k] = None
+            return _uppercase_strings(data)
+        return data
 
 class CustomerOut(CustomerBase):
     id: str

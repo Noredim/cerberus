@@ -15,6 +15,7 @@ def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
     return data
 
 class SupplierBase(BaseModel):
+    company_id: Optional[UUID] = None
     cnpj: str = Field(..., min_length=14, max_length=14)
     razao_social: str
     nome_fantasia: Optional[str] = None
@@ -32,8 +33,13 @@ class SupplierBase(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def uppercase_all(cls, data):
-        return _uppercase_strings(data) if isinstance(data, dict) else data
+    def process_empty_strings(cls, data):
+        if isinstance(data, dict):
+            for k, v in list(data.items()):
+                if v == "":
+                    data[k] = None
+            return _uppercase_strings(data)
+        return data
 
     @field_validator('cnpj', mode='before')
     @classmethod
@@ -59,8 +65,13 @@ class SupplierUpdate(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def uppercase_all(cls, data):
-        return _uppercase_strings(data) if isinstance(data, dict) else data
+    def process_empty_strings(cls, data):
+        if isinstance(data, dict):
+            for k, v in list(data.items()):
+                if v == "":
+                    data[k] = None
+            return _uppercase_strings(data)
+        return data
 
 class SupplierOut(SupplierBase):
     id: str # Using str to match model's primary key type (which is UUID-based but stored as String)

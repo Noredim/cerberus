@@ -57,6 +57,23 @@ class OpportunityKitCostResponse(OpportunityKitCostBase):
     class Config:
         from_attributes = True
 
+class OpportunityKitMonthlyCostBase(BaseModel):
+    servico: str
+    tipo_custo: str
+    quantidade: Decimal = Field(default=Decimal(1))
+    valor_unitario: Decimal = Field(default=Decimal(0))
+
+class OpportunityKitMonthlyCostCreate(OpportunityKitMonthlyCostBase):
+    pass
+
+class OpportunityKitMonthlyCostResponse(OpportunityKitMonthlyCostBase):
+    id: UUID
+    kit_id: UUID
+
+    class Config:
+        from_attributes = True
+
+
 class OpportunityKitBase(BaseModel):
     sales_budget_id: Optional[UUID] = None
     nome_kit: str
@@ -82,6 +99,7 @@ class OpportunityKitBase(BaseModel):
     fator_margem_servicos_produtos: Decimal = Field(default=Decimal(1.0))
     havera_manutencao: bool = Field(default=False)
     qtd_meses_manutencao: Optional[int] = None
+    faturamento_servico_separado: bool = Field(default=False)
     
     aliq_pis: Decimal = Field(default=Decimal(0.0))
     aliq_cofins: Decimal = Field(default=Decimal(0.0))
@@ -104,10 +122,14 @@ class OpportunityKitBase(BaseModel):
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
     costs: List[OpportunityKitCostCreate] = []
+    monthly_costs: List[OpportunityKitMonthlyCostCreate] = []
+
 
 class OpportunityKitUpdate(BaseModel):
     items: Optional[List[OpportunityKitItemCreate]] = None
     costs: Optional[List[OpportunityKitCostCreate]] = None
+    monthly_costs: Optional[List[OpportunityKitMonthlyCostCreate]] = None
+
     nome_kit: Optional[str] = None
     descricao_kit: Optional[str] = None
     quantidade_kits: Optional[int] = None
@@ -131,6 +153,7 @@ class OpportunityKitUpdate(BaseModel):
     fator_margem_servicos_produtos: Optional[Decimal] = None
     havera_manutencao: Optional[bool] = None
     qtd_meses_manutencao: Optional[int] = None
+    faturamento_servico_separado: Optional[bool] = None
     
     aliq_pis: Optional[Decimal] = None
     aliq_cofins: Optional[Decimal] = None
@@ -203,6 +226,8 @@ class OpportunityKitResponse(OpportunityKitBase):
     id: UUID
     items: List[OpportunityKitItemResponse]
     costs: List[OpportunityKitCostResponse] = []
+    monthly_costs: List[OpportunityKitMonthlyCostResponse] = []
+
     summary: Optional[OpportunityKitFinancialSummary] = None
     item_summaries: Optional[List[OpportunityKitItemFinancialSummary]] = None
 

@@ -20,14 +20,19 @@ class CustomerService:
         self.db.refresh(customer)
         return customer
 
-    def get_customer(self, tenant_id: str, customer_id: str) -> Optional[Customer]:
-        return self.db.query(Customer).filter(
+    def get_customer(self, tenant_id: str, customer_id: str, company_id: Optional[str] = None) -> Optional[Customer]:
+        query = self.db.query(Customer).filter(
             Customer.id == customer_id,
             Customer.tenant_id == tenant_id
-        ).first()
+        )
+        if company_id:
+            query = query.filter(Customer.company_id == company_id)
+        return query.first()
 
-    def list_customers(self, tenant_id: str, q: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Customer]:
+    def list_customers(self, tenant_id: str, q: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None) -> List[Customer]:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(Customer.company_id == company_id)
         
         if q:
             q_clean = re.sub(r'\D', '', q)
@@ -41,8 +46,10 @@ class CustomerService:
             
         return query.offset(skip).limit(limit).all()
 
-    def count_customers(self, tenant_id: str, q: Optional[str] = None) -> int:
+    def count_customers(self, tenant_id: str, q: Optional[str] = None, company_id: Optional[str] = None) -> int:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(Customer.company_id == company_id)
         if q:
             q_clean = re.sub(r'\D', '', q)
             filters = [
@@ -54,8 +61,8 @@ class CustomerService:
             query = query.filter(or_(*filters))
         return query.count()
 
-    def update_customer(self, tenant_id: str, customer_id: str, payload: CustomerUpdate) -> Optional[Customer]:
-        customer = self.get_customer(tenant_id, customer_id)
+    def update_customer(self, tenant_id: str, customer_id: str, payload: CustomerUpdate, company_id: Optional[str] = None) -> Optional[Customer]:
+        customer = self.get_customer(tenant_id, customer_id, company_id)
         if not customer:
             return None
         
@@ -67,8 +74,8 @@ class CustomerService:
         self.db.refresh(customer)
         return customer
 
-    def delete_customer(self, tenant_id: str, customer_id: str) -> bool:
-        customer = self.get_customer(tenant_id, customer_id)
+    def delete_customer(self, tenant_id: str, customer_id: str, company_id: Optional[str] = None) -> bool:
+        customer = self.get_customer(tenant_id, customer_id, company_id)
         if not customer:
             return False
         

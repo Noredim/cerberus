@@ -22,20 +22,22 @@ def list_budgets(
     supplier_id: Optional[str] = None,
     sales_budget_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
     """
     Listar orcamentos de compra.
     """
-    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id)
+    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id, company_id)
 
 @router.get("/{budget_id}", response_model=schemas.PurchaseBudgetOut)
 def get_budget(
     budget_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
-    return PurchaseBudgetService.get_budget_by_id(db, current_user.tenant_id, budget_id)
+    return PurchaseBudgetService.get_budget_by_id(db, current_user.tenant_id, budget_id, company_id)
 
 @router.post("", response_model=schemas.PurchaseBudgetOut)
 def create_budget(

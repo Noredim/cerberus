@@ -3,12 +3,14 @@ from sqlalchemy.orm import relationship
 from src.core.base import Base
 from datetime import datetime
 import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 class Supplier(Base):
     __tablename__ = "suppliers"
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String, index=True, nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Identificação
     cnpj = Column(String, index=True, nullable=False)

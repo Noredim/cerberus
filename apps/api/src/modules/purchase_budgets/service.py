@@ -19,9 +19,11 @@ import openpyxl
 
 class PurchaseBudgetService:
     @staticmethod
-    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None):
+    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None):
         # returns budgets with nested supplier and items
         query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(PurchaseBudget.company_id == company_id)
         if supplier_id:
             query = query.filter(PurchaseBudget.supplier_id == supplier_id)
         if sales_budget_id:
@@ -29,8 +31,11 @@ class PurchaseBudgetService:
         return query.order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
-    def get_budget_by_id(db: Session, tenant_id: str, budget_id: UUID) -> PurchaseBudget:
-        budget = db.query(PurchaseBudget).filter(PurchaseBudget.id == budget_id, PurchaseBudget.tenant_id == tenant_id).first()
+    def get_budget_by_id(db: Session, tenant_id: str, budget_id: UUID, company_id: Optional[str] = None) -> PurchaseBudget:
+        query = db.query(PurchaseBudget).filter(PurchaseBudget.id == budget_id, PurchaseBudget.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(PurchaseBudget.company_id == company_id)
+        budget = query.first()
         if not budget:
             raise HTTPException(status_code=404, detail="Budget not found")
         return budget

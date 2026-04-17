@@ -20,14 +20,19 @@ class SupplierService:
         self.db.refresh(supplier)
         return supplier
 
-    def get_supplier(self, tenant_id: str, supplier_id: str) -> Optional[Supplier]:
-        return self.db.query(Supplier).filter(
+    def get_supplier(self, tenant_id: str, supplier_id: str, company_id: Optional[str] = None) -> Optional[Supplier]:
+        query = self.db.query(Supplier).filter(
             Supplier.id == supplier_id,
             Supplier.tenant_id == tenant_id
-        ).first()
+        )
+        if company_id:
+            query = query.filter(Supplier.company_id == company_id)
+        return query.first()
 
-    def list_suppliers(self, tenant_id: str, q: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Supplier]:
+    def list_suppliers(self, tenant_id: str, q: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None) -> List[Supplier]:
         query = self.db.query(Supplier).filter(Supplier.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(Supplier.company_id == company_id)
         
         if q:
             q_clean = re.sub(r'\D', '', q)
@@ -41,8 +46,10 @@ class SupplierService:
             
         return query.offset(skip).limit(limit).all()
 
-    def count_suppliers(self, tenant_id: str, q: Optional[str] = None) -> int:
+    def count_suppliers(self, tenant_id: str, q: Optional[str] = None, company_id: Optional[str] = None) -> int:
         query = self.db.query(Supplier).filter(Supplier.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(Supplier.company_id == company_id)
         if q:
             q_clean = re.sub(r'\D', '', q)
             filters = [
@@ -54,8 +61,8 @@ class SupplierService:
             query = query.filter(or_(*filters))
         return query.count()
 
-    def update_supplier(self, tenant_id: str, supplier_id: str, payload: SupplierUpdate) -> Optional[Supplier]:
-        supplier = self.get_supplier(tenant_id, supplier_id)
+    def update_supplier(self, tenant_id: str, supplier_id: str, payload: SupplierUpdate, company_id: Optional[str] = None) -> Optional[Supplier]:
+        supplier = self.get_supplier(tenant_id, supplier_id, company_id)
         if not supplier:
             return None
         
@@ -67,8 +74,8 @@ class SupplierService:
         self.db.refresh(supplier)
         return supplier
 
-    def delete_supplier(self, tenant_id: str, supplier_id: str) -> bool:
-        supplier = self.get_supplier(tenant_id, supplier_id)
+    def delete_supplier(self, tenant_id: str, supplier_id: str, company_id: Optional[str] = None) -> bool:
+        supplier = self.get_supplier(tenant_id, supplier_id, company_id)
         if not supplier:
             return False
         

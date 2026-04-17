@@ -214,6 +214,14 @@ class OpportunityKitService:
                     "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2),  # type: ignore
                 })
 
+        custo_mensal_bloco_7 = Decimal("0.0")
+        if hasattr(kit, 'monthly_costs') and kit.monthly_costs:
+            for mcost in kit.monthly_costs:
+                qtde = Decimal(mcost.quantidade or 1)
+                vl_un = Decimal(mcost.valor_unitario or 0)
+                vl_tot = vl_un * qtde
+                custo_mensal_bloco_7 += vl_tot
+
         custo_aquisicao_kit = Decimal("0.0")
         custo_aquisicao_produtos = Decimal("0.0")
         custo_aquisicao_servicos = Decimal("0.0")
@@ -507,21 +515,42 @@ class OpportunityKitService:
             valor_impostos = impostos_produtos_base + impostos_instalacao + impostos_manutencao
             valor_mensal_antes_impostos = valor_base_final
         else:
-            # Locação: Users requested taxes to be calculated statically over the locacao_base and manutencao without 'por dentro'
+            # Locação / Comodato
             valor_mensal_antes_impostos = valor_base_final
             valor_mensal_kit = valor_base_final
-            valor_impostos = valor_mensal_kit * aliq_total_impostos
+            
+            faturamento_separado = getattr(kit, 'faturamento_servico_separado', False)
+            if faturamento_separado:
+                aliq_base = sum([
+                    Decimal(kit.aliq_pis or 0),
+                    Decimal(kit.aliq_cofins or 0),
+                    Decimal(kit.aliq_csll or 0),
+                    Decimal(kit.aliq_irpj or 0)
+                ]) / Decimal(100.0)
+                
+                aliq_iss_pct = Decimal(kit.aliq_iss or 0) / Decimal(100.0)
+                
+                # Grupo 1: Produtos/Equipamentos (Locação Base) sem ISS
+                impostos_grupo_1 = valor_mensal_locacao_base * aliq_base
+                # Grupo 2: Serviços (Manutenção) com ISS
+                impostos_grupo_2 = manutencao_mensal * (aliq_base + aliq_iss_pct)
+                
+                valor_impostos = impostos_grupo_1 + impostos_grupo_2
+                if valor_mensal_kit > 0:
+                    aliq_total_impostos = valor_impostos / valor_mensal_kit
+            else:
+                valor_impostos = valor_mensal_kit * aliq_total_impostos
 
         # 16. Receita Liquida
         receita_liquida_mensal_kit = valor_mensal_kit - valor_impostos
 
         # 17. Lucro Mensal
         if kit.tipo_contrato == "INSTALACAO":
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_aquisicao_kit - custo_operacional_mensal_kit
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_aquisicao_kit - custo_operacional_mensal_kit - custo_mensal_bloco_7
         elif kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
         else:
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
 
         margem_kit = Decimal("0.0")
         if receita_liquida_mensal_kit > 0:
@@ -559,20 +588,25 @@ class OpportunityKitService:
             # For Locacao/Comodato, we treat the main rental fee as equipment revenue for this summary logic
             venda_equipamentos_total = valor_mensal_locacao_base
             venda_manutencao_total = manutencao_mensal
-            
             # Simplified profit splits for Locacao
-            imposto_equip_loc = venda_equipamentos_total * aliq_total_impostos
+            faturamento_separado = getattr(kit, 'faturamento_servico_separado', False)
+            if faturamento_separado:
+                imposto_equip_loc = venda_equipamentos_total * aliq_base
+                imposto_manut_loc = venda_manutencao_total * (aliq_base + aliq_iss_pct)
+            else:
+                imposto_equip_loc = venda_equipamentos_total * aliq_total_impostos
+                imposto_manut_loc = venda_manutencao_total * aliq_total_impostos
+                
             lucro_equipamentos = venda_equipamentos_total - (custo_aquisicao_kit + vlr_instal_calc) - imposto_equip_loc
             if venda_equipamentos_total > 0:
                 margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)
                 
-            imposto_manut_loc = venda_manutencao_total * aliq_total_impostos
             lucro_manutencao = venda_manutencao_total - custo_operacional_mensal_kit - imposto_manut_loc
             if venda_manutencao_total > 0:
                 margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
 
-        # ROI = Investimento / (Faturamento - Custo Op. Bloco6 - Impostos)
-        roi_denominador = valor_mensal_antes_impostos - custo_operacional_mensal_kit - valor_impostos
+        # ROI = Investimento / (Faturamento - Custo Op. Bloco6 - Custo Bloco7 - Impostos)
+        roi_denominador = valor_mensal_antes_impostos - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
         investimento_total = custo_aquisicao_kit + vlr_instal_calc
         roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
 
@@ -637,11 +671,14 @@ class OpportunityKitService:
             kit.item_summaries = fin["item_summaries"]
         return kits
 
-    def get_kit(self, kit_id: str, tenant_id: str):
-        kit = self.db.query(OpportunityKit).filter(
+    def get_kit(self, kit_id: str, tenant_id: str, company_id: Optional[str] = None):
+        query = self.db.query(OpportunityKit).filter(
             OpportunityKit.id == kit_id,
             OpportunityKit.tenant_id == tenant_id
-        ).first()
+        )
+        if company_id:
+            query = query.filter(OpportunityKit.company_id == company_id)
+        kit = query.first()
         if kit:
             fin = self.calculate_financials(kit, tenant_id)
             kit.summary = fin["summary"]
@@ -717,16 +754,27 @@ class OpportunityKitService:
             )
             self.db.add(cost)
 
+        for mcost_data in getattr(data, "monthly_costs", []):
+            from src.modules.opportunity_kits.models import OpportunityKitMonthlyCost
+            mcost = OpportunityKitMonthlyCost(
+                kit_id=kit.id,
+                servico=mcost_data.servico,
+                tipo_custo=mcost_data.tipo_custo,
+                quantidade=mcost_data.quantidade,
+                valor_unitario=mcost_data.valor_unitario
+            )
+            self.db.add(mcost)
             
         self.db.commit()
+
         self.db.refresh(kit)
         fin = self.calculate_financials(kit, tenant_id)
         kit.summary = fin["summary"]
         kit.item_summaries = fin["item_summaries"]
         return kit
 
-    def update_kit(self, kit_id: str, tenant_id: str, data: OpportunityKitUpdate) -> OpportunityKit:
-        kit = self.db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+    def update_kit(self, kit_id: str, tenant_id: str, data: OpportunityKitUpdate, company_id: Optional[str] = None) -> OpportunityKit:
+        kit = self.get_kit(kit_id, tenant_id, company_id)
         if not kit:
             return None
             
@@ -768,6 +816,21 @@ class OpportunityKitService:
                 )
                 self.db.add(new_cost)
 
+        mcosts_data = update_data.pop("monthly_costs", None)
+        if mcosts_data is not None:
+            from src.modules.opportunity_kits.models import OpportunityKitMonthlyCost
+            self.db.query(OpportunityKitMonthlyCost).filter(OpportunityKitMonthlyCost.kit_id == kit.id).delete()
+            self.db.flush()
+            for mcost in mcosts_data:
+                new_mcost = OpportunityKitMonthlyCost(
+                    kit_id=kit.id,
+                    servico=mcost["servico"],
+                    tipo_custo=mcost["tipo_custo"],
+                    quantidade=mcost["quantidade"],
+                    valor_unitario=mcost["valor_unitario"]
+                )
+                self.db.add(new_mcost)
+
         for key, value in update_data.items():
             setattr(kit, key, value)
             
@@ -784,10 +847,13 @@ class OpportunityKitService:
     def recalculate_kit_preview(self, tenant_id: str, company_id: str, data: OpportunityKitCreate) -> dict:
         """Endpoint used to preview financials without saving to DB"""
         # Create a mock objects
-        kit = OpportunityKit(**data.model_dump(exclude={"items", "costs"}))
+        kit = OpportunityKit(**data.model_dump(exclude={"items", "costs", "monthly_costs"}))
         kit.company_id = company_id
         kit.items = [OpportunityKitItem(**item_data.model_dump()) for item_data in data.items]
         kit.costs = [OpportunityKitCost(**cost_data.model_dump()) for cost_data in data.costs]
+        
+        from src.modules.opportunity_kits.models import OpportunityKitMonthlyCost
+        kit.monthly_costs = [OpportunityKitMonthlyCost(**mc_data.model_dump()) for mc_data in getattr(data, "monthly_costs", [])]
         
         fin = self.calculate_financials(kit, tenant_id)
         return fin

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+from uuid import UUID
 import re
 
 def clean_digits(v: Optional[str]) -> Optional[str]:
@@ -9,6 +10,7 @@ def clean_digits(v: Optional[str]) -> Optional[str]:
 
 class ProfessionalBase(BaseModel):
     name: str = Field(..., description="Name of the professional")
+    company_id: UUID = Field(..., description="ID of the company")
     cpf: str = Field(..., description="CPF of the professional")
     role_id: str = Field(..., description="ID of the associated role")
     user_id: Optional[str] = Field(None, description="ID of the associated user account")
@@ -27,6 +29,7 @@ class ProfessionalCreate(ProfessionalBase):
 
 class ProfessionalUpdate(BaseModel):
     name: Optional[str] = None
+    company_id: Optional[UUID] = None
     cpf: Optional[str] = None
     role_id: Optional[str] = None
     user_id: Optional[str] = None

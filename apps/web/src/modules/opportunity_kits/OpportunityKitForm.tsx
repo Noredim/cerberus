@@ -109,6 +109,13 @@ interface KitFormValues {
     valor_unitario: number;
     descricao_item?: string;
   }>;
+  monthly_costs: Array<{
+    servico: string;
+    tipo_custo: string;
+    quantidade: number;
+    valor_unitario: number;
+  }>;
+  faturamento_servico_separado: boolean;
   forma_execucao?: string;
 }
 
@@ -155,6 +162,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     havera_manutencao: false,
     qtd_meses_manutencao: '',
     manutencao_inclusa: false,
+    faturamento_servico_separado: false,
     fator_manutencao: '',
     aliq_pis: 0,
     aliq_cofins: 0,
@@ -174,6 +182,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     forma_execucao: 'H. NORMAL',
     items: [],
     costs: [],
+    monthly_costs: [],
   });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -192,6 +201,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       const data = res.data;
       if (!data.items) data.items = [];
       if (!data.costs) data.costs = [];
+      if (!data.monthly_costs) data.monthly_costs = [];
 
       // Safely parse the incoming maintenance factor
       const loadFm = data.fator_manutencao;
@@ -212,6 +222,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         ...c,
         descricao_item: c.product?.nome || c.descricao_item || 'Serviço'
       }));
+      data.faturamento_servico_separado = data.faturamento_servico_separado || false;
       setForm(data);
       // Ensure we record the loaded contract type so it doesn't trigger the change detection later
       prevTipoContratoRef.current = data.tipo_contrato;
@@ -311,7 +322,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       percentual_instalacao: data.percentual_instalacao === '' ? null : data.percentual_instalacao,
       fator_manutencao: data.fator_manutencao === '' ? null : data.fator_manutencao,
       qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
+      faturamento_servico_separado: data.faturamento_servico_separado || false,
       costs: sanitizedCosts,
+      monthly_costs: data.monthly_costs,
     };
   };
 
@@ -963,8 +976,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {/* Manut. = custo bruto Bloco 6, sem fator de margem */}
                   <div className="flex justify-between items-center gap-2">
                     <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Manut. (custo):</span>
-                    <span className="font-semibold tabular-nums text-text-primary">{fmtC(custoOpMensal)}</span>
+                    <span className="font-semibold tabular-nums text-text-primary">
+                      {fmtC((!form.havera_manutencao || form.manutencao_inclusa) ? 0 : custoOpMensal)}
+                    </span>
                   </div>
+                  {/* Bloco 7 – Custos Mensais do Contrato */}
+                  {(form.monthly_costs && form.monthly_costs.length > 0) && (
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Custo Mensal:</span>
+                      <span className="font-semibold tabular-nums text-text-primary">{fmtC(form.monthly_costs.reduce((sum, c) => sum + ((c.quantidade || 0) * (c.valor_unitario || 0)), 0))}</span>
+                    </div>
+                  )}
                   {/* Impostos com tooltip de aliquotas */}
                   <div className="flex justify-between items-center gap-2">
                     <span className="flex items-center gap-1">
@@ -1260,8 +1282,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           </section>
 
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-            <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
-              3. Impostos sobre Faturamento (%)
+            <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle flex justify-between items-center">
+              <span>3. Impostos sobre Faturamento (%)</span>
+              {['LOCACAO', 'COMODATO'].includes(form.tipo_contrato) && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="chk-faturamento-separado"
+                    checked={form.faturamento_servico_separado}
+                    onChange={(e) => handleInputChange('faturamento_servico_separado', e.target.checked)}
+                    className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                  />
+                  <label htmlFor="chk-faturamento-separado" className="text-sm font-semibold text-text-primary cursor-pointer">
+                    Faturamento Serviço Separado
+                  </label>
+                </div>
+              )}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
               {['aliq_pis', 'aliq_cofins', 'aliq_csll', 'aliq_irpj', 'aliq_iss', 'aliq_icms'].map(f => (
@@ -1929,6 +1965,149 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             </td>
                           </>
                         )}
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Bloco 7 – Custos Mensais do Contrato */}
+          {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+            <section className="bg-bg-surface border border-border-subtle shadow-sm rounded-xl p-4 sm:p-6 lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+                  Bloco 7 – Custos Mensais do Contrato
+                </h2>
+                <Button variant="secondary" size="sm" type="button" onClick={() => {
+                  setForm(prev => ({
+                    ...prev,
+                    monthly_costs: [
+                      ...(prev.monthly_costs || []),
+                      { servico: '', tipo_custo: 'Operacional', quantidade: 1, valor_unitario: 0 }
+                    ]
+                  }));
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Linha
+                </Button>
+              </div>
+
+              {(!form.monthly_costs || form.monthly_costs.length === 0) ? (
+                <div className="text-center py-6 text-text-muted border-2 border-dashed border-border-subtle rounded-lg">
+                  <p className="text-sm">Nenhum custo mensal recorrente adicionado.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-border-subtle rounded-lg">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-bg-subtle border-b border-border-subtle text-text-muted">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Serviço (Descrição)</th>
+                        <th className="px-4 py-3 font-medium">Tipo de Custo</th>
+                        <th className="px-2 py-3 font-medium text-right w-24">Qtd.</th>
+                        <th className="px-4 py-3 font-medium text-right w-32">Vlr Unitário</th>
+                        <th className="px-4 py-3 font-medium text-right w-32">Custo Total</th>
+                        <th className="px-4 py-3 font-medium w-12"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {form.monthly_costs.map((mcost, idx) => (
+                        <tr key={idx} className="hover:bg-bg-subtle/50 transition-colors group">
+                          <td className="px-4 py-2">
+                            <Input
+                              value={mcost.servico}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setForm(prev => {
+                                  const newCosts = [...prev.monthly_costs];
+                                  newCosts[idx].servico = val;
+                                  return { ...prev, monthly_costs: newCosts };
+                                });
+                              }}
+                              className="w-full h-8"
+                              placeholder="Descreva o custo"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              className="w-full h-8 bg-bg-surface border border-border-base rounded px-2 text-sm focus:ring-1 focus:ring-brand-primary/30 text-text-primary"
+                              value={mcost.tipo_custo}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setForm(prev => {
+                                  const newCosts = [...prev.monthly_costs];
+                                  newCosts[idx].tipo_custo = val;
+                                  return { ...prev, monthly_costs: newCosts };
+                                });
+                              }}
+                            >
+                              <option value="Operacional">Operacional</option>
+                              <option value="Suporte">Suporte</option>
+                              <option value="Infraestrutura">Infraestrutura</option>
+                              <option value="Terceiros">Terceiros</option>
+                              <option value="Outros">Outros</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-2">
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1"
+                              className="w-16 text-right h-8 ml-auto"
+                              value={mcost.quantidade}
+                              onChange={e => {
+                                const val = parseFloat(e.target.value) || 1;
+                                setForm(prev => {
+                                  const newCosts = [...prev.monthly_costs];
+                                  newCosts[idx].quantidade = val;
+                                  return { ...prev, monthly_costs: newCosts };
+                                });
+                              }}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <Decimal4Input 
+                              value={mcost.valor_unitario}
+                              onChange={(val: number) => {
+                                setForm(prev => {
+                                  const newCosts = [...prev.monthly_costs];
+                                  newCosts[idx].valor_unitario = val;
+                                  return { ...prev, monthly_costs: newCosts };
+                                });
+                              }}
+                              className="w-full text-right h-8 ml-auto"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-brand-warning tabular-nums">
+                            {fmtC((mcost.quantidade || 0) * (mcost.valor_unitario || 0))}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => {
+                                setForm(prev => {
+                                  const newCosts = [...prev.monthly_costs];
+                                  newCosts.splice(idx, 1);
+                                  return { ...prev, monthly_costs: newCosts };
+                                });
+                              }} 
+                              className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-bg-deep/30 border-t-2 border-border-subtle font-semibold text-text-primary">
+                      <tr>
+                        <td colSpan={4} className="px-4 py-3 text-right text-text-muted">Total:</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
+                          {fmtC(form.monthly_costs.reduce((sum, c) => sum + ((c.quantidade || 0) * (c.valor_unitario || 0)), 0))}
+                        </td>
                         <td></td>
                       </tr>
                     </tfoot>

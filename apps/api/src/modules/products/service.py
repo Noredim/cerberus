@@ -48,17 +48,24 @@ class ProductService:
         self.db.refresh(product)
         return product
 
-    def get_product(self, tenant_id: str, product_id: str) -> Optional[Product]:
-        product = self.db.query(Product).filter(
+    def get_product(self, tenant_id: str, product_id: str, company_id: Optional[str] = None) -> Optional[Product]:
+        query = self.db.query(Product).filter(
             Product.id == product_id,
             Product.tenant_id == tenant_id
-        ).first()
+        )
+        if company_id:
+            query = query.filter(Product.company_id == company_id)
+            
+        product = query.first()
         if product:
             self._attach_benefits(product)
         return product
 
-    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[Product]:
+    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None) -> List[Product]:
         query = self.db.query(Product).filter(Product.tenant_id == tenant_id)
+        
+        if company_id:
+            query = query.filter(Product.company_id == company_id)
         
         if q:
             q_clean = re.sub(r'\D', '', q)
@@ -78,8 +85,8 @@ class ProductService:
             self._attach_benefits(p)
         return products
 
-    def update_product(self, tenant_id: str, product_id: str, payload: ProductUpdate) -> Optional[Product]:
-        product = self.get_product(tenant_id, product_id)
+    def update_product(self, tenant_id: str, product_id: str, payload: ProductUpdate, company_id: Optional[str] = None) -> Optional[Product]:
+        product = self.get_product(tenant_id, product_id, company_id)
         if not product:
             return None
         
@@ -109,8 +116,8 @@ class ProductService:
         self.db.refresh(product)
         return product
 
-    def delete_product(self, tenant_id: str, product_id: str) -> bool:
-        product = self.get_product(tenant_id, product_id)
+    def delete_product(self, tenant_id: str, product_id: str, company_id: Optional[str] = None) -> bool:
+        product = self.get_product(tenant_id, product_id, company_id)
         if not product:
             return False
         

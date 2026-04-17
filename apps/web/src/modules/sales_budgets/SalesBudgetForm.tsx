@@ -2545,14 +2545,18 @@ export function SalesBudgetForm() {
           const diretor_saldo = diretor_rec_liq - diretor_comissao;
           const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
 
-          // Using exact payback loop simulation to avoid any math mismatch
-          const diretor_roi = paybackDecimal > 0 ? paybackDecimal : ((prazoContratoMeses || 1) + 1); // fallback if it never pays off
-
           // ROI Final = Custo Aquisição / (Mensal Locação - Custo Op. Mensal - Imposto Mensal)
           // Fórmula direta conforme definição: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
           const _roiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal;
           const base_roi = _roiDenominador > 0
             ? rentalTotals.investimento / _roiDenominador
+            : ((prazoContratoMeses || 1) + 1);
+
+          // O card do ROI final dentro do card de Consolidação Diretoria deve seguir a mesma lógica
+          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comissão rec/liq.
+          const _diretorRoiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal - comissao_mensal_calc;
+          const diretor_roi = _diretorRoiDenominador > 0 
+            ? rentalTotals.investimento / _diretorRoiDenominador 
             : ((prazoContratoMeses || 1) + 1);
 
 
@@ -2900,7 +2904,7 @@ export function SalesBudgetForm() {
                         <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
                       </div>
                     }>
-                      <div className="col-span-2 p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
+                      <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
                         <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
                           ROI Final
                           <HelpCircle className="w-3" />
@@ -2910,6 +2914,41 @@ export function SalesBudgetForm() {
                         </p>
                       </div>
                     </Tooltip>
+
+                    {/* MKP Geral */}
+                    {(() => {
+                      const mkpDivisor = rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal;
+                      const mkpGeral = mkpDivisor > 0 ? rentalTotals.faturamentoTotal / mkpDivisor : 0;
+                      return (
+                        <Tooltip content={
+                          <div className="w-72 space-y-2 text-gray-200">
+                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">MKP Geral (Markup Global)</div>
+                            <div className="text-[11px] space-y-1">
+                              <div className="flex justify-between"><span>Faturamento Total:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span></div>
+                              <div className="flex justify-between"><span>Custo Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                              <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
+                              <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
+                              <div className="border-t border-gray-600 pt-1 mt-1 flex justify-between font-bold">
+                                <span>Divisor:</span><span className="text-white">{fmt(mkpDivisor)}</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1">
+                              MKP = Faturamento / (Custo Aq. + Impostos + Custo Op.)
+                            </div>
+                          </div>
+                        }>
+                          <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                              MKP Geral
+                              <HelpCircle className="w-3" />
+                            </span>
+                            <p className={`text-lg font-black ${mkpGeral >= 1 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              {mkpGeral.toFixed(4)}
+                            </p>
+                          </div>
+                        </Tooltip>
+                      );
+                    })()}
 
                   </div>
                 </div>
