@@ -1,0 +1,403 @@
+diff a/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx b/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx	(rejected hunks)
+@@ -509,9 +708,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+       } else {
+         navigate('/cadastros/kits');
+       }
+-    } catch (error) {
++    } catch (error: any) {
+       console.error("Error saving kit", error);
+-      alert("Erro ao salvar kit. Verifique se o prazo de carência não ├® maior que o de contrato.");
++      if (error.response?.data?.detail) {
++        setAlertMessage(error.response.data.detail);
++      } else {
++        setAlertMessage("Erro ao salvar kit. Verifique se o prazo de carência não ├® maior que o de contrato.");
++      }
+     }
+   };
+ 
+@@ -640,166 +847,236 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+ 
+           return (
+             <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-6 transition-all">
+-              <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
++              {/* Header row */}
++              <div 
++                className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
++                onClick={() => setIsCalcExpanded(!isCalcExpanded)}
++              >
+                 <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
+                   <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo — Venda de Equipamentos
+                 </h3>
+-                {isCalculating ? (
+-                  <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
+-                    <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
+-                  </span>
+-                ) : (
+-                  <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+-                )}
++                <div className="flex items-center gap-3">
++                  {isCalculating ? (
++                    <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
++                      <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
++                    </span>
++                  ) : (
++                    <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
++                  )}
++                  <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
++                    {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
++                  </button>
++                </div>
+               </div>
+ 
+-              {/* Row 1 — Custos e vendas por bloco */}
+-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+-                {/* Custo de Aquisição */}
+-                <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+-                  <div className="text-xl font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 space-x-2 truncate">
+-                    <span title="Bloco 4 ÔÇô Itens">B4: {fmtC(custoB4)}</span>
+-                    <span>┬À</span>
+-                    <span title="Bloco 5 ÔÇô Instalação">B5: {fmtC(custoB5)}</span>
+-                    <span>┬À</span>
+-                    <span title={`Bloco 6 ÔÇô ${fmtC(custoB6)}/mês ├ù ${qtdMeses}m`}>B6: {fmtC(custoB6Total)}</span>
+-                  </div>
+-                </div>
++              {isCalcExpanded && (
++                <>
++                  {/* Persistent Policy Panel — always visible */}
++                  <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
++                    {/* Panel header */}
++                    <div className="flex items-center justify-between px-3 py-1.5 bg-bg-subtle border-b border-border-subtle">
++                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Política Comercial</span>
++                      {activePolicy && (
++                        <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
++                          {activePolicy.nome_politica} — {activePolicy.comissao_percentual}% comissão
++                        </span>
++                      )}
++                    </div>
+ 
+-                {/* Total da Venda (B4 + B5) */}
+-                <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
+-                  <div className="text-xl font-bold text-brand-primary">{fmtC(totalVenda)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 truncate">
+-                    <span title="Itens (B4)">Itens: {fmtC(vendaB4)}</span>
+-                    {vendaB5 > 0 && <><span> ┬À </span><span title="Instalação (B5)">Inst: {fmtC(vendaB5)}</span></>}
+-                  </div>
+-                  {impostosB45 > 0 && (
+-                    <Tooltip content={
+-                      <div className="w-72 space-y-2 text-gray-200 p-1">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
+-                        {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
+-                          <div key={t.label} className="flex justify-between text-xs">
+-                            <span>{t.label}</span><span className="text-rose-300">{fmtC(t.total)}</span>
+-                          </div>
+-                        ))}
+-                        <div className="border-t border-gray-600 pt-1 flex justify-between font-bold text-xs">
+-                          <span>Total Impostos</span><span className="text-rose-400">{fmtC(impostosB45)}</span>
+-                        </div>
++                    {/* Tier list — three states: loading, empty, populated */}
++                    {!policiesLoaded ? (
++                      <div className="flex items-center gap-2 px-3 py-2">
++                        <div className="w-3 h-3 rounded-full border-2 border-brand-primary border-t-transparent animate-spin shrink-0" />
++                        <span className="text-[10px] text-text-muted">Carregando políticas...</span>
+                       </div>
+-                    }>
+-                      <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+-                        Imp: {fmtC(impostosB45)}
+-                      </span>
+-                    </Tooltip>
+-                  )}
+-                </div>
+-
+-                {/* Total de Manutenção (B6 ├ù meses) */}
+-                <div className={`border rounded-xl p-4 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manutenção</span>
+-                  <div className="text-xl font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 truncate">
+-                    {fmtC(vendaMensalB6)}/mês ├ù {qtdMeses || '—'} meses
++                    ) : userPolicies.length === 0 ? (
++                      <div className="px-3 py-2">
++                        <span className="text-[10px] text-text-muted italic">Nenhuma política comercial configurada para esta empresa.</span>
++                      </div>
++                    ) : (
++                      <div className="flex items-stretch divide-x divide-border-subtle">
++                        {userPolicies.map((p: any) => {
++                          const isActive = activePolicy?.id === p.id;
++                          const fatorAtual = Number(form.fator_margem_locacao);
++                          const nextTier = userPolicies.find((np: any) => Number(np.fator_limite) > Number(p.fator_limite));
++                          const rangeLabel = nextTier
++                            ? `${Number(p.fator_limite).toFixed(2)} Ôëñ x < ${Number(nextTier.fator_limite).toFixed(2)}`
++                            : `ÔëÑ ${Number(p.fator_limite).toFixed(2)}`;
++                          return (
++                            <div
++                              key={p.id}
++                              className={`flex-1 px-3 py-2 transition-colors ${isActive
++                                  ? 'bg-brand-primary/8 border-t-2 border-t-brand-primary'
++                                  : 'bg-bg-surface opacity-60'
++                                }`}
++                            >
++                              <p className={`text-[10px] font-bold uppercase tracking-wide truncate mb-0.5 ${isActive ? 'text-brand-primary' : 'text-text-muted'}`}>
++                                {p.nome_politica}
++                              </p>
++                              <p className={`text-xs font-bold tabular-nums ${isActive ? 'text-text-primary' : 'text-text-muted'}`}>
++                                {Number(p.comissao_percentual).toFixed(2)}%
++                              </p>
++                              <p className="text-[9px] text-text-muted mt-0.5 truncate">{rangeLabel}</p>
++                            </div>
++                          );
++                        })}
++                      </div>
++                    )}
+                   </div>
+-                  {impostosMensalB6 > 0 && (
+-                    <Tooltip content={
+-                      <div className="w-80 space-y-2 text-gray-200 p-1">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Manutenção (B6)</div>
+-                        <div className="grid grid-cols-3 text-[10px] font-bold text-gray-400 mb-1">
+-                          <span>Imposto</span><span className="text-right">Mensal</span><span className="text-right">Total ({qtdMeses}m)</span>
+-                        </div>
+-                        {Object.values(taxLabelB6).filter(t => t.mensal > 0).map(t => (
+-                          <div key={t.label} className="grid grid-cols-3 text-xs">
+-                            <span>{t.label}</span>
+-                            <span className="text-right text-rose-300">{fmtC(t.mensal)}</span>
+-                            <span className="text-right text-rose-400">{fmtC(t.total)}</span>
+-                          </div>
+-                        ))}
+-                        <div className="border-t border-gray-600 pt-1 grid grid-cols-3 font-bold text-xs">
+-                          <span>Total</span>
+-                          <span className="text-right text-rose-300">{fmtC(impostosMensalB6)}</span>
+-                          <span className="text-right text-rose-400">{fmtC(impostosMensalB6 * qtdMeses)}</span>
+-                        </div>
++
++                  {/* Row 1 — Custos e vendas por bloco */}
++
++                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
++                    {/* Custo de Aquisição */}
++                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
++                      <div className="text-xl font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 space-x-2 truncate">
++                        <span title="Bloco 4 ÔÇô Itens">B4: {fmtC(custoB4)}</span>
++                        <span>┬À</span>
++                        <span title="Bloco 5 ÔÇô Instalação">B5: {fmtC(custoB5)}</span>
++                        <span>┬À</span>
++                        <span title={`Bloco 6 ÔÇô ${fmtC(custoB6)}/mês ├ù ${qtdMeses}m`}>B6: {fmtC(custoB6Total)}</span>
+                       </div>
+-                    }>
+-                      <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+-                        Imp/mês: {fmtC(impostosMensalB6)}
+-                      </span>
+-                    </Tooltip>
+-                  )}
+-                  {!form.havera_manutencao && (
+-                    <span className="text-[10px] text-brand-warning mt-1 font-semibold">
+-                      Inativo ("Haverá Manutenção" desmarcado)
+-                    </span>
+-                  )}
+-                </div>
++                    </div>
+ 
+-                {/* Faturamento Total */}
+-                <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden">
+-                  <div className="absolute top-0 right-0 w-20 h-20 bg-brand-primary/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+-                  <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
+-                  <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
+-                  <div className="text-[10px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
+-                    <span>Venda {form.havera_manutencao && `+ Manutenção (${qtdMeses || '—'}m)`}</span>
+-                  </div>
+-                </div>
+-              </div>
++                    {/* Total da Venda (B4 + B5) */}
++                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
++                      <div className="text-xl font-bold text-brand-primary">{fmtC(totalVenda)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 truncate">
++                        <span title="Itens (B4)">Itens: {fmtC(vendaB4)}</span>
++                        {vendaB5 > 0 && <><span> ┬À </span><span title="Instalação (B5)">Inst: {fmtC(vendaB5)}</span></>}
++                      </div>
++                      {impostosB45 > 0 && (
++                        <Tooltip content={
++                          <div className="w-72 space-y-2 text-gray-200 p-1">
++                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
++                            {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
++                              <div key={t.label} className="flex justify-between text-xs">
++                                <span>{t.label}</span><span className="text-rose-300">{fmtC(t.total)}</span>
++                              </div>
++                            ))}
++                            <div className="border-t border-gray-600 pt-1 flex justify-between font-bold text-xs">
++                              <span>Total Impostos</span><span className="text-rose-400">{fmtC(impostosB45)}</span>
++                            </div>
++                          </div>
++                        }>
++                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
++                            Imp: {fmtC(impostosB45)}
++                          </span>
++                        </Tooltip>
++                      )}
++                    </div>
+ 
+-              {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
+-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
+-                {/* Lucro da Venda */}
+-                <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro da Venda (Fechamento)</span>
+-                    <div className={`text-xl font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
++                    {/* Total de Manutenção (B6 ├ù meses) */}
++                    <div className={`border rounded-xl p-4 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manutenção</span>
++                      <div className="text-xl font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 truncate">
++                        {fmtC(vendaMensalB6)}/mês ├ù {qtdMeses || '—'} meses
++                      </div>
++                      {impostosMensalB6 > 0 && (
++                        <Tooltip content={
++                          <div className="w-80 space-y-2 text-gray-200 p-1">
++                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Manutenção (B6)</div>
++                            <div className="grid grid-cols-3 text-[10px] font-bold text-gray-400 mb-1">
++                              <span>Imposto</span><span className="text-right">Mensal</span><span className="text-right">Total ({qtdMeses}m)</span>
++                            </div>
++                            {Object.values(taxLabelB6).filter(t => t.mensal > 0).map(t => (
++                              <div key={t.label} className="grid grid-cols-3 text-xs">
++                                <span>{t.label}</span>
++                                <span className="text-right text-rose-300">{fmtC(t.mensal)}</span>
++                                <span className="text-right text-rose-400">{fmtC(t.total)}</span>
++                              </div>
++                            ))}
++                            <div className="border-t border-gray-600 pt-1 grid grid-cols-3 font-bold text-xs">
++                              <span>Total</span>
++                              <span className="text-right text-rose-300">{fmtC(impostosMensalB6)}</span>
++                              <span className="text-right text-rose-400">{fmtC(impostosMensalB6 * qtdMeses)}</span>
++                            </div>
++                          </div>
++                        }>
++                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
++                            Imp/mês: {fmtC(impostosMensalB6)}
++                          </span>
++                        </Tooltip>
++                      )}
++                      {!form.havera_manutencao && (
++                        <span className="text-[10px] text-brand-warning mt-1 font-semibold">
++                          Inativo ("Haverá Manutenção" desmarcado)
++                        </span>
++                      )}
+                     </div>
+-                    <div className="text-[10px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
+-                      <span>Fat. <span className="text-text-muted font-semibold">{fmtC(totalVenda)}</span></span>
+-                      <span>Custo Aq. <span className="text-text-muted font-semibold">{fmtC(custoB4 + custoB5)}</span></span>
+-                      <span>Impostos <span className="text-rose-400 font-semibold">{fmtC(impostosB45)}</span></span>
+-                      <span>Desp. Venda <span className="text-text-muted font-semibold">{fmtC(despVenda)}</span></span>
++
++                    {/* Faturamento Total */}
++                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden">
++                      <div className="absolute top-0 right-0 w-20 h-20 bg-brand-primary/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
++                      <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
++                      <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
++                      <div className="text-[10px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
++                        <span>Venda {form.havera_manutencao && `+ Manutenção (${qtdMeses || '—'}m)`}</span>
++                      </div>
+                     </div>
+                   </div>
+-                  <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+-                    <span className="text-lg font-black">{margemVenda.toFixed(1)}%</span>
+-                  </div>
+-                </div>
+ 
+-                {/* Lucro Manutenção 12m */}
+-                <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manutenção (12 meses)</span>
+-                    <div className={`text-xl font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      {fmtC(lucroMensalB6)}/mês projetado em 12m
++                  {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
++                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
++                    {/* Lucro da Venda */}
++                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro da Venda (Fechamento)</span>
++                        <div className={`text-xl font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
++                        </div>
++                        <div className="text-[10px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
++                          <span>Fat. <span className="text-text-muted font-semibold">{fmtC(totalVenda)}</span></span>
++                          <span>Custo Aq. <span className="text-text-muted font-semibold">{fmtC(custoB4 + custoB5)}</span></span>
++                          <span>Impostos <span className="text-rose-400 font-semibold">{fmtC(impostosB45)}</span></span>
++                          {((financials?.summary?.credito_icms_compra_total || 0) > 0) && (
++                            <span className="col-span-2">Cr├®d. ICMS <span className="text-brand-success font-semibold">-{fmtC(financials?.summary?.credito_icms_compra_total || 0)}</span></span>
++                          )}
++                          <span>Desp. Venda <span className="text-text-muted font-semibold">{fmtC(despVenda)}</span></span>
++                        </div>
++                      </div>
++                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
++                        <span className="text-lg font-black">{margemVenda.toFixed(1)}%</span>
++                      </div>
+                     </div>
+-                  </div>
+-                  <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+-                    <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
+-                  </div>
+-                </div>
+ 
+-                {/* Fator Geral M├®dia */}
+-                <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
+-                    <div className="text-xl font-black text-text-primary">
+-                      {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
++                    {/* Lucro Manutenção 12m */}
++                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manutenção (12 meses)</span>
++                        <div className={`text-xl font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          {fmtC(lucroMensalB6)}/mês projetado em 12m
++                        </div>
++                      </div>
++                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
++                        <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
++                      </div>
+                     </div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      M├®dia: F. Margem + F. Manut. (Demonstrativo)
++
++                    {/* Fator Geral M├®dia */}
++                    <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
++                        <div className="text-xl font-black text-text-primary">
++                          {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
++                        </div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          M├®dia: F. Margem + F. Manut. (Demonstrativo)
++                        </div>
++                      </div>
+                     </div>
+-                  </div>
+-                </div>
+ 
+-              </div>
++                  </div>
++                </>
++              )}
+             </div>
+           );
+         }
+@@ -1981,7 +2347,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                 <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+                   Bloco 7 ÔÇô Custos Mensais do Contrato
+                 </h2>
+-                <Button variant="secondary" size="sm" type="button" onClick={() => {
++                <Button variant="outline" size="sm" type="button" onClick={() => {
+                   setForm(prev => ({
+                     ...prev,
+                     monthly_costs: [

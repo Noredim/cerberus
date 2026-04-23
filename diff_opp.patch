@@ -1,0 +1,1039 @@
+﻿diff --git a/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx b/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx
+index 359ad45..9ca8351 100644
+--- a/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx
++++ b/apps/web/src/modules/opportunity_kits/OpportunityKitForm.tsx
+@@ -1,31 +1,44 @@
+ import { useEffect, useState, useRef } from 'react';
+ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+ import { useAuth } from '../../contexts/AuthContext';
+-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info } from 'lucide-react';
++import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown } from 'lucide-react';
+ import { Button } from '../../components/ui/Button';
+ import { Input } from '../../components/ui/Input';
+ import { Tooltip } from '../../components/ui/Tooltip';
+ import { api } from '../../services/api';
+ import { ProductSearchModal } from '../../components/modals/ProductSearchModal';
+ import { AddOperationalCostModal } from '../../components/modals/AddOperationalCostModal';
++import Modal from '../../components/modals/Modal';
+ 
+-const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", className = "w-full" }: any) => {
++const Decimal4Input = ({ value, onChange, onBlur, disabled, placeholder = "0.0000", className = "w-full", correctedValue }: any) => {
+   const [localStr, setLocalStr] = useState(Number(value || 0).toFixed(4));
+   const [isFocused, setIsFocused] = useState(false);
+ 
++  // Sync from parent (e.g. when form state changes externally)
+   useEffect(() => {
+     if (!isFocused) {
+       setLocalStr(Number(value || 0).toFixed(4));
+     }
+   }, [value, isFocused]);
+ 
++  // When correctedValue is pushed in by the parent after policy check, update display
++  useEffect(() => {
++    if (correctedValue !== undefined && correctedValue !== null) {
++      setLocalStr(Number(correctedValue).toFixed(4));
++    }
++  }, [correctedValue]);
++
+   const handleBlur = () => {
+     setIsFocused(false);
+     let val = localStr.replace(',', '.');
+     let parsed = parseFloat(val);
+     if (isNaN(parsed)) parsed = 0;
+-    setLocalStr(parsed.toFixed(4));
+-    onChange(parsed);
++    // Don't call onChange yet ÔÇö let the parent's onBlur decide the final value
++    if (onBlur) onBlur(parsed);
++    else {
++      setLocalStr(parsed.toFixed(4));
++      onChange(parsed);
++    }
+   };
+ 
+   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+@@ -138,10 +151,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+ 
+   const [financials, setFinancials] = useState<any>(null);
+   const [isCalculating, setIsCalculating] = useState(false);
++  const [isCalcExpanded, setIsCalcExpanded] = useState(true);
+   const [showProductSearch, setShowProductSearch] = useState(false);
+   const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
+   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
+   const [isKitLoaded, setIsKitLoaded] = useState(!kitId);
++  const [userPolicies, setUserPolicies] = useState<any[]>([]);
++  const [policiesLoaded, setPoliciesLoaded] = useState(false);
++  const [activePolicy, setActivePolicy] = useState<any>(null);
++  const [alertMessage, setAlertMessage] = useState<string | null>(null);
++  // Rich context for the policy violation modal
++  const [policyAlert, setPolicyAlert] = useState<{
++    fieldLabel: string;
++    enteredValue: number;
++    correctedValue: number;
++    policyName: string;
++  } | null>(null);
+ 
+   const [form, setForm] = useState<KitFormValues>({
+     sales_budget_id: sourceBudgetId || undefined,
+@@ -254,7 +279,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+     // But DO overwrite when the user explicitly switches tipo_contrato.
+     const shouldOverwriteTaxes = (!kitId && isKitLoaded) || tipoChanged;
+ 
+-    if (!shouldOverwriteTaxes) return;
++    if (!shouldOverwriteTaxes) return; // Guard: only prefill for new kits or on tipo_contrato change
+ 
+     api.get(`/companies/${activeCompanyId}/sales-parameters`).then(res => {
+       const p = res.data;
+@@ -288,8 +313,108 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+         } : {}),
+       }));
+     }).catch(err => console.error('Failed to load sales parameters', err));
++  }, [kitId, form.tipo_contrato, activeCompanyId, isKitLoaded]);
++
++  // ÔöÇÔöÇ Policy loading ÔÇö ALWAYS runs, independent of shouldOverwriteTaxes guard ÔöÇÔöÇ
++  // BUG FIX: previously this lived inside the prefill effect above. The
++  // `if (!shouldOverwriteTaxes) return` guard was killing the whole effect for
++  // existing kits, so setPoliciesLoaded(true) was never called and the
++  // "Carregando pol├¡ticas..." spinner looped forever.
++  useEffect(() => {
++    if (!activeCompanyId) return;
++
++    const shouldOverwriteTaxes = !kitId && isKitLoaded;
++
++    const loadPolicies = async () => {
++      setPoliciesLoaded(false);
++      try {
++        // Use the user-scoped endpoint so limits reflect the logged-in user's
++        // role (cargo), not every tier configured for the company.
++        // The admin endpoint /{id}/commercial-policies returns ALL tiers and
++        // was causing minAllowed to be the company-wide minimum (e.g. 1.0)
++        // instead of what the user's role actually permits (e.g. 1.71).
++        const res = await api.get(`/companies/commercial-policies/me`);
++        const policies = (res.data || []).filter((p: any) => p.ativo);
++        const sorted = [...policies].sort((a: any, b: any) => Number(a.fator_limite) - Number(b.fator_limite));
++        setUserPolicies(sorted);
++
++        if (sorted.length > 0) {
++          const minAllowed = Number(sorted[0].fator_limite);
++          const defaultPolicy: any = sorted.find((p: any) => p.is_default) ?? sorted[0];
++
++          setForm(prev => {
++            const updates: any = {};
++
++            if (shouldOverwriteTaxes && defaultPolicy && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
++              const defaultFator = Number(defaultPolicy.fator_limite);
++              updates.fator_margem_locacao = defaultFator;
++              updates.fator_margem_instalacao = defaultFator;
++              updates.fator_margem_manutencao = defaultFator;
++              updates.fator_margem_servicos_produtos = defaultFator;
++              updates.taxa_manutencao_anual = defaultPolicy.manutencao_ano_percentual ?? 0;
++              updates.perc_comissao = defaultPolicy.comissao_percentual ?? 0;
++            } else {
++              if (Number(prev.fator_margem_locacao) < minAllowed) updates.fator_margem_locacao = minAllowed;
++              if (Number(prev.fator_margem_instalacao) < minAllowed) updates.fator_margem_instalacao = minAllowed;
++              if (Number(prev.fator_margem_manutencao) < minAllowed) updates.fator_margem_manutencao = minAllowed;
++              if (Number(prev.fator_margem_servicos_produtos) < minAllowed) updates.fator_margem_servicos_produtos = minAllowed;
++              if (prev.fator_manutencao && Number(prev.fator_manutencao) < minAllowed) updates.fator_manutencao = minAllowed;
++            }
++
++            const currentFator = Number(updates.fator_margem_locacao ?? prev.fator_margem_locacao);
++            const applicable = sorted
++              .filter((p: any) => Number(p.fator_limite) <= currentFator + 0.00001)
++              .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
++
++            if (applicable) {
++              setTimeout(() => setActivePolicy(applicable), 0);
++              if (!shouldOverwriteTaxes && updates.perc_comissao === undefined) {
++                updates.perc_comissao = applicable.comissao_percentual;
++              }
++            }
++
++            return { ...prev, ...updates };
++          });
++        }
++      } catch (err) {
++        console.error('Failed to load company policies', err);
++      } finally {
++        setPoliciesLoaded(true);
++      }
++    };
++
++    loadPolicies();
+   }, [kitId, form.tipo_contrato, activeCompanyId]);
+ 
++
++  // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
++  // Effect 1: Detect which tier the current factor falls into.
++  // Runs on every fator_margem_locacao change (committed value, after blur).
++  useEffect(() => {
++    if (!userPolicies || userPolicies.length === 0) return;
++
++    const fator = Number(form.fator_margem_locacao);
++    if (!fator || fator <= 0) return;
++
++    const applicable = userPolicies
++      .filter((p: any) => Number(p.fator_limite) <= fator + 0.00001)
++      .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0] ?? null;
++
++    setActivePolicy(applicable);
++  }, [form.fator_margem_locacao, userPolicies]);
++
++  // Effect 2: Sync commission when the active tier changes (tier ID changed).
++  // Separated from Effect 1 to avoid nested state setter anti-pattern.
++  useEffect(() => {
++    if (!activePolicy) return;
++    setForm(prev => {
++      const incoming = Number(activePolicy.comissao_percentual);
++      if (Number(prev.perc_comissao) === incoming) return prev; // no-op if already correct
++      return { ...prev, perc_comissao: incoming };
++    });
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [activePolicy?.id]); // Only fires when the TIER changes, not on every form render
++
+   useEffect(() => {
+     if (timerRef.current) clearTimeout(timerRef.current);
+     timerRef.current = setTimeout(() => {
+@@ -349,6 +474,58 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+     setForm(prev => ({ ...prev, [field]: value }));
+   };
+ 
++  const FACTOR_LABELS: Record<string, string> = {
++    fator_margem_locacao: 'Fator Margem (Produtos / Base)',
++    fator_margem_servicos_produtos: 'Fator Margem Servi├ºos (Produtos)',
++    fator_margem_instalacao: 'Fator Margem Instala├º├úo',
++    fator_margem_manutencao: 'Fator Margem Manuten├º├úo',
++    fator_manutencao: 'Fator Manuten├º├úo',
++  };
++
++  const handleFactorBlur = (fieldName: keyof KitFormValues, value: number) => {
++    // ALWAYS commit the typed value first ÔÇö never leave input in limbo.
++    // This is the single source of truth: the user's intent is respected,
++    // then validated against loaded policies.
++    setForm(prev => ({ ...prev, [fieldName]: value }));
++
++    // If policies aren't loaded yet, skip validation (they'll clamp on load)
++    if (!policiesLoaded || !userPolicies || userPolicies.length === 0) return;
++
++    const minAllowed = Math.min(...userPolicies.map(p => Number(p.fator_limite)));
++    const violatingPolicy = userPolicies.find(p => Number(p.fator_limite) === minAllowed);
++
++    let finalValue = value;
++    if (value < minAllowed - 0.00001) {
++      // Trigger rich policy violation modal
++      setPolicyAlert({
++        fieldLabel: FACTOR_LABELS[fieldName as string] ?? String(fieldName),
++        enteredValue: value,
++        correctedValue: minAllowed,
++        policyName: violatingPolicy?.nome_politica ?? 'Pol├¡tica Comercial',
++      });
++      finalValue = minAllowed;
++    }
++
++    // Commit corrected value
++    setForm(prev => ({ ...prev, [fieldName]: finalValue }));
++
++    // Determine which policy tier applies
++    const applicablePolicy = userPolicies
++      .filter(p => Number(p.fator_limite) <= finalValue + 0.00001)
++      .sort((a, b) => Number(b.fator_limite) - Number(a.fator_limite))[0];
++
++    if (applicablePolicy) {
++      setActivePolicy(applicablePolicy);
++      setForm(prev => ({
++        ...prev,
++        [fieldName]: finalValue,
++        perc_comissao: applicablePolicy.comissao_percentual
++      }));
++    } else {
++      setActivePolicy(null);
++    }
++  };
++
+   const handleAddProduct = (product: any) => {
+     setForm(prev => {
+       // Check if product already exists to simply increment QTY
+@@ -478,6 +655,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+   };
+ 
+   const onSubmit = async () => {
++    // Front-end safety validation
++    if (userPolicies.length > 0) {
++      const minAllowed = Math.min(...userPolicies.map(p => Number(p.fator_limite)));
++      const factorFields: (keyof KitFormValues)[] = [
++        'fator_margem_locacao',
++        'fator_margem_instalacao',
++        'fator_margem_manutencao',
++        'fator_margem_servicos_produtos',
++        'fator_margem_manutencao'
++      ];
++
++      const invalidField = factorFields.find(f => {
++        const val = form[f];
++        return val !== null && val !== undefined && Number(val) > 0 && Number(val) < (minAllowed - 0.0001);
++      });
++
++      if (invalidField) {
++        setAlertMessage(`O campo [${invalidField}] est├í com o fator abaixo do limite permitido (${minAllowed.toFixed(4)}). Por favor, ajuste antes de prosseguir.`);
++        return;
++      }
++    }
++
+     try {
+       const payload = sanitizePayload(form);
+       let savedKit = null;
+@@ -509,9 +708,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+       } else {
+         navigate('/cadastros/kits');
+       }
+-    } catch (error) {
++    } catch (error: any) {
+       console.error("Error saving kit", error);
+-      alert("Erro ao salvar kit. Verifique se o prazo de car├¬ncia n├úo ├® maior que o de contrato.");
++      if (error.response?.data?.detail) {
++        setAlertMessage(error.response.data.detail);
++      } else {
++        setAlertMessage("Erro ao salvar kit. Verifique se o prazo de car├¬ncia n├úo ├® maior que o de contrato.");
++      }
+     }
+   };
+ 
+@@ -569,6 +772,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+ 
+       {/* STICKY TOP HUD */}
+       {(() => {
++        // While the policy-violation modal is open, suppress the HUD entirely ÔÇö
++        // it would show financials computed from an invalid (below-minimum) factor.
++        if (policyAlert) return null;
++
+         const isVenda = form.tipo_contrato === 'VENDA_EQUIPAMENTOS';
+ 
+         if (isVenda) {
+@@ -599,7 +806,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+           const faturamentoTotal = totalVenda + totalManutencao;
+           const lucroVenda = Number(financials?.summary?.lucro_equipamentos || 0);
+           const margemVenda = Number(financials?.summary?.margem_equipamentos || 0);
+-          
++
+           const lucroManutMensal = totalManutencao > 0 ? Number(financials?.summary?.lucro_manutencao || 0) / qtdMeses : 0;
+           const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
+           const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
+@@ -640,166 +847,236 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+ 
+           return (
+             <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-6 transition-all">
+-              <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
++              {/* Header row */}
++              <div 
++                className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
++                onClick={() => setIsCalcExpanded(!isCalcExpanded)}
++              >
+                 <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
+                   <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> C├ílculo Simult├óneo ÔÇö Venda de Equipamentos
+                 </h3>
+-                {isCalculating ? (
+-                  <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
+-                    <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
+-                  </span>
+-                ) : (
+-                  <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+-                )}
++                <div className="flex items-center gap-3">
++                  {isCalculating ? (
++                    <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
++                      <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
++                    </span>
++                  ) : (
++                    <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
++                  )}
++                  <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
++                    {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
++                  </button>
++                </div>
+               </div>
+ 
+-              {/* Row 1 ÔÇö Custos e vendas por bloco */}
+-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+-                {/* Custo de Aquisi├º├úo */}
+-                <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisi├º├úo</span>
+-                  <div className="text-xl font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 space-x-2 truncate">
+-                    <span title="Bloco 4 ÔÇô Itens">B4: {fmtC(custoB4)}</span>
+-                    <span>┬À</span>
+-                    <span title="Bloco 5 ÔÇô Instala├º├úo">B5: {fmtC(custoB5)}</span>
+-                    <span>┬À</span>
+-                    <span title={`Bloco 6 ÔÇô ${fmtC(custoB6)}/m├¬s ├ù ${qtdMeses}m`}>B6: {fmtC(custoB6Total)}</span>
+-                  </div>
+-                </div>
++              {isCalcExpanded && (
++                <>
++                  {/* Persistent Policy Panel ÔÇö always visible */}
++                  <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
++                    {/* Panel header */}
++                    <div className="flex items-center justify-between px-3 py-1.5 bg-bg-subtle border-b border-border-subtle">
++                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Pol├¡tica Comercial</span>
++                      {activePolicy && (
++                        <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
++                          {activePolicy.nome_politica} ÔÇö {activePolicy.comissao_percentual}% comiss├úo
++                        </span>
++                      )}
++                    </div>
+ 
+-                {/* Total da Venda (B4 + B5) */}
+-                <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
+-                  <div className="text-xl font-bold text-brand-primary">{fmtC(totalVenda)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 truncate">
+-                    <span title="Itens (B4)">Itens: {fmtC(vendaB4)}</span>
+-                    {vendaB5 > 0 && <><span> ┬À </span><span title="Instala├º├úo (B5)">Inst: {fmtC(vendaB5)}</span></>}
+-                  </div>
+-                  {impostosB45 > 0 && (
+-                    <Tooltip content={
+-                      <div className="w-72 space-y-2 text-gray-200 p-1">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos ÔÇö Venda (B4 + B5)</div>
+-                        {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
+-                          <div key={t.label} className="flex justify-between text-xs">
+-                            <span>{t.label}</span><span className="text-rose-300">{fmtC(t.total)}</span>
+-                          </div>
+-                        ))}
+-                        <div className="border-t border-gray-600 pt-1 flex justify-between font-bold text-xs">
+-                          <span>Total Impostos</span><span className="text-rose-400">{fmtC(impostosB45)}</span>
+-                        </div>
++                    {/* Tier list ÔÇö three states: loading, empty, populated */}
++                    {!policiesLoaded ? (
++                      <div className="flex items-center gap-2 px-3 py-2">
++                        <div className="w-3 h-3 rounded-full border-2 border-brand-primary border-t-transparent animate-spin shrink-0" />
++                        <span className="text-[10px] text-text-muted">Carregando pol├¡ticas...</span>
+                       </div>
+-                    }>
+-                      <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+-                        Imp: {fmtC(impostosB45)}
+-                      </span>
+-                    </Tooltip>
+-                  )}
+-                </div>
+-
+-                {/* Total de Manuten├º├úo (B6 ├ù meses) */}
+-                <div className={`border rounded-xl p-4 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
+-                  <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manuten├º├úo</span>
+-                  <div className="text-xl font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
+-                  <div className="text-[10px] text-text-muted mt-1 truncate">
+-                    {fmtC(vendaMensalB6)}/m├¬s ├ù {qtdMeses || 'ÔÇö'} meses
++                    ) : userPolicies.length === 0 ? (
++                      <div className="px-3 py-2">
++                        <span className="text-[10px] text-text-muted italic">Nenhuma pol├¡tica comercial configurada para esta empresa.</span>
++                      </div>
++                    ) : (
++                      <div className="flex items-stretch divide-x divide-border-subtle">
++                        {userPolicies.map((p: any) => {
++                          const isActive = activePolicy?.id === p.id;
++                          const fatorAtual = Number(form.fator_margem_locacao);
++                          const nextTier = userPolicies.find((np: any) => Number(np.fator_limite) > Number(p.fator_limite));
++                          const rangeLabel = nextTier
++                            ? `${Number(p.fator_limite).toFixed(2)} Ôëñ x < ${Number(nextTier.fator_limite).toFixed(2)}`
++                            : `ÔëÑ ${Number(p.fator_limite).toFixed(2)}`;
++                          return (
++                            <div
++                              key={p.id}
++                              className={`flex-1 px-3 py-2 transition-colors ${isActive
++                                  ? 'bg-brand-primary/8 border-t-2 border-t-brand-primary'
++                                  : 'bg-bg-surface opacity-60'
++                                }`}
++                            >
++                              <p className={`text-[10px] font-bold uppercase tracking-wide truncate mb-0.5 ${isActive ? 'text-brand-primary' : 'text-text-muted'}`}>
++                                {p.nome_politica}
++                              </p>
++                              <p className={`text-xs font-bold tabular-nums ${isActive ? 'text-text-primary' : 'text-text-muted'}`}>
++                                {Number(p.comissao_percentual).toFixed(2)}%
++                              </p>
++                              <p className="text-[9px] text-text-muted mt-0.5 truncate">{rangeLabel}</p>
++                            </div>
++                          );
++                        })}
++                      </div>
++                    )}
+                   </div>
+-                  {impostosMensalB6 > 0 && (
+-                    <Tooltip content={
+-                      <div className="w-80 space-y-2 text-gray-200 p-1">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos ÔÇö Manuten├º├úo (B6)</div>
+-                        <div className="grid grid-cols-3 text-[10px] font-bold text-gray-400 mb-1">
+-                          <span>Imposto</span><span className="text-right">Mensal</span><span className="text-right">Total ({qtdMeses}m)</span>
+-                        </div>
+-                        {Object.values(taxLabelB6).filter(t => t.mensal > 0).map(t => (
+-                          <div key={t.label} className="grid grid-cols-3 text-xs">
+-                            <span>{t.label}</span>
+-                            <span className="text-right text-rose-300">{fmtC(t.mensal)}</span>
+-                            <span className="text-right text-rose-400">{fmtC(t.total)}</span>
+-                          </div>
+-                        ))}
+-                        <div className="border-t border-gray-600 pt-1 grid grid-cols-3 font-bold text-xs">
+-                          <span>Total</span>
+-                          <span className="text-right text-rose-300">{fmtC(impostosMensalB6)}</span>
+-                          <span className="text-right text-rose-400">{fmtC(impostosMensalB6 * qtdMeses)}</span>
+-                        </div>
++
++                  {/* Row 1 ÔÇö Custos e vendas por bloco */}
++
++                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
++                    {/* Custo de Aquisi├º├úo */}
++                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisi├º├úo</span>
++                      <div className="text-xl font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 space-x-2 truncate">
++                        <span title="Bloco 4 ÔÇô Itens">B4: {fmtC(custoB4)}</span>
++                        <span>┬À</span>
++                        <span title="Bloco 5 ÔÇô Instala├º├úo">B5: {fmtC(custoB5)}</span>
++                        <span>┬À</span>
++                        <span title={`Bloco 6 ÔÇô ${fmtC(custoB6)}/m├¬s ├ù ${qtdMeses}m`}>B6: {fmtC(custoB6Total)}</span>
+                       </div>
+-                    }>
+-                      <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+-                        Imp/m├¬s: {fmtC(impostosMensalB6)}
+-                      </span>
+-                    </Tooltip>
+-                  )}
+-                  {!form.havera_manutencao && (
+-                    <span className="text-[10px] text-brand-warning mt-1 font-semibold">
+-                      Inativo ("Haver├í Manuten├º├úo" desmarcado)
+-                    </span>
+-                  )}
+-                </div>
++                    </div>
+ 
+-                {/* Faturamento Total */}
+-                <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden">
+-                  <div className="absolute top-0 right-0 w-20 h-20 bg-brand-primary/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+-                  <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
+-                  <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
+-                  <div className="text-[10px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
+-                    <span>Venda {form.havera_manutencao && `+ Manuten├º├úo (${qtdMeses || 'ÔÇö'}m)`}</span>
+-                  </div>
+-                </div>
+-              </div>
++                    {/* Total da Venda (B4 + B5) */}
++                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
++                      <div className="text-xl font-bold text-brand-primary">{fmtC(totalVenda)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 truncate">
++                        <span title="Itens (B4)">Itens: {fmtC(vendaB4)}</span>
++                        {vendaB5 > 0 && <><span> ┬À </span><span title="Instala├º├úo (B5)">Inst: {fmtC(vendaB5)}</span></>}
++                      </div>
++                      {impostosB45 > 0 && (
++                        <Tooltip content={
++                          <div className="w-72 space-y-2 text-gray-200 p-1">
++                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos ÔÇö Venda (B4 + B5)</div>
++                            {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
++                              <div key={t.label} className="flex justify-between text-xs">
++                                <span>{t.label}</span><span className="text-rose-300">{fmtC(t.total)}</span>
++                              </div>
++                            ))}
++                            <div className="border-t border-gray-600 pt-1 flex justify-between font-bold text-xs">
++                              <span>Total Impostos</span><span className="text-rose-400">{fmtC(impostosB45)}</span>
++                            </div>
++                          </div>
++                        }>
++                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
++                            Imp: {fmtC(impostosB45)}
++                          </span>
++                        </Tooltip>
++                      )}
++                    </div>
+ 
+-              {/* Row 2 ÔÇö Fechamento: Lucro da Venda + Lucro Manuten├º├úo 12m */}
+-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
+-                {/* Lucro da Venda */}
+-                <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro da Venda (Fechamento)</span>
+-                    <div className={`text-xl font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
++                    {/* Total de Manuten├º├úo (B6 ├ù meses) */}
++                    <div className={`border rounded-xl p-4 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
++                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manuten├º├úo</span>
++                      <div className="text-xl font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
++                      <div className="text-[10px] text-text-muted mt-1 truncate">
++                        {fmtC(vendaMensalB6)}/m├¬s ├ù {qtdMeses || 'ÔÇö'} meses
++                      </div>
++                      {impostosMensalB6 > 0 && (
++                        <Tooltip content={
++                          <div className="w-80 space-y-2 text-gray-200 p-1">
++                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos ÔÇö Manuten├º├úo (B6)</div>
++                            <div className="grid grid-cols-3 text-[10px] font-bold text-gray-400 mb-1">
++                              <span>Imposto</span><span className="text-right">Mensal</span><span className="text-right">Total ({qtdMeses}m)</span>
++                            </div>
++                            {Object.values(taxLabelB6).filter(t => t.mensal > 0).map(t => (
++                              <div key={t.label} className="grid grid-cols-3 text-xs">
++                                <span>{t.label}</span>
++                                <span className="text-right text-rose-300">{fmtC(t.mensal)}</span>
++                                <span className="text-right text-rose-400">{fmtC(t.total)}</span>
++                              </div>
++                            ))}
++                            <div className="border-t border-gray-600 pt-1 grid grid-cols-3 font-bold text-xs">
++                              <span>Total</span>
++                              <span className="text-right text-rose-300">{fmtC(impostosMensalB6)}</span>
++                              <span className="text-right text-rose-400">{fmtC(impostosMensalB6 * qtdMeses)}</span>
++                            </div>
++                          </div>
++                        }>
++                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
++                            Imp/m├¬s: {fmtC(impostosMensalB6)}
++                          </span>
++                        </Tooltip>
++                      )}
++                      {!form.havera_manutencao && (
++                        <span className="text-[10px] text-brand-warning mt-1 font-semibold">
++                          Inativo ("Haver├í Manuten├º├úo" desmarcado)
++                        </span>
++                      )}
+                     </div>
+-                    <div className="text-[10px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
+-                      <span>Fat. <span className="text-text-muted font-semibold">{fmtC(totalVenda)}</span></span>
+-                      <span>Custo Aq. <span className="text-text-muted font-semibold">{fmtC(custoB4 + custoB5)}</span></span>
+-                      <span>Impostos <span className="text-rose-400 font-semibold">{fmtC(impostosB45)}</span></span>
+-                      <span>Desp. Venda <span className="text-text-muted font-semibold">{fmtC(despVenda)}</span></span>
++
++                    {/* Faturamento Total */}
++                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden">
++                      <div className="absolute top-0 right-0 w-20 h-20 bg-brand-primary/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
++                      <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
++                      <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
++                      <div className="text-[10px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
++                        <span>Venda {form.havera_manutencao && `+ Manuten├º├úo (${qtdMeses || 'ÔÇö'}m)`}</span>
++                      </div>
+                     </div>
+                   </div>
+-                  <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+-                    <span className="text-lg font-black">{margemVenda.toFixed(1)}%</span>
+-                  </div>
+-                </div>
+ 
+-                {/* Lucro Manuten├º├úo 12m */}
+-                <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manuten├º├úo (12 meses)</span>
+-                    <div className={`text-xl font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      {fmtC(lucroMensalB6)}/m├¬s projetado em 12m
++                  {/* Row 2 ÔÇö Fechamento: Lucro da Venda + Lucro Manuten├º├úo 12m */}
++                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
++                    {/* Lucro da Venda */}
++                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro da Venda (Fechamento)</span>
++                        <div className={`text-xl font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
++                        </div>
++                        <div className="text-[10px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
++                          <span>Fat. <span className="text-text-muted font-semibold">{fmtC(totalVenda)}</span></span>
++                          <span>Custo Aq. <span className="text-text-muted font-semibold">{fmtC(custoB4 + custoB5)}</span></span>
++                          <span>Impostos <span className="text-rose-400 font-semibold">{fmtC(impostosB45)}</span></span>
++                          {((financials?.summary?.credito_icms_compra_total || 0) > 0) && (
++                            <span className="col-span-2">Cr├®d. ICMS <span className="text-brand-success font-semibold">-{fmtC(financials?.summary?.credito_icms_compra_total || 0)}</span></span>
++                          )}
++                          <span>Desp. Venda <span className="text-text-muted font-semibold">{fmtC(despVenda)}</span></span>
++                        </div>
++                      </div>
++                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
++                        <span className="text-lg font-black">{margemVenda.toFixed(1)}%</span>
++                      </div>
+                     </div>
+-                  </div>
+-                  <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+-                    <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
+-                  </div>
+-                </div>
+ 
+-                {/* Fator Geral M├®dia */}
+-                <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
+-                  <div>
+-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
+-                    <div className="text-xl font-black text-text-primary">
+-                      {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
++                    {/* Lucro Manuten├º├úo 12m */}
++                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manuten├º├úo (12 meses)</span>
++                        <div className={`text-xl font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          {fmtC(lucroMensalB6)}/m├¬s projetado em 12m
++                        </div>
++                      </div>
++                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
++                        <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
++                      </div>
+                     </div>
+-                    <div className="text-[10px] text-text-muted mt-0.5">
+-                      M├®dia: F. Margem + F. Manut. (Demonstrativo)
++
++                    {/* Fator Geral M├®dia */}
++                    <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
++                      <div>
++                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
++                        <div className="text-xl font-black text-text-primary">
++                          {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
++                        </div>
++                        <div className="text-[10px] text-text-muted mt-0.5">
++                          M├®dia: F. Margem + F. Manut. (Demonstrativo)
++                        </div>
++                      </div>
+                     </div>
+-                  </div>
+-                </div>
+ 
+-              </div>
++                  </div>
++                </>
++              )}
+             </div>
+           );
+         }
+@@ -861,20 +1138,55 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+         return (
+           <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-5 transition-all">
+             {/* Header */}
+-            <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
++            <div 
++              className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
++              onClick={() => setIsCalcExpanded(!isCalcExpanded)}
++            >
+               <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center gap-2">
+                 <Calculator className="w-4 h-4 text-brand-primary" />
+                 C├ílculo Simult├óneo ÔÇö {tipoLabel}
+               </h3>
+-              {isCalculating ? (
+-                <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
+-                  <Calculator className="w-3 h-3 animate-pulse" /> Calculando
+-                </span>
+-              ) : (
+-                <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+-              )}
++              <div className="flex items-center gap-3">
++                {isCalculating ? (
++                  <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
++                    <Calculator className="w-3 h-3 animate-pulse" /> Calculando
++                  </span>
++                ) : (
++                  <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
++                )}
++                <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
++                  {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
++                </button>
++              </div>
+             </div>
+ 
++            {isCalcExpanded && (
++              <>
++                {/* Active Policy info row */}
++                {activePolicy ? (
++              <div className="flex items-center gap-3 mb-4 px-3 py-2 bg-brand-primary/5 border border-brand-primary/20 rounded-lg">
++                <div className="w-6 h-6 rounded-full bg-brand-primary flex items-center justify-center shrink-0">
++                  <span className="text-white text-[10px] font-black">P</span>
++                </div>
++                <div className="flex-1 min-w-0">
++                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Pol├¡tica Comercial Ativa</p>
++                  <p className="text-sm font-bold text-brand-primary truncate">{activePolicy.nome_politica}</p>
++                </div>
++                <div className="shrink-0 text-right">
++                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Fator M├¡n.</p>
++                  <p className="text-sm font-bold text-text-primary">{Number(activePolicy.fator_limite).toFixed(4)}</p>
++                </div>
++                <div className="shrink-0 text-right border-l border-brand-primary/20 pl-3">
++                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Comiss├úo</p>
++                  <p className="text-sm font-bold text-brand-primary">{activePolicy.comissao_percentual}%</p>
++                </div>
++              </div>
++            ) : (
++              <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-bg-subtle border border-border-subtle rounded-lg">
++                <span className="text-[10px] text-text-muted italic">Nenhuma pol├¡tica comercial ativa para o seu cargo.</span>
++              </div>
++            )}
++
+             {/* Cards Grid */}
+             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+ 
+@@ -1000,6 +1312,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                           <div className="space-y-1.5 font-mono text-text-muted text-xs">
+                             {(() => {
+                               const baseTributavel = faturamentoMensal;
++                              const creditoIcmsCompra = financials?.summary?.credito_icms_compra_total || 0;
+                               return (
+                                 <>
+                                   {(Number(form.aliq_pis) > 0) && (
+@@ -1038,6 +1351,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                                       <span>{fmtC(baseTributavel * (Number(form.aliq_icms) / 100))}</span>
+                                     </div>
+                                   )}
++                                  {(creditoIcmsCompra > 0) && (
++                                    <div className="flex justify-between text-brand-success mt-1 border-t border-brand-success/20 pt-1">
++                                      <span>Cr├®dito ICMS (Compra)</span>
++                                      <span>-{fmtC(creditoIcmsCompra)}</span>
++                                    </div>
++                                  )}
+                                 </>
+                               );
+                             })()}
+@@ -1071,6 +1390,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+               </div>
+ 
+             </div>
++              </>
++            )}
+           </div>
+         );
+       })()}
+@@ -1165,13 +1486,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                 <label className="block text-sm font-medium mb-1">
+                   {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Fator Margem (Produtos)' : 'Fator Margem'}
+                 </label>
+-                <Decimal4Input value={form.fator_margem_locacao} onChange={(val: number) => handleInputChange('fator_margem_locacao', val)} />
++                <Decimal4Input
++                  value={form.fator_margem_locacao}
++                  onChange={(val: number) => handleInputChange('fator_margem_locacao', val)}
++                  onBlur={(val: number) => handleFactorBlur('fator_margem_locacao', val)}
++                />
+               </div>
+ 
+               {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
+                 <div>
+                   <label className="block text-sm font-medium mb-1">Fator Manuten├º├úo</label>
+-                  <Decimal4Input value={form.fator_manutencao} onChange={(val: number) => handleInputChange('fator_manutencao', val)} placeholder="Ex: 1.7000" />
++                  <Decimal4Input
++                    value={form.fator_manutencao}
++                    onChange={(val: number) => handleInputChange('fator_manutencao', val)}
++                    onBlur={(val: number) => handleFactorBlur('fator_manutencao', val)}
++                    placeholder="Ex: 1.7000"
++                  />
+                 </div>
+               )}
+ 
+@@ -1179,15 +1509,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                 <>
+                   <div>
+                     <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Servi├ºos e Licen├ºas inseridos no Bloco 4.">Fator Margem Servi├ºos (Produtos)</label>
+-                    <Decimal4Input value={form.fator_margem_servicos_produtos} onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)} />
++                    <Decimal4Input
++                      value={form.fator_margem_servicos_produtos}
++                      onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
++                      onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
++                    />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-medium mb-1">Fator Margem Instala├º├úo</label>
+-                    <Decimal4Input value={form.fator_margem_instalacao} onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)} />
++                    <Decimal4Input
++                      value={form.fator_margem_instalacao}
++                      onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)}
++                      onBlur={(val: number) => handleFactorBlur('fator_margem_instalacao', val)}
++                    />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-medium mb-1">Fator Margem Manuten├º├úo</label>
+-                    <Decimal4Input value={form.fator_margem_manutencao} onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)} />
++                    <Decimal4Input
++                      value={form.fator_margem_manutencao}
++                      onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)}
++                      onBlur={(val: number) => handleFactorBlur('fator_margem_manutencao', val)}
++                    />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>
+@@ -1331,7 +1673,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                 {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && form.items.length > 0 && (
+                   <Button variant="outline" size="sm" onClick={() => {
+                     if (!form.forma_execucao) {
+-                      alert('Selecione a Forma de Execu├º├úo no bloco Informa├º├Áes Gerais antes de incluir Servi├ºos Pr├│prios.');
++                      setAlertMessage('Selecione a Forma de Execu├º├úo no bloco Informa├º├Áes Gerais antes de incluir Servi├ºos Pr├│prios.');
+                       return;
+                     }
+                     setShowItemServiceSearch(true);
+@@ -1447,6 +1789,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                                     </div>
+                                     <div className="space-y-1.5 font-mono text-text-muted">
+                                       <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
++                                      {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
+                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
+                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
+@@ -1652,7 +1995,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                               <div className="flex flex-col gap-0.5">
+                                 <span>{c.descricao_item || 'Servi├ºo'}</span>
+                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
+-                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
++                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
+                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
+                                   </span>
+                                 )}
+@@ -1661,7 +2004,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                             <td className="px-4 py-3 text-text-secondary">{c.tipo_custo === 'INSTALACAO' ? 'Instala├º├úo' : c.tipo_custo}</td>
+                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                               <>
+-                                <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</td>
++                                <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
++                                  <Tooltip content={
++                                    <div className="w-64 text-left">
++                                      <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
++                                        <Info className="w-3.5 h-3.5 text-brand-primary" />
++                                        Detalhamento de Custo
++                                      </div>
++                                      <div className="space-y-1.5 font-mono text-text-muted">
++                                        <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
++                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
++                                        {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
++                                        {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
++                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
++                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
++                                          <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
++                                        </div>
++                                      </div>
++                                    </div>
++                                  }>
++                                    <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
++                                  </Tooltip>
++                                </td>
+                                 <td className="px-2 py-3 text-right tabular-nums">
+                                   <Input
+                                     type="number"
+@@ -1818,7 +2182,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                               <div className="flex flex-col gap-0.5">
+                                 <span>{c.descricao_item || 'Servi├ºo'}</span>
+                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
+-                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
++                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
+                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
+                                   </span>
+                                 )}
+@@ -1836,9 +2200,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                                       </div>
+                                       <div className="space-y-1.5 font-mono text-text-muted">
+                                         <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
++                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                         {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
+                                         {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
+-                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}                                         <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
++                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
++                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                           <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
+                                         </div>
+                                       </div>
+@@ -1981,7 +2347,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                 <h2 className="text-sm font-semibold tracking-tight text-text-primary">
+                   Bloco 7 ÔÇô Custos Mensais do Contrato
+                 </h2>
+-                <Button variant="secondary" size="sm" type="button" onClick={() => {
++                <Button variant="outline" size="sm" type="button" onClick={() => {
+                   setForm(prev => ({
+                     ...prev,
+                     monthly_costs: [
+@@ -2068,7 +2434,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                             />
+                           </td>
+                           <td className="px-4 py-2">
+-                            <Decimal4Input 
++                            <Decimal4Input
+                               value={mcost.valor_unitario}
+                               onChange={(val: number) => {
+                                 setForm(prev => {
+@@ -2084,16 +2450,16 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+                             {fmtC((mcost.quantidade || 0) * (mcost.valor_unitario || 0))}
+                           </td>
+                           <td className="px-4 py-2 text-right">
+-                            <Button 
+-                              variant="ghost" 
+-                              size="sm" 
++                            <Button
++                              variant="ghost"
++                              size="sm"
+                               onClick={() => {
+                                 setForm(prev => {
+                                   const newCosts = [...prev.monthly_costs];
+                                   newCosts.splice(idx, 1);
+                                   return { ...prev, monthly_costs: newCosts };
+                                 });
+-                              }} 
++                              }}
+                               className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                             >
+                               <Trash2 className="w-4 h-4" />
+@@ -2141,6 +2507,76 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
+           />
+         </div>
+ 
++        {/* Generic alert modal (non-policy) */}
++        <Modal isOpen={!!alertMessage} onClose={() => setAlertMessage(null)} title="Aviso">
++          <div className="py-2 text-text-secondary">
++            <p className="text-sm leading-relaxed">{alertMessage}</p>
++          </div>
++          <div className="flex justify-end pt-4 mt-4 border-t border-border-subtle">
++            <Button onClick={() => setAlertMessage(null)} className="btn-primary">
++              Entendido
++            </Button>
++          </div>
++        </Modal>
++
++        {/* Rich Policy Violation Modal */}
++        <Modal
++          isOpen={!!policyAlert}
++          onClose={() => setPolicyAlert(null)}
++          title="Viola├º├úo de Pol├¡tica Comercial"
++        >
++          {policyAlert && (
++            <div className="space-y-4">
++              {/* Icon + intro */}
++              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
++                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
++                  <span className="text-red-600 font-bold text-sm">!</span>
++                </div>
++                <div>
++                  <p className="text-sm font-semibold text-red-800">Fator abaixo do limite permitido</p>
++                  <p className="text-xs text-red-700 mt-0.5">
++                    O valor informado viola a Pol├¡tica Comercial vigente e foi automaticamente corrigido.
++                  </p>
++                </div>
++              </div>
++
++              {/* Detail table */}
++              <div className="bg-bg-subtle border border-border-subtle rounded-lg overflow-hidden text-sm">
++                <div className="grid grid-cols-2 divide-x divide-border-subtle">
++                  <div className="p-3">
++                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Campo</p>
++                    <p className="font-semibold text-text-primary">{policyAlert.fieldLabel}</p>
++                  </div>
++                  <div className="p-3">
++                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Pol├¡tica Violada</p>
++                    <p className="font-semibold text-text-primary">{policyAlert.policyName}</p>
++                  </div>
++                </div>
++                <div className="grid grid-cols-2 divide-x divide-border-subtle border-t border-border-subtle">
++                  <div className="p-3">
++                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Valor Informado</p>
++                    <p className="font-bold text-red-600 text-base">{policyAlert.enteredValue.toFixed(4)}</p>
++                  </div>
++                  <div className="p-3">
++                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Corrigido Para</p>
++                    <p className="font-bold text-brand-success text-base">{policyAlert.correctedValue.toFixed(4)}</p>
++                  </div>
++                </div>
++              </div>
++
++              <p className="text-xs text-text-muted">
++                O campo foi automaticamente ajustado para o valor m├¡nimo da pol├¡tica. Para utilizar um fator menor, solicite autoriza├º├úo ao seu gestor.
++              </p>
++
++              <div className="flex justify-end pt-2 border-t border-border-subtle">
++                <Button onClick={() => setPolicyAlert(null)} className="btn-primary">
++                  Entendido
++                </Button>
++              </div>
++            </div>
++          )}
++        </Modal>
++
+       </div>
+     </div>
+   );

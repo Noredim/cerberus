@@ -1,0 +1,118 @@
+diff a/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx b/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx	(rejected hunks)
+@@ -814,7 +851,7 @@ export function SalesBudgetForm() {
+   }, [id]);
+ 
+ 
+-  // ÔöÇÔöÇ Rental item functions ÔöÇÔöÇ
++  // âÔÇØÔé¼âÔÇØÔé¼ Rental item functions âÔÇØÔé¼âÔÇØÔé¼
+   const handleAddRentalItem = (modalOutput: any) => {
+     setHasUnsavedChanges(true);
+     const { product, quantidade, perc_instalacao_item, valor_instalacao_item, cost_composition } = modalOutput;
+@@ -1864,15 +1924,15 @@ export function SalesBudgetForm() {
+                 <Tooltip content={
+                   <div className="w-80 space-y-3 text-gray-200">
+                     <div>
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comissão Venda</div>
+-                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, Receita Líquida ├ù % Receita Líquida)</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comiss├â┬úo Venda</div>
++                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, Receita L├â┬¡quida ├â— % Receita L├â┬¡quida)</div>
+                       <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_comissao_diretoria)}</div>
+                     </div>
+                   </div>
+                 }>
+                   <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                     <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                      Comissão Rec/Liq
++                      Comiss├â┬úo Rec/Liq
+                       <HelpCircle className="w-3 h-3 opacity-50" />
+                     </span>
+                     <p className="text-xl font-bold text-text-primary">{fmt(venda_comissao_diretoria)}</p>
+@@ -1939,23 +2000,23 @@ export function SalesBudgetForm() {
+                   </div>
+                   <Tooltip content={
+                     <div className="w-64 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comissão Padrão</div>
+-                      <div className="text-xs">Comissão informada linha-a-linha na tabela de mercadorias. (Não ├® a comissão da diretoria)</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comiss├â┬úo Padr├â┬úo</div>
++                      <div className="text-xs">Comiss├â┬úo informada linha-a-linha na tabela de mercadorias. (N├â┬úo ├â┬® a comiss├â┬úo da diretoria)</div>
+                     </div>
+                   }>
+                     <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comissão Padrão</span>
++                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comiss├â┬úo Padr├â┬úo</span>
+                       <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.comissao)}</p>
+                     </div>
+                   </Tooltip>
+                   <Tooltip content={
+                     <div className="w-64 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padrão</div>
+-                      <div className="text-xs">Lucro tradicional considerando a comissão padrão e sem deduzir a comissão de diretoria.</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padr├â┬úo</div>
++                      <div className="text-xs">Lucro tradicional considerando a comiss├â┬úo padr├â┬úo e sem deduzir a comiss├â┬úo de diretoria.</div>
+                     </div>
+                   }>
+                     <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padrão</span>
++                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padr├â┬úo</span>
+                       <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
+                     </div>
+                   </Tooltip>
+@@ -2471,7 +2566,7 @@ export function SalesBudgetForm() {
+         </div>
+       </>)}
+ 
+-      {/* ═══ LOCA├ç├âO / COMODATO TAB ═══ */}
++      {/* â•┬Éâ•┬Éâ•┬É LOCA├âÔÇí├âãÆO / COMODATO TAB â•┬Éâ•┬Éâ•┬É */}
+       {activeTab === 'locacao' && (<>
+         {rentalItems.length > 0 && (() => {
+           const diretor_rec_liq = rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal;
+@@ -2623,20 +2718,20 @@ export function SalesBudgetForm() {
+                   <Tooltip content={
+                     <div className="w-80 space-y-3 text-gray-200">
+                       <div>
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instalação</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Total Instalação - Custo Aq. Total de Instalação - Impostos de Instalação</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├â┬º├â┬úo</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Total Instala├â┬º├â┬úo - Custo Aq. Total de Instala├â┬º├â┬úo - Impostos de Instala├â┬º├â┬úo</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_inst_calc)}</div>
+                       </div>
+                       <div>
+                         <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">(Valor Locação Mensal ├ù (Prazo Contrato - Prazo Instalação)) - (Custo Aquisição Total - Custo Aq. Total Instalação) - (Imposto Mensal ├ù (Prazo Contrato - Prazo Instalação)) - Custos Operacionais Totais</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">(Valor Loca├â┬º├â┬úo Mensal ├â— (Prazo Contrato - Prazo Instala├â┬º├â┬úo)) - (Custo Aquisi├â┬º├â┬úo Total - Custo Aq. Total Instala├â┬º├â┬úo) - (Imposto Mensal ├â— (Prazo Contrato - Prazo Instala├â┬º├â┬úo)) - Custos Operacionais Totais</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_mensal_calc)}</div>
+                       </div>
+                     </div>
+                   }>
+                     <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
+                       <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                        Receita Líquida
++                        Receita L├â┬¡quida
+                         <HelpCircle className="w-3 h-3 opacity-50" />
+                       </span>
+                       <p className="text-xl font-bold text-text-primary">{fmt(diretor_rec_liq)}</p>
+@@ -2646,20 +2741,20 @@ export function SalesBudgetForm() {
+                   <Tooltip content={
+                     <div className="w-80 space-y-3 text-gray-200">
+                       <div>
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instalação</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, Receita Líquida de Instalação ├ù % Receita Líquida)</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├â┬º├â┬úo</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, Receita L├â┬¡quida de Instala├â┬º├â┬úo ├â— % Receita L├â┬¡quida)</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_inst_calc)}</div>
+                       </div>
+                       <div>
+                         <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, (Receita Líquida Mensal ├ù % Receita Líquida) / (Prazo Contrato - Prazo Instalação))</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, (Receita L├â┬¡quida Mensal ├â— % Receita L├â┬¡quida) / (Prazo Contrato - Prazo Instala├â┬º├â┬úo))</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_mensal_calc)}</div>
+                       </div>
+                     </div>
+                   }>
+                     <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                       <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                        Comissão Rec/Liq
++                        Comiss├â┬úo Rec/Liq
+                         <HelpCircle className="w-3 h-3 opacity-50" />
+                       </span>
+                       <p className="text-xl font-bold text-text-primary">{fmt(diretor_comissao)}</p>

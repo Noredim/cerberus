@@ -1,0 +1,1311 @@
+﻿diff --git a/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx b/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx
+index b14470b..4a300e1 100644
+--- a/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx
++++ b/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx
+@@ -1,4 +1,4 @@
+-import { useState, useEffect, useMemo } from 'react';
++´╗┐import { useState, useEffect, useMemo } from 'react';
+ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+ import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw } from 'lucide-react';
+ import { Button } from '../../components/ui/Button';
+@@ -31,6 +31,7 @@ interface CostComposition {
+   difal_unitario: number;
+   tipo: string;
+   custo_unit_final: number;
++  icms_abatido?: number;
+ }
+ 
+ const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
+@@ -139,6 +140,7 @@ interface SalesBudgetItem {
+   perc_cofins: number; cofins_unit: number;
+   perc_csll: number; csll_unit: number;
+   perc_irpj: number; irpj_unit: number;
++  icms_abatido_unit?: number;
+   perc_icms: number; icms_unit: number;
+   tem_st: boolean;
+   perc_iss: number; iss_unit: number;
+@@ -441,18 +443,23 @@ export function SalesBudgetForm() {
+   const [percIss, setPercIss] = useState(0);
+   const [percIcmsInterno, setPercIcmsInterno] = useState(0);
+   const [percIcmsExterno, setPercIcmsExterno] = useState(0);
+-  // Venda tab ÔÇö 4 separate fator margem fields
++  // Venda tab ├óÔé¼ÔÇØ 4 separate fator margem fields
+   const [fatorMargemProdutos, setFatorMargemProdutos] = useState(1.35);
+   const [fatorMargemServicos, setFatorMargemServicos] = useState(1.35);
+   const [fatorMargemInstalacao, setFatorMargemInstalacao] = useState(1.35);
+   const [fatorMargemManutencao, setFatorMargemManutencao] = useState(1.35);
++  const [fatorMargemPadrao, setFatorMargemPadrao] = useState(1.35);
++  const [fatorManutencaoPadrao, setFatorManutencaoPadrao] = useState(1.35);
++  const [userPolicies, setUserPolicies] = useState<any[]>([]);
++  const [activePolicy, setActivePolicy] = useState<any>(null);
++  const [minFatorAllowed, setMinFatorAllowed] = useState(0);
+   const [vendaHaveraManutencao, setVendaHaveraManutencao] = useState(false);
+   const [vendaQtdMesesManutencao, setVendaQtdMesesManutencao] = useState(0);
+-  // Controls the tax-detail info modal in Par├ómetros Padr├úo (Venda)
++  // Controls the tax-detail info modal in Par├â┬ómetros Padr├â┬úo (Venda)
+   const [showTaxModal, setShowTaxModal] = useState(false);
+-  // Company _venda taxes ÔÇö always reflects current company config, used only by the modal (read-only)
++  // Company _venda taxes ├óÔé¼ÔÇØ always reflects current company config, used only by the modal (read-only)
+   const [companyVendaTaxes, setCompanyVendaTaxes] = useState({ pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms_interno: 0, icms_externo: 0 });
+-  // Company MKP for Venda ÔÇö drives the 4 fatorMargem fields reactively (race-condition safe)
++  // Company MKP for Venda ├óÔé¼ÔÇØ drives the 4 fatorMargem fields reactively (race-condition safe)
+ 
+   // Items
+   const [items, setItems] = useState<SalesBudgetItem[]>([]);
+@@ -522,8 +529,8 @@ export function SalesBudgetForm() {
+     prazo_instalacao_meses: prazoInstalacaoMeses,
+     taxa_juros_mensal: taxaJurosMensal,
+     taxa_manutencao_anual: taxaManutencaoAnual,
+-    fator_margem_padrao: 1,
+-    fator_manutencao_padrao: 1,
++    fator_margem_padrao: fatorMargemPadrao,
++    fator_manutencao_padrao: fatorManutencaoPadrao,
+     perc_instalacao_padrao: percInstalacaoPadrao,
+     perc_comissao_rental: percComissaoRental,
+     perc_pis_rental: percPisRental,
+@@ -566,7 +573,7 @@ export function SalesBudgetForm() {
+     api.get(`/companies/${activeCompanyId}/sales-parameters`).then(({ data }) => {
+       const pick = (key: string) => Number(data[`${key}_venda`] || data[key] || 0);
+ 
+-      // Mapping for Loca├º├úo de Equipamentos as per requirement
++      // Mapping for Loca├â┬º├â┬úo de Equipamentos as per requirement
+       const mkpLocacao = Number(data.mkp_padrao_locacao || data.mkp_padrao || 1.35);
+       const despAdmLocacao = Number(data.despesa_administrativa_locacao || data.despesa_administrativa || 0);
+       const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
+@@ -581,6 +588,36 @@ export function SalesBudgetForm() {
+         icms_externo: pick('icms_externo'),
+       });
+ 
++      // Fetch Commercial Policies
++      api.get(`/companies/commercial-policies/me`).then(res => {
++        const policies = res.data || [];
++        setUserPolicies(policies);
++        if (policies.length > 0) {
++          const minVal = Math.min(...policies.map((p: any) => Number(p.fator_limite)));
++          setMinFatorAllowed(minVal);
++          
++          // Adjust defaults if they are below the minimum
++          setFatorMargemProdutos(prev => prev < minVal ? minVal : prev);
++          setFatorMargemServicos(prev => prev < minVal ? minVal : prev);
++          setFatorMargemInstalacao(prev => prev < minVal ? minVal : prev);
++          setFatorMargemManutencao(prev => prev < minVal ? minVal : prev);
++          setFatorMargemPadrao(prev => prev < minVal ? minVal : prev);
++          setFatorManutencaoPadrao(prev => prev < minVal ? minVal : prev);
++          setMarkupPadrao(prev => prev < minVal ? minVal : prev);
++
++          // Adjust existing items markup/fator if they are below the minimum
++          setItems(prev => prev.map(i => (i.markup && i.markup > 0 && i.markup < minVal) ? { ...i, markup: minVal } : i));
++          setRentalItems(prev => prev.map(ri => (ri.fator_margem && ri.fator_margem > 0 && ri.fator_margem < minVal) ? { ...ri, fator_margem: minVal } : ri));
++
++          // Set active policy (highest satisfied)
++          // We'll use the main markupPadrao to decide which policy is "active" at load
++          const currentMkp = markupPadrao;
++          const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
++                                     .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
++          if (applicable) setActivePolicy(applicable);
++        }
++      }).catch(err => console.error('Failed to load policies', err));
++
+       // For NEW budgets only: also pre-fill the other editable budget-level defaults
+       if (!isEditing) {
+         setFatorMargemProdutos(mkpLocacao);
+@@ -683,8 +720,8 @@ export function SalesBudgetForm() {
+               lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+               margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+ 
+-              lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
+-              margem_geral: Number(kit.summary?.margem_kit || 0),
++              lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
++              margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+ 
+               havera_manutencao: kit.havera_manutencao,
+               qtd_meses_manutencao: kit.qtd_meses_manutencao,
+@@ -814,7 +851,7 @@ export function SalesBudgetForm() {
+   }, [id]);
+ 
+ 
+-  // ÔöÇÔöÇ Rental item functions ÔöÇÔöÇ
++  // ├óÔÇØÔé¼├óÔÇØÔé¼ Rental item functions ├óÔÇØÔé¼├óÔÇØÔé¼
+   const handleAddRentalItem = (modalOutput: any) => {
+     setHasUnsavedChanges(true);
+     const { product, quantidade, perc_instalacao_item, valor_instalacao_item, cost_composition } = modalOutput;
+@@ -926,8 +963,8 @@ export function SalesBudgetForm() {
+       lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+       margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+ 
+-      lucro_final: Number(kit.summary?.lucro_mensal_kit || 0),
+-      margem_geral: Number(kit.summary?.margem_kit || 0),
++      lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
++      margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+ 
+       summary: kit.summary,
+       kit_raw: kit,
+@@ -977,7 +1014,6 @@ export function SalesBudgetForm() {
+   const proceedApplyKits = async (overriddenParams?: any) => {
+     setSaving(true);
+     setShowApplyKitsModal(false);
+-    console.log('Applying params to kits...', vendaKits.length);
+     try {
+       const updatedKits = [...vendaKits];
+       for (let i = 0; i < updatedKits.length; i++) {
+@@ -989,7 +1025,7 @@ export function SalesBudgetForm() {
+           fator_margem_servicos_produtos: fatorMargemServicos,
+           fator_margem_instalacao: fatorMargemInstalacao,
+           fator_margem_manutencao: fatorMargemManutencao
+-          // RN02: Alterar apenas os campos de par├ómetros financeiros equivalentes
++          // RN02: Alterar apenas os campos de par├â┬ómetros financeiros equivalentes
+         };
+ 
+         let finalKitId = vk.opportunity_kit_id;
+@@ -997,7 +1033,6 @@ export function SalesBudgetForm() {
+         let finalKitData = null;
+ 
+         if (isGlobal) {
+-          console.log(`Cloning global kit ${vk.opportunity_kit_id} for budget ${id}`);
+           const raw = vk.kit_raw || {};
+ 
+           const itemsPayload = (raw.items || []).map((item: any) => ({
+@@ -1050,7 +1085,6 @@ export function SalesBudgetForm() {
+           finalKitId = data.id;
+           finalKitData = data;
+         } else {
+-          console.log(`Updating budget kit ${vk.opportunity_kit_id}`);
+           await api.patch(`/opportunity-kits/${vk.opportunity_kit_id}`, payload);
+           const { data } = await api.get(`/opportunity-kits/${vk.opportunity_kit_id}?include_financials=true`);
+           finalKitId = data.id;
+@@ -1079,8 +1113,8 @@ export function SalesBudgetForm() {
+           lucro_manutencao: Number(finalKitData.summary?.lucro_manutencao || 0),
+           margem_manutencao: Number(finalKitData.summary?.margem_manutencao || 0),
+ 
+-          lucro_final: Number(finalKitData.summary?.lucro_mensal_kit || 0),
+-          margem_geral: Number(finalKitData.summary?.margem_kit || 0),
++          lucro_final: Number(finalKitData.summary?.lucro_equipamentos || 0) + Number(finalKitData.summary?.lucro_manutencao || 0),
++          margem_geral: (Number(finalKitData.summary?.faturamento_total_venda ?? (Number(finalKitData.summary?.venda_equipamentos_total || 0) + Number(finalKitData.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(finalKitData.summary?.lucro_equipamentos || 0) + Number(finalKitData.summary?.lucro_manutencao || 0)) / Number(finalKitData.summary?.faturamento_total_venda ?? (Number(finalKitData.summary?.venda_equipamentos_total || 0) + Number(finalKitData.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+ 
+           summary: finalKitData.summary,
+           kit_raw: finalKitData,
+@@ -1092,11 +1126,11 @@ export function SalesBudgetForm() {
+       const success = await handleSave(true, undefined, updatedKits);
+       if (!success) return;
+ 
+-      alert('Par├ómetros aplicados aos kits com sucesso!');
++      alert('Par├â┬ómetros aplicados aos kits com sucesso!');
+       window.location.reload();
+     } catch (err) {
+       console.error('Failed to apply kit params:', err);
+-      alert('Erro ao aplicar par├ómetros aos kits.');
++      alert('Erro ao aplicar par├â┬ómetros aos kits.');
+     } finally {
+       setSaving(false);
+     }
+@@ -1104,7 +1138,7 @@ export function SalesBudgetForm() {
+ 
+   const handleRefreshParams = async () => {
+     if (!activeCompanyId) return;
+-    if (!window.confirm("Deseja atualizar os par├ómetros com base no cadastro da empresa? Os valores atuais ser├úo substitu├¡dos.")) return;
++    if (!window.confirm("Deseja atualizar os par├â┬ómetros com base no cadastro da empresa? Os valores atuais ser├â┬úo substitu├â┬¡dos.")) return;
+ 
+     try {
+       setSaving(true);
+@@ -1162,7 +1196,7 @@ export function SalesBudgetForm() {
+ 
+     } catch (err) {
+       console.error('Failed to refresh parameters:', err);
+-      alert('Erro ao carregar par├ómetros da empresa.');
++      alert('Erro ao carregar par├â┬ómetros da empresa.');
+     } finally {
+       setSaving(false);
+     }
+@@ -1230,7 +1264,7 @@ export function SalesBudgetForm() {
+       base_fornecedor: 0, total_ipi: 0, total_frete_compra: 0, total_icms_st: 0,
+       // Tax breakdown (sales)
+       total_pis: 0, total_cofins: 0, total_csll: 0,
+-      total_irpj: 0, total_icms: 0, total_iss: 0,
++      total_irpj: 0, total_icms: 0, total_iss: 0, total_credito_icms: 0,
+     };
+     items.forEach(i => {
+       const q = i.quantidade;
+@@ -1238,7 +1272,10 @@ export function SalesBudgetForm() {
+       t.custo += i.custo_unit_base * q;
+       t.venda += i.venda_unit * q;
+       t.frete += i.frete_venda_unit * q;
+-      t.impostos += (i.pis_unit + i.cofins_unit + i.csll_unit + i.irpj_unit + i.icms_unit + i.iss_unit) * q;
++      const impostosBrutos = (i.pis_unit + i.cofins_unit + i.csll_unit + i.irpj_unit + i.icms_unit + i.iss_unit) * q;
++      const creditoIcms = (i.cost_composition?.icms_abatido ?? i.icms_abatido_unit ?? 0) * q;
++      t.impostos += Math.max(0, impostosBrutos - creditoIcms);
++      t.total_credito_icms += creditoIcms;
+       t.despAdm += i.despesa_adm_unit * q;
+       t.comissao += i.comissao_unit * q;
+       t.lucro += i.lucro_unit * q;
+@@ -1374,7 +1411,7 @@ export function SalesBudgetForm() {
+     }
+     const kitIds = Array.from(new Set(rentalItems.filter(ri => ri.opportunity_kit_id).map(ri => ri.opportunity_kit_id)));
+     if (kitIds.length === 0) {
+-      alert("N├úo h├í kits lan├ºados nesta oportunidade para atualizar.");
++      alert("N├â┬úo h├â┬í kits lan├â┬ºados nesta oportunidade para atualizar.");
+       setShowOverwriteModal(false);
+       return;
+     }
+@@ -1436,10 +1473,30 @@ export function SalesBudgetForm() {
+ 
+   const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems, overriddenVendaKits?: typeof vendaKits) => {
+     if (!titulo || !customerId) {
+-      alert('Preencha t├¡tulo e cliente.');
++      alert('Preencha t├â┬¡tulo e cliente.');
+       return false;
+     }
+     setSaving(true);
++    // Policy Validation
++    if (userPolicies.length > 0) {
++      const allFactors: number[] = [
++        +fatorMargemProdutos,
++        +fatorMargemServicos,
++        +fatorMargemInstalacao,
++        +fatorMargemManutencao,
++        +markupPadrao,
++        ...items.map(i => +i.markup),
++        ...rentalItems.map(i => +i.fator_margem)
++      ].filter(f => f !== null && f !== undefined && f > 0);
++      
++      const invalid = allFactors.some(f => f < (minFatorAllowed - 0.0001));
++      if (invalid) {
++        alert(`Aten├â┬º├â┬úo: Existem fatores de margem (markup) abaixo do limite permitido pela sua pol├â┬¡tica comercial (${minFatorAllowed.toFixed(4)}). Por favor, ajuste-os antes de salvar.`);
++        setSaving(false);
++        return false;
++      }
++    }
++
+     try {
+       const payload = {
+         customer_id: customerId,
+@@ -1469,8 +1526,8 @@ export function SalesBudgetForm() {
+         prazo_instalacao_meses: +prazoInstalacaoMeses,
+         taxa_juros_mensal: +taxaJurosMensal,
+         taxa_manutencao_anual: +taxaManutencaoAnual,
+-        fator_margem_padrao: 1,
+-        fator_manutencao_padrao: 1,
++        fator_margem_padrao: +fatorMargemPadrao,
++        fator_manutencao_padrao: +fatorManutencaoPadrao,
+         perc_instalacao_padrao: +percInstalacaoPadrao,
+         perc_comissao_rental: +percComissaoRental,
+         perc_pis_rental: +percPisRental,
+@@ -1489,6 +1546,7 @@ export function SalesBudgetForm() {
+             custo_unit_base: +i.custo_unit_base,
+             markup: +i.markup,
+             quantidade: +i.quantidade,
++            icms_abatido_unit: +(i.cost_composition?.icms_abatido ?? i.icms_abatido_unit ?? 0),
+             perc_frete_venda: +i.perc_frete_venda,
+             perc_pis: +i.perc_pis,
+             perc_cofins: +i.perc_cofins,
+@@ -1507,8 +1565,10 @@ export function SalesBudgetForm() {
+             descricao_servico: vk.nome_kit,
+             usa_parametros_padrao: false,
+             custo_unit_base: +(vk.custo_aquisicao_equip_unit + vk.custo_manutencao_unit),
+-            markup: 1, // Pricing is internal to kit
++            markup: 0, // Using 0 to bypass commercial policy validation as pricing is internal to kit
+             quantidade: +vk.quantidade,
++            override_venda_unit: +vk.faturamento_total,
++            override_lucro_unit: +vk.lucro_final,
+             // Perc values are derived from kit summary but these fields are optional/ignored for kits by the engine
+             perc_frete_venda: 0,
+             perc_pis: 0,
+@@ -1598,7 +1658,7 @@ export function SalesBudgetForm() {
+           }
+         } catch (err) {
+           console.error('Failed to save purchase budget', err);
+-          alert('Erro ao salvar aba de or├ºamento de compra.');
++          alert('Erro ao salvar aba de or├â┬ºamento de compra.');
+         }
+       }
+ 
+@@ -1706,7 +1766,7 @@ export function SalesBudgetForm() {
+           onClick={() => setIsHeaderCollapsed(prev => !prev)}
+         >
+           <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+-            Cabe├ºalho
++            Cabe├â┬ºalho
+             {isHeaderCollapsed
+               ? <ChevronDown className="w-4 h-4 text-text-muted" />
+               : <ChevronUp className="w-4 h-4 text-text-muted" />}
+@@ -1725,7 +1785,7 @@ export function SalesBudgetForm() {
+           <div className="px-5 pb-5 space-y-4 border-t border-border-subtle">
+             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4">
+               <div className="md:col-span-2">
+-                <label className="block text-sm font-medium text-text-muted mb-1">T├¡tulo *</label>
++                <label className="block text-sm font-medium text-text-muted mb-1">T├â┬¡tulo *</label>
+                 <input value={titulo} onChange={() => { }} disabled={true}
+                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+               </div>
+@@ -1752,12 +1812,12 @@ export function SalesBudgetForm() {
+                 </select>
+               </div>
+               <div>
+-                <label className="block text-sm font-medium text-text-muted mb-1">Respons├ível</label>
++                <label className="block text-sm font-medium text-text-muted mb-1">Respons├â┬ível</label>
+                 <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
+               </div>
+             </div>
+             <div>
+-              <label className="block text-sm font-medium text-text-muted mb-1">Observa├º├Áes</label>
++              <label className="block text-sm font-medium text-text-muted mb-1">Observa├â┬º├â┬Áes</label>
+               <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadonly} rows={2}
+                 className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
+             </div>
+@@ -1773,17 +1833,17 @@ export function SalesBudgetForm() {
+         </button>
+         <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>
+           <TrendingUp className="w-4 h-4" />
+-          Loca├º├úo / Comodato
++          Loca├â┬º├â┬úo / Comodato
+         </button>
+         <button onClick={() => setSearchParams({ tab: 'compra' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'compra' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-text-muted hover:text-text-primary'}`}>
+           <Package className="w-4 h-4" />
+-          Or├ºamento de Compra
++          Or├â┬ºamento de Compra
+         </button>
+       </div>
+ 
+-      {/* ÔòÉÔòÉÔòÉ VENDA TAB ÔòÉÔòÉÔòÉ */}
++      {/* ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É VENDA TAB ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É */}
+       {activeTab === 'venda' && (<>
+-        {/* Consolida├º├úo Diretoria ÔÇö right after header */}
++        {/* Consolida├â┬º├â┬úo Diretoria ├óÔé¼ÔÇØ right after header */}
+         {items.length > 0 && (() => {
+           const venda_fat = totals.venda;
+           const venda_custo_total = totals.custo + totals.impostos + totals.frete + totals.despAdm;
+@@ -1800,8 +1860,8 @@ export function SalesBudgetForm() {
+ 
+               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                 <div>
+-                  <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├º├úo Diretoria</h2>
+-                  <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├ílise de viabilidade e comissionamento executivo</p>
++                  <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├â┬º├â┬úo Diretoria</h2>
++                  <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├â┬ílise de viabilidade e comissionamento executivo</p>
+                 </div>
+               </div>
+ 
+@@ -1809,7 +1869,7 @@ export function SalesBudgetForm() {
+               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
+                 <div className="lg:col-span-4">
+                   <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+-                    Comiss├úo sobre receita l├¡quida
++                    Comiss├â┬úo sobre receita l├â┬¡quida
+                   </label>
+                   <div className="relative max-w-[180px]">
+                     <input
+@@ -1846,7 +1906,7 @@ export function SalesBudgetForm() {
+                 <Tooltip content={
+                   <div className="w-80 space-y-3 text-gray-200">
+                     <div>
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita L├¡quida Venda</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita L├â┬¡quida Venda</div>
+                       <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Faturamento - (Custo Aq. + Impostos + Frete + Desp. Adm.)</div>
+                       <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_rec_liq)}</div>
+                     </div>
+@@ -1854,7 +1914,7 @@ export function SalesBudgetForm() {
+                 }>
+                   <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
+                     <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                      Receita L├¡quida
++                      Receita L├â┬¡quida
+                       <HelpCircle className="w-3 h-3 opacity-50" />
+                     </span>
+                     <p className="text-xl font-bold text-text-primary">{fmt(venda_rec_liq)}</p>
+@@ -1864,15 +1924,15 @@ export function SalesBudgetForm() {
+                 <Tooltip content={
+                   <div className="w-80 space-y-3 text-gray-200">
+                     <div>
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comiss├úo Venda</div>
+-                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, Receita L├¡quida ├ù % Receita L├¡quida)</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comiss├â┬úo Venda</div>
++                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, Receita L├â┬¡quida ├âÔÇö % Receita L├â┬¡quida)</div>
+                       <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_comissao_diretoria)}</div>
+                     </div>
+                   </div>
+                 }>
+                   <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                     <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                      Comiss├úo Rec/Liq
++                      Comiss├â┬úo Rec/Liq
+                       <HelpCircle className="w-3 h-3 opacity-50" />
+                     </span>
+                     <p className="text-xl font-bold text-text-primary">{fmt(venda_comissao_diretoria)}</p>
+@@ -1890,18 +1950,18 @@ export function SalesBudgetForm() {
+                 </div>
+               </div>
+ 
+-              {/* Detalhamento de Opera├º├úo (Replaces previous Consolida├º├úo standard blocks) */}
++              {/* Detalhamento de Opera├â┬º├â┬úo (Replaces previous Consolida├â┬º├â┬úo standard blocks) */}
+               <div className="mt-8 pt-6 border-t border-border-subtle">
+                 <h3 className="font-semibold text-text-primary text-base mb-4 flex items-center gap-2">
+                   <Receipt className="w-4 h-4 text-brand-primary" />
+-                  Detalhamento de Opera├º├úo
++                  Detalhamento de Opera├â┬º├â┬úo
+                 </h3>
+                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
+-                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisi├º├úo</span>
++                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisi├â┬º├â┬úo</span>
+                     <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.custo)}</p>
+                     <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
+-                      <div className="font-semibold text-amber-300 mb-2">Composi├º├úo do Custo</div>
++                      <div className="font-semibold text-amber-300 mb-2">Composi├â┬º├â┬úo do Custo</div>
+                       <div className="space-y-1">
+                         <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
+                         {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
+@@ -1924,6 +1984,7 @@ export function SalesBudgetForm() {
+                         {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
+                         {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
+                         {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
++                        {totals.total_credito_icms > 0 && <div className="flex justify-between text-brand-success"><span>Cr├â┬®d. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>}
+                         <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
+                       </div>
+                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
+@@ -1939,23 +2000,23 @@ export function SalesBudgetForm() {
+                   </div>
+                   <Tooltip content={
+                     <div className="w-64 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comiss├úo Padr├úo</div>
+-                      <div className="text-xs">Comiss├úo informada linha-a-linha na tabela de mercadorias. (N├úo ├® a comiss├úo da diretoria)</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comiss├â┬úo Padr├â┬úo</div>
++                      <div className="text-xs">Comiss├â┬úo informada linha-a-linha na tabela de mercadorias. (N├â┬úo ├â┬® a comiss├â┬úo da diretoria)</div>
+                     </div>
+                   }>
+                     <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comiss├úo Padr├úo</span>
++                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comiss├â┬úo Padr├â┬úo</span>
+                       <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.comissao)}</p>
+                     </div>
+                   </Tooltip>
+                   <Tooltip content={
+                     <div className="w-64 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padr├úo</div>
+-                      <div className="text-xs">Lucro tradicional considerando a comiss├úo padr├úo e sem deduzir a comiss├úo de diretoria.</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padr├â┬úo</div>
++                      <div className="text-xs">Lucro tradicional considerando a comiss├â┬úo padr├â┬úo e sem deduzir a comiss├â┬úo de diretoria.</div>
+                     </div>
+                   }>
+                     <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
+-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padr├úo</span>
++                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padr├â┬úo</span>
+                       <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
+                     </div>
+                   </Tooltip>
+@@ -1971,7 +2032,7 @@ export function SalesBudgetForm() {
+             <div className="flex items-center justify-between">
+               <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
+                 <Calculator className="w-5 h-5 text-brand-primary" />
+-                Par├ómetros Padr├úo
++                Par├â┬ómetros Padr├â┬úo
+               </h2>
+               <div className="flex items-center gap-2">
+                 <Button
+@@ -1983,7 +2044,7 @@ export function SalesBudgetForm() {
+                   className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
+                 >
+                   <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
+-                  Atualizar Par├ómetros
++                  Atualizar Par├â┬ómetros
+                 </Button>
+                 {vendaKits.length > 0 && (
+                   <Button
+@@ -1998,7 +2059,7 @@ export function SalesBudgetForm() {
+                     Aplicar aos Kits
+                   </Button>
+                 )}
+-                {/* Info button ÔÇö opens read-only tax breakdown modal */}
++                {/* Info button ├óÔé¼ÔÇØ opens read-only tax breakdown modal */}
+                 <button
+                   type="button"
+                   onClick={() => setShowTaxModal(true)}
+@@ -2009,13 +2070,13 @@ export function SalesBudgetForm() {
+               </div>
+             </div>
+ 
+-            {/* Row 1 ÔÇö Fator Margem (4 fields) + Maintenance */}
++            {/* Row 1 ├óÔé¼ÔÇØ Fator Margem (4 fields) + Maintenance */}
+             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+               {[
+                 { label: 'Fator Margem (Produtos)', val: fatorMargemProdutos, set: setFatorMargemProdutos },
+-                { label: 'Fator Margem Servi├ºos', val: fatorMargemServicos, set: setFatorMargemServicos },
+-                { label: 'Fator Margem Instala├º├úo', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
+-                { label: 'Fator Margem Manuten├º├úo', val: fatorMargemManutencao, set: setFatorMargemManutencao },
++                { label: 'Fator Margem Servi├â┬ºos', val: fatorMargemServicos, set: setFatorMargemServicos },
++                { label: 'Fator Margem Instala├â┬º├â┬úo', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
++                { label: 'Fator Margem Manuten├â┬º├â┬úo', val: fatorMargemManutencao, set: setFatorMargemManutencao },
+               ].map(p => (
+                 <div key={p.label}>
+                   <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+@@ -2032,7 +2093,7 @@ export function SalesBudgetForm() {
+                   disabled={isReadonly}
+                   className="w-4 h-4 rounded border-brand-primary/30 text-brand-primary focus:ring-brand-primary/30"
+                 />
+-                <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manuten├º├úo Mensal</label>
++                <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manuten├â┬º├â┬úo Mensal</label>
+               </div>
+               <div>
+                 <label className="block text-xs font-medium text-text-muted mb-1">Qtd. Meses Manut.</label>
+@@ -2049,11 +2110,11 @@ export function SalesBudgetForm() {
+             </div>
+ 
+ 
+-            {/* Row 2 ÔÇö Desp. Adm., Comiss├úo, Frete */}
++            {/* Row 2 ├óÔé¼ÔÇØ Desp. Adm., Comiss├â┬úo, Frete */}
+             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+               {[
+                 { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
+-                { label: 'Comiss├úo %', val: percComissao, set: setPercComissao },
++                { label: 'Comiss├â┬úo %', val: percComissao, set: setPercComissao },
+                 { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
+               ].map(p => (
+                 <div key={p.label}>
+@@ -2072,11 +2133,11 @@ export function SalesBudgetForm() {
+             <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+               <div className="flex items-center justify-between mb-4">
+                 <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+-                  <Receipt className="w-5 h-5 text-rose-400" /> Impostos Incidentes ÔÇö Venda de Equipamentos
++                  <Receipt className="w-5 h-5 text-rose-400" /> Impostos Incidentes ├óÔé¼ÔÇØ Venda de Equipamentos
+                 </h3>
+                 <button onClick={() => setShowTaxModal(false)} className="text-text-muted hover:text-text-primary transition-colors"><X className="w-5 h-5" /></button>
+               </div>
+-              <p className="text-xs text-text-muted mb-4">Tributa├º├úo padr├úo do bloco <strong>Venda de Equipamentos e Servi├ºos</strong> configurada nos Par├ómetros da empresa. Estes valores s├úo aplicados automaticamente e somente podem ser alterados no cadastro da empresa.</p>
++              <p className="text-xs text-text-muted mb-4">Tributa├â┬º├â┬úo padr├â┬úo do bloco <strong>Venda de Equipamentos e Servi├â┬ºos</strong> configurada nos Par├â┬ómetros da empresa. Estes valores s├â┬úo aplicados automaticamente e somente podem ser alterados no cadastro da empresa.</p>
+               <div className="space-y-2">
+                 {[
+                   { label: 'PIS', val: companyVendaTaxes.pis },
+@@ -2102,24 +2163,28 @@ export function SalesBudgetForm() {
+         )}
+ 
+ 
+-        {/* Bloco de Totaliza├º├úo Venda */}
++        {/* Bloco de Totaliza├â┬º├â┬úo Venda */}
+         {vendaKits.length > 0 && (() => {
+           const t = vendaKits.reduce((acc, kit) => {
+             const q = kit.quantidade || 1;
+             const s = kit.summary || {};
++            const raw = kit.kit_raw || {};
+ 
+             // Custo Base
+-            acc.custoAquisicao += (kit.custo_aquisicao_equip_unit || 0) * q;
+-            acc.mat += (Number(s.custo_aquisicao_total) || 0) * q;
+-            acc.mao += (Number(s.vlr_instal_calc) || 0) * q;
++            const st = (Number(s.total_st_kit) || 0) * q;
++            const ipi = (Number(s.total_ipi_kit) || 0) * q;
++            const difal = (Number(s.total_difal_kit) || 0) * q;
++            
++            acc.vLTSt += st;
++            acc.vLTIpi += ipi;
++            acc.vLTDifal += difal;
+ 
+-            // Custo Quebrado
+             acc.baseFornecedor += (Number(s.custo_aquisicao_produtos) || 0) * q;
+-            acc.vltSt += (Number(s.total_st_kit) || 0) * q;
+-            acc.vltIpi += (Number(s.total_ipi_kit) || 0) * q;
+-            acc.vltDifal += (Number(s.total_difal_kit) || 0) * q;
+-            acc.impostosCompra += (Number(s.total_st_kit || 0) + Number(s.total_ipi_kit || 0) + Number(s.total_difal_kit || 0)) * q;
+             acc.freteCompra += (Number(s.total_frete_kit) || 0) * q;
++            acc.mat += (Number(s.custo_aquisicao_total) || 0) * q;
++            acc.mao += (Number(s.vlr_instal_calc) || 0) * q;
++
++            acc.custoAquisicaoLimpo += ((kit.custo_aquisicao_equip_unit || 0) * q);
+ 
+             // Faturamento Bruto
+             acc.totalVenda += (kit.venda_equip_unit || 0) * q;
+@@ -2131,158 +2196,188 @@ export function SalesBudgetForm() {
+             const manM = Number(kit.qtd_meses_manutencao) || 0;
+             if (manM > acc.maxMesesManut) acc.maxMesesManut = manM;
+ 
++            // Impostos de Venda (Apenas B4 + B5)
++            const baseB45 = Number(s.venda_equipamentos_total) || 0;
++            acc.pis += (baseB45 * (Number(raw.aliq_pis) || 0) / 100) * q;
++            acc.cofins += (baseB45 * (Number(raw.aliq_cofins) || 0) / 100) * q;
++            acc.csll += (baseB45 * (Number(raw.aliq_csll) || 0) / 100) * q;
++            acc.irpj += (baseB45 * (Number(raw.aliq_irpj) || 0) / 100) * q;
++
++            // ICMS no B4 (Produtos com ST) e ISS no B4 (Servi├â┬ºos Lupa) + B5 (Instala├â┬º├â┬úo)
++            const iSums = raw.item_summaries || [];
++            let icmsKit = 0;
++            let issB4Kit = 0;
++            let vendaB4Kit = 0;
++            
++            iSums.forEach((isum: any) => {
++              icmsKit += Number(isum.icms_unit) || 0;
++              issB4Kit += Number(isum.iss_unit) || 0;
++              vendaB4Kit += Number(isum.venda_total_item) || 0;
++            });
++            
++            acc.icms += (icmsKit) * q;
++            const vendaB5Kit = Math.max(0, baseB45 - vendaB4Kit);
++            const issB5Kit = vendaB5Kit * (Number(raw.aliq_iss) || 0) / 100;
++            acc.iss += (issB4Kit + issB5Kit) * q;
++            acc.credito_icms += (Number(s.credito_icms_compra_total) || 0) * q;
++
++            // Despesas de Venda (Apenas B4 + B5, desconsiderando B6 Manuten├â┬º├â┬úo)
++            acc.comissao += (baseB45 * (Number(raw.perc_comissao) || 0) / 100) * q;
++            acc.despAdm += (baseB45 * (Number(raw.perc_despesas_adm) || 0) / 100) * q;
++            acc.freteVenda += (baseB45 * (Number(raw.perc_frete_venda) || 0) / 100) * q;
++
+             return acc;
+           }, {
+-            custoAquisicao: 0, mat: 0, mao: 0, totalVenda: 0, totalManutencao: 0, vltManutMensal: 0,
++            custoAquisicaoLimpo: 0, mat: 0, mao: 0, totalVenda: 0, totalManutencao: 0, vltManutMensal: 0,
+             lucroManutencao: 0, maxMesesManut: 0,
+-            impostosCompra: 0, baseFornecedor: 0, freteCompra: 0,
+-            vltSt: 0, vltIpi: 0, vltDifal: 0
++            baseFornecedor: 0, freteCompra: 0,
++            vLTSt: 0, vLTIpi: 0, vLTDifal: 0,
++            pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms: 0, credito_icms: 0,
++            comissao: 0, despAdm: 0, freteVenda: 0
+           });
+ 
+-          // C├ílculos Consolidados sobre o Total Geral
+-          const sumTaxes = (companyVendaTaxes?.icms_interno || 0) + (companyVendaTaxes?.pis || 0) + (companyVendaTaxes?.cofins || 0) + (companyVendaTaxes?.csll || 0) + (companyVendaTaxes?.irpj || 0) + (companyVendaTaxes?.iss || 0);
++          // C├â┬ílculos de Impostos = Impostos de Sa├â┬¡da (B4+B5)
++          const sumVendaTaxes = t.pis + t.cofins + t.csll + t.irpj + t.iss + t.icms;
++          const impostosConsolidadoGlobal = Math.max(0, sumVendaTaxes - t.credito_icms);
+ 
+-          const impostosVendaConsolidado = (t.totalVenda * sumTaxes) / 100;
+-          const vltDespAdmConsolidado = (t.totalVenda * (percDespesaAdm || 0)) / 100;
+-          const vltComissaoConsolidado = (t.totalVenda * (percComissao || 0)) / 100;
+-          const vltFreteVendaConsolidado = (t.totalVenda * (percFreteVenda || 0)) / 100;
++          // C├â┬ílculos Despesas (Consolidadas dos kits)
++          const vltDespAdmConsolidado = t.despAdm;
++          const vltComissaoConsolidado = t.comissao;
++          const vltFreteVendaConsolidado = t.freteVenda;
+ 
+-          const despesasVendaTotal = vltDespAdmConsolidado + vltComissaoConsolidado + vltFreteVendaConsolidado;
++          const despesasAdmComFrete = vltDespAdmConsolidado + vltFreteVendaConsolidado;
++          const despesasVendaTotal = despesasAdmComFrete + vltComissaoConsolidado;
+ 
+-          const lucroVendaConsolidado = t.totalVenda - t.custoAquisicao - impostosVendaConsolidado - despesasVendaTotal;
+-
+-          const faturamentoTotal = t.totalVenda + t.totalManutencao;
++          const lucroVendaConsolidado = t.totalVenda - (impostosConsolidadoGlobal + despesasVendaTotal + t.custoAquisicaoLimpo);
+           const margemVenda = t.totalVenda > 0 ? (lucroVendaConsolidado / t.totalVenda) * 100 : 0;
++
+           const margemManutencao = t.totalManutencao > 0 ? (t.lucroManutencao / t.totalManutencao) * 100 : 0;
+ 
+           return (
+             <div className="mb-6 bg-surface border border-border-subtle rounded-xl p-6 shadow-sm overflow-hidden">
+-              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border-subtle/50">
+-                <Calculator className="w-5 h-5 text-brand-primary" />
+-                <h2 className="text-xl font-bold text-text-primary">Fechamento de Venda</h2>
++              <div className="flex items-center justify-between gap-2 mb-4 pb-4 border-b border-border-subtle/50">
++                <div className="flex items-center gap-2">
++                  <Calculator className="w-5 h-5 text-brand-primary" />
++                  <h2 className="text-xl font-bold text-text-primary">Fechamento de Venda</h2>
++                </div>
++                {activePolicy && (
++                  <span className="text-[10px] font-bold text-white bg-brand-primary border border-brand-primary/20 px-2 py-1 rounded-full shadow-sm">
++                    Pol├â┬¡tica Ativa: {activePolicy.nome} ({activePolicy.comissao_percentual}%)
++                  </span>
++                )}
+               </div>
+ 
+-              <div className="space-y-4">
+-                {/* Linha Top */}
+-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+-                  <Tooltip content={
+-                    <div className="w-56 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Composi├º├úo de Custo</div>
+-                      <div className="flex justify-between text-xs"><span>Base Prod.:</span><span className="font-semibold">{fmt(t.baseFornecedor)}</span></div>
+-                      <div className="flex justify-between text-xs"><span>Frete:</span><span className="font-semibold">{fmt(t.freteCompra)}</span></div>
+-                      <div className="flex justify-between text-xs text-rose-300"><span>IPI:</span><span className="font-semibold">{fmt(t.vltIpi)}</span></div>
+-                      <div className="flex justify-between text-xs text-rose-300"><span>ST:</span><span className="font-semibold">{fmt(t.vltSt)}</span></div>
+-                      <div className="flex justify-between text-xs text-rose-300"><span>Difal:</span><span className="font-semibold">{fmt(t.vltDifal)}</span></div>
+-                      <div className="flex justify-between text-xs pt-1 mt-1 border-t border-gray-600 font-bold"><span>Total Impostos:</span><span className="text-rose-400">{fmt(t.impostosCompra)}</span></div>
+-                      <div className="flex justify-between text-xs pt-1 border-t border-gray-600 mt-1 text-emerald-300"><span>M├úo de Obra:</span><span className="font-semibold">{fmt(t.mao)}</span></div>
+-                    </div>
+-                  }>
+-                    <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between cursor-help h-full">
+-                      <div>
+-                        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisi├º├úo</div>
+-                        <div className="text-2xl font-bold text-text-primary">{fmt(t.custoAquisicao)}</div>
+-                      </div>
+-                      <div className="flex justify-between items-center text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle">
+-                        <span title="Materiais e Mercadorias">Mat: <span className="font-medium text-text-secondary">{fmt(t.mat)}</span></span>
+-                        <span title="Impostos Pagos na Compra">Imp: <span className="font-medium text-text-secondary">{fmt(t.impostosCompra)}</span></span>
+-                      </div>
+-                    </div>
+-                  </Tooltip>
++              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
++                
++                {/* 1. Custo de Aquisi├â┬º├â┬úo */}
++                <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
++                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisi├â┬º├â┬úo</div>
++                  <div className="text-2xl font-bold text-text-primary mb-4">{fmt(t.custoAquisicaoLimpo)}</div>
++                  <div className="flex justify-between items-center text-xs text-text-muted mt-auto pt-3 border-t border-border-subtle">
++                    <span>Custo base com impostos de entrada</span>
++                  </div>
++                </div>
+ 
+-                  <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+-                    <div>
+-                      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total da Venda</div>
+-                      <div className="text-2xl font-bold text-brand-primary">{fmt(t.totalVenda)}</div>
+-                    </div>
+-                    <div className="flex justify-between items-center text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle">
+-                      <span>Impostos (NF):</span>
+-                      <span className="font-medium text-brand-primary">{fmt(impostosVendaConsolidado)}</span>
+-                    </div>
++                {/* 2. Total de Venda */}
++                <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
++                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Venda</div>
++                  <div className="text-2xl font-black text-brand-primary mb-4">{fmt(t.totalVenda)}</div>
++                  <div className="flex justify-between items-center text-[10px] text-text-muted mt-auto pt-3 border-t border-border-subtle uppercase">
++                    <span>Faturamento Equip/Serv</span>
+                   </div>
++                </div>
+ 
+-                  <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+-                    <div>
+-                      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Manuten├º├úo</div>
+-                      <div className="text-2xl font-bold text-amber-500">{fmt(t.totalManutencao)}</div>
+-                    </div>
+-                    <div className="text-xs text-text-muted mt-5 pt-3 border-t border-border-subtle flex justify-end">
+-                      {vendaHaveraManutencao ? (
+-                        <span className="font-medium">{fmt(t.vltManutMensal)} <span className="text-[11px] font-normal">/m├¬s ({t.maxMesesManut}x)</span></span>
+-                      ) : (
+-                        <span className="text-amber-500/70">Inativo (Desmarcado)</span>
+-                      )}
++                {/* 3. Total de Impostos */}
++                <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
++                  <div>
++                    <div className="text-[11px] font-bold text-rose-800/60 uppercase tracking-wider mb-1">Total de Impostos</div>
++                      <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-rose-800/70">
++                      {t.pis > 0 && <div className="flex justify-between items-center"><span>PIS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.pis / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.pis)}</span></div>}
++                      {t.cofins > 0 && <div className="flex justify-between items-center"><span>COFINS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.cofins / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.cofins)}</span></div>}
++                      {t.csll > 0 && <div className="flex justify-between items-center"><span>CSLL <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.csll / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.csll)}</span></div>}
++                      {t.irpj > 0 && <div className="flex justify-between items-center"><span>IRPJ <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.irpj / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.irpj)}</span></div>}
++                      {t.iss > 0 && <div className="flex justify-between items-center"><span>ISS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.iss / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.iss)}</span></div>}
++                      {t.icms > 0 && <div className="flex justify-between items-center"><span>ICMS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.icms / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.icms)}</span></div>}
++                      {t.credito_icms > 0 && <div className="flex justify-between items-center text-brand-success"><span>Cr├â┬®d. ICMS (Compra) <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.credito_icms / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">-{fmt(t.credito_icms)}</span></div>}
++                      {impostosConsolidadoGlobal === 0 && <div className="text-rose-800/40 italic">Nenhum imposto calculado</div>}
+                     </div>
+                   </div>
++                  <div className="flex justify-between items-center text-[10px] text-rose-800/60 mt-auto pt-3 border-t border-rose-100/60 uppercase tracking-wide">
++                    <span>Impostos sobre Faturamento</span>
++                  </div>
++                </div>
+ 
+-                  <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-5 shadow-sm flex flex-col justify-between h-full">
+-                    <div>
+-                      <div className="text-[11px] font-bold text-brand-primary uppercase tracking-wider mb-1">Faturamento Total</div>
+-                      <div className="text-2xl font-bold text-brand-primary">{fmt(faturamentoTotal)}</div>
+-                    </div>
+-                    <div className="flex justify-between items-center text-xs text-brand-primary/70 mt-5 pt-3 border-t border-brand-primary/10">
+-                      <span>Venda + Manuten├º├úo</span>
++                {/* 4. Total Despesas */}
++                <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
++                  <div>
++                    <div className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider mb-1">Total de Despesas de Venda</div>
++                    <div className="text-2xl font-bold text-amber-600 mb-4">{fmt(despesasVendaTotal)}</div>
++                    
++                    <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-amber-800/70">
++                      <div className="flex justify-between items-center"><span>Adm <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.despAdm / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.despAdm)}</span></div>
++                      <div className="flex justify-between items-center"><span>Frete <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.freteVenda / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.freteVenda)}</span></div>
++                      <div className="flex justify-between items-center"><span>Comiss├â┬úo <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.comissao / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.comissao)}</span></div>
+                     </div>
+                   </div>
++                  <div className="flex justify-between items-center text-[10px] text-amber-800/60 mt-auto pt-3 border-t border-amber-100/60 uppercase tracking-wide">
++                    <span>Adm + Frete + Comiss├â┬úo</span>
++                  </div>
+                 </div>
+ 
+-                {/* Linha Bottom */}
+-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+-                  <Tooltip content={
+-                    <div className="w-56 space-y-1 text-gray-200 p-1">
+-                      <div className="font-bold text-emerald-300 border-b border-emerald-800/50 pb-1 mb-2">Detalhamento Financeiro (Venda)</div>
+-                      <div className="flex justify-between text-xs text-rose-300"><span>Impostos (NF):</span><span className="font-semibold">{fmt(impostosVendaConsolidado)}</span></div>
+-                      <div className="flex justify-between text-xs mt-1 text-amber-300 border-t border-emerald-800/20 pt-1"><span>Comiss├úo:</span><span className="font-semibold">{fmt(vltComissaoConsolidado)}</span></div>
+-                      <div className="flex justify-between text-xs text-amber-300"><span>Desp. Adm:</span><span className="font-semibold">{fmt(vltDespAdmConsolidado)}</span></div>
+-                      <div className="flex justify-between text-xs text-amber-300"><span>Frete (Entrega):</span><span className="font-semibold">{fmt(vltFreteVendaConsolidado)}</span></div>
+-                      <div className="flex justify-between text-xs border-t border-emerald-800/50 pt-1 mt-1 text-gray-400"><span>Custo Prod+Instal:</span><span className="font-semibold">{fmt(t.custoAquisicao)}</span></div>
+-                      <div className="flex justify-between text-sm pt-2 mt-1 border-t border-emerald-800/80 font-bold text-emerald-400"><span>Lucro Liquido:</span><span>{fmt(lucroVendaConsolidado)}</span></div>
+-                    </div>
+-                  }>
+-                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-5 flex flex-col justify-between shadow-sm cursor-help relative group h-full">
+-                      <div className="flex items-start justify-between w-full">
+-                        <div>
+-                          <div className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider mb-1">Lucro da Venda (Fechamento)</div>
+-                          <div className="text-3xl font-black text-emerald-600 group-hover:text-emerald-700 transition-colors tracking-tight">{fmt(lucroVendaConsolidado)}</div>
+-                        </div>
+-                        <div className="px-4 py-2 flex flex-col items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 min-w-[80px]">
+-                          <span className="text-[9px] font-bold uppercase tracking-widest">Margem</span>
+-                          <span className="text-xl font-black leading-none mt-1">{t.totalVenda > 0 ? margemVenda.toFixed(1) : '0.0'}%</span>
+-                        </div>
++                {/* 5. Lucro da Venda */}
++                <div className={`col-span-2 lg:col-span-2 border rounded-xl p-6 shadow-sm flex flex-col justify-between relative overflow-hidden ${lucroVendaConsolidado >= 0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-rose-50/60 border-rose-200'}`}>
++                  {lucroVendaConsolidado >= 0 ? (
++                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
++                  ) : (
++                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
++                  )}
++                  <div className="flex justify-between items-start w-full relative z-10">
++                    <div>
++                      <div className={`text-[11px] font-extrabold uppercase tracking-widest mb-2 ${lucroVendaConsolidado >= 0 ? 'text-emerald-800/70' : 'text-rose-800/70'}`}>
++                        Lucro da Venda
+                       </div>
+-
+-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 text-xs text-emerald-800/70 pt-4 mt-4 border-t border-emerald-100/60 w-full">
+-                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Faturamento</span> <span className="font-semibold text-emerald-800">{fmt(t.totalVenda)}</span></div>
+-                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Custo Aqui.</span> <span className="font-semibold text-emerald-800">{fmt(t.custoAquisicao)}</span></div>
+-                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">Imp. Venda</span> <span className="font-semibold text-emerald-800">{fmt(impostosVendaConsolidado)}</span></div>
+-                        <div className="flex flex-col"><span className="text-[10px] uppercase font-bold text-emerald-800/50">O. Despesas</span> <span className="font-semibold text-emerald-800">{fmt(despesasVendaTotal)}</span></div>
++                      <div className={`text-4xl font-black tracking-tighter ${lucroVendaConsolidado >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
++                        {fmt(lucroVendaConsolidado)}
+                       </div>
+                     </div>
+-                  </Tooltip>
++                    <div className={`px-5 py-3 flex flex-col items-center justify-center rounded-xl min-w-[90px] shadow-sm ${lucroVendaConsolidado >= 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/50' : 'bg-rose-100 text-rose-800 border border-rose-200/50'}`}>
++                      <span className="text-[9px] font-bold uppercase tracking-widest opacity-80">Margem</span>
++                      <span className="text-xl font-black leading-none mt-1">{t.totalVenda > 0 ? margemVenda.toFixed(2) : '0.00'}%</span>
++                    </div>
++                  </div>
++                </div>
+ 
+-                  <div className={`bg-surface border rounded-xl p-5 flex flex-col justify-between shadow-sm h-full ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'border-emerald-100 bg-emerald-50/30' : 'border-border-subtle'}`}>
+-                    <div className="flex items-start justify-between w-full">
+-                      <div>
+-                        <div className={`text-[11px] font-bold uppercase tracking-wider mb-1 ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-emerald-800/60' : 'text-text-muted'}`}>Lucro Manuten├º├úo ({t.maxMesesManut || 12}x)</div>
+-                        <div className={`text-3xl font-black tracking-tight ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-emerald-600' : 'text-text-primary'}`}>{fmt(t.lucroManutencao)}</div>
+-                      </div>
+-                      <div className={`px-4 py-2 flex flex-col items-center justify-center rounded-lg min-w-[80px] ${margemManutencao >= 15 ? 'bg-emerald-100 text-emerald-700' : margemManutencao >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+-                        <span className="text-[9px] font-bold uppercase tracking-widest">Margem</span>
+-                        <span className="text-xl font-black leading-none mt-1">{t.totalManutencao > 0 ? margemManutencao.toFixed(1) : '0.0'}%</span>
++                {/* 6. Total de Manuten├â┬º├â┬úo (Inalterado) */}
++                <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
++                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Manuten├â┬º├â┬úo</div>
++                  <div className="text-2xl font-bold text-amber-500 mb-4">{fmt(t.totalManutencao)}</div>
++                  <div className="text-xs text-text-muted mt-auto pt-3 border-t border-border-subtle flex justify-between">
++                    {vendaHaveraManutencao ? (
++                      <span className="font-medium">{fmt(t.vltManutMensal)} <span className="text-[11px] font-normal">/m (x{t.maxMesesManut})</span></span>
++                    ) : (
++                      <span className="text-amber-500/70">Inativo</span>
++                    )}
++                  </div>
++                </div>
++
++                {/* 7. Lucro de Manuten├â┬º├â┬úo (Inalterado) */}
++                <div className={`border rounded-xl p-5 flex flex-col justify-between shadow-sm relative ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'bg-surface border-border-subtle' : 'bg-surface border-border-subtle'}`}>
++                  <div className="flex items-start justify-between w-full relative z-10">
++                    <div>
++                      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Lucro de Manuten├â┬º├â┬úo</div>
++                      <div className={`text-2xl font-black tracking-tight ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-text-primary' : 'text-text-muted'}`}>
++                        {fmt(t.lucroManutencao)}
+                       </div>
+                     </div>
+-
+-                    <div className={`flex items-center text-xs pt-4 mt-4 border-t w-full ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'border-emerald-100/50 text-emerald-800/70' : 'border-border-subtle text-text-muted'}`}>
+-                      {vendaHaveraManutencao ? (
+-                        <div className="flex gap-8">
+-                          <div className="flex flex-col"><span className="text-[10px] uppercase font-bold opacity-60 mb-0.5">Total Receitas</span> <span className="font-semibold">{fmt(t.totalManutencao)}</span></div>
+-                          <div className="flex flex-col"><span className="text-[10px] uppercase font-bold opacity-60 mb-0.5">Total Custos</span> <span className="font-semibold">{fmt(t.totalManutencao - t.lucroManutencao)}</span></div>
+-                        </div>
+-                      ) : (
+-                        <div className="h-full flex items-center">Manuten├º├úo desativada para a venda.</div>
+-                      )}
++                    <div className="px-3 py-1.5 flex flex-col items-center justify-center rounded-lg bg-bg-deep border border-border-subtle min-w-[70px]">
++                      <span className="text-[8px] font-bold text-text-muted uppercase tracking-widest">Margem</span>
++                      <span className={`text-sm font-black leading-none mt-1 ${margemManutencao >= 15 ? 'text-emerald-600' : margemManutencao >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>
++                        {t.totalManutencao > 0 ? margemManutencao.toFixed(2) : '0.00'}%
++                      </span>
+                     </div>
+                   </div>
+                 </div>
++
+               </div>
+             </div>
+           );
+@@ -2322,12 +2417,12 @@ export function SalesBudgetForm() {
+                   <tr>
+                     <th className="px-1.5 py-3 whitespace-nowrap pl-4">Nome do Kit</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-center w-14">Qtd</th>
+-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisi├º├úo (Equipamentos e Instala├º├úo)">Custo Aq. (Equip/Inst)</th>
+-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manuten├º├úo Projetada">Custo Manut.</th>
++                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisi├â┬º├â┬úo (Equipamentos e Instala├â┬º├â┬úo)">Custo Aq. (Equip/Inst)</th>
++                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manuten├â┬º├â┬úo Projetada">Custo Manut.</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-center w-16">Fator</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Venda de Equipamentos">Venda Equip.</th>
+-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Manuten├º├úo">Total Manuten├º├úo</th>
+-                    <th className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary" title="Faturamento Total (Venda + Manuten├º├úo)">Fat. Total</th>
++                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Manuten├â┬º├â┬úo">Total Manuten├â┬º├â┬úo</th>
++                    <th className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary" title="Faturamento Total (Venda + Manuten├â┬º├â┬úo)">Fat. Total</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Venda</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Marg. Vda</th>
+                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Manut.</th>
+@@ -2356,7 +2451,7 @@ export function SalesBudgetForm() {
+                           </div>
+                         </td>
+ 
+-                        {/* Qtd ÔÇö editable */}
++                        {/* Qtd ├óÔé¼ÔÇØ editable */}
+                         <td className="px-1.5 py-3 whitespace-nowrap text-center">
+                           <input
+                             type="number" step="1" min="1" value={item.quantidade}
+@@ -2376,15 +2471,15 @@ export function SalesBudgetForm() {
+                           {fmt(item.custo_manutencao_unit * q)}
+                         </td>
+ 
+-                        {/* Fator ÔÇö average with tooltip */}
++                        {/* Fator ├óÔé¼ÔÇØ average with tooltip */}
+                         <td className="px-1.5 py-3 whitespace-nowrap text-center">
+                           <Tooltip content={
+                             <div className="w-48 space-y-1">
+-                              <div className="font-bold border-b border-white/20 pb-1 mb-1">Composi├º├úo de Margem</div>
++                              <div className="font-bold border-b border-white/20 pb-1 mb-1">Composi├â┬º├â┬úo de Margem</div>
+                               <div className="flex justify-between"><span>Produtos:</span> <span className="font-mono">{item.fator_margem_locacao.toFixed(2)}</span></div>
+-                              <div className="flex justify-between"><span>Servi├ºos:</span> <span className="font-mono">{item.fator_margem_servicos_produtos.toFixed(2)}</span></div>
+-                              <div className="flex justify-between"><span>Instala├º├úo:</span> <span className="font-mono">{item.fator_margem_instalacao.toFixed(2)}</span></div>
+-                              <div className="flex justify-between"><span>Manuten├º├úo:</span> <span className="font-mono">{item.fator_margem_manutencao.toFixed(2)}</span></div>
++                              <div className="flex justify-between"><span>Servi├â┬ºos:</span> <span className="font-mono">{item.fator_margem_servicos_produtos.toFixed(2)}</span></div>
++                              <div className="flex justify-between"><span>Instala├â┬º├â┬úo:</span> <span className="font-mono">{item.fator_margem_instalacao.toFixed(2)}</span></div>
++                              <div className="flex justify-between"><span>Manuten├â┬º├â┬úo:</span> <span className="font-mono">{item.fator_margem_manutencao.toFixed(2)}</span></div>
+                             </div>
+                           }>
+                             <div className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded-full text-[10px] font-bold cursor-help inline-block">
+@@ -2398,7 +2493,7 @@ export function SalesBudgetForm() {
+                           {fmt(item.venda_equip_unit * q)}
+                         </td>
+ 
+-                        {/* Total Manuten├º├úo */}
++                        {/* Total Manuten├â┬º├â┬úo */}
+                         <td className="px-1.5 py-3 whitespace-nowrap text-right font-semibold text-text-primary">
+                           {fmt(item.venda_manut_unit * q)}
+                         </td>
+@@ -2438,7 +2533,7 @@ export function SalesBudgetForm() {
+                           {fmtPct(item.margem_geral)}
+                         </td>
+ 
+-                        {/* A├º├Áes */}
++                        {/* A├â┬º├â┬Áes */}
+                         <td className="px-1 py-3 whitespace-nowrap text-center pr-4">
+                           {!isReadonly && (
+                             <div className="flex items-center gap-1 justify-center">
+@@ -2471,7 +2566,7 @@ export function SalesBudgetForm() {
+         </div>
+       </>)}
+ 
+-      {/* ÔòÉÔòÉÔòÉ LOCA├ç├âO / COMODATO TAB ÔòÉÔòÉÔòÉ */}
++      {/* ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É LOCA├âÔÇí├âãÆO / COMODATO TAB ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É */}
+       {activeTab === 'locacao' && (<>
+         {rentalItems.length > 0 && (() => {
+           const diretor_rec_liq = rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal;
+@@ -2545,15 +2640,15 @@ export function SalesBudgetForm() {
+           const diretor_saldo = diretor_rec_liq - diretor_comissao;
+           const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
+ 
+-          // ROI Final = Custo Aquisi├º├úo / (Mensal Loca├º├úo - Custo Op. Mensal - Imposto Mensal)
+-          // F├│rmula direta conforme defini├º├úo: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
++          // ROI Final = Custo Aquisi├â┬º├â┬úo / (Mensal Loca├â┬º├â┬úo - Custo Op. Mensal - Imposto Mensal)
++          // F├â┬│rmula direta conforme defini├â┬º├â┬úo: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
+           const _roiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal;
+           const base_roi = _roiDenominador > 0
+             ? rentalTotals.investimento / _roiDenominador
+             : ((prazoContratoMeses || 1) + 1);
+ 
+-          // O card do ROI final dentro do card de Consolida├º├úo Diretoria deve seguir a mesma l├│gica
+-          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comiss├úo rec/liq.
++          // O card do ROI final dentro do card de Consolida├â┬º├â┬úo Diretoria deve seguir a mesma l├â┬│gica
++          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comiss├â┬úo rec/liq.
+           const _diretorRoiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal - comissao_mensal_calc;
+           const diretor_roi = _diretorRoiDenominador > 0 
+             ? rentalTotals.investimento / _diretorRoiDenominador 
+@@ -2569,8 +2664,8 @@ export function SalesBudgetForm() {
+ 
+                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                   <div>
+-                    <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├º├úo Diretoria</h2>
+-                    <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├ílise de viabilidade e comissionamento executivo</p>
++                    <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├â┬º├â┬úo Diretoria</h2>
++                    <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├â┬ílise de viabilidade e comissionamento executivo</p>
+                   </div>
+                   <button
+                     onClick={() => setShowEvolutivoChart(true)}
+@@ -2586,7 +2681,7 @@ export function SalesBudgetForm() {
+                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
+                   <div className="lg:col-span-4">
+                     <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+-                      Comiss├úo sobre receita l├¡quida
++                      Comiss├â┬úo sobre receita l├â┬¡quida
+                     </label>
+                     <div className="relative max-w-[180px]">
+                       <input
+@@ -2623,20 +2718,20 @@ export function SalesBudgetForm() {
+                   <Tooltip content={
+                     <div className="w-80 space-y-3 text-gray-200">
+                       <div>
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├º├úo</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Total Instala├º├úo - Custo Aq. Total de Instala├º├úo - Impostos de Instala├º├úo</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├â┬º├â┬úo</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Total Instala├â┬º├â┬úo - Custo Aq. Total de Instala├â┬º├â┬úo - Impostos de Instala├â┬º├â┬úo</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_inst_calc)}</div>
+                       </div>
+                       <div>
+                         <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">(Valor Loca├º├úo Mensal ├ù (Prazo Contrato - Prazo Instala├º├úo)) - (Custo Aquisi├º├úo Total - Custo Aq. Total Instala├º├úo) - (Imposto Mensal ├ù (Prazo Contrato - Prazo Instala├º├úo)) - Custos Operacionais Totais</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">(Valor Loca├â┬º├â┬úo Mensal ├âÔÇö (Prazo Contrato - Prazo Instala├â┬º├â┬úo)) - (Custo Aquisi├â┬º├â┬úo Total - Custo Aq. Total Instala├â┬º├â┬úo) - (Imposto Mensal ├âÔÇö (Prazo Contrato - Prazo Instala├â┬º├â┬úo)) - Custos Operacionais Totais</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(rec_liq_mensal_calc)}</div>
+                       </div>
+                     </div>
+                   }>
+                     <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
+                       <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                        Receita L├¡quida
++                        Receita L├â┬¡quida
+                         <HelpCircle className="w-3 h-3 opacity-50" />
+                       </span>
+                       <p className="text-xl font-bold text-text-primary">{fmt(diretor_rec_liq)}</p>
+@@ -2646,20 +2741,20 @@ export function SalesBudgetForm() {
+                   <Tooltip content={
+                     <div className="w-80 space-y-3 text-gray-200">
+                       <div>
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├º├úo</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, Receita L├¡quida de Instala├º├úo ├ù % Receita L├¡quida)</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Instala├â┬º├â┬úo</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, Receita L├â┬¡quida de Instala├â┬º├â┬úo ├âÔÇö % Receita L├â┬¡quida)</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_inst_calc)}</div>
+                       </div>
+                       <div>
+                         <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Mensal</div>
+-                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├üX(0, (Receita L├¡quida Mensal ├ù % Receita L├¡quida) / (Prazo Contrato - Prazo Instala├º├úo))</div>
++                        <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">M├â┬üX(0, (Receita L├â┬¡quida Mensal ├âÔÇö % Receita L├â┬¡quida) / (Prazo Contrato - Prazo Instala├â┬º├â┬úo))</div>
+                         <div className="text-sm font-bold text-amber-400 mt-1">{fmt(comissao_mensal_calc)}</div>
+                       </div>
+                     </div>
+                   }>
+                     <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group border-l lg:border-l-0 border-border-subtle">
+                       <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
+-                        Comiss├úo Rec/Liq
++                        Comiss├â┬úo Rec/Liq
+                         <HelpCircle className="w-3 h-3 opacity-50" />
+                       </span>
+                       <p className="text-xl font-bold text-text-primary">{fmt(diretor_comissao)}</p>
+@@ -2678,8 +2773,8 @@ export function SalesBudgetForm() {
+ 
+                   <Tooltip content={
+                     <div className="w-72 space-y-1 text-gray-200">
+-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├│dulo de Retorno (Iterativo)</div>
+-                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├º├úo iterativa m├¬s a m├¬s calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comiss├Áes" amortiza o Investimento inicial.</div>
++                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├â┬│dulo de Retorno (Iterativo)</div>
++                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├â┬º├â┬úo iterativa m├â┬¬s a m├â┬¬s calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comiss├â┬Áes" amortiza o Investimento inicial.</div>
+                     </div>
+                   }>
+                     <div className="p-4 sm:p-5 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] col-span-2 lg:col-span-1 border-t lg:border-t-0 border-border-subtle">
+@@ -2699,7 +2794,7 @@ export function SalesBudgetForm() {
+                     onClick={() => setIsComparativoExpanded(!isComparativoExpanded)}
+                   >
+                     <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
+-                      An├ílise de Rentabilidade de Capital
++                      An├â┬ílise de Rentabilidade de Capital
+                       {isComparativoExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
+                     </h3>
+                   </div>
+@@ -2751,7 +2846,7 @@ export function SalesBudgetForm() {
+                     {/* Mensal */}
+                     <Tooltip content={
+                       <div className="w-64 space-y-2 text-gray-200">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1">Valores Mensais Unit├írios</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1">Valores Mensais Unit├â┬írios</div>
+                         {rentalItems.filter(ri => !ri.is_kit_instalacao).map((ri, idx) => (
+                           <div key={ri.id || idx} className="flex justify-between text-[11px] mb-0.5">
+                             <span className="truncate pr-2">{ri.product_nome}</span>
+@@ -2759,7 +2854,7 @@ export function SalesBudgetForm() {
+                           </div>
+                         ))}
+                         <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 mt-1">
+-                          <span>Total Unit├írio:</span>
++                          <span>Total Unit├â┬írio:</span>
+                           <span className="text-brand-primary">
+                             {fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}
+                           </span>
+@@ -2768,7 +2863,7 @@ export function SalesBudgetForm() {
+                     }>
+                       <div className="p-4 md:p-6 hover:bg-surface/50 transition-colors cursor-help group flex flex-col justify-between h-full border-b md:border-b-0 border-border-subtle lg:col-span-1">
+                         <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+-                          Mensal Loca├º├úo
++                          Mensal Loca├â┬º├â┬úo
+                           <HelpCircle className="w-3.5 h-3.5" />
+                         </span>
+                         <p className="text-2xl sm:text-3xl font-black text-brand-primary tracking-tight">{fmt(rentalTotals.faturamentoMensal)}</p>
+@@ -2781,11 +2876,11 @@ export function SalesBudgetForm() {
+                       <p className="text-2xl sm:text-3xl font-black text-teal-600 tracking-tight">{fmt(rentalTotals.faturamentoTotal)}</p>
+                     </div>
+ 
+-                    {/* Total Instala├º├úo (Only if exists) OR Prazo */}
++                    {/* Total Instala├â┬º├â┬úo (Only if exists) OR Prazo */}
+                     <div className="p-4 md:p-6 bg-bg-deep flex flex-col justify-between h-full lg:col-span-1">
+                       {rentalTotals.totalInstalacao > 0 ? (
+                         <>
+-                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500/80 mb-4 block opacity-80">Total Instala├º├úo</span>
++                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500/80 mb-4 block opacity-80">Total Instala├â┬º├â┬úo</span>
+                           <p className="text-2xl sm:text-3xl font-black text-teal-500 tracking-tight">{fmt(rentalTotals.totalInstalacao)}</p>
+                         </>
+                       ) : (
+@@ -2806,7 +2901,7 @@ export function SalesBudgetForm() {
+                     {/* Custo Aq */}
+                     <Tooltip content={
+                       <div className="w-64 space-y-2 text-gray-200">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1">Composi├º├úo do Custo</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1">Composi├â┬º├â┬úo do Custo</div>
+                         <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
+                         <div className="flex justify-between text-sm"><span>Impostos Compra:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
+                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
+@@ -2814,7 +2909,7 @@ export function SalesBudgetForm() {
+                     }>
+                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
+                         <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+-                          Custo Aquisi├º├úo
++                          Custo Aquisi├â┬º├â┬úo
+                           <HelpCircle className="w-3" />
+                         </span>
+                         <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.investimento)}</p>
+@@ -2829,7 +2924,7 @@ export function SalesBudgetForm() {
+                           <thead>
+                             <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
+                               <th className="text-left pb-1 font-bold">Imposto</th>
+-                              <th className="pb-1 font-bold pl-3">Al├¡q.</th>
++                              <th className="pb-1 font-bold pl-3">Al├â┬¡q.</th>
+                               {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Inst.</th>}
+                               <th className="pb-1 font-bold pl-4">Mensal</th>
+                               <th className="pb-1 font-bold pl-4">Total</th>
+@@ -2900,8 +2995,8 @@ export function SalesBudgetForm() {
+                     {/* ROI Final */}
+                     <Tooltip content={
+                       <div className="w-72 space-y-1 text-gray-200">
+-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├│dulo de Retorno (Iterativo)</div>
+-                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├º├úo iterativa m├¬s a m├¬s. Considera apenas Impostos + Custos Operacionais (sem comiss├Áes). Indica quando o faturamento cobre o investimento inicial.</div>
++                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├â┬│dulo de Retorno (Iterativo)</div>
++                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├â┬º├â┬úo iterativa m├â┬¬s a m├â┬¬s. Considera apenas Impostos + Custos Operacionais (sem comiss├â┬Áes). Indica quando o faturamento cobre o investimento inicial.</div>
+                       </div>
+                     }>
+                       <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
+@@ -2925,7 +3020,7 @@ export function SalesBudgetForm() {
+                             <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">MKP Geral (Markup Global)</div>
+                             <div className="text-[11px] space-y-1">
+                               <div className="flex justify-between"><span>Faturamento Total:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span></div>
+-                              <div className="flex justify-between"><span>Custo Aquisi├º├úo:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
++                              <div className="flex justify-between"><span>Custo Aquisi├â┬º├â┬úo:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                               <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
+                               <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
+                               <div className="border-t border-gray-600 pt-1 mt-1 flex justify-between font-bold">
+@@ -2962,7 +3057,7 @@ export function SalesBudgetForm() {
+         {/* Rental Parameters */}
+         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+           <div className="flex items-center justify-between">
+-            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Par├ómetros de Loca├º├úo/Comodato</h2>
++            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Par├â┬ómetros de Loca├â┬º├â┬úo/Comodato</h2>
+             {!isReadonly && (
+               <Button size="sm" variant="outline" className="border-brand-primary text-brand-primary hover:bg-brand-primary/10" onClick={() => setShowOverwriteModal(true)}>
+                 <Save className="w-4 h-4 mr-2" /> Salvar e recalcular oportunidade
+@@ -2972,8 +3067,8 @@ export function SalesBudgetForm() {
+           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+             {[
+               { label: 'Prazo Contrato (meses)', val: prazoContratoMeses, set: setPrazoContratoMeses, step: '1' },
+-              { label: 'Prazo Instala├º├úo (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
+-              { label: 'Comiss├úo %', val: percComissaoRental, set: setPercComissaoRental },
++              { label: 'Prazo Instala├â┬º├â┬úo (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
++              { label: 'Comiss├â┬úo %', val: percComissaoRental, set: setPercComissaoRental },
+             ].map(p => (
+               <div key={p.label}>
+                 <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
+@@ -2987,7 +3082,7 @@ export function SalesBudgetForm() {
+         {/* Rental Items Grid */}
+         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+           <div className="flex items-center justify-between">
+-            <h2 className="font-semibold text-text-primary text-lg">Ativos de Loca├º├úo</h2>
++            <h2 className="font-semibold text-text-primary text-lg">Ativos de Loca├â┬º├â┬úo</h2>
+             <div className="flex items-center gap-2">
+               {!isReadonly && (
+                 <Button variant="outline" size="sm" onClick={() => setShowKitSearchModal(true)}>
+@@ -2995,7 +3090,7 @@ export function SalesBudgetForm() {
+                 </Button>
+               )}
+               {!isReadonly && (
+-                <Tooltip content={!id ? "Salve a oportunidade primeiro para criar um kit espec├¡fico" : ""}>
++                <Tooltip content={!id ? "Salve a oportunidade primeiro para criar um kit espec├â┬¡fico" : ""}>
+                   <div>
+                     <Button
+                       variant="outline"
+@@ -3027,7 +3122,7 @@ export function SalesBudgetForm() {
+                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Operacional Mensal do Kit (1 uni)">Custo Op. Mensal Unit.</th>
+                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Op. Mensal * Quantidade">Custo Op. Total</th>
+                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Prazo</th>
+-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instala├º├úo</th>
++                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instala├â┬º├â┬úo</th>
+                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Unit.</th>
+                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Mensal</th>
+                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Vlr Mensal x Prazo">Vlr Total</th>
+@@ -3173,7 +3268,7 @@ export function SalesBudgetForm() {
+         </div>
+       </>)}
+ 
+-      {/* ÔòÉÔòÉÔòÉ COMPRA TAB ÔòÉÔòÉÔòÉ */}
++      {/* ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É COMPRA TAB ├óÔÇó┬É├óÔÇó┬É├óÔÇó┬É */}
+       {activeTab === 'compra' && (
+         <div className="space-y-6">
+           <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+@@ -3375,12 +3470,12 @@ export function SalesBudgetForm() {
+       {showOverwriteModal && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-bg-deep rounded-2xl shadow-2xl p-6 w-full max-w-md border border-border-subtle">
+-            <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substitui├º├úo</h3>
++            <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substitui├â┬º├â┬úo</h3>
+             <p className="text-text-muted mb-6">
+-              Esta a├º├úo ir├í <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
+-              ÔÇó Prazo de contrato<br />
+-              ÔÇó Prazo de instala├º├úo (Car├¬ncia)<br /><br />
+-              em <b>todos os kits lan├ºados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
++              Esta a├â┬º├â┬úo ir├â┬í <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
++              ├óÔé¼┬ó Prazo de contrato<br />
++              ├óÔé¼┬ó Prazo de instala├â┬º├â┬úo (Car├â┬¬ncia)<br /><br />
++              em <b>todos os kits lan├â┬ºados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
+             </p>
+             <div className="flex justify-end gap-3">
+               <Button variant="outline" onClick={() => setShowOverwriteModal(false)} disabled={saving}>Cancelar</Button>
+@@ -3392,7 +3487,7 @@ export function SalesBudgetForm() {
+         </div>
+       )}
+ 
+-      {/* Product Search Modal ÔÇö Rental */}
++      {/* Product Search Modal ├óÔé¼ÔÇØ Rental */}
+       {showAddRentalItemModal && (
+         <AddRentalItemModal
+           open={showAddRentalItemModal}
+@@ -3522,8 +3617,8 @@ export function SalesBudgetForm() {
+                           lucro_manutencao: Number(savedKit.summary?.lucro_manutencao || 0),
+                           margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
+ 
+-                          lucro_final: Number(savedKit.summary?.lucro_mensal_kit || 0),
+-                          margem_geral: Number(savedKit.summary?.margem_kit || 0),
++                          lucro_final: Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0),
++                          margem_geral: (Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0)) / Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+ 
+                           havera_manutencao: !!savedKit.havera_manutencao,
+                           qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null,
+@@ -3551,8 +3646,8 @@ export function SalesBudgetForm() {
+               </h2>
+             </div>
+             <div className="p-6 text-text-muted text-sm space-y-4">
+-              <p>Deseja aplicar os fatores de margem e impostos atuais a todos os kits lan├ºados para esta venda?</p>
+-              <p>Isso atualizar├í os valores de venda dos kits. <strong>Kits globais ser├úo clonados para esta oportunidade</strong> para preservar os originais.</p>
++              <p>Deseja aplicar os fatores de margem e impostos atuais a todos os kits lan├â┬ºados para esta venda?</p>
++              <p>Isso atualizar├â┬í os valores de venda dos kits. <strong>Kits globais ser├â┬úo clonados para esta oportunidade</strong> para preservar os originais.</p>
+             </div>
+             <div className="p-6 bg-bg-deep border-t border-border-subtle flex justify-end gap-3">
+               <Button type="button" variant="outline" onClick={() => setShowApplyKitsModal(false)}>
+@@ -3590,7 +3685,7 @@ export function SalesBudgetForm() {
+               <h3 className="text-lg font-bold text-text-primary">Sair sem salvar?</h3>
+             </div>
+             <p className="text-text-muted mb-6">
+-              Existem altera├º├Áes que n├úo foram salvas nesta oportunidade. Se voc├¬ sair agora, todas as modifica├º├Áes recentes ser├úo perdidas.
++              Existem altera├â┬º├â┬Áes que n├â┬úo foram salvas nesta oportunidade. Se voc├â┬¬ sair agora, todas as modifica├â┬º├â┬Áes recentes ser├â┬úo perdidas.
+             </p>
+             <div className="flex items-center justify-end gap-3">
+               <Button onClick={() => setShowDiscardDialog(false)} variant="outline" className="text-text-secondary border-border-subtle">
+@@ -3609,3 +3704,4 @@ export function SalesBudgetForm() {
+ }
+ 
+ // ProductSearchModal removed as it is unused
++
