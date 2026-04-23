@@ -1,31 +1,44 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
 import { ProductSearchModal } from '../../components/modals/ProductSearchModal';
 import { AddOperationalCostModal } from '../../components/modals/AddOperationalCostModal';
+import Modal from '../../components/modals/Modal';
 
-const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", className = "w-full" }: any) => {
+const Decimal4Input = ({ value, onChange, onBlur, disabled, placeholder = "0.0000", className = "w-full", correctedValue }: any) => {
   const [localStr, setLocalStr] = useState(Number(value || 0).toFixed(4));
   const [isFocused, setIsFocused] = useState(false);
 
+  // Sync from parent (e.g. when form state changes externally)
   useEffect(() => {
     if (!isFocused) {
       setLocalStr(Number(value || 0).toFixed(4));
     }
   }, [value, isFocused]);
 
+  // When correctedValue is pushed in by the parent after policy check, update display
+  useEffect(() => {
+    if (correctedValue !== undefined && correctedValue !== null) {
+      setLocalStr(Number(correctedValue).toFixed(4));
+    }
+  }, [correctedValue]);
+
   const handleBlur = () => {
     setIsFocused(false);
     let val = localStr.replace(',', '.');
     let parsed = parseFloat(val);
     if (isNaN(parsed)) parsed = 0;
-    setLocalStr(parsed.toFixed(4));
-    onChange(parsed);
+    // Don't call onChange yet — let the parent's onBlur decide the final value
+    if (onBlur) onBlur(parsed);
+    else {
+      setLocalStr(parsed.toFixed(4));
+      onChange(parsed);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,10 +151,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isCalcExpanded, setIsCalcExpanded] = useState(true);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
   const [isKitLoaded, setIsKitLoaded] = useState(!kitId);
+  const [userPolicies, setUserPolicies] = useState<any[]>([]);
+  const [policiesLoaded, setPoliciesLoaded] = useState(false);
+  const [activePolicy, setActivePolicy] = useState<any>(null);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  // Rich context for the policy violation modal
+  const [policyAlert, setPolicyAlert] = useState<{
+    fieldLabel: string;
+    enteredValue: number;
+    correctedValue: number;
+    policyName: string;
+  } | null>(null);
 
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
@@ -254,7 +279,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     // But DO overwrite when the user explicitly switches tipo_contrato.
     const shouldOverwriteTaxes = (!kitId && isKitLoaded) || tipoChanged;
 
-    if (!shouldOverwriteTaxes) return;
+    if (!shouldOverwriteTaxes) return; // Guard: only prefill for new kits or on tipo_contrato change
 
     api.get(`/companies/${activeCompanyId}/sales-parameters`).then(res => {
       const p = res.data;
@@ -288,7 +313,107 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         } : {}),
       }));
     }).catch(err => console.error('Failed to load sales parameters', err));
+  }, [kitId, form.tipo_contrato, activeCompanyId, isKitLoaded]);
+
+  // ÔöÇÔöÇ Policy loading — ALWAYS runs, independent of shouldOverwriteTaxes guard ÔöÇÔöÇ
+  // BUG FIX: previously this lived inside the prefill effect above. The
+  // `if (!shouldOverwriteTaxes) return` guard was killing the whole effect for
+  // existing kits, so setPoliciesLoaded(true) was never called and the
+  // "Carregando políticas..." spinner looped forever.
+  useEffect(() => {
+    if (!activeCompanyId) return;
+
+    const shouldOverwriteTaxes = !kitId && isKitLoaded;
+
+    const loadPolicies = async () => {
+      setPoliciesLoaded(false);
+      try {
+        // Use the user-scoped endpoint so limits reflect the logged-in user's
+        // role (cargo), not every tier configured for the company.
+        // The admin endpoint /{id}/commercial-policies returns ALL tiers and
+        // was causing minAllowed to be the company-wide minimum (e.g. 1.0)
+        // instead of what the user's role actually permits (e.g. 1.71).
+        const res = await api.get(`/companies/commercial-policies/me`);
+        const policies = (res.data || []).filter((p: any) => p.ativo);
+        const sorted = [...policies].sort((a: any, b: any) => Number(a.fator_limite) - Number(b.fator_limite));
+        setUserPolicies(sorted);
+
+        if (sorted.length > 0) {
+          const minAllowed = Number(sorted[0].fator_limite);
+          const defaultPolicy: any = sorted.find((p: any) => p.is_default) ?? sorted[0];
+
+          setForm(prev => {
+            const updates: any = {};
+
+            if (shouldOverwriteTaxes && defaultPolicy && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
+              const defaultFator = Number(defaultPolicy.fator_limite);
+              updates.fator_margem_locacao = defaultFator;
+              updates.fator_margem_instalacao = defaultFator;
+              updates.fator_margem_manutencao = defaultFator;
+              updates.fator_margem_servicos_produtos = defaultFator;
+              updates.taxa_manutencao_anual = defaultPolicy.manutencao_ano_percentual ?? 0;
+              updates.perc_comissao = defaultPolicy.comissao_percentual ?? 0;
+            } else {
+              if (Number(prev.fator_margem_locacao) < minAllowed) updates.fator_margem_locacao = minAllowed;
+              if (Number(prev.fator_margem_instalacao) < minAllowed) updates.fator_margem_instalacao = minAllowed;
+              if (Number(prev.fator_margem_manutencao) < minAllowed) updates.fator_margem_manutencao = minAllowed;
+              if (Number(prev.fator_margem_servicos_produtos) < minAllowed) updates.fator_margem_servicos_produtos = minAllowed;
+              if (prev.fator_manutencao && Number(prev.fator_manutencao) < minAllowed) updates.fator_manutencao = minAllowed;
+            }
+
+            const currentFator = Number(updates.fator_margem_locacao ?? prev.fator_margem_locacao);
+            const applicable = sorted
+              .filter((p: any) => Number(p.fator_limite) <= currentFator + 0.00001)
+              .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+
+            if (applicable) {
+              setTimeout(() => setActivePolicy(applicable), 0);
+              if (!shouldOverwriteTaxes && updates.perc_comissao === undefined) {
+                updates.perc_comissao = applicable.comissao_percentual;
+              }
+            }
+
+            return { ...prev, ...updates };
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load company policies', err);
+      } finally {
+        setPoliciesLoaded(true);
+      }
+    };
+
+    loadPolicies();
   }, [kitId, form.tipo_contrato, activeCompanyId]);
+
+
+  // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // Effect 1: Detect which tier the current factor falls into.
+  // Runs on every fator_margem_locacao change (committed value, after blur).
+  useEffect(() => {
+    if (!userPolicies || userPolicies.length === 0) return;
+
+    const fator = Number(form.fator_margem_locacao);
+    if (!fator || fator <= 0) return;
+
+    const applicable = userPolicies
+      .filter((p: any) => Number(p.fator_limite) <= fator + 0.00001)
+      .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0] ?? null;
+
+    setActivePolicy(applicable);
+  }, [form.fator_margem_locacao, userPolicies]);
+
+  // Effect 2: Sync commission when the active tier changes (tier ID changed).
+  // Separated from Effect 1 to avoid nested state setter anti-pattern.
+  useEffect(() => {
+    if (!activePolicy) return;
+    setForm(prev => {
+      const incoming = Number(activePolicy.comissao_percentual);
+      if (Number(prev.perc_comissao) === incoming) return prev; // no-op if already correct
+      return { ...prev, perc_comissao: incoming };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePolicy?.id]); // Only fires when the TIER changes, not on every form render
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -347,6 +472,58 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const handleInputChange = (field: keyof KitFormValues, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const FACTOR_LABELS: Record<string, string> = {
+    fator_margem_locacao: 'Fator Margem (Produtos / Base)',
+    fator_margem_servicos_produtos: 'Fator Margem Serviços (Produtos)',
+    fator_margem_instalacao: 'Fator Margem Instalação',
+    fator_margem_manutencao: 'Fator Margem Manutenção',
+    fator_manutencao: 'Fator Manutenção',
+  };
+
+  const handleFactorBlur = (fieldName: keyof KitFormValues, value: number) => {
+    // ALWAYS commit the typed value first — never leave input in limbo.
+    // This is the single source of truth: the user's intent is respected,
+    // then validated against loaded policies.
+    setForm(prev => ({ ...prev, [fieldName]: value }));
+
+    // If policies aren't loaded yet, skip validation (they'll clamp on load)
+    if (!policiesLoaded || !userPolicies || userPolicies.length === 0) return;
+
+    const minAllowed = Math.min(...userPolicies.map(p => Number(p.fator_limite)));
+    const violatingPolicy = userPolicies.find(p => Number(p.fator_limite) === minAllowed);
+
+    let finalValue = value;
+    if (value < minAllowed - 0.00001) {
+      // Trigger rich policy violation modal
+      setPolicyAlert({
+        fieldLabel: FACTOR_LABELS[fieldName as string] ?? String(fieldName),
+        enteredValue: value,
+        correctedValue: minAllowed,
+        policyName: violatingPolicy?.nome_politica ?? 'Política Comercial',
+      });
+      finalValue = minAllowed;
+    }
+
+    // Commit corrected value
+    setForm(prev => ({ ...prev, [fieldName]: finalValue }));
+
+    // Determine which policy tier applies
+    const applicablePolicy = userPolicies
+      .filter(p => Number(p.fator_limite) <= finalValue + 0.00001)
+      .sort((a, b) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+
+    if (applicablePolicy) {
+      setActivePolicy(applicablePolicy);
+      setForm(prev => ({
+        ...prev,
+        [fieldName]: finalValue,
+        perc_comissao: applicablePolicy.comissao_percentual
+      }));
+    } else {
+      setActivePolicy(null);
+    }
   };
 
   const handleAddProduct = (product: any) => {
@@ -478,6 +655,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   };
 
   const onSubmit = async () => {
+    // Front-end safety validation
+    if (userPolicies.length > 0) {
+      const minAllowed = Math.min(...userPolicies.map(p => Number(p.fator_limite)));
+      const factorFields: (keyof KitFormValues)[] = [
+        'fator_margem_locacao',
+        'fator_margem_instalacao',
+        'fator_margem_manutencao',
+        'fator_margem_servicos_produtos',
+        'fator_margem_manutencao'
+      ];
+
+      const invalidField = factorFields.find(f => {
+        const val = form[f];
+        return val !== null && val !== undefined && Number(val) > 0 && Number(val) < (minAllowed - 0.0001);
+      });
+
+      if (invalidField) {
+        setAlertMessage(`O campo [${invalidField}] está com o fator abaixo do limite permitido (${minAllowed.toFixed(4)}). Por favor, ajuste antes de prosseguir.`);
+        return;
+      }
+    }
+
     try {
       const payload = sanitizePayload(form);
       let savedKit = null;
@@ -569,6 +768,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
       {/* STICKY TOP HUD */}
       {(() => {
+        // While the policy-violation modal is open, suppress the HUD entirely —
+        // it would show financials computed from an invalid (below-minimum) factor.
+        if (policyAlert) return null;
+
         const isVenda = form.tipo_contrato === 'VENDA_EQUIPAMENTOS';
 
         if (isVenda) {
@@ -599,7 +802,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           const faturamentoTotal = totalVenda + totalManutencao;
           const lucroVenda = Number(financials?.summary?.lucro_equipamentos || 0);
           const margemVenda = Number(financials?.summary?.margem_equipamentos || 0);
-          
+
           const lucroManutMensal = totalManutencao > 0 ? Number(financials?.summary?.lucro_manutencao || 0) / qtdMeses : 0;
           const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
           const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
@@ -861,19 +1064,54 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         return (
           <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-5 transition-all">
             {/* Header */}
-            <div className="flex items-center justify-between mb-4 border-b border-border-subtle pb-3">
+            <div
+              className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
+              onClick={() => setIsCalcExpanded(!isCalcExpanded)}
+            >
               <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-brand-primary" />
                 Cálculo Simultâneo — {tipoLabel}
               </h3>
-              {isCalculating ? (
-                <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
-                  <Calculator className="w-3 h-3 animate-pulse" /> Calculando
-                </span>
-              ) : (
-                <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
-              )}
+              <div className="flex items-center gap-3">
+                {isCalculating ? (
+                  <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
+                    <Calculator className="w-3 h-3 animate-pulse" /> Calculando
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+                )}
+                <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
+                  {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
+
+            {isCalcExpanded && (
+              <>
+                {/* Active Policy info row */}
+                {activePolicy ? (
+              <div className="flex items-center gap-3 mb-4 px-3 py-2 bg-brand-primary/5 border border-brand-primary/20 rounded-lg">
+                <div className="w-6 h-6 rounded-full bg-brand-primary flex items-center justify-center shrink-0">
+                  <span className="text-white text-[10px] font-black">P</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Política Comercial Ativa</p>
+                  <p className="text-sm font-bold text-brand-primary truncate">{activePolicy.nome_politica}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Fator Mín.</p>
+                  <p className="text-sm font-bold text-text-primary">{Number(activePolicy.fator_limite).toFixed(4)}</p>
+                </div>
+                <div className="shrink-0 text-right border-l border-brand-primary/20 pl-3">
+                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Comissão</p>
+                  <p className="text-sm font-bold text-brand-primary">{activePolicy.comissao_percentual}%</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-bg-subtle border border-border-subtle rounded-lg">
+                <span className="text-[10px] text-text-muted italic">Nenhuma política comercial ativa para o seu cargo.</span>
+              </div>
+            )}
 
             {/* Cards Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
@@ -1000,6 +1238,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           <div className="space-y-1.5 font-mono text-text-muted text-xs">
                             {(() => {
                               const baseTributavel = faturamentoMensal;
+                              const creditoIcmsCompra = financials?.summary?.credito_icms_compra_total || 0;
                               return (
                                 <>
                                   {(Number(form.aliq_pis) > 0) && (
@@ -1038,6 +1277,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       <span>{fmtC(baseTributavel * (Number(form.aliq_icms) / 100))}</span>
                                     </div>
                                   )}
+                                  {(creditoIcmsCompra > 0) && (
+                                    <div className="flex justify-between text-brand-success mt-1 border-t border-brand-success/20 pt-1">
+                                      <span>Cr├®dito ICMS (Compra)</span>
+                                      <span>-{fmtC(creditoIcmsCompra)}</span>
+                                    </div>
+                                  )}
                                 </>
                               );
                             })()}
@@ -1071,6 +1316,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               </div>
 
             </div>
+              </>
+            )}
           </div>
         );
       })()}
@@ -1165,13 +1412,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <label className="block text-sm font-medium mb-1">
                   {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Fator Margem (Produtos)' : 'Fator Margem'}
                 </label>
-                <Decimal4Input value={form.fator_margem_locacao} onChange={(val: number) => handleInputChange('fator_margem_locacao', val)} />
+                <Decimal4Input
+                  value={form.fator_margem_locacao}
+                  onChange={(val: number) => handleInputChange('fator_margem_locacao', val)}
+                  onBlur={(val: number) => handleFactorBlur('fator_margem_locacao', val)}
+                />
               </div>
 
               {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
-                  <Decimal4Input value={form.fator_manutencao} onChange={(val: number) => handleInputChange('fator_manutencao', val)} placeholder="Ex: 1.7000" />
+                  <Decimal4Input
+                    value={form.fator_manutencao}
+                    onChange={(val: number) => handleInputChange('fator_manutencao', val)}
+                    onBlur={(val: number) => handleFactorBlur('fator_manutencao', val)}
+                    placeholder="Ex: 1.7000"
+                  />
                 </div>
               )}
 
@@ -1179,15 +1435,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
-                    <Decimal4Input value={form.fator_margem_servicos_produtos} onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)} />
+                    <Decimal4Input
+                      value={form.fator_margem_servicos_produtos}
+                      onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
+                      onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Fator Margem Instalação</label>
-                    <Decimal4Input value={form.fator_margem_instalacao} onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)} />
+                    <Decimal4Input
+                      value={form.fator_margem_instalacao}
+                      onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)}
+                      onBlur={(val: number) => handleFactorBlur('fator_margem_instalacao', val)}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
-                    <Decimal4Input value={form.fator_margem_manutencao} onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)} />
+                    <Decimal4Input
+                      value={form.fator_margem_manutencao}
+                      onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)}
+                      onBlur={(val: number) => handleFactorBlur('fator_margem_manutencao', val)}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>
@@ -1331,7 +1599,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && form.items.length > 0 && (
                   <Button variant="outline" size="sm" onClick={() => {
                     if (!form.forma_execucao) {
-                      alert('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
+                      setAlertMessage('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
                       return;
                     }
                     setShowItemServiceSearch(true);
@@ -1447,6 +1715,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                     </div>
                                     <div className="space-y-1.5 font-mono text-text-muted">
                                       <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
+                                      {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
@@ -1652,7 +1921,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <div className="flex flex-col gap-0.5">
                                 <span>{c.descricao_item || 'Serviço'}</span>
                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
-                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
+                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
                                   </span>
                                 )}
@@ -1661,7 +1930,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             <td className="px-4 py-3 text-text-secondary">{c.tipo_custo === 'INSTALACAO' ? 'Instalação' : c.tipo_custo}</td>
                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                               <>
-                                <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
+                                  <Tooltip content={
+                                    <div className="w-64 text-left">
+                                      <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                        <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                        Detalhamento de Custo
+                                      </div>
+                                      <div className="space-y-1.5 font-mono text-text-muted">
+                                        <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
+                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                        {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
+                                        {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
+                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
+                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                          <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }>
+                                    <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
+                                  </Tooltip>
+                                </td>
                                 <td className="px-2 py-3 text-right tabular-nums">
                                   <Input
                                     type="number"
@@ -1818,7 +2108,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <div className="flex flex-col gap-0.5">
                                 <span>{c.descricao_item || 'Serviço'}</span>
                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
-                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded font-semibold border border-purple-200 uppercase">
+                                  <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
                                   </span>
                                 )}
@@ -1836,9 +2126,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       </div>
                                       <div className="space-y-1.5 font-mono text-text-muted">
                                         <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
+                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
                                         {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                         {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
-                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}                                         <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                        {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
+                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
                                           <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
                                         </div>
                                       </div>
@@ -1981,7 +2273,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <h2 className="text-sm font-semibold tracking-tight text-text-primary">
                   Bloco 7 – Custos Mensais do Contrato
                 </h2>
-                <Button variant="secondary" size="sm" type="button" onClick={() => {
+                <Button variant="outline" size="sm" type="button" onClick={() => {
                   setForm(prev => ({
                     ...prev,
                     monthly_costs: [
@@ -2068,7 +2360,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             />
                           </td>
                           <td className="px-4 py-2">
-                            <Decimal4Input 
+                            <Decimal4Input
                               value={mcost.valor_unitario}
                               onChange={(val: number) => {
                                 setForm(prev => {
@@ -2084,16 +2376,16 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             {fmtC((mcost.quantidade || 0) * (mcost.valor_unitario || 0))}
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => {
                                 setForm(prev => {
                                   const newCosts = [...prev.monthly_costs];
                                   newCosts.splice(idx, 1);
                                   return { ...prev, monthly_costs: newCosts };
                                 });
-                              }} 
+                              }}
                               className="text-text-muted hover:text-brand-danger opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -2140,6 +2432,76 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             kitFormaExecucao={form.forma_execucao || 'H. NORMAL'}
           />
         </div>
+
+        {/* Generic alert modal (non-policy) */}
+        <Modal isOpen={!!alertMessage} onClose={() => setAlertMessage(null)} title="Aviso">
+          <div className="py-2 text-text-secondary">
+            <p className="text-sm leading-relaxed">{alertMessage}</p>
+          </div>
+          <div className="flex justify-end pt-4 mt-4 border-t border-border-subtle">
+            <Button onClick={() => setAlertMessage(null)} className="btn-primary">
+              Entendido
+            </Button>
+          </div>
+        </Modal>
+
+        {/* Rich Policy Violation Modal */}
+        <Modal
+          isOpen={!!policyAlert}
+          onClose={() => setPolicyAlert(null)}
+          title="Violação de Política Comercial"
+        >
+          {policyAlert && (
+            <div className="space-y-4">
+              {/* Icon + intro */}
+              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-red-600 font-bold text-sm">!</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Fator abaixo do limite permitido</p>
+                  <p className="text-xs text-red-700 mt-0.5">
+                    O valor informado viola a Política Comercial vigente e foi automaticamente corrigido.
+                  </p>
+                </div>
+              </div>
+
+              {/* Detail table */}
+              <div className="bg-bg-subtle border border-border-subtle rounded-lg overflow-hidden text-sm">
+                <div className="grid grid-cols-2 divide-x divide-border-subtle">
+                  <div className="p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Campo</p>
+                    <p className="font-semibold text-text-primary">{policyAlert.fieldLabel}</p>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Política Violada</p>
+                    <p className="font-semibold text-text-primary">{policyAlert.policyName}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 divide-x divide-border-subtle border-t border-border-subtle">
+                  <div className="p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Valor Informado</p>
+                    <p className="font-bold text-red-600 text-base">{policyAlert.enteredValue.toFixed(4)}</p>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">Corrigido Para</p>
+                    <p className="font-bold text-brand-success text-base">{policyAlert.correctedValue.toFixed(4)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-text-muted">
+                O campo foi automaticamente ajustado para o valor mínimo da política. Para utilizar um fator menor, solicite autorização ao seu gestor.
+              </p>
+
+              <div className="flex justify-end pt-2 border-t border-border-subtle">
+                <Button onClick={() => setPolicyAlert(null)} className="btn-primary">
+                  Entendido
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
 
       </div>
     </div>

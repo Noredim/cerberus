@@ -312,8 +312,8 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
           </div>
         ) : (
           <div className="p-6 space-y-6 overflow-y-auto">
-            <div className={`border rounded-lg p-4 flex items-start gap-4 ${tipoItem === 'PRODUTO' ? 'bg-brand-primary/5 border-brand-primary/20' : 'bg-purple-50 border-purple-200'}`}>
-              <CheckCircle className={`w-6 h-6 shrink-0 mt-0.5 ${tipoItem === 'PRODUTO' ? 'text-brand-primary' : 'text-purple-600'}`} />
+            <div className={`border rounded-lg p-4 flex items-start gap-4 ${tipoItem === 'PRODUTO' ? 'bg-brand-primary/5 border-brand-primary/20' : 'bg-cyan-50 border-cyan-200'}`}>
+              <CheckCircle className={`w-6 h-6 shrink-0 mt-0.5 ${tipoItem === 'PRODUTO' ? 'text-brand-primary' : 'text-cyan-600'}`} />
               <div>
                 <h4 className="font-semibold text-text-primary">
                   {tipoItem === 'PRODUTO' ? selectedProduct.nome : selectedProduct.nome_servico}
@@ -363,7 +363,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
                   <select
                     value={formaExecucao}
                     onChange={(e) => setFormaExecucao(e.target.value)}
-                    className="w-full px-3 py-2 border border-border-strong rounded-lg bg-bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/50 text-text-primary"
+                    className="w-full px-3 py-2 border border-border-strong rounded-lg bg-bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50 text-text-primary"
                   >
                     {execOptions.map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -374,7 +374,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
               
               {tipoItem === 'SERVICO_PROPRIO' && isKitBasedExecucao && (
                  <div className="flex flex-col justify-center mt-6">
-                    <span className="text-xs text-purple-600 font-semibold bg-purple-50 px-2 py-1 rounded inline-block self-start border border-purple-200">
+                    <span className="text-xs text-cyan-600 font-semibold bg-cyan-50 px-2 py-1 rounded inline-block self-start border border-cyan-200">
                       Custo baseado na Forma de Execução do Kit ({kitFormaExecucao})
                     </span>
                  </div>

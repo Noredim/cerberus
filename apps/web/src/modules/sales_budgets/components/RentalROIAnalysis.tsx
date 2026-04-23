@@ -415,12 +415,11 @@ export const RentalROIAnalysis: React.FC<RentalROIAnalysisProps> = ({
                         />
                       )}
                       {prazoContratoMeses > 0 && (
-                        <ReferenceLine
-                          x={Math.floor(prazoContratoMeses)}
-                          stroke="#a78bfa"
-                          strokeDasharray="4 4"
-                          strokeWidth={1.5}
-                          label={{ position: 'insideTopLeft', value: `Ctt ${prazoContratoMeses}m`, fill: '#a78bfa', fontSize: 10 }}
+                        <ReferenceLine 
+                          x={prazoContratoMeses} 
+                          stroke="#0ea5e9" 
+                          strokeDasharray="3 3"
+                          label={{ position: 'insideTopLeft', value: `Ctt ${prazoContratoMeses}m`, fill: '#0ea5e9', fontSize: 10 }}
                         />
                       )}
                     </LineChart>
