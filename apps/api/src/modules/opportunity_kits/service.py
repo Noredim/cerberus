@@ -495,7 +495,7 @@ class OpportunityKitService:
             
             if kit.manutencao_inclusa:
                 tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
-                vlt_manut = (custo_aquisicao_kit + vlr_instal_calc_base_manut) * tx_manut
+                vlt_manut = (custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem * tx_manut
             else:
                 fator_manut = Decimal(kit.fator_manutencao if kit.fator_manutencao is not None else 1)
                 vlt_manut = custo_operacional_mensal_kit * fator_manut
