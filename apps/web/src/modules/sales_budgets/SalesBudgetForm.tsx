@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -32,6 +32,7 @@ interface CostComposition {
   tipo: string;
   custo_unit_final: number;
   icms_abatido?: number;
+  perfil_st_ativo?: boolean;
 }
 
 const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
@@ -443,7 +444,7 @@ export function SalesBudgetForm() {
   const [percIss, setPercIss] = useState(0);
   const [percIcmsInterno, setPercIcmsInterno] = useState(0);
   const [percIcmsExterno, setPercIcmsExterno] = useState(0);
-  // Venda tab âÔé¼ÔÇØ 4 separate fator margem fields
+  // Venda tab — 4 separate fator margem fields
   const [fatorMargemProdutos, setFatorMargemProdutos] = useState(1.35);
   const [fatorMargemServicos, setFatorMargemServicos] = useState(1.35);
   const [fatorMargemInstalacao, setFatorMargemInstalacao] = useState(1.35);
@@ -455,11 +456,11 @@ export function SalesBudgetForm() {
   const [minFatorAllowed, setMinFatorAllowed] = useState(0);
   const [vendaHaveraManutencao, setVendaHaveraManutencao] = useState(false);
   const [vendaQtdMesesManutencao, setVendaQtdMesesManutencao] = useState(0);
-  // Controls the tax-detail info modal in Par├â┬ómetros Padr├â┬úo (Venda)
+  // Controls the tax-detail info modal in Parâmetros Padrão (Venda)
   const [showTaxModal, setShowTaxModal] = useState(false);
-  // Company _venda taxes âÔé¼ÔÇØ always reflects current company config, used only by the modal (read-only)
+  // Company _venda taxes — always reflects current company config, used only by the modal (read-only)
   const [companyVendaTaxes, setCompanyVendaTaxes] = useState({ pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms_interno: 0, icms_externo: 0 });
-  // Company MKP for Venda âÔé¼ÔÇØ drives the 4 fatorMargem fields reactively (race-condition safe)
+  // Company MKP for Venda — drives the 4 fatorMargem fields reactively (race-condition safe)
 
   // Items
   const [items, setItems] = useState<SalesBudgetItem[]>([]);
@@ -573,7 +574,7 @@ export function SalesBudgetForm() {
     api.get(`/companies/${activeCompanyId}/sales-parameters`).then(({ data }) => {
       const pick = (key: string) => Number(data[`${key}_venda`] || data[key] || 0);
 
-      // Mapping for Loca├â┬º├â┬úo de Equipamentos as per requirement
+      // Mapping for Locação de Equipamentos as per requirement
       const mkpLocacao = Number(data.mkp_padrao_locacao || data.mkp_padrao || 1.35);
       const despAdmLocacao = Number(data.despesa_administrativa_locacao || data.despesa_administrativa || 0);
       const comissaoLocacao = Number(data.comissionamento_locacao || data.comissionamento || 0);
@@ -735,7 +736,15 @@ export function SalesBudgetForm() {
           try {
             if (item.product_id) {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}`);
-              regularItems.push({ ...item, cost_composition: cc });
+              // When company does NOT adhere to ST (perfil_st_ativo=false),
+              // override the saved ST flag and recalculate ICMS on the sale.
+              // Items saved before this fix have icms_unit=0 (ST zeroed it out).
+              if (cc.perfil_st_ativo === false && item.tem_st) {
+                const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
+                regularItems.push({ ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit });
+              } else {
+                regularItems.push({ ...item, cost_composition: cc });
+              }
             } else {
               regularItems.push(item);
             }
@@ -1025,7 +1034,7 @@ export function SalesBudgetForm() {
           fator_margem_servicos_produtos: fatorMargemServicos,
           fator_margem_instalacao: fatorMargemInstalacao,
           fator_margem_manutencao: fatorMargemManutencao
-          // RN02: Alterar apenas os campos de par├â┬ómetros financeiros equivalentes
+          // RN02: Alterar apenas os campos de parâmetros financeiros equivalentes
         };
 
         let finalKitId = vk.opportunity_kit_id;
@@ -1126,11 +1135,11 @@ export function SalesBudgetForm() {
       const success = await handleSave(true, undefined, updatedKits);
       if (!success) return;
 
-      alert('Par├â┬ómetros aplicados aos kits com sucesso!');
+      alert('Parâmetros aplicados aos kits com sucesso!');
       window.location.reload();
     } catch (err) {
       console.error('Failed to apply kit params:', err);
-      alert('Erro ao aplicar par├â┬ómetros aos kits.');
+      alert('Erro ao aplicar parâmetros aos kits.');
     } finally {
       setSaving(false);
     }
@@ -1138,7 +1147,7 @@ export function SalesBudgetForm() {
 
   const handleRefreshParams = async () => {
     if (!activeCompanyId) return;
-    if (!window.confirm("Deseja atualizar os par├â┬ómetros com base no cadastro da empresa? Os valores atuais ser├â┬úo substitu├â┬¡dos.")) return;
+    if (!window.confirm("Deseja atualizar os parâmetros com base no cadastro da empresa? Os valores atuais serão substituídos.")) return;
 
     try {
       setSaving(true);
@@ -1196,7 +1205,7 @@ export function SalesBudgetForm() {
 
     } catch (err) {
       console.error('Failed to refresh parameters:', err);
-      alert('Erro ao carregar par├â┬ómetros da empresa.');
+      alert('Erro ao carregar parâmetros da empresa.');
     } finally {
       setSaving(false);
     }
@@ -1411,7 +1420,7 @@ export function SalesBudgetForm() {
     }
     const kitIds = Array.from(new Set(rentalItems.filter(ri => ri.opportunity_kit_id).map(ri => ri.opportunity_kit_id)));
     if (kitIds.length === 0) {
-      alert("N├â┬úo h├â┬í kits lan├â┬ºados nesta oportunidade para atualizar.");
+      alert("Não há kits lançados nesta oportunidade para atualizar.");
       setShowOverwriteModal(false);
       return;
     }
@@ -1473,7 +1482,7 @@ export function SalesBudgetForm() {
 
   const handleSave = async (preventNavigate = false, overriddenRentalItems?: typeof rentalItems, overriddenVendaKits?: typeof vendaKits) => {
     if (!titulo || !customerId) {
-      alert('Preencha t├â┬¡tulo e cliente.');
+      alert('Preencha título e cliente.');
       return false;
     }
     setSaving(true);
@@ -1491,7 +1500,7 @@ export function SalesBudgetForm() {
 
       const invalid = allFactors.some(f => f < (minFatorAllowed - 0.0001));
       if (invalid) {
-        alert(`Aten├â┬º├â┬úo: Existem fatores de margem (markup) abaixo do limite permitido pela sua pol├â┬¡tica comercial (${minFatorAllowed.toFixed(4)}). Por favor, ajuste-os antes de salvar.`);
+        alert(`Atenção: Existem fatores de margem (markup) abaixo do limite permitido pela sua política comercial (${minFatorAllowed.toFixed(4)}). Por favor, ajuste-os antes de salvar.`);
         setSaving(false);
         return false;
       }
@@ -1658,7 +1667,7 @@ export function SalesBudgetForm() {
           }
         } catch (err) {
           console.error('Failed to save purchase budget', err);
-          alert('Erro ao salvar aba de or├â┬ºamento de compra.');
+          alert('Erro ao salvar aba de orçamento de compra.');
         }
       }
 
@@ -1766,7 +1775,7 @@ export function SalesBudgetForm() {
           onClick={() => setIsHeaderCollapsed(prev => !prev)}
         >
           <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-            Cabe├â┬ºalho
+            Cabeçalho
             {isHeaderCollapsed
               ? <ChevronDown className="w-4 h-4 text-text-muted" />
               : <ChevronUp className="w-4 h-4 text-text-muted" />}
@@ -1785,7 +1794,7 @@ export function SalesBudgetForm() {
           <div className="px-5 pb-5 space-y-4 border-t border-border-subtle">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-text-muted mb-1">T├â┬¡tulo *</label>
+                <label className="block text-sm font-medium text-text-muted mb-1">Título *</label>
                 <input value={titulo} onChange={() => { }} disabled={true}
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
@@ -1812,12 +1821,12 @@ export function SalesBudgetForm() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-muted mb-1">Respons├â┬ível</label>
+                <label className="block text-sm font-medium text-text-muted mb-1">Responsável</label>
                 <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-muted mb-1">Observa├â┬º├â┬Áes</label>
+              <label className="block text-sm font-medium text-text-muted mb-1">Observações</label>
               <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadonly} rows={2}
                 className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
             </div>
@@ -1833,17 +1842,17 @@ export function SalesBudgetForm() {
         </button>
         <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>
           <TrendingUp className="w-4 h-4" />
-          Loca├â┬º├â┬úo / Comodato
+          Locação / Comodato
         </button>
         <button onClick={() => setSearchParams({ tab: 'compra' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'compra' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-text-muted hover:text-text-primary'}`}>
           <Package className="w-4 h-4" />
-          Or├â┬ºamento de Compra
+          Orçamento de Compra
         </button>
       </div>
 
       {/* â•┬Éâ•┬Éâ•┬É VENDA TAB â•┬Éâ•┬Éâ•┬É */}
       {activeTab === 'venda' && (<>
-        {/* Consolida├â┬º├â┬úo Diretoria âÔé¼ÔÇØ right after header */}
+        {/* Consolidação Diretoria — right after header */}
         {items.length > 0 && (() => {
           const venda_fat = totals.venda;
           const venda_custo_total = totals.custo + totals.impostos + totals.frete + totals.despAdm;
@@ -1860,8 +1869,8 @@ export function SalesBudgetForm() {
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
-                  <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├â┬º├â┬úo Diretoria</h2>
-                  <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├â┬ílise de viabilidade e comissionamento executivo</p>
+                  <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolidação Diretoria</h2>
+                  <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">Análise de viabilidade e comissionamento executivo</p>
                 </div>
               </div>
 
@@ -1869,7 +1878,7 @@ export function SalesBudgetForm() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
                 <div className="lg:col-span-4">
                   <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
-                    Comiss├â┬úo sobre receita l├â┬¡quida
+                    Comissão sobre receita líquida
                   </label>
                   <div className="relative max-w-[180px]">
                     <input
@@ -1906,7 +1915,7 @@ export function SalesBudgetForm() {
                 <Tooltip content={
                   <div className="w-80 space-y-3 text-gray-200">
                     <div>
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita L├â┬¡quida Venda</div>
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita Líquida Venda</div>
                       <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Faturamento - (Custo Aq. + Impostos + Frete + Desp. Adm.)</div>
                       <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_rec_liq)}</div>
                     </div>
@@ -1914,7 +1923,7 @@ export function SalesBudgetForm() {
                 }>
                   <div className="p-4 sm:p-5 hover:bg-white/[0.03] transition-colors cursor-help group">
                     <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-gray-300 transition-colors">
-                      Receita L├â┬¡quida
+                      Receita Líquida
                       <HelpCircle className="w-3 h-3 opacity-50" />
                     </span>
                     <p className="text-xl font-bold text-text-primary">{fmt(venda_rec_liq)}</p>
@@ -1950,18 +1959,18 @@ export function SalesBudgetForm() {
                 </div>
               </div>
 
-              {/* Detalhamento de Opera├â┬º├â┬úo (Replaces previous Consolida├â┬º├â┬úo standard blocks) */}
+              {/* Detalhamento de Operação (Replaces previous Consolidação standard blocks) */}
               <div className="mt-8 pt-6 border-t border-border-subtle">
                 <h3 className="font-semibold text-text-primary text-base mb-4 flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-brand-primary" />
-                  Detalhamento de Opera├â┬º├â┬úo
+                  Detalhamento de Operação
                 </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisi├â┬º├â┬úo</span>
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisição</span>
                     <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.custo)}</p>
                     <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
-                      <div className="font-semibold text-amber-300 mb-2">Composi├â┬º├â┬úo do Custo</div>
+                      <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
                       <div className="space-y-1">
                         <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
                         {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
@@ -1984,7 +1993,7 @@ export function SalesBudgetForm() {
                         {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
                         {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
                         {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
-                        {totals.total_credito_icms > 0 && <div className="flex justify-between text-brand-success"><span>Cr├â┬®d. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>}
+                        {totals.total_credito_icms > 0 && <div className="flex justify-between text-brand-success"><span>Créd. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>}
                         <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
                       </div>
                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
@@ -2032,7 +2041,7 @@ export function SalesBudgetForm() {
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
                 <Calculator className="w-5 h-5 text-brand-primary" />
-                Par├â┬ómetros Padr├â┬úo
+                Parâmetros Padrão
               </h2>
               <div className="flex items-center gap-2">
                 <Button
@@ -2044,7 +2053,7 @@ export function SalesBudgetForm() {
                   className="text-[11px] border-brand-primary/30 hover:bg-brand-primary/5 text-brand-primary h-8"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${saving ? 'animate-spin' : ''}`} />
-                  Atualizar Par├â┬ómetros
+                  Atualizar Parâmetros
                 </Button>
                 {vendaKits.length > 0 && (
                   <Button
@@ -2059,7 +2068,7 @@ export function SalesBudgetForm() {
                     Aplicar aos Kits
                   </Button>
                 )}
-                {/* Info button âÔé¼ÔÇØ opens read-only tax breakdown modal */}
+                {/* Info button — opens read-only tax breakdown modal */}
                 <button
                   type="button"
                   onClick={() => setShowTaxModal(true)}
@@ -2070,13 +2079,13 @@ export function SalesBudgetForm() {
               </div>
             </div>
 
-            {/* Row 1 âÔé¼ÔÇØ Fator Margem (4 fields) + Maintenance */}
+            {/* Row 1 — Fator Margem (4 fields) + Maintenance */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Fator Margem (Produtos)', val: fatorMargemProdutos, set: setFatorMargemProdutos },
-                { label: 'Fator Margem Servi├â┬ºos', val: fatorMargemServicos, set: setFatorMargemServicos },
-                { label: 'Fator Margem Instala├â┬º├â┬úo', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
-                { label: 'Fator Margem Manuten├â┬º├â┬úo', val: fatorMargemManutencao, set: setFatorMargemManutencao },
+                { label: 'Fator Margem Serviços', val: fatorMargemServicos, set: setFatorMargemServicos },
+                { label: 'Fator Margem Instalação', val: fatorMargemInstalacao, set: setFatorMargemInstalacao },
+                { label: 'Fator Margem Manutenção', val: fatorMargemManutencao, set: setFatorMargemManutencao },
               ].map(p => (
                 <div key={p.label}>
                   <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
@@ -2093,7 +2102,7 @@ export function SalesBudgetForm() {
                   disabled={isReadonly}
                   className="w-4 h-4 rounded border-brand-primary/30 text-brand-primary focus:ring-brand-primary/30"
                 />
-                <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manuten├â┬º├â┬úo Mensal</label>
+                <label htmlFor="vendaHaveraManutencao" className="text-xs font-medium text-text-muted cursor-pointer">Manutenção Mensal</label>
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Qtd. Meses Manut.</label>
@@ -2110,11 +2119,11 @@ export function SalesBudgetForm() {
             </div>
 
 
-            {/* Row 2 âÔé¼ÔÇØ Desp. Adm., Comiss├â┬úo, Frete */}
+            {/* Row 2 — Desp. Adm., Comissão, Frete */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Desp. Adm. %', val: percDespesaAdm, set: setPercDespesaAdm },
-                { label: 'Comiss├â┬úo %', val: percComissao, set: setPercComissao },
+                { label: 'Comissão %', val: percComissao, set: setPercComissao },
                 { label: 'Frete Venda %', val: percFreteVenda, set: setPercFreteVenda },
               ].map(p => (
                 <div key={p.label}>
@@ -2133,11 +2142,11 @@ export function SalesBudgetForm() {
             <div className="bg-bg-surface border border-border-subtle rounded-2xl shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-                  <Receipt className="w-5 h-5 text-rose-400" /> Impostos Incidentes âÔé¼ÔÇØ Venda de Equipamentos
+                  <Receipt className="w-5 h-5 text-rose-400" /> Impostos Incidentes — Venda de Equipamentos
                 </h3>
                 <button onClick={() => setShowTaxModal(false)} className="text-text-muted hover:text-text-primary transition-colors"><X className="w-5 h-5" /></button>
               </div>
-              <p className="text-xs text-text-muted mb-4">Tributa├â┬º├â┬úo padr├â┬úo do bloco <strong>Venda de Equipamentos e Servi├â┬ºos</strong> configurada nos Par├â┬ómetros da empresa. Estes valores s├â┬úo aplicados automaticamente e somente podem ser alterados no cadastro da empresa.</p>
+              <p className="text-xs text-text-muted mb-4">Tributação padrão do bloco <strong>Venda de Equipamentos e Serviços</strong> configurada nos Parâmetros da empresa. Estes valores são aplicados automaticamente e somente podem ser alterados no cadastro da empresa.</p>
               <div className="space-y-2">
                 {[
                   { label: 'PIS', val: companyVendaTaxes.pis },
@@ -2163,12 +2172,11 @@ export function SalesBudgetForm() {
         )}
 
 
-        {/* Bloco de Totaliza├â┬º├â┬úo Venda */}
+        {/* Bloco de Totalização Venda */}
         {vendaKits.length > 0 && (() => {
           const t = vendaKits.reduce((acc, kit) => {
             const q = kit.quantidade || 1;
             const s = kit.summary || {};
-            const raw = kit.kit_raw || {};
 
             // Custo Base
             const st = (Number(s.total_st_kit) || 0) * q;
@@ -2196,35 +2204,19 @@ export function SalesBudgetForm() {
             const manM = Number(kit.qtd_meses_manutencao) || 0;
             if (manM > acc.maxMesesManut) acc.maxMesesManut = manM;
 
-            // Impostos de Venda (Apenas B4 + B5)
-            const baseB45 = Number(s.venda_equipamentos_total) || 0;
-            acc.pis += (baseB45 * (Number(raw.aliq_pis) || 0) / 100) * q;
-            acc.cofins += (baseB45 * (Number(raw.aliq_cofins) || 0) / 100) * q;
-            acc.csll += (baseB45 * (Number(raw.aliq_csll) || 0) / 100) * q;
-            acc.irpj += (baseB45 * (Number(raw.aliq_irpj) || 0) / 100) * q;
-
-            // ICMS no B4 (Produtos com ST) e ISS no B4 (Servi├â┬ºos Lupa) + B5 (Instala├â┬º├â┬úo)
-            const iSums = raw.item_summaries || [];
-            let icmsKit = 0;
-            let issB4Kit = 0;
-            let vendaB4Kit = 0;
-
-            iSums.forEach((isum: any) => {
-              icmsKit += Number(isum.icms_unit) || 0;
-              issB4Kit += Number(isum.iss_unit) || 0;
-              vendaB4Kit += Number(isum.venda_total_item) || 0;
-            });
-
-            acc.icms += (icmsKit) * q;
-            const vendaB5Kit = Math.max(0, baseB45 - vendaB4Kit);
-            const issB5Kit = vendaB5Kit * (Number(raw.aliq_iss) || 0) / 100;
-            acc.iss += (issB4Kit + issB5Kit) * q;
+            // Impostos e Despesas (Usando valores consolidados do backend)
+            acc.pis += (Number(s.vlt_pis) || 0) * q;
+            acc.cofins += (Number(s.vlt_cofins) || 0) * q;
+            acc.csll += (Number(s.vlt_csll) || 0) * q;
+            acc.irpj += (Number(s.vlt_irpj) || 0) * q;
+            acc.icms += (Number(s.vlt_icms) || 0) * q;
+            acc.iss += (Number(s.vlt_iss) || 0) * q;
             acc.credito_icms += (Number(s.credito_icms_compra_total) || 0) * q;
 
-            // Despesas de Venda (Apenas B4 + B5, desconsiderando B6 Manuten├â┬º├â┬úo)
-            acc.comissao += (baseB45 * (Number(raw.perc_comissao) || 0) / 100) * q;
-            acc.despAdm += (baseB45 * (Number(raw.perc_despesas_adm) || 0) / 100) * q;
-            acc.freteVenda += (baseB45 * (Number(raw.perc_frete_venda) || 0) / 100) * q;
+            // Despesas
+            acc.comissao += (Number(s.vlt_comissao) || 0) * q;
+            acc.despAdm += (Number(s.vlt_despesas_adm) || 0) * q;
+            acc.freteVenda += (Number(s.vlt_frete_venda) || 0) * q;
 
             return acc;
           }, {
@@ -2236,11 +2228,11 @@ export function SalesBudgetForm() {
             comissao: 0, despAdm: 0, freteVenda: 0
           });
 
-          // C├â┬ílculos de Impostos = Impostos de Sa├â┬¡da (B4+B5)
+          // Cálculos de Impostos = Impostos de Saída (B4+B5)
           const sumVendaTaxes = t.pis + t.cofins + t.csll + t.irpj + t.iss + t.icms;
           const impostosConsolidadoGlobal = Math.max(0, sumVendaTaxes - t.credito_icms);
 
-          // C├â┬ílculos Despesas (Consolidadas dos kits)
+          // Cálculos Despesas (Consolidadas dos kits)
           const vltDespAdmConsolidado = t.despAdm;
           const vltComissaoConsolidado = t.comissao;
           const vltFreteVendaConsolidado = t.freteVenda;
@@ -2262,16 +2254,16 @@ export function SalesBudgetForm() {
                 </div>
                 {activePolicy && (
                   <span className="text-[10px] font-bold text-white bg-brand-primary border border-brand-primary/20 px-2 py-1 rounded-full shadow-sm">
-                    Pol├â┬¡tica Ativa: {activePolicy.nome} ({activePolicy.comissao_percentual}%)
+                    Política Ativa: {activePolicy.nome} ({activePolicy.comissao_percentual}%)
                   </span>
                 )}
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
-                {/* 1. Custo de Aquisi├â┬º├â┬úo */}
+                {/* 1. Custo de Aquisição */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisi├â┬º├â┬úo</div>
+                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisição</div>
                   <div className="text-2xl font-bold text-text-primary mb-4">{fmt(t.custoAquisicaoLimpo)}</div>
                   <div className="flex justify-between items-center text-xs text-text-muted mt-auto pt-3 border-t border-border-subtle">
                     <span>Custo base com impostos de entrada</span>
@@ -2290,15 +2282,17 @@ export function SalesBudgetForm() {
                 {/* 3. Total de Impostos */}
                 <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-5 shadow-sm flex flex-col justify-between">
                   <div>
-                    <div className="text-[11px] font-bold text-rose-800/60 uppercase tracking-wider mb-1">Total de Impostos</div>
-                      <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-rose-800/70">
+                    <div className="text-[11px] font-bold text-rose-800/60 uppercase tracking-wider mb-1">Total de Impostos (Líquido)</div>
+                    <div className="text-2xl font-bold text-rose-600 mb-4">{fmt(impostosConsolidadoGlobal)}</div>
+                    
+                    <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-rose-800/70">
                       {t.pis > 0 && <div className="flex justify-between items-center"><span>PIS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.pis / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.pis)}</span></div>}
                       {t.cofins > 0 && <div className="flex justify-between items-center"><span>COFINS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.cofins / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.cofins)}</span></div>}
                       {t.csll > 0 && <div className="flex justify-between items-center"><span>CSLL <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.csll / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.csll)}</span></div>}
                       {t.irpj > 0 && <div className="flex justify-between items-center"><span>IRPJ <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.irpj / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.irpj)}</span></div>}
                       {t.iss > 0 && <div className="flex justify-between items-center"><span>ISS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.iss / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.iss)}</span></div>}
                       {t.icms > 0 && <div className="flex justify-between items-center"><span>ICMS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.icms / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.icms)}</span></div>}
-                      {t.credito_icms > 0 && <div className="flex justify-between items-center text-brand-success"><span>Cr├â┬®d. ICMS (Compra) <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.credito_icms / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">-{fmt(t.credito_icms)}</span></div>}
+                      {t.credito_icms > 0 && <div className="flex justify-between items-center text-brand-success"><span>Créd. ICMS (Compra) <span className="opacity-60 ml-1 font-mono text-[9px]">({t.custoAquisicaoLimpo > 0 ? ((t.credito_icms / t.custoAquisicaoLimpo) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">-{fmt(t.credito_icms)}</span></div>}
                       {impostosConsolidadoGlobal === 0 && <div className="text-rose-800/40 italic">Nenhum imposto calculado</div>}
                     </div>
                   </div>
@@ -2316,11 +2310,11 @@ export function SalesBudgetForm() {
                     <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-amber-800/70">
                       <div className="flex justify-between items-center"><span>Adm <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.despAdm / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.despAdm)}</span></div>
                       <div className="flex justify-between items-center"><span>Frete <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.freteVenda / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.freteVenda)}</span></div>
-                      <div className="flex justify-between items-center"><span>Comiss├â┬úo <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.comissao / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.comissao)}</span></div>
+                      <div className="flex justify-between items-center"><span>Comissão <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.comissao / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.comissao)}</span></div>
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-amber-800/60 mt-auto pt-3 border-t border-amber-100/60 uppercase tracking-wide">
-                    <span>Adm + Frete + Comiss├â┬úo</span>
+                    <span>Adm + Frete + Comissão</span>
                   </div>
                 </div>
 
@@ -2347,9 +2341,9 @@ export function SalesBudgetForm() {
                   </div>
                 </div>
 
-                {/* 6. Total de Manuten├â┬º├â┬úo (Inalterado) */}
+                {/* 6. Total de Manutenção (Inalterado) */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Manuten├â┬º├â┬úo</div>
+                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Manutenção</div>
                   <div className="text-2xl font-bold text-amber-500 mb-4">{fmt(t.totalManutencao)}</div>
                   <div className="text-xs text-text-muted mt-auto pt-3 border-t border-border-subtle flex justify-between">
                     {vendaHaveraManutencao ? (
@@ -2360,11 +2354,11 @@ export function SalesBudgetForm() {
                   </div>
                 </div>
 
-                {/* 7. Lucro de Manuten├â┬º├â┬úo (Inalterado) */}
+                {/* 7. Lucro de Manutenção (Inalterado) */}
                 <div className={`border rounded-xl p-5 flex flex-col justify-between shadow-sm relative ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'bg-surface border-border-subtle' : 'bg-surface border-border-subtle'}`}>
                   <div className="flex items-start justify-between w-full relative z-10">
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Lucro de Manuten├â┬º├â┬úo</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Lucro de Manutenção</div>
                       <div className={`text-2xl font-black tracking-tight ${t.lucroManutencao >= 0 && vendaHaveraManutencao ? 'text-text-primary' : 'text-text-muted'}`}>
                         {fmt(t.lucroManutencao)}
                       </div>
@@ -2417,12 +2411,12 @@ export function SalesBudgetForm() {
                   <tr>
                     <th className="px-1.5 py-3 whitespace-nowrap pl-4">Nome do Kit</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-center w-14">Qtd</th>
-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisi├â┬º├â┬úo (Equipamentos e Instala├â┬º├â┬úo)">Custo Aq. (Equip/Inst)</th>
-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manuten├â┬º├â┬úo Projetada">Custo Manut.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisição (Equipamentos e Instalação)">Custo Aq. (Equip/Inst)</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manutenção Projetada">Custo Manut.</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-center w-16">Fator</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Venda de Equipamentos">Venda Equip.</th>
-                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Manuten├â┬º├â┬úo">Total Manuten├â┬º├â┬úo</th>
-                    <th className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary" title="Faturamento Total (Venda + Manuten├â┬º├â┬úo)">Fat. Total</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Valor Total de Manutenção">Total Manutenção</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap text-right font-bold text-brand-primary" title="Faturamento Total (Venda + Manutenção)">Fat. Total</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Venda</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Marg. Vda</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right">Lucro Manut.</th>
@@ -2451,7 +2445,7 @@ export function SalesBudgetForm() {
                           </div>
                         </td>
 
-                        {/* Qtd âÔé¼ÔÇØ editable */}
+                        {/* Qtd — editable */}
                         <td className="px-1.5 py-3 whitespace-nowrap text-center">
                           <input
                             type="number" step="1" min="1" value={item.quantidade}
@@ -2471,15 +2465,15 @@ export function SalesBudgetForm() {
                           {fmt(item.custo_manutencao_unit * q)}
                         </td>
 
-                        {/* Fator âÔé¼ÔÇØ average with tooltip */}
+                        {/* Fator — average with tooltip */}
                         <td className="px-1.5 py-3 whitespace-nowrap text-center">
                           <Tooltip content={
                             <div className="w-48 space-y-1">
-                              <div className="font-bold border-b border-white/20 pb-1 mb-1">Composi├â┬º├â┬úo de Margem</div>
+                              <div className="font-bold border-b border-white/20 pb-1 mb-1">Composição de Margem</div>
                               <div className="flex justify-between"><span>Produtos:</span> <span className="font-mono">{item.fator_margem_locacao.toFixed(2)}</span></div>
-                              <div className="flex justify-between"><span>Servi├â┬ºos:</span> <span className="font-mono">{item.fator_margem_servicos_produtos.toFixed(2)}</span></div>
-                              <div className="flex justify-between"><span>Instala├â┬º├â┬úo:</span> <span className="font-mono">{item.fator_margem_instalacao.toFixed(2)}</span></div>
-                              <div className="flex justify-between"><span>Manuten├â┬º├â┬úo:</span> <span className="font-mono">{item.fator_margem_manutencao.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Serviços:</span> <span className="font-mono">{item.fator_margem_servicos_produtos.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Instalação:</span> <span className="font-mono">{item.fator_margem_instalacao.toFixed(2)}</span></div>
+                              <div className="flex justify-between"><span>Manutenção:</span> <span className="font-mono">{item.fator_margem_manutencao.toFixed(2)}</span></div>
                             </div>
                           }>
                             <div className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded-full text-[10px] font-bold cursor-help inline-block">
@@ -2493,7 +2487,7 @@ export function SalesBudgetForm() {
                           {fmt(item.venda_equip_unit * q)}
                         </td>
 
-                        {/* Total Manuten├â┬º├â┬úo */}
+                        {/* Total Manutenção */}
                         <td className="px-1.5 py-3 whitespace-nowrap text-right font-semibold text-text-primary">
                           {fmt(item.venda_manut_unit * q)}
                         </td>
@@ -2533,7 +2527,7 @@ export function SalesBudgetForm() {
                           {fmtPct(item.margem_geral)}
                         </td>
 
-                        {/* A├â┬º├â┬Áes */}
+                        {/* Ações */}
                         <td className="px-1 py-3 whitespace-nowrap text-center pr-4">
                           {!isReadonly && (
                             <div className="flex items-center gap-1 justify-center">
@@ -2590,7 +2584,6 @@ export function SalesBudgetForm() {
 
           let saldoInvestimento = rentalTotals.investimento;
           let paybackMes: number | null = null;
-          let paybackDecimal = 0;
           let lucroAcumuladoGeral = 0;
 
           const pCtr = prazoContratoMeses || 1;
@@ -2624,7 +2617,6 @@ export function SalesBudgetForm() {
             if (saldoInvestimento <= 0 && paybackMes === null) {
               paybackMes = m;
               const fraction = receitaLivre > 0 ? (quitarMes / receitaLivre) : 1;
-              paybackDecimal = (m - 1) + fraction;
             }
 
             chartData.push({
@@ -2640,15 +2632,15 @@ export function SalesBudgetForm() {
           const diretor_saldo = diretor_rec_liq - diretor_comissao;
           const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
 
-          // ROI Final = Custo Aquisi├â┬º├â┬úo / (Mensal Loca├â┬º├â┬úo - Custo Op. Mensal - Imposto Mensal)
-          // F├â┬│rmula direta conforme defini├â┬º├â┬úo: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
+          // ROI Final = Custo Aquisição / (Mensal Locação - Custo Op. Mensal - Imposto Mensal)
+          // Fórmula direta conforme definição: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
           const _roiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal;
           const base_roi = _roiDenominador > 0
             ? rentalTotals.investimento / _roiDenominador
             : ((prazoContratoMeses || 1) + 1);
 
-          // O card do ROI final dentro do card de Consolida├â┬º├â┬úo Diretoria deve seguir a mesma l├â┬│gica
-          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comiss├â┬úo rec/liq.
+          // O card do ROI final dentro do card de Consolidação Diretoria deve seguir a mesma lógica
+          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comissão rec/liq.
           const _diretorRoiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal - comissao_mensal_calc;
           const diretor_roi = _diretorRoiDenominador > 0 
             ? rentalTotals.investimento / _diretorRoiDenominador 
@@ -2664,8 +2656,8 @@ export function SalesBudgetForm() {
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolida├â┬º├â┬úo Diretoria</h2>
-                    <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">An├â┬ílise de viabilidade e comissionamento executivo</p>
+                    <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">Consolidação Diretoria</h2>
+                    <p className="text-[11px] text-text-muted mt-0.5 uppercase tracking-wide">Análise de viabilidade e comissionamento executivo</p>
                   </div>
                   <button
                     onClick={() => setShowEvolutivoChart(true)}
@@ -2681,7 +2673,7 @@ export function SalesBudgetForm() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
                   <div className="lg:col-span-4">
                     <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
-                      Comiss├â┬úo sobre receita l├â┬¡quida
+                      Comissão sobre receita líquida
                     </label>
                     <div className="relative max-w-[180px]">
                       <input
@@ -2773,8 +2765,8 @@ export function SalesBudgetForm() {
 
                   <Tooltip content={
                     <div className="w-72 space-y-1 text-gray-200">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├â┬│dulo de Retorno (Iterativo)</div>
-                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├â┬º├â┬úo iterativa m├â┬¬s a m├â┬¬s calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comiss├â┬Áes" amortiza o Investimento inicial.</div>
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                      <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comissões" amortiza o Investimento inicial.</div>
                     </div>
                   }>
                     <div className="p-4 sm:p-5 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] col-span-2 lg:col-span-1 border-t lg:border-t-0 border-border-subtle">
@@ -2794,7 +2786,7 @@ export function SalesBudgetForm() {
                     onClick={() => setIsComparativoExpanded(!isComparativoExpanded)}
                   >
                     <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
-                      An├â┬ílise de Rentabilidade de Capital
+                      Análise de Rentabilidade de Capital
                       {isComparativoExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
                     </h3>
                   </div>
@@ -2846,7 +2838,7 @@ export function SalesBudgetForm() {
                     {/* Mensal */}
                     <Tooltip content={
                       <div className="w-64 space-y-2 text-gray-200">
-                        <div className="font-bold text-white border-b border-gray-600 pb-1">Valores Mensais Unit├â┬írios</div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Valores Mensais Unitários</div>
                         {rentalItems.filter(ri => !ri.is_kit_instalacao).map((ri, idx) => (
                           <div key={ri.id || idx} className="flex justify-between text-[11px] mb-0.5">
                             <span className="truncate pr-2">{ri.product_nome}</span>
@@ -2854,7 +2846,7 @@ export function SalesBudgetForm() {
                           </div>
                         ))}
                         <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 mt-1">
-                          <span>Total Unit├â┬írio:</span>
+                          <span>Total Unitário:</span>
                           <span className="text-brand-primary">
                             {fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}
                           </span>
@@ -2863,7 +2855,7 @@ export function SalesBudgetForm() {
                     }>
                       <div className="p-4 md:p-6 hover:bg-surface/50 transition-colors cursor-help group flex flex-col justify-between h-full border-b md:border-b-0 border-border-subtle lg:col-span-1">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                          Mensal Loca├â┬º├â┬úo
+                          Mensal Locação
                           <HelpCircle className="w-3.5 h-3.5" />
                         </span>
                         <p className="text-2xl sm:text-3xl font-black text-brand-primary tracking-tight">{fmt(rentalTotals.faturamentoMensal)}</p>
@@ -2876,11 +2868,11 @@ export function SalesBudgetForm() {
                       <p className="text-2xl sm:text-3xl font-black text-teal-600 tracking-tight">{fmt(rentalTotals.faturamentoTotal)}</p>
                     </div>
 
-                    {/* Total Instala├â┬º├â┬úo (Only if exists) OR Prazo */}
+                    {/* Total Instalação (Only if exists) OR Prazo */}
                     <div className="p-4 md:p-6 bg-bg-deep flex flex-col justify-between h-full lg:col-span-1">
                       {rentalTotals.totalInstalacao > 0 ? (
                         <>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500/80 mb-4 block opacity-80">Total Instala├â┬º├â┬úo</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-500/80 mb-4 block opacity-80">Total Instalação</span>
                           <p className="text-2xl sm:text-3xl font-black text-teal-500 tracking-tight">{fmt(rentalTotals.totalInstalacao)}</p>
                         </>
                       ) : (
@@ -2901,7 +2893,7 @@ export function SalesBudgetForm() {
                     {/* Custo Aq */}
                     <Tooltip content={
                       <div className="w-64 space-y-2 text-gray-200">
-                        <div className="font-bold text-white border-b border-gray-600 pb-1">Composi├â┬º├â┬úo do Custo</div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
                         <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Impostos Compra:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
@@ -2909,7 +2901,7 @@ export function SalesBudgetForm() {
                     }>
                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
                         <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                          Custo Aquisi├â┬º├â┬úo
+                          Custo Aquisição
                           <HelpCircle className="w-3" />
                         </span>
                         <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.investimento)}</p>
@@ -2924,7 +2916,7 @@ export function SalesBudgetForm() {
                           <thead>
                             <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
                               <th className="text-left pb-1 font-bold">Imposto</th>
-                              <th className="pb-1 font-bold pl-3">Al├â┬¡q.</th>
+                              <th className="pb-1 font-bold pl-3">Alíq.</th>
                               {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Inst.</th>}
                               <th className="pb-1 font-bold pl-4">Mensal</th>
                               <th className="pb-1 font-bold pl-4">Total</th>
@@ -2995,8 +2987,8 @@ export function SalesBudgetForm() {
                     {/* ROI Final */}
                     <Tooltip content={
                       <div className="w-72 space-y-1 text-gray-200">
-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">M├â┬│dulo de Retorno (Iterativo)</div>
-                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simula├â┬º├â┬úo iterativa m├â┬¬s a m├â┬¬s. Considera apenas Impostos + Custos Operacionais (sem comiss├â┬Áes). Indica quando o faturamento cobre o investimento inicial.</div>
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
                       </div>
                     }>
                       <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
@@ -3020,7 +3012,7 @@ export function SalesBudgetForm() {
                             <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">MKP Geral (Markup Global)</div>
                             <div className="text-[11px] space-y-1">
                               <div className="flex justify-between"><span>Faturamento Total:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span></div>
-                              <div className="flex justify-between"><span>Custo Aquisi├â┬º├â┬úo:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                              <div className="flex justify-between"><span>Custo Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
                               <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
                               <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
                               <div className="border-t border-gray-600 pt-1 mt-1 flex justify-between font-bold">
@@ -3057,7 +3049,7 @@ export function SalesBudgetForm() {
         {/* Rental Parameters */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Par├â┬ómetros de Loca├â┬º├â┬úo/Comodato</h2>
+            <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2"><Calculator className="w-5 h-5 text-teal-500" />Parâmetros de Locação/Comodato</h2>
             {!isReadonly && (
               <Button size="sm" variant="outline" className="border-brand-primary text-brand-primary hover:bg-brand-primary/10" onClick={() => setShowOverwriteModal(true)}>
                 <Save className="w-4 h-4 mr-2" /> Salvar e recalcular oportunidade
@@ -3067,8 +3059,8 @@ export function SalesBudgetForm() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
               { label: 'Prazo Contrato (meses)', val: prazoContratoMeses, set: setPrazoContratoMeses, step: '1' },
-              { label: 'Prazo Instala├â┬º├â┬úo (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
-              { label: 'Comiss├â┬úo %', val: percComissaoRental, set: setPercComissaoRental },
+              { label: 'Prazo Instalação (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
+              { label: 'Comissão %', val: percComissaoRental, set: setPercComissaoRental },
             ].map(p => (
               <div key={p.label}>
                 <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
@@ -3082,7 +3074,7 @@ export function SalesBudgetForm() {
         {/* Rental Items Grid */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-text-primary text-lg">Ativos de Loca├â┬º├â┬úo</h2>
+            <h2 className="font-semibold text-text-primary text-lg">Ativos de Locação</h2>
             <div className="flex items-center gap-2">
               {!isReadonly && (
                 <Button variant="outline" size="sm" onClick={() => setShowKitSearchModal(true)}>
@@ -3090,7 +3082,7 @@ export function SalesBudgetForm() {
                 </Button>
               )}
               {!isReadonly && (
-                <Tooltip content={!id ? "Salve a oportunidade primeiro para criar um kit espec├â┬¡fico" : ""}>
+                <Tooltip content={!id ? "Salve a oportunidade primeiro para criar um kit específico" : ""}>
                   <div>
                     <Button
                       variant="outline"
@@ -3122,7 +3114,7 @@ export function SalesBudgetForm() {
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Operacional Mensal do Kit (1 uni)">Custo Op. Mensal Unit.</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Op. Mensal * Quantidade">Custo Op. Total</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Prazo</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instala├â┬º├â┬úo</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instalação</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Unit.</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Mensal</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Vlr Mensal x Prazo">Vlr Total</th>
@@ -3470,12 +3462,12 @@ export function SalesBudgetForm() {
       {showOverwriteModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-bg-deep rounded-2xl shadow-2xl p-6 w-full max-w-md border border-border-subtle">
-            <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substitui├â┬º├â┬úo</h3>
+            <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substituição</h3>
             <p className="text-text-muted mb-6">
-              Esta a├â┬º├â┬úo ir├â┬í <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
+              Esta ação irá <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
               âÔé¼┬ó Prazo de contrato<br />
-              âÔé¼┬ó Prazo de instala├â┬º├â┬úo (Car├â┬¬ncia)<br /><br />
-              em <b>todos os kits lan├â┬ºados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
+              âÔé¼┬ó Prazo de instalação (Carência)<br /><br />
+              em <b>todos os kits lançados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
             </p>
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setShowOverwriteModal(false)} disabled={saving}>Cancelar</Button>
@@ -3487,7 +3479,7 @@ export function SalesBudgetForm() {
         </div>
       )}
 
-      {/* Product Search Modal âÔé¼ÔÇØ Rental */}
+      {/* Product Search Modal — Rental */}
       {showAddRentalItemModal && (
         <AddRentalItemModal
           open={showAddRentalItemModal}
@@ -3646,8 +3638,8 @@ export function SalesBudgetForm() {
               </h2>
             </div>
             <div className="p-6 text-text-muted text-sm space-y-4">
-              <p>Deseja aplicar os fatores de margem e impostos atuais a todos os kits lan├â┬ºados para esta venda?</p>
-              <p>Isso atualizar├â┬í os valores de venda dos kits. <strong>Kits globais ser├â┬úo clonados para esta oportunidade</strong> para preservar os originais.</p>
+              <p>Deseja aplicar os fatores de margem e impostos atuais a todos os kits lançados para esta venda?</p>
+              <p>Isso atualizará os valores de venda dos kits. <strong>Kits globais serão clonados para esta oportunidade</strong> para preservar os originais.</p>
             </div>
             <div className="p-6 bg-bg-deep border-t border-border-subtle flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setShowApplyKitsModal(false)}>
@@ -3685,7 +3677,7 @@ export function SalesBudgetForm() {
               <h3 className="text-lg font-bold text-text-primary">Sair sem salvar?</h3>
             </div>
             <p className="text-text-muted mb-6">
-              Existem altera├â┬º├â┬Áes que n├â┬úo foram salvas nesta oportunidade. Se voc├â┬¬ sair agora, todas as modifica├â┬º├â┬Áes recentes ser├â┬úo perdidas.
+              Existem alterações que não foram salvas nesta oportunidade. Se você sair agora, todas as modificações recentes serão perdidas.
             </p>
             <div className="flex items-center justify-end gap-3">
               <Button onClick={() => setShowDiscardDialog(false)} variant="outline" className="text-text-secondary border-border-subtle">

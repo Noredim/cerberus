@@ -121,6 +121,13 @@ def calculate_item(
     qty = _d(item_data.quantidade)
     total = _round(venda * qty)
 
+    # Pass through the ICMS credit abatement value from the frontend
+    icms_abatido = _d(getattr(item_data, 'icms_abatido_unit', 0) or 0)
+    
+    # Apply ICMS credit to profit
+    lucro = lucro + icms_abatido
+    margem = _round(lucro / venda * 100, 4) if venda > 0 else Decimal("0")
+
     return {
         "custo_unit_base": custo, "markup": markup, "venda_unit": venda,
         "perc_frete_venda": perc_frete, "frete_venda_unit": frete_unit,
@@ -130,6 +137,7 @@ def calculate_item(
         "perc_irpj": perc_irpj, "irpj_unit": irpj_u,
         "perc_icms": perc_icms, "icms_unit": icms_u,
         "tem_st": actual_st,
+        "icms_abatido_unit": icms_abatido,
         "perc_iss": perc_iss, "iss_unit": iss_u,
         "perc_despesa_adm": perc_desp, "despesa_adm_unit": desp_u,
         "perc_comissao": perc_com, "comissao_unit": com_u,
@@ -376,7 +384,7 @@ def _build_rental_defaults(budget: SalesBudget) -> dict:
     }
 
 
-def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_uf, defaults):
+def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo=True):
     """Process and save sale items for a budget."""
     for item_data in data_items:
         product = None
@@ -386,6 +394,13 @@ def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_
         has_st = False
         if product and item_data.tipo_item == "MERCADORIA":
             has_st = item_data.tem_st or check_st_flag(db, tenant_id, product.ncm_codigo, company_uf)
+
+        # When the company does NOT adhere to ST (perfil_tarifario_st=False),
+        # override has_st to False so ICMS is calculated on the sale (17% × venda)
+        # instead of being zeroed out. The ICMS credit from the purchase invoice
+        # is tracked via icms_abatido_unit.
+        if not perfil_st_ativo:
+            has_st = False
 
         if item_data.usa_parametros_padrao or item_data.perc_icms is None:
             if company_uf == customer_uf:
@@ -519,7 +534,16 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
     customer_uf = customer.state_id if customer else ""
     defaults = _build_defaults(budget)
 
-    _process_sale_items(db, budget, data.items, tenant_id, company_uf, customer_uf, defaults)
+    # Determine perfil_tarifario_st for the company
+    from src.modules.companies.models import CompanyTaxProfile
+    tax_profile = db.query(CompanyTaxProfile).filter(
+        CompanyTaxProfile.company_id == company_id
+    ).first()
+    perfil_st_ativo = True
+    if tax_profile and tax_profile.perfil_tarifario_st is False:
+        perfil_st_ativo = False
+
+    _process_sale_items(db, budget, data.items, tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo)
 
     # Rental items
     rental_defaults = _build_rental_defaults(budget)
@@ -595,7 +619,16 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     customer_uf = customer.state_id if customer else ""
     defaults = _build_defaults(budget)
 
-    _process_sale_items(db, budget, data.items, budget.tenant_id, company_uf, customer_uf, defaults)
+    # Determine perfil_tarifario_st for the company
+    from src.modules.companies.models import CompanyTaxProfile
+    tax_profile = db.query(CompanyTaxProfile).filter(
+        CompanyTaxProfile.company_id == budget.company_id
+    ).first()
+    perfil_st_ativo = True
+    if tax_profile and tax_profile.perfil_tarifario_st is False:
+        perfil_st_ativo = False
+
+    _process_sale_items(db, budget, data.items, budget.tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo)
 
     rental_defaults = _build_rental_defaults(budget)
     _process_rental_items(db, budget, data.rental_items, rental_defaults)
@@ -786,10 +819,11 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
     return new_budget
 
 
-def list_budgets(db: Session, tenant_id: str) -> list:
-    return db.query(SalesBudget).filter(
-        SalesBudget.tenant_id == tenant_id
-    ).order_by(SalesBudget.created_at.desc()).all()
+def list_budgets(db: Session, tenant_id: str, company_id: Optional[str] = None) -> list:
+    query = db.query(SalesBudget).filter(SalesBudget.tenant_id == tenant_id)
+    if company_id:
+        query = query.filter(SalesBudget.company_id == company_id)
+    return query.order_by(SalesBudget.created_at.desc()).all()
 
 
 def get_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[SalesBudget]:
@@ -962,10 +996,12 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
                 else:
                     difal_unitario = max(0.0, c_valor_difal_base)
 
+    icms_abatido_unitario = 0.0
     if uso_consumo:
         custo_unit_final = base_unitario + ipi_unitario + frete_unitario + difal_unitario
     else:
         if not perfil_st_ativo:
+            icms_abatido_unitario = base_unitario * (icms_entrada_effective / 100.0)
             custo_unit_final = base_unitario + ipi_unitario + frete_unitario
         else:
             custo_unit_final = base_unitario + ipi_unitario + frete_unitario + calc_icms_st_final
@@ -988,4 +1024,5 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
         "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
         "custo_unit_final": round(custo_unit_final, 2),
         "perfil_st_ativo": perfil_st_ativo,
+        "icms_abatido": round(icms_abatido_unitario, 2),
     }

@@ -18,12 +18,13 @@ router = APIRouter(prefix="/sales-budgets", tags=["Sales Budgets"])
 @router.get("")
 def list_budgets(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
 ):
-    budgets = service.list_budgets(db, current_user.tenant_id)
+    budgets = service.list_budgets(db, current_user.tenant_id, company_id)
     result = []
     for b in budgets:
-        mv = _calc_margem_venda(b.items)
+        mv = _calc_margem_venda(b.items, b.rental_items)
         mr = _calc_margem_rental(b.rental_items)
         
         # Margem Geral: average of non-zero margins
@@ -32,9 +33,14 @@ def list_budgets(
         else:
             mg = float(mv if mv > 0 else mr)
             
-        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * int(ri.prazo_contrato or 0) for ri in b.rental_items)
-        valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in b.rental_items)
-        prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in b.rental_items]) if b.rental_items else 0
+        valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+        
+        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * int(ri.prazo_contrato or 0) for ri in valid_rentals)
+        valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+        prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
+        
+        total_venda_items = sum(float(i.total_venda or 0) for i in b.items if not getattr(i, "opportunity_kit_id", None))
+        total_venda_kits = sum(float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1) for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) == 'VENDA_EQUIPAMENTOS')
         
         result.append({
             "id": b.id,
@@ -43,7 +49,7 @@ def list_budgets(
             "status": b.status,
             "data_orcamento": b.data_orcamento,
             "customer_nome": b.customer.nome_fantasia or b.customer.razao_social if b.customer else None,
-            "total_venda": sum(float(i.total_venda or 0) for i in b.items),
+            "total_venda": float(total_venda_items + total_venda_kits),
             "margem_venda": mv,
             "total_faturamento_rental": total_faturamento_rental,
             "valor_mensal_total_rental": valor_mensal_total_rental,
@@ -55,17 +61,25 @@ def list_budgets(
     return result
 
 
-def _calc_margem_venda(items) -> float:
-    total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items)
-    total_venda = sum(float(i.venda_unit or 0) * float(i.quantidade or 1) for i in items)
+def _calc_margem_venda(items, rental_items) -> float:
+    total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items if not getattr(i, "opportunity_kit_id", None))
+    total_venda = sum(float(i.total_venda or 0) for i in items if not getattr(i, "opportunity_kit_id", None))
+    
+    if rental_items:
+        for ri in rental_items:
+            if ri.tipo_contrato_kit == 'VENDA_EQUIPAMENTOS':
+                total_lucro += float(ri.kit_lucro_mensal or 0) * float(ri.quantidade or 1)
+                total_venda += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
+                
     if total_venda == 0:
         return 0.0
     return float(round(total_lucro / total_venda * 100, 2))
 
 
 def _calc_margem_rental(rental_items) -> float:
-    total_lucro_mensal = sum(float(ri.lucro_mensal or 0) * float(ri.quantidade or 1) for ri in rental_items)
-    total_faturamento_mensal = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in rental_items)
+    valid_rentals = [ri for ri in rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+    total_lucro_mensal = sum(float(ri.lucro_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+    total_faturamento_mensal = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
     if total_faturamento_mensal == 0:
         return 0.0
     return float(round(total_lucro_mensal / total_faturamento_mensal * 100, 2))

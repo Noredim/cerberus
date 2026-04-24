@@ -43,6 +43,10 @@ class OpportunityKit(Base):
     qtd_meses_manutencao = Column(Integer, nullable=True)
     faturamento_servico_separado = Column(Boolean, nullable=False, default=False)
     
+    # Parâmetros de Monitoramento
+    custo_monitoramento_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    fator_monitoramento = Column(Numeric(10, 4), nullable=False, default=1.0)
+    
     # Impostos sobre Receita
     aliq_pis = Column(Numeric(6, 4), nullable=False, default=0.0)
     aliq_cofins = Column(Numeric(6, 4), nullable=False, default=0.0)

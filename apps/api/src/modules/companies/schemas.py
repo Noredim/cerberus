@@ -259,3 +259,28 @@ class CompanyOut(BaseModel):
     sales_parameters: Optional[CompanySalesParameterOut] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+class CommercialPolicyRoleBase(BaseModel):
+    role_id: str
+    model_config = ConfigDict(from_attributes=True)
+
+class CommercialPolicyBase(BaseModel):
+    nome_politica: str = Field(..., max_length=25)
+    fator_limite: Decimal = Field(..., ge=1)
+    manutencao_ano_percentual: Decimal = Field(..., ge=0)
+    comissao_percentual: Decimal = Field(..., ge=0)
+    ativo: bool = True
+    is_default: bool = False
+
+class CommercialPolicyCreate(CommercialPolicyBase):
+    roles: List[str] = []  # List of role UUID strings
+
+class CommercialPolicyUpdate(CommercialPolicyBase):
+    roles: Optional[List[str]] = None
+
+class CommercialPolicyOut(CommercialPolicyBase):
+    id: UUID
+    company_id: UUID
+    roles: List[CommercialPolicyRoleBase] = []
+    model_config = ConfigDict(from_attributes=True)
+

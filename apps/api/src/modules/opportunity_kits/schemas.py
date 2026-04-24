@@ -116,8 +116,11 @@ class OpportunityKitBase(BaseModel):
     custo_suporte_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_seguro_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_logistica_mensal_kit: Decimal = Field(default=Decimal(0.0))
-    custo_software_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_itens_acessorios_mensal_kit: Decimal = Field(default=Decimal(0.0))
+    
+    # Parâmetros de Monitoramento
+    custo_monitoramento_unitario: Decimal = Field(default=Decimal(0.0))
+    fator_monitoramento: Decimal = Field(default=Decimal(1.0))
 
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
@@ -172,6 +175,9 @@ class OpportunityKitUpdate(BaseModel):
     custo_logistica_mensal_kit: Optional[Decimal] = None
     custo_software_mensal_kit: Optional[Decimal] = None
     custo_itens_acessorios_mensal_kit: Optional[Decimal] = None
+    
+    custo_monitoramento_unitario: Optional[Decimal] = None
+    fator_monitoramento: Optional[Decimal] = None
 
 class OpportunityKitFinancialSummary(BaseModel):
     prazo_mensalidades: int
@@ -199,14 +205,40 @@ class OpportunityKitFinancialSummary(BaseModel):
     margem_kit: Decimal
     
     # New granular fields
+    imposto_instalacao: Optional[Decimal] = Field(default=Decimal(0))
+    valor_comissao_locacao: Optional[Decimal] = Field(default=Decimal(0))
     venda_equipamentos_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
     margem_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
     venda_manutencao_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_manutencao: Optional[Decimal] = Field(default=Decimal(0))
     margem_manutencao: Optional[Decimal] = Field(default=Decimal(0))
+    
+    # Monitoramento fields
+    venda_unit_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
+    receita_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
+    custo_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
+    lucro_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
+    
     # ROI payback period in months (LOCACAO/COMODATO only)
     roi_meses: Optional[float] = Field(default=0.0)
+    # Granular tax/expense breakdown for Fechamento de Venda
+    faturamento_total_venda: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_pis: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_cofins: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_csll: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_irpj: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_icms: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_iss: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_frete_venda: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_despesas_adm: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao: Optional[Decimal] = Field(default=Decimal(0))
+    custo_equip_total_calc: Optional[Decimal] = Field(default=Decimal(0))
+    custo_manut_total_calc: Optional[Decimal] = Field(default=Decimal(0))
+    
+    credito_icms_compra_total: Optional[Decimal] = Field(default=Decimal(0))
+    total_st_kit: Optional[Decimal] = Field(default=Decimal(0))
+    total_ipi_kit: Optional[Decimal] = Field(default=Decimal(0))
 
 
 class OpportunityKitItemFinancialSummary(BaseModel):
@@ -221,6 +253,13 @@ class OpportunityKitItemFinancialSummary(BaseModel):
     venda_unitario_item: Decimal = Field(default=Decimal(0))
     venda_total_item: Decimal = Field(default=Decimal(0))
     imposto_venda_item: Decimal = Field(default=Decimal(0))
+    icms_abatido: Decimal = Field(default=Decimal(0))
+    pis_unit: Decimal = Field(default=Decimal(0))
+    cofins_unit: Decimal = Field(default=Decimal(0))
+    csll_unit: Decimal = Field(default=Decimal(0))
+    irpj_unit: Decimal = Field(default=Decimal(0))
+    icms_unit: Decimal = Field(default=Decimal(0))
+    iss_unit: Decimal = Field(default=Decimal(0))
 
 class OpportunityKitResponse(OpportunityKitBase):
     id: UUID

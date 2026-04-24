@@ -9,10 +9,10 @@ import os
 import shutil
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa
-from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase
+from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut
 
 from .providers.cnpj_provider import ReceitaWsProvider
 from .services.cnpj_consultar_service import ConsultarEmpresaPorCNPJService
@@ -266,6 +266,52 @@ async def upload_company_logo(
     
     return company
 
+@router.get("/commercial-policies/me", response_model=List[CommercialPolicyOut])
+def get_my_commercial_policies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
+):
+    """
+    Returns commercial policies applicable to the current user's role
+    in the active company. Used by OpportunityKitForm to enforce
+    margin factor limits scoped to the logged-in user.
+    """
+    from .models import CommercialPolicy, CommercialPolicyRole
+    from src.modules.professionals.models import Professional
+
+    if not active_company_id:
+        return []
+
+    # Find the user's professional record to get their role
+    professional = db.query(Professional).filter(
+        Professional.user_id == current_user.id,
+        Professional.tenant_id == current_user.tenant_id
+    ).first()
+
+    if not professional or not professional.role_id:
+        # No role assigned — return all active policies for the company
+        # so the UI can still display them (read-only info)
+        policies = db.query(CommercialPolicy).options(
+            joinedload(CommercialPolicy.roles)
+        ).filter(
+            CommercialPolicy.company_id == active_company_id,
+            CommercialPolicy.ativo == True
+        ).all()
+        return policies
+
+    # Filter policies linked to the user's role
+    policies = db.query(CommercialPolicy).join(
+        CommercialPolicyRole
+    ).options(
+        joinedload(CommercialPolicy.roles)
+    ).filter(
+        CommercialPolicy.company_id == active_company_id,
+        CommercialPolicy.ativo == True,
+        CommercialPolicyRole.role_id == professional.role_id
+    ).all()
+    return policies
+
 @router.get("/{company_id}", response_model=CompanyOut)
 def get_company(
     company_id: str,
@@ -455,3 +501,109 @@ def upsert_sales_parameters(
     db.commit()
     db.refresh(param)
     return param
+
+@router.get("/{id}/commercial-policies", response_model=List[CommercialPolicyOut])
+def get_commercial_policies(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import CommercialPolicy
+    from .schemas import CommercialPolicyOut
+    
+    policies = db.query(CommercialPolicy).options(joinedload(CommercialPolicy.roles)).filter(
+        CommercialPolicy.company_id == id
+    ).all()
+    return policies
+
+@router.post("/{id}/commercial-policies", response_model=CommercialPolicyOut)
+def create_commercial_policy(
+    id: UUID,
+    payload: CommercialPolicyCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import CommercialPolicy, CommercialPolicyRole
+    
+    # Check if company exists first
+    company = db.query(Company).filter(
+        Company.id == id,
+        Company.tenant_id == current_user.tenant_id
+    ).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada ou sem acesso.")
+
+    # Only one default policy allowed per company
+    if payload.is_default:
+        db.query(CommercialPolicy).filter(CommercialPolicy.company_id == id).update({"is_default": False})
+
+    policy = CommercialPolicy(
+        company_id=id,
+        nome_politica=payload.nome_politica,
+        fator_limite=payload.fator_limite,
+        manutencao_ano_percentual=payload.manutencao_ano_percentual,
+        comissao_percentual=payload.comissao_percentual,
+        ativo=payload.ativo,
+        is_default=payload.is_default
+    )
+    db.add(policy)
+    db.flush() # get id
+
+    for role_id in payload.roles:
+        db.add(CommercialPolicyRole(policy_id=policy.id, role_id=role_id))
+
+    db.commit()
+    db.refresh(policy)
+    return policy
+
+@router.put("/commercial-policies/{policy_id}", response_model=CommercialPolicyOut)
+def update_commercial_policy(
+    policy_id: UUID,
+    payload: CommercialPolicyUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import CommercialPolicy, CommercialPolicyRole
+    
+    policy = db.query(CommercialPolicy).options(joinedload(CommercialPolicy.company)).filter(
+        CommercialPolicy.id == policy_id
+    ).first()
+    
+    if not policy or policy.company.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Política não encontrada.")
+
+    # Only one default policy allowed per company
+    if payload.is_default and not policy.is_default:
+        db.query(CommercialPolicy).filter(CommercialPolicy.company_id == policy.company_id).update({"is_default": False})
+
+    update_data = payload.model_dump(exclude={"roles"}, exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(policy, key, value)
+
+    if payload.roles is not None:
+        db.query(CommercialPolicyRole).filter(CommercialPolicyRole.policy_id == policy_id).delete()
+        for role_id in payload.roles:
+            db.add(CommercialPolicyRole(policy_id=policy_id, role_id=role_id))
+
+    db.commit()
+    db.refresh(policy)
+    return policy
+
+@router.delete("/commercial-policies/{policy_id}")
+def delete_commercial_policy(
+    policy_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import CommercialPolicy
+    
+    policy = db.query(CommercialPolicy).options(joinedload(CommercialPolicy.company)).filter(
+        CommercialPolicy.id == policy_id
+    ).first()
+    
+    if not policy or policy.company.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Política não encontrada.")
+
+    db.delete(policy)
+    db.commit()
+    return {"ok": True}

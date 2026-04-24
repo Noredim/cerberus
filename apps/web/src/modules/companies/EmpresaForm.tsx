@@ -13,7 +13,8 @@ import {
     XCircle,
     WifiOff,
     UploadCloud,
-    Edit2
+    Edit2,
+    Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -21,6 +22,7 @@ import { useCompanies } from './hooks/useCompanies';
 import { api } from '../../services/api';
 import type { CNPJLookupResult } from './types';
 import { CnaeAutocomplete } from './components/CnaeAutocomplete';
+import { CommercialPoliciesTab } from './components/CommercialPoliciesTab';
 
 interface State {
     id: string;
@@ -116,6 +118,7 @@ const EmpresaForm: React.FC = () => {
         { id: 'cnae', label: 'CNAEs', icon: Briefcase },
         { id: 'tax', label: 'Regime & Benefícios', icon: ShieldCheck },
         { id: 'sales_params', label: 'Parâmetros de Venda', icon: Hash },
+        { id: 'policies', label: 'Políticas Comerciais', icon: Shield },
         { id: 'qsa', label: 'Quadro de Sócios', icon: Building2 },
     ];
 
@@ -1319,6 +1322,18 @@ const EmpresaForm: React.FC = () => {
                                             );
                                         })()}
 
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'policies' && (
+                                    <motion.div
+                                        key="policies"
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        className="space-y-6"
+                                    >
+                                        <CommercialPoliciesTab companyId={id!} isReadOnly={isReadOnly} />
                                     </motion.div>
                                 )}
 

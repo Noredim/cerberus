@@ -118,6 +118,7 @@ class SalesBudgetItem(Base):
     perc_icms = Column(Numeric(6, 4), nullable=False, default=0)
     icms_unit = Column(Numeric(15, 4), nullable=False, default=0)
     tem_st = Column(Boolean, nullable=False, default=False)
+    icms_abatido_unit = Column(Numeric(15, 4), nullable=False, default=0)
 
     # ISS (services only)
     perc_iss = Column(Numeric(6, 4), nullable=False, default=0)

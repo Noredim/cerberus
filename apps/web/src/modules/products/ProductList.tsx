@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
     Package,
     Search,
@@ -13,7 +13,9 @@ import {
     Activity,
     Briefcase,
     ArrowRight,
-    Key
+    Key,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -37,6 +39,12 @@ const ProductList: React.FC = () => {
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
+    const ITEMS_PER_PAGE = 20;
+    const [currentPage, setCurrentPage] = useState(1);
+    
+    // Refs para sincronizar scroll horizontal se necessário, ou usar max-height
+    const tableContainerRef = useRef<HTMLDivElement>(null);
+
     const fetchProducts = async () => {
         setLoading(true);
         try {
@@ -55,6 +63,7 @@ const ProductList: React.FC = () => {
 
     useEffect(() => {
         const timer = setTimeout(() => {
+            setCurrentPage(1);
             fetchProducts();
         }, 300);
         return () => clearTimeout(timer);
@@ -122,9 +131,12 @@ const ProductList: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="min-h-[200px] overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                <div 
+                    ref={tableContainerRef}
+                    className="min-h-[200px] overflow-auto max-h-[calc(100vh-280px)] relative"
+                >
+                    <table className="w-full text-left border-collapse min-w-[1200px]">
+                        <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle sticky top-0 z-10">
                             <tr>
                                 <th className="px-6 py-4">Produto</th>
                                 <th className="px-6 py-4">SKU / Código</th>
@@ -151,7 +163,7 @@ const ProductList: React.FC = () => {
                                             Nenhum produto cadastrado.
                                         </td>
                                     </tr>
-                                ) : products.map((product, i) => (
+                                ) : products.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((product, i) => (
                                     <motion.tr
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -298,6 +310,62 @@ const ProductList: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Paginação */}
+                {products.length > 0 && (
+                    <div className="p-4 border-t border-border-subtle flex items-center justify-between bg-surface rounded-b-lg">
+                        <div className="text-sm text-text-muted">
+                            Mostrando <span className="font-medium text-text-primary">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> a <span className="font-medium text-text-primary">{Math.min(currentPage * ITEMS_PER_PAGE, products.length)}</span> de <span className="font-medium text-text-primary">{products.length}</span> produtos
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-md border border-border-subtle text-text-muted hover:bg-bg-deep hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: Math.ceil(products.length / ITEMS_PER_PAGE) }).map((_, idx) => {
+                                    const page = idx + 1;
+                                    // Mostra max 5 botões de paginação
+                                    if (
+                                        page === 1 || 
+                                        page === Math.ceil(products.length / ITEMS_PER_PAGE) || 
+                                        (page >= currentPage - 1 && page <= currentPage + 1)
+                                    ) {
+                                        return (
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page)}
+                                                className={`w-8 h-8 rounded-md text-sm font-medium transition-colors ${
+                                                    currentPage === page
+                                                        ? 'bg-brand-primary text-white'
+                                                        : 'hover:bg-bg-deep text-text-muted hover:text-text-primary'
+                                                }`}
+                                            >
+                                                {page}
+                                            </button>
+                                        );
+                                    }
+                                    if (page === currentPage - 2 || page === currentPage + 2) {
+                                        return <span key={page} className="text-text-muted px-1">...</span>;
+                                    }
+                                    return null;
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(products.length / ITEMS_PER_PAGE), p + 1))}
+                                disabled={currentPage === Math.ceil(products.length / ITEMS_PER_PAGE)}
+                                className="p-2 rounded-md border border-border-subtle text-text-muted hover:bg-bg-deep hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from src.modules.users.models import User
 from src.modules.professionals.models import Professional
-from src.modules.companies.models import CompanyCommercialPolicy, CompanyCommercialPolicyRole
+from src.modules.companies.models import CommercialPolicy, CommercialPolicyRole
 
 def validate_commercial_policy_limits(db: Session, current_user: User, company_id: str, factors: list[Decimal]):
     """
@@ -23,12 +23,12 @@ def validate_commercial_policy_limits(db: Session, current_user: User, company_i
     if not professional or not professional.role_id:
         return # Cannot validate if user has no role
 
-    policies = db.query(CompanyCommercialPolicy).join(
-        CompanyCommercialPolicyRole
+    policies = db.query(CommercialPolicy).join(
+        CommercialPolicyRole
     ).filter(
-        CompanyCommercialPolicy.company_id == company_id,
-        CompanyCommercialPolicy.ativo == True,
-        CompanyCommercialPolicyRole.role_id == professional.role_id
+        CommercialPolicy.company_id == company_id,
+        CommercialPolicy.ativo == True,
+        CommercialPolicyRole.role_id == professional.role_id
     ).all()
 
     if not policies:

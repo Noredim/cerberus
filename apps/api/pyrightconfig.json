@@ -2,11 +2,11 @@
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": [
-    "."
+    "c:/cerberus/apps/api"
   ],
   "executionEnvironments": [
     {
-      "root": "."
+      "root": "c:/cerberus/apps/api"
     }
   ]
 }

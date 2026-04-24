@@ -60,7 +60,8 @@ class OpportunityKitService:
             "difal": Decimal(comp.get("difal_unitario", 0)),
             "icms_st": icms_st,
             "tem_st": icms_st > 0 or bool(comp.get("has_st", False)),
-            "perfil_st_ativo": comp.get("perfil_st_ativo", True)
+            "perfil_st_ativo": comp.get("perfil_st_ativo", True),
+            "icms_abatido_unit": Decimal(comp.get("icms_abatido", 0))
         }
 
     def calculate_financials(self, kit: OpportunityKit, tenant_id: str) -> dict:
@@ -247,6 +248,7 @@ class OpportunityKitService:
         
         item_summaries = []
         total_imposto_itens_venda = Decimal("0.0")
+        credito_icms_compra_total = Decimal("0.0")
         
         for item in kit.items:
             tipo_item_entity = getattr(item, "tipo_item", "PRODUTO")
@@ -255,6 +257,7 @@ class OpportunityKitService:
             tipo_produto = "MERCADORIA"
             difal_unitario = Decimal("0.0")
             icms_st = Decimal("0.0")
+            icms_abatido_unit = Decimal("0.0")
             info = {}  # fallback for tooltip details; populated only for product items
             
             if tipo_item_entity == "SERVICO_PROPRIO" and getattr(item, "own_service_id", None):
@@ -307,6 +310,7 @@ class OpportunityKitService:
                 tipo_produto = info["tipo"]
                 difal_unitario = info["difal"]
                 icms_st = info.get("icms_st", Decimal("0.0"))
+                icms_abatido_unit = info.get("icms_abatido_unit", Decimal("0.0"))
             
             custo_total_item_no_kit = custo_base_unitario_item * Decimal(item.quantidade_no_kit or 1)
             difal_total_item = difal_unitario * Decimal(item.quantidade_no_kit or 1)
@@ -314,6 +318,7 @@ class OpportunityKitService:
             
             custo_aquisicao_kit += custo_total_item_no_kit
             total_difal_kit += difal_total_item
+            credito_icms_compra_total += icms_abatido_unit * Decimal(item.quantidade_no_kit or 1)
             
             if tipo_produto in ["SERVICO", "LICENCA"]:
                 custo_aquisicao_servicos += custo_total_item_no_kit
@@ -356,7 +361,7 @@ class OpportunityKitService:
             desp_adm_item = venda_total_item * perc_despesas_adm
             comissao_item = venda_total_item * perc_comissao
             
-            lucro_total_item = venda_total_item - custo_total_item_no_kit - imposto_venda_item - frete_venda_item - desp_adm_item - comissao_item
+            lucro_total_item = venda_total_item - custo_total_item_no_kit - imposto_venda_item - frete_venda_item - desp_adm_item - comissao_item + (icms_abatido_unit * Decimal(item.quantidade_no_kit or 1))
             lucro_unitario_item = (lucro_total_item / Decimal(item.quantidade_no_kit or 1)) if Decimal(item.quantidade_no_kit or 1) > 0 else Decimal("0.0")
             margem_item = (lucro_total_item / venda_total_item * Decimal(100.0)) if venda_total_item > 0 else Decimal("0.0")
 
@@ -376,6 +381,7 @@ class OpportunityKitService:
                 "imposto_venda_item": round(imposto_venda_item, 2),  # type: ignore
                 "icms_st_unitario": round(icms_st, 2),  # type: ignore
                 "icms_st_total": round(icms_st_total, 2),  # type: ignore
+                "icms_abatido": round(icms_abatido_unit, 2), # type: ignore
                 "frete_venda_item": round(frete_venda_item, 2),  # type: ignore
                 "desp_adm_item": round(desp_adm_item, 2),  # type: ignore
                 "comissao_item": round(comissao_item, 2),  # type: ignore
@@ -472,6 +478,17 @@ class OpportunityKitService:
                 valor_mensal_locacao_base = (custo_aquisicao_kit * fator_margem) * tx_locacao
 
             valor_base_venda = custo_aquisicao_kit * fator_margem
+            
+            perc_comissao_locacao = Decimal(getattr(kit, 'perc_comissao', 0) or 0) / Decimal(100.0)
+            valor_comissao_locacao = valor_base_venda * perc_comissao_locacao
+            
+            # Monitoramento
+            custo_monitoramento_unitario = Decimal(getattr(kit, 'custo_monitoramento_unitario', 0) or 0)
+            fator_monitoramento = Decimal(getattr(kit, 'fator_monitoramento', 1) or 1)
+            venda_unit_monitoramento = custo_monitoramento_unitario * fator_monitoramento
+            receita_total_monitoramento = venda_unit_monitoramento * Decimal(kit.prazo_contrato_meses or 1)
+            custo_total_monitoramento = custo_monitoramento_unitario * Decimal(kit.prazo_contrato_meses or 1)
+            lucro_total_monitoramento = receita_total_monitoramento - custo_total_monitoramento
 
             # Manutenção
             vlt_manut = Decimal("0.0")
@@ -489,11 +506,11 @@ class OpportunityKitService:
             if kit.tipo_contrato == "INSTALACAO":
                 valor_base_final = valor_parcela_locacao + custo_operacional_mensal_kit
             else:
-                valor_base_final = valor_parcela_locacao + manutencao_mensal
+                valor_base_final = valor_parcela_locacao + manutencao_mensal + venda_unit_monitoramento
 
             # custo_operacional_mensal_kit = raw Block 6 cost (DO NOT MUTATE)
             # custo_total_mensal_kit = all operational costs for profitability calc
-            custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut))
+            custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut)) + custo_monitoramento_unitario
 
         # 14. Calculo de Impostos
         # aliq_total_impostos was calculated at the top
@@ -529,26 +546,56 @@ class OpportunityKitService:
             valor_mensal_kit = valor_base_final
             
             faturamento_separado = getattr(kit, 'faturamento_servico_separado', False)
+            
+            aliq_base = sum([
+                Decimal(kit.aliq_pis or 0),
+                Decimal(kit.aliq_cofins or 0),
+                Decimal(kit.aliq_csll or 0),
+                Decimal(kit.aliq_irpj or 0)
+            ]) / Decimal(100.0)
+            aliq_iss_pct = Decimal(kit.aliq_iss or 0) / Decimal(100.0)
+
+            # --- START UPFRONT INSTALLATION TAX CALCULATION ---
+            imposto_instalacao_upfront = Decimal("0.0")
+            venda_instalacao_upfront = Decimal("0.0")
+            if kit.instalacao_inclusa:
+                venda_instalacao_upfront = locals().get("vlr_instal_calc_base_manut", Decimal("0.0"))
+            else:
+                venda_instalacao_upfront = locals().get("custo_instalacao_avulso", Decimal("0.0"))
+                
+            if venda_instalacao_upfront > 0:
+                if faturamento_separado:
+                    imposto_instalacao_upfront = venda_instalacao_upfront * (aliq_base + aliq_iss_pct)
+                else:
+                    imposto_instalacao_upfront = venda_instalacao_upfront * aliq_total_impostos
+            # --- END UPFRONT INSTALLATION TAX CALCULATION ---
+
             if faturamento_separado:
-                aliq_base = sum([
-                    Decimal(kit.aliq_pis or 0),
-                    Decimal(kit.aliq_cofins or 0),
-                    Decimal(kit.aliq_csll or 0),
-                    Decimal(kit.aliq_irpj or 0)
-                ]) / Decimal(100.0)
-                
-                aliq_iss_pct = Decimal(kit.aliq_iss or 0) / Decimal(100.0)
-                
-                # Grupo 1: Produtos/Equipamentos (Locação Base) sem ISS
-                impostos_grupo_1 = valor_mensal_locacao_base * aliq_base
-                # Grupo 2: Serviços (Manutenção) com ISS
-                impostos_grupo_2 = manutencao_mensal * (aliq_base + aliq_iss_pct)
+                # Split locacao into equipment and installation
+                if kit.instalacao_inclusa:
+                    locacao_equipamento = (custo_aquisicao_kit * fator_margem) * tx_locacao
+                    locacao_instalacao = Decimal("0.0") # <-- REMOVED from monthly tax base!
+                else:
+                    locacao_equipamento = valor_mensal_locacao_base
+                    locacao_instalacao = Decimal("0.0")
+
+                # Grupo 1: Produtos/Equipamentos (Locação Base pura) sem ISS
+                impostos_grupo_1 = locacao_equipamento * aliq_base
+                # Grupo 2: Serviços (Instalação, Manutenção e Monitoramento) com ISS
+                impostos_grupo_2 = (locacao_instalacao + manutencao_mensal + venda_unit_monitoramento) * (aliq_base + aliq_iss_pct)
                 
                 valor_impostos = impostos_grupo_1 + impostos_grupo_2
                 if valor_mensal_kit > 0:
                     aliq_total_impostos = valor_impostos / valor_mensal_kit
             else:
-                valor_impostos = valor_mensal_kit * aliq_total_impostos
+                # Se unificado, a instalação está embutida no valor_mensal_kit, precisamos deduzir para não tributar mensalmente
+                if kit.instalacao_inclusa:
+                    loc_instalacao_mensal = (locals().get("vlr_instal_calc_base_manut", Decimal("0.0")) * fator_margem) * tx_locacao
+                    mensal_tributavel = valor_mensal_kit - loc_instalacao_mensal
+                else:
+                    mensal_tributavel = valor_mensal_kit
+
+                valor_impostos = mensal_tributavel * aliq_total_impostos
 
         # 16. Receita Liquida
         receita_liquida_mensal_kit = valor_mensal_kit - valor_impostos
@@ -557,7 +604,7 @@ class OpportunityKitService:
         if kit.tipo_contrato == "INSTALACAO":
             lucro_mensal_kit = receita_liquida_mensal_kit - custo_aquisicao_kit - custo_operacional_mensal_kit - custo_mensal_bloco_7
         elif kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total
         else:
             lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
 
@@ -590,7 +637,7 @@ class OpportunityKitService:
             venda_equipamentos_total = valor_venda_produtos + valor_venda_instalacao
             custo_equipamentos_total = custo_aquisicao_kit + vlr_instal_calc
             imposto_equipamentos_total = impostos_produtos_base + impostos_instalacao
-            lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao))
+            lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao)) + credito_icms_compra_total
             if venda_equipamentos_total > 0:
                 margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)
         else:
@@ -614,10 +661,42 @@ class OpportunityKitService:
             if venda_manutencao_total > 0:
                 margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
 
-        # ROI = Investimento / (Faturamento - Custo Op. Bloco6 - Custo Bloco7 - Impostos)
-        roi_denominador = valor_mensal_antes_impostos - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
-        investimento_total = custo_aquisicao_kit + vlr_instal_calc
+        # ROI = Investimento / (Faturamento - Custo Monitoramento - Custo Op. Bloco6 - Custo Bloco7 - Impostos)
+        custo_monit = locals().get("custo_monitoramento_unitario", Decimal("0.0"))
+        roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
+        valor_com_loc = locals().get("valor_comissao_locacao", Decimal("0.0"))
+        investimento_total = custo_aquisicao_kit + vlr_instal_calc + valor_com_loc
         roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
+
+        # 19. Aggregate granular tax fields for the frontend Fechamento de Venda
+        faturamento_total_venda = valor_mensal_kit
+        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+            # Sum from individual item_summaries for precision
+            vlt_pis = sum(Decimal(str(is_.get("pis_unit", 0))) for is_ in item_summaries)
+            vlt_cofins = sum(Decimal(str(is_.get("cofins_unit", 0))) for is_ in item_summaries)
+            vlt_csll = sum(Decimal(str(is_.get("csll_unit", 0))) for is_ in item_summaries)
+            vlt_irpj = sum(Decimal(str(is_.get("irpj_unit", 0))) for is_ in item_summaries)
+            vlt_icms = sum(Decimal(str(is_.get("icms_unit", 0))) for is_ in item_summaries)
+            vlt_iss = sum(Decimal(str(is_.get("iss_unit", 0))) for is_ in item_summaries)
+            # Add ISS from installation and maintenance (services not in item_summaries)
+            vlt_iss += impostos_instalacao + impostos_manutencao
+            faturamento_total_venda = venda_equipamentos_total + venda_manutencao_total
+        else:
+            # Locação/Comodato: calculate from aliquots × faturamento
+            vlt_pis = faturamento_total_venda * (Decimal(kit.aliq_pis or 0) / Decimal(100))
+            vlt_cofins = faturamento_total_venda * (Decimal(kit.aliq_cofins or 0) / Decimal(100))
+            vlt_csll = faturamento_total_venda * (Decimal(kit.aliq_csll or 0) / Decimal(100))
+            vlt_irpj = faturamento_total_venda * (Decimal(kit.aliq_irpj or 0) / Decimal(100))
+            vlt_icms = Decimal("0")  # Locação doesn't apply ICMS on revenue
+            vlt_iss = faturamento_total_venda * (Decimal(kit.aliq_iss or 0) / Decimal(100))
+
+        vlt_frete_venda = faturamento_total_venda * perc_frete_venda
+        vlt_despesas_adm = faturamento_total_venda * perc_despesas_adm
+        vlt_comissao = faturamento_total_venda * perc_comissao
+
+        # Aggregate cost breakdown for Fechamento
+        custo_equip_total_calc = custo_aquisicao_kit + vlr_instal_calc
+        custo_manut_total_calc = vlt_manut if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else custo_operacional_mensal_kit
 
         return {
             "summary": {
@@ -634,6 +713,8 @@ class OpportunityKitService:
                 "valor_mensal_locacao_base": round(valor_mensal_locacao_base, 2),  # type: ignore
                 "vlt_manut": round(vlt_manut, 2),  # type: ignore
                 "valor_base_venda": round(valor_base_venda, 2),  # type: ignore
+                "imposto_instalacao": round(locals().get("imposto_instalacao_upfront", Decimal("0.0")), 2),  # type: ignore
+                "valor_comissao_locacao": round(locals().get("valor_comissao_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_parcela_locacao": round(valor_parcela_locacao, 2),  # type: ignore
                 "manutencao_mensal": round(manutencao_mensal, 2),  # type: ignore
                 "valor_mensal_antes_impostos": round(valor_mensal_antes_impostos, 2),  # type: ignore
@@ -644,13 +725,32 @@ class OpportunityKitService:
                 "lucro_mensal_kit": round(lucro_mensal_kit, 2),  # type: ignore
                 "margem_kit": round(margem_kit, 2),  # type: ignore
                 "roi_meses": round(roi_meses, 1),  # type: ignore
+                "credito_icms_compra_total": round(credito_icms_compra_total, 2), # type: ignore
                 # New granular fields
                 "venda_equipamentos_total": round(venda_equipamentos_total, 2), # type: ignore
                 "lucro_equipamentos": round(lucro_equipamentos, 2), # type: ignore
                 "margem_equipamentos": round(margem_equipamentos, 2), # type: ignore
                 "venda_manutencao_total": round(venda_manutencao_total, 2), # type: ignore
                 "lucro_manutencao": round(lucro_manutencao, 2), # type: ignore
-                "margem_manutencao": round(margem_manutencao, 2) # type: ignore
+                "margem_manutencao": round(margem_manutencao, 2), # type: ignore
+                
+                "venda_unit_monitoramento": round(locals().get("venda_unit_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                "receita_total_monitoramento": round(locals().get("receita_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                "custo_total_monitoramento": round(locals().get("custo_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                "lucro_total_monitoramento": round(locals().get("lucro_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                # Granular tax/expense breakdown for Fechamento de Venda
+                "faturamento_total_venda": round(faturamento_total_venda, 2), # type: ignore
+                "vlt_pis": round(vlt_pis, 2), # type: ignore
+                "vlt_cofins": round(vlt_cofins, 2), # type: ignore
+                "vlt_csll": round(vlt_csll, 2), # type: ignore
+                "vlt_irpj": round(vlt_irpj, 2), # type: ignore
+                "vlt_icms": round(vlt_icms, 2), # type: ignore
+                "vlt_iss": round(vlt_iss, 2), # type: ignore
+                "vlt_frete_venda": round(vlt_frete_venda, 2), # type: ignore
+                "vlt_despesas_adm": round(vlt_despesas_adm, 2), # type: ignore
+                "vlt_comissao": round(vlt_comissao, 2), # type: ignore
+                "custo_equip_total_calc": round(custo_equip_total_calc, 2), # type: ignore
+                "custo_manut_total_calc": round(custo_manut_total_calc, 2), # type: ignore
             },
             "item_summaries": item_summaries,
             "cost_summaries": cost_summaries

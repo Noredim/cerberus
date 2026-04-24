@@ -64,6 +64,7 @@ class Company(Base):
     benefits = relationship("CompanyBenefit", back_populates="company", cascade="all, delete-orphan")
     qsa = relationship("CompanyQsa", back_populates="company", cascade="all, delete-orphan")
     sales_parameters = relationship("CompanySalesParameter", back_populates="company", uselist=False, cascade="all, delete-orphan")
+    commercial_policies = relationship("CommercialPolicy", back_populates="company", cascade="all, delete-orphan")
 
 class CompanyCnae(Base):
     __tablename__ = "company_cnaes"
@@ -226,3 +227,29 @@ class CompanyQsa(Base):
     created_at = Column(DateTime(timezone=True), default=func.now())
 
     company = relationship("Company", back_populates="qsa")
+
+class CommercialPolicy(Base):
+    __tablename__ = "company_commercial_policies"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    nome_politica = Column(String(25), nullable=False)
+    fator_limite = Column(Numeric(10, 4), nullable=False)
+    manutencao_ano_percentual = Column(Numeric(5, 2), nullable=False)
+    comissao_percentual = Column(Numeric(5, 2), nullable=False)
+    ativo = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    company = relationship("Company", back_populates="commercial_policies")
+    roles = relationship("CommercialPolicyRole", back_populates="policy", cascade="all, delete-orphan")
+
+class CommercialPolicyRole(Base):
+    __tablename__ = "company_commercial_policy_roles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="CASCADE"), nullable=False)
+    role_id = Column(String, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+
+    policy = relationship("CommercialPolicy", back_populates="roles")
+

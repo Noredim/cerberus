@@ -106,6 +106,7 @@ class SalesBudgetItemBase(BaseModel):
     perc_despesa_adm: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     perc_comissao: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     tem_st: bool = False
+    icms_abatido_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
 
 
 class SalesBudgetItemCreate(SalesBudgetItemBase):
@@ -121,6 +122,7 @@ class SalesBudgetItemOut(SalesBudgetItemBase):
     csll_unit: Decimal = Decimal('0.00')
     irpj_unit: Decimal = Decimal('0.00')
     icms_unit: Decimal = Decimal('0.00')
+    icms_abatido_unit: Decimal = Decimal('0.00')
     iss_unit: Decimal = Decimal('0.00')
     despesa_adm_unit: Decimal = Decimal('0.00')
     comissao_unit: Decimal = Decimal('0.00')
