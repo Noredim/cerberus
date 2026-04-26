@@ -654,8 +654,16 @@ class OpportunityKitService:
         custo_monit = locals().get("custo_monitoramento_unitario", Decimal("0.0"))
         roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
         valor_com_loc = locals().get("valor_comissao_locacao", Decimal("0.0"))
-        investimento_total = custo_aquisicao_kit + vlr_instal_calc + valor_com_loc
+        imposto_inst = locals().get("imposto_instalacao_upfront", Decimal("0.0"))
+        investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc
         roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
+
+        # ROI Equipamento = (Custo de Aquisição + Comissão) / (Locação Mensal - Imposto de Locação)
+        roi_equipamento_meses = 0.0
+        if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
+            locacao_liquida = venda_equipamentos_total - locals().get("imposto_equip_loc", Decimal("0.0"))
+            if locacao_liquida > 0:
+                roi_equipamento_meses = float((custo_aquisicao_kit + valor_com_loc) / locacao_liquida)
 
         # 19. Aggregate granular tax fields for the frontend Fechamento de Venda
         faturamento_total_venda = valor_mensal_kit
@@ -714,6 +722,8 @@ class OpportunityKitService:
                 "lucro_mensal_kit": round(lucro_mensal_kit, 2),  # type: ignore
                 "margem_kit": round(margem_kit, 2),  # type: ignore
                 "roi_meses": round(roi_meses, 1),  # type: ignore
+                "roi_equipamento_meses": round(roi_equipamento_meses, 2), # type: ignore
+                "imposto_equip_loc": round(locals().get("imposto_equip_loc", Decimal("0.0")), 2), # type: ignore
                 "credito_icms_compra_total": round(credito_icms_compra_total, 2), # type: ignore
                 # New granular fields
                 "venda_equipamentos_total": round(venda_equipamentos_total, 2), # type: ignore

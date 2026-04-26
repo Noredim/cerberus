@@ -14,8 +14,25 @@ class OpportunityKitItemBase(BaseModel):
 class OpportunityKitItemCreate(OpportunityKitItemBase):
     pass
 
+class SupplierSimpleResponse(BaseModel):
+    id: str
+    razao_social: str
+    nome_fantasia: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class ProductSupplierSimpleResponse(BaseModel):
+    supplier: SupplierSimpleResponse
+
+    class Config:
+        from_attributes = True
+
 class ProductSimpleResponse(BaseModel):
     codigo: str
+    nome: str
+    fornecedor_ultimo_preco: Optional[SupplierSimpleResponse] = None
+    suppliers: List[ProductSupplierSimpleResponse] = []
 
     class Config:
         from_attributes = True
@@ -222,8 +239,10 @@ class OpportunityKitFinancialSummary(BaseModel):
     
     # ROI payback period in months (LOCACAO/COMODATO only)
     roi_meses: Optional[float] = Field(default=0.0)
+    roi_equipamento_meses: Optional[float] = Field(default=0.0)
     # Granular tax/expense breakdown for Fechamento de Venda
     faturamento_total_venda: Optional[Decimal] = Field(default=Decimal(0))
+    imposto_equip_loc: Optional[Decimal] = Field(default=Decimal(0))
     vlt_pis: Optional[Decimal] = Field(default=Decimal(0))
     vlt_cofins: Optional[Decimal] = Field(default=Decimal(0))
     vlt_csll: Optional[Decimal] = Field(default=Decimal(0))

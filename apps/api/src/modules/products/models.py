@@ -55,6 +55,7 @@ class Product(Base):
     company = relationship("Company")
     tenant = relationship("Tenant")
     suppliers = relationship("ProductSupplier", back_populates="product", cascade="all, delete-orphan")
+    fornecedor_ultimo_preco = relationship("Supplier", foreign_keys=[fornecedor_ultimo_preco_id])
 
 
 class ProductSupplier(Base):

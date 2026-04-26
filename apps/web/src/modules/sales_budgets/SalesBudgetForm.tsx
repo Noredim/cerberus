@@ -205,7 +205,7 @@ interface RentalBudgetItem {
   kit_margem?: number;
   kit_faturamento_mensal?: number;
   kit_faturamento_separado?: boolean;
-  
+
   // Grid Detailed Fields Snapshot
   kit_investimento_total?: number;
   kit_imposto_instalacao?: number;
@@ -587,7 +587,7 @@ export function SalesBudgetForm() {
           // We'll use the main markupPadrao to decide which policy is "active" at load
           const currentMkp = markupPadrao;
           const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
-                                     .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+            .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
           if (applicable) setActivePolicy(applicable);
         }
       }).catch(err => console.error('Failed to load policies', err));
@@ -918,7 +918,7 @@ export function SalesBudgetForm() {
         kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
         kit_margem: Number(kit.summary?.margem_kit || 0),
         kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
-        
+
         // Grid Detailed Fields Snapshot
         kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
         kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
@@ -928,7 +928,7 @@ export function SalesBudgetForm() {
         kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
         kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
         kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
-        
+
         custo_manut_mensal: 0,
         custo_total_mensal: 0,
         valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
@@ -1342,7 +1342,7 @@ export function SalesBudgetForm() {
       impostosInstalacaoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
       nominalTaxes: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
     };
-    
+
     if (rentalItems.length > 0) {
       const first = rentalItems.find(ri => ri.opportunity_kit_id) || rentalItems[0];
       if (first.opportunity_kit_id) {
@@ -1367,7 +1367,7 @@ export function SalesBudgetForm() {
 
       const faturamentoMensalItem = (i.kit_valor_mensal || i.faturamento_mensal || i.valor_mensal || 0) * q;
       const impostos = i.impostos_mensal * q;
-      
+
       const custoMonitoramentoMensal = Number(i.kit_custo_monitoramento_unit || 0) * q;
       const custoManutencaoMensal = Number(i.custo_op_mensal_kit || 0) * q;
       const custoOpMensal = custoMonitoramentoMensal + custoManutencaoMensal;
@@ -1378,7 +1378,7 @@ export function SalesBudgetForm() {
         t.investimentoInstalacao += i.custo_total_aquisicao * q;
         t.impostosInstalacaoTotal += impostos;
         t.custoOpInstalacaoTotal += custoOpMensal;
-        
+
         t.faturamentoTotal += faturamentoMensalItem;
         t.impostosTotal += impostos;
         t.custoOpTotal += custoOpMensal;
@@ -1389,7 +1389,7 @@ export function SalesBudgetForm() {
         t.custoMensal += i.custo_total_mensal * q;
         t.lucroMensal += i.lucro_mensal * q;
         t.custoOpMensalTotal += custoOpMensal;
-        
+
         t.faturamentoTotal += faturamentoMensalItem * prazoItem;
         t.impostosTotal += impostos * prazoItem;
         t.custoOpTotal += custoOpMensal * prazoItem;
@@ -1424,7 +1424,7 @@ export function SalesBudgetForm() {
         mon = (i.kit_venda_unit_monitoramento || 0) * q;
         loc = (i.kit_parcela_locacao || 0) * q;
         man = Math.max(0, faturamento - loc - mon);
-        
+
         rate_pis = i.kit_pis || 0;
         rate_cofins = i.kit_cofins || 0;
         rate_csll = i.kit_csll || 0;
@@ -1455,7 +1455,7 @@ export function SalesBudgetForm() {
       const cIrpj = calcTax(false, rate_irpj);
       const cIss = calcTax(true, rate_iss);
       const totalCalc = cPis + cCofins + cCsll + cIrpj + cIss;
-      
+
       const ratio = totalCalc > 0 ? impostos / totalCalc : 1;
 
       if (totalCalc > 0 || impostos > 0) {
@@ -2350,7 +2350,7 @@ export function SalesBudgetForm() {
                   <div>
                     <div className="text-[11px] font-bold text-rose-800/60 uppercase tracking-wider mb-1">Total de Impostos (Líquido)</div>
                     <div className="text-2xl font-bold text-rose-600 mb-4">{fmt(impostosConsolidadoGlobal)}</div>
-                    
+
                     <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-rose-800/70">
                       {t.pis > 0 && <div className="flex justify-between items-center"><span>PIS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.pis / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.pis)}</span></div>}
                       {t.cofins > 0 && <div className="flex justify-between items-center"><span>COFINS <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.cofins / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.cofins)}</span></div>}
@@ -2708,8 +2708,8 @@ export function SalesBudgetForm() {
           // O card do ROI final dentro do card de Consolidação Diretoria deve seguir a mesma lógica
           // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comissão rec/liq.
           const _diretorRoiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal - comissao_mensal_calc;
-          const diretor_roi = _diretorRoiDenominador > 0 
-            ? rentalTotals.investimento / _diretorRoiDenominador 
+          const diretor_roi = _diretorRoiDenominador > 0
+            ? rentalTotals.investimento / _diretorRoiDenominador
             : ((prazoContratoMeses || 1) + 1);
 
 

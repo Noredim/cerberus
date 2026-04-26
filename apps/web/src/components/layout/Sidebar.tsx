@@ -83,7 +83,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Análise de NF-e', path: '/fiscal/analise-nfe' },
             ]
         },
-        { icon: BarChart3, label: 'Relatórios', path: '/dashboards' },
+        {
+            icon: BarChart3,
+            label: 'Relatórios',
+            path: '/relatorios',
+            subItems: [
+                { label: 'Dashboards', path: '/dashboards' },
+                { label: 'Kit Analítico', path: '/relatorios/kit-analitico' }
+            ]
+        },
         { icon: Settings, label: 'Configurações', path: '/settings' },
     ];
 

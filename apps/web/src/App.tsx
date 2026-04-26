@@ -38,6 +38,7 @@ import { SolutionAnalysisList } from './modules/solution_analysis/SolutionAnalys
 import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalysisForm';
 import { SalesProposalList } from './modules/sales_proposals/SalesProposalList';
 import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
+import KitAnalyticReport from './modules/reports/KitAnalyticReport';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -167,6 +168,9 @@ function App() {
             <Route path="/comercial/propostas" element={<SalesProposalList />} />
             <Route path="/comercial/propostas/:id" element={<SalesProposalForm />} />
 
+
+            {/* Relatórios */}
+            <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
 
           </Route>
         </Routes>

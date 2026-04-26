@@ -1142,7 +1142,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         const custoMonitoramentoMensal = Number(form.custo_monitoramento_unitario) || 0;
         const denominadorROI = faturamentoMensal - custoMonitoramentoMensal - impostosMensais - custoOpMensal;
         const totalReceitaContrato = (faturamentoMensal * mesesFaturados) + (form.instalacao_inclusa ? instalacaoEmbutida : 0);
-        const roiMeses = denominadorROI > 0 ? (totalInvestimento / denominadorROI) : 0;
+        const roiMeses = financials?.summary?.roi_meses || 0;
+        const roiEquipamentoMeses = financials?.summary?.roi_equipamento_meses || 0;
 
 
         const tipoLabel = form.tipo_contrato === 'LOCACAO' ? 'Locação' : 'Comodato';
@@ -1463,6 +1464,68 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   </div>
                 </div>
               </div>
+
+              {/* Card 6.5: ROI DE EQUIPAMENTO */}
+              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiEquipamentoMeses > 0 ? 'bg-indigo-500/5 border-indigo-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                  {roiEquipamentoMeses > 0 && (
+                    <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                  )}
+                  <div className="flex items-center gap-1 text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">
+                    ROI DE EQUIPAMENTO
+                    <Tooltip content={
+                      <div className="w-auto min-w-[320px] text-left p-1">
+                        <div className="font-bold text-white text-[13px] mb-3 flex items-center gap-1.5 border-b border-slate-700 pb-2">
+                          <Info className="w-4 h-4 text-indigo-400" />
+                          Memória de Cálculo (Equipamento)
+                        </div>
+                        <div className="text-[11px] text-slate-300 space-y-1.5">
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-slate-400">Custo de Aquisição:</span>
+                            <span className="font-mono text-[10px] text-slate-200">{fmtC(custoAq)}</span>
+                          </div>
+                          {valorComissaoLocacao > 0 && (
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="text-slate-400">Comissão:</span>
+                              <span className="font-mono text-[10px] text-slate-200">{fmtC(valorComissaoLocacao)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-100 mt-1 pt-1 border-t border-slate-700">
+                            <span className="uppercase tracking-tighter opacity-80">Total Investimento (A):</span>
+                            <span>{fmtC(custoAq + valorComissaoLocacao)}</span>
+                          </div>
+
+                          <div className="flex justify-between items-center gap-2 mt-3">
+                            <span className="text-slate-400">Locação Mensal:</span>
+                            <span className="font-mono text-[10px] text-slate-200">{fmtC(financials?.summary?.venda_equipamentos_total || 0)}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-slate-400">Imposto de Locação:</span>
+                            <span className="font-mono text-[10px] text-rose-400">-{fmtC(financials?.summary?.imposto_equip_loc || 0)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-100 mt-1 pt-1 border-t border-slate-700">
+                            <span className="uppercase tracking-tighter opacity-80">Receita Líquida (B):</span>
+                            <span>{fmtC((financials?.summary?.venda_equipamentos_total || 0) - (financials?.summary?.imposto_equip_loc || 0))}</span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[11px] font-black text-indigo-400 mt-3 pt-2 border-t border-indigo-500/30">
+                            <span className="uppercase tracking-widest">Resultado (A / B):</span>
+                            <span>{roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(2)} meses` : 'Indisponível'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    }>
+                      <Info className="w-3 h-3 text-text-muted cursor-help hover:text-text-primary transition-colors" />
+                    </Tooltip>
+                  </div>
+                  <div className={`text-xl font-black tabular-nums tracking-tighter relative z-10 ${roiEquipamentoMeses > 0 ? 'text-indigo-500' : 'text-text-muted'}`}>
+                    {roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(2)} meses` : <span className="text-sm font-medium">ROI indisponível</span>}
+                  </div>
+                  <div className="text-[9px] text-text-muted mt-1.5 italic relative z-10 leading-tight">
+                    Tempo estimado para retorno do investimento do equipamento
+                  </div>
+                </div>
+              )}
 
               {/* Card 7: FATOR GERAL */}
               <div className="border rounded-xl p-3 flex flex-col justify-center bg-bg-subtle border-border-subtle shadow-sm relative overflow-hidden">
