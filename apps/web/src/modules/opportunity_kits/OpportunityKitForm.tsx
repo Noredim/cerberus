@@ -1102,17 +1102,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           : 'Sem instalação embutida';
 
         // Card Locação Mensal — ((custoAq + instalacao) * fatorMargem) * txLoc
-        const prazoMeses = Number(form.prazo_contrato_meses) || 0;
+
         const fatorMargem = Number(form.fator_margem_locacao) || 1;
         const txLocDecimal = financials?.summary?.tx_locacao || 0;         // já calculado pelo backend
         const txLocPerc = txLocDecimal * 100;
         const locacaoMensal = ((custoAq + instalacaoEmbutida) * fatorMargem) * txLocDecimal;
 
-        // Card Manutenção — TX manut = taxa_manutencao_anual / prazo_contrato_meses
+        // Card Manutenção — TX manut = taxa_manutencao_anual / 12
         // Quando inclusa: ((custoAq + instalacao) * fatorMargem) * (txManut / 100)
         // Quando não inclusa: soma do Bloco 6
         const taxaManutAnual = Number(form.taxa_manutencao_anual) || 0;
-        const txManutPerc = prazoMeses > 0 ? taxaManutAnual / prazoMeses : 0;
+        const txManutPerc = taxaManutAnual / 12;
         const manutencaoCalculada = ((custoAq + instalacaoEmbutida) * fatorMargem) * (txManutPerc / 100);
         const custoOpMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
         const fatorManut = Number(form.fator_manutencao) || 1;
@@ -1380,7 +1380,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           <div className="font-mono text-slate-300 text-[11px]">
                             {(() => {
                               const bases = {
-                                loc: form.instalacao_inclusa ? locacaoMensal - (instalacaoEmbutida * fatorMargem * txLocDecimal) : locacaoMensal,
+                                loc: locacaoMensal,
                                 man: manutencaoMensal,
                                 mon: vendaUnitMonitoramento
                               };
@@ -1414,7 +1414,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       if (rate <= 0) return null;
                                       if (tax === 'ISS' && !['COMODATO', 'INSTALACAO', 'LOCACAO'].includes(form.tipo_contrato)) return null;
 
-                                      const calcRate = (isService) => {
+                                      const calcRate = (isService: boolean) => {
                                         if (!isSep) return rate;
                                         if (tax === 'ISS' && !isService) return 0;
                                         return rate;
@@ -1850,8 +1850,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       ) : (
                         <>
                           <th className="px-1.5 py-3 w-20">Quantidade</th>
+                          <th className="px-1.5 py-3 text-right">Custo Base</th>
                           <th className="px-1.5 py-3 text-right">DIFAL (Un.)</th>
-                          <th className="px-1.5 py-3 text-right">Custo Un. Base</th>
+                          <th className="px-1.5 py-3 text-right">Total sem DIFAL</th>
                           <th className="px-1.5 py-3 text-right">Custo Total</th>
                         </>
                       )}
@@ -1991,10 +1992,35 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 />
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
+                                {(() => {
+                                  const custoBase = (summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0);
+                                  return (
+                                    <Tooltip content={
+                                      <div className="w-64">
+                                        <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
+                                          <Info className="w-3.5 h-3.5 text-brand-primary" />
+                                          Composição Custo Base
+                                        </div>
+                                        <div className="space-y-1.5 font-mono text-text-muted">
+                                          <div className="flex justify-between"><span>Base (Unit.):</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
+                                          <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit || 0)}</span></div>
+                                          <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit || 0)}</span></div>
+                                          <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                            <span>Custo Base:</span><span>{fmtC(custoBase)}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    }>
+                                      <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(custoBase)}</span>
+                                    </Tooltip>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
                                 {fmtC(summary?.difal_unitario || 0)}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                {fmtC(summary?.custo_base_unitario_item)}
+                                {fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
                                 {fmtC(summary?.custo_total_item_no_kit)}
@@ -2035,9 +2061,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
                           <td className="px-4 py-3"></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_difal_kit || 0))}</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-bold">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
                         </>
                       )}
                       <td></td>

@@ -50,6 +50,14 @@ class RentalBudgetItemBase(BaseModel):
     kit_receita_liquida: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_lucro_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_margem: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=4)
+    
+    kit_investimento_total: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_comissao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_perc_comissao: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_vlr_instal_calc: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_parcela_locacao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_venda_unit_monitoramento: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    
     prazo_contrato: int = 36
     usa_taxa_manut_padrao: bool = True
     taxa_manutencao_anual_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)

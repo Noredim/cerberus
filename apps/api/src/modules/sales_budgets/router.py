@@ -24,18 +24,25 @@ def list_budgets(
     budgets = service.list_budgets(db, current_user.tenant_id, company_id)
     result = []
     for b in budgets:
-        mv = _calc_margem_venda(b.items, b.rental_items)
-        mr = _calc_margem_rental(b.rental_items)
+        lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items)
+        lucro_rental, fat_rental = _calc_margem_rental(b.rental_items, getattr(b, "prazo_instalacao_meses", 0))
         
-        # Margem Geral: average of non-zero margins
-        if mv > 0 and mr > 0:
-            mg = float(round((mv + mr) / 2, 2))
+        mv = float(round(lucro_venda / fat_venda * 100, 2)) if fat_venda > 0 else 0.0
+        mr = float(round(lucro_rental / fat_rental * 100, 2)) if fat_rental > 0 else 0.0
+        
+        fat_geral = fat_venda + fat_rental
+        if fat_geral > 0:
+            mg = float(round((lucro_venda + lucro_rental) / fat_geral * 100, 2))
         else:
-            mg = float(mv if mv > 0 else mr)
+            mg = 0.0
             
         valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
         
-        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * int(ri.prazo_contrato or 0) for ri in valid_rentals)
+        # Adjust prazo_contrato internally for the header view
+        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * max(0, int(ri.prazo_contrato or 0) - int(getattr(b, "prazo_instalacao_meses", 0) or 0)) for ri in valid_rentals)
+        # Adding instalacao to the display of total faturamento rental
+        total_faturamento_rental += sum(float(getattr(ri, "valor_instalacao_item", 0) or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+        
         valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
         prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
         
@@ -61,7 +68,7 @@ def list_budgets(
     return result
 
 
-def _calc_margem_venda(items, rental_items) -> float:
+def _calc_margem_venda(items, rental_items) -> tuple[float, float]:
     total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items if not getattr(i, "opportunity_kit_id", None))
     total_venda = sum(float(i.total_venda or 0) for i in items if not getattr(i, "opportunity_kit_id", None))
     
@@ -71,18 +78,44 @@ def _calc_margem_venda(items, rental_items) -> float:
                 total_lucro += float(ri.kit_lucro_mensal or 0) * float(ri.quantidade or 1)
                 total_venda += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
                 
-    if total_venda == 0:
-        return 0.0
-    return float(round(total_lucro / total_venda * 100, 2))
+    return (total_lucro, total_venda)
 
 
-def _calc_margem_rental(rental_items) -> float:
+def _calc_margem_rental(rental_items, prazo_instalacao: int = 0) -> tuple[float, float]:
     valid_rentals = [ri for ri in rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
-    total_lucro_mensal = sum(float(ri.lucro_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
-    total_faturamento_mensal = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
-    if total_faturamento_mensal == 0:
-        return 0.0
-    return float(round(total_lucro_mensal / total_faturamento_mensal * 100, 2))
+    
+    total_faturamento = 0.0
+    total_custo = 0.0
+    
+    for ri in valid_rentals:
+        q = float(ri.quantidade or 1)
+        pCtrRaw = int(ri.prazo_contrato or 36)
+        pCtr = max(0, pCtrRaw - (prazo_instalacao or 0))
+        
+        fat_mensal = float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0)
+        instalacao = float(getattr(ri, "valor_instalacao_item", 0) or 0)
+        fat_lifetime = (fat_mensal * pCtr + instalacao) * q
+        
+        investimento = float(ri.custo_total_aquisicao or 0) * q
+        
+        impostos_mensal = float(ri.impostos_mensal or getattr(ri, "kit_valor_impostos", 0) or 0)
+        perc_impostos = float(ri.perc_impostos_total or 0) / 100.0
+        impostos_total = (impostos_mensal * pCtr + instalacao * perc_impostos) * q
+        
+        custo_op_mensal = float(ri.custo_total_mensal or ri.custo_manut_mensal or getattr(ri, "kit_vlt_manut", 0) or 0)
+        custo_op_total = (custo_op_mensal * pCtr) * q
+        
+        comissao_mensal = float(ri.comissao_mensal or 0)
+        perc_comissao = float(ri.perc_comissao or 0) / 100.0
+        comissao_final = (comissao_mensal * pCtr + instalacao * perc_comissao) * q
+        
+        custo_lifetime = investimento + impostos_total + custo_op_total + comissao_final
+        
+        total_faturamento += fat_lifetime
+        total_custo += custo_lifetime
+        
+    lucro = total_faturamento - total_custo
+    return (lucro, total_faturamento)
 
 
 @router.get("/check-st")

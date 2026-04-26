@@ -35,45 +35,7 @@ interface CostComposition {
   perfil_st_ativo?: boolean;
 }
 
-const CurrencyCellInput = ({ value, onChange, disabled, className }: any) => {
-  const [localStr, setLocalStr] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
 
-  useEffect(() => {
-    if (!isFocused) {
-      setLocalStr(Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    }
-  }, [value, isFocused]);
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    let parsed = parseFloat(localStr.replace(/\./g, '').replace(',', '.'));
-    if (isNaN(parsed)) parsed = 0;
-    onChange(parsed);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    if (/^[0-9.,-]*$/.test(val)) {
-      setLocalStr(val);
-    }
-  };
-
-  return (
-    <input
-      type="text"
-      value={isFocused ? localStr : localStr}
-      onChange={handleChange}
-      onFocus={() => {
-        setIsFocused(true);
-        setLocalStr(value ? String(value).replace('.', ',') : '');
-      }}
-      onBlur={handleBlur}
-      disabled={disabled}
-      className={className}
-    />
-  );
-};
 
 const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", className = "w-full" }: any) => {
   const [localStr, setLocalStr] = useState(Number(value || 0).toFixed(4));
@@ -242,6 +204,17 @@ interface RentalBudgetItem {
   kit_lucro_mensal?: number;
   kit_margem?: number;
   kit_faturamento_mensal?: number;
+  kit_faturamento_separado?: boolean;
+  
+  // Grid Detailed Fields Snapshot
+  kit_investimento_total?: number;
+  kit_imposto_instalacao?: number;
+  kit_comissao?: number;
+  kit_perc_comissao?: number;
+  kit_vlr_instal_calc?: number;
+  kit_parcela_locacao?: number;
+  kit_venda_unit_monitoramento?: number;
+  kit_custo_monitoramento_unit?: number;
   roi_meses?: number;
   faturamento_mensal?: number;
 }
@@ -793,6 +766,15 @@ export function SalesBudgetForm() {
                 kit_valor_impostos: Number(kit.summary?.valor_impostos ?? 0),
                 kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
                 kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
+                kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+                kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
+                kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: Number(kit.perc_comissao || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+                kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
+                kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
+                kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
                 kit_margem: Number(kit.summary?.margem_kit || 0),
               };
             } catch { /* fallback */ }
@@ -935,6 +917,18 @@ export function SalesBudgetForm() {
         kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
         kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
         kit_margem: Number(kit.summary?.margem_kit || 0),
+        kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+        
+        // Grid Detailed Fields Snapshot
+        kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+        kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
+        kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
+        kit_perc_comissao: Number(kit.perc_comissao || 0),
+        kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+        kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
+        kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
+        kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
+        
         custo_manut_mensal: 0,
         custo_total_mensal: 0,
         valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
@@ -1241,18 +1235,20 @@ export function SalesBudgetForm() {
           icms_st_unit: Number(updatedKit.summary?.total_st_kit || 0),
           difal_unit: Number(updatedKit.summary?.total_difal_kit || 0),
           taxa_manutencao_anual_item: Number(updatedKit.taxa_manutencao_anual || 0),
-          kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
-          kit_valor_mensal: updatedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(updatedKit.summary?.venda_equipamentos_total || 0) : Number(updatedKit.summary?.valor_mensal_antes_impostos ?? updatedKit.summary?.valor_mensal_kit ?? 0),
-          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos ?? 0),
-          kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
-          kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
-          kit_margem: Number(updatedKit.summary?.margem_kit || 0),
-          // these won't change but just to ensure syncing:
           kit_pis: Number(updatedKit.aliq_pis || 0),
           kit_cofins: Number(updatedKit.aliq_cofins || 0),
           kit_csll: Number(updatedKit.aliq_csll || 0),
           kit_irpj: Number(updatedKit.aliq_irpj || 0),
-          kit_iss: Number(updatedKit.aliq_iss || 0)
+          kit_iss: Number(updatedKit.aliq_iss || 0),
+          kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
+          kit_valor_mensal: updatedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(updatedKit.summary?.venda_equipamentos_total || 0) : Number(updatedKit.summary?.valor_mensal_antes_impostos ?? updatedKit.summary?.valor_mensal_kit ?? 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
+          kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
+          kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
+          kit_margem: Number(updatedKit.summary?.margem_kit || 0),
+          kit_imposto_instalacao: Number(updatedKit.summary?.imposto_instalacao || 0),
+          // these won't change but just to ensure syncing:
+          kit_custo_monitoramento_unit: Number(updatedKit.summary?.custo_monitoramento_unitario || updatedKit.custo_monitoramento_unitario || 0)
         }, rentalDefaults);
         return updated;
       });
@@ -1337,72 +1333,139 @@ export function SalesBudgetForm() {
   const rentalTotals = useMemo(() => {
     const t = {
       investimento: 0, investimentoInstalacao: 0, faturamentoMensal: 0, impostosMensal: 0, receitaLiqMensal: 0, custoMensal: 0, lucroMensal: 0,
-      fornecedoresTotal: 0, impostosCompraTotal: 0, freteTotal: 0, faturamentoTotal: 0, impostosTotal: 0,
+      fornecedoresTotal: 0, impostosCompraTotal: 0, impostoInstalacaoKitTotal: 0, freteTotal: 0, faturamentoTotal: 0, impostosTotal: 0,
       custoOpMensalTotal: 0, custoOpTotal: 0, totalInstalacao: 0,
       impostosInstalacaoTotal: 0, custoOpInstalacaoTotal: 0,
+      comissaoTotal: 0,
+      nominalPercComissao: 0,
       impostosDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
-      impostosInstalacaoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
+      impostosInstalacaoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
+      nominalTaxes: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
     };
+    
+    if (rentalItems.length > 0) {
+      const first = rentalItems.find(ri => ri.opportunity_kit_id) || rentalItems[0];
+      if (first.opportunity_kit_id) {
+        t.nominalPercComissao = Number(first.kit_perc_comissao || 0);
+        t.nominalTaxes.pis = Number(first.kit_pis || 0);
+        t.nominalTaxes.cofins = Number(first.kit_cofins || 0);
+        t.nominalTaxes.csll = Number(first.kit_csll || 0);
+        t.nominalTaxes.irpj = Number(first.kit_irpj || 0);
+        t.nominalTaxes.iss = Number(first.kit_iss || 0);
+      } else {
+        t.nominalTaxes.pis = Number(rentalDefaults.perc_pis_rental || 0);
+        t.nominalTaxes.cofins = Number(rentalDefaults.perc_cofins_rental || 0);
+        t.nominalTaxes.csll = Number(rentalDefaults.perc_csll_rental || 0);
+        t.nominalTaxes.irpj = Number(rentalDefaults.perc_irpj_rental || 0);
+        t.nominalTaxes.iss = Number(rentalDefaults.perc_iss_rental || 0);
+      }
+    }
     rentalItems.forEach(i => {
       const q = i.quantidade;
+      const prazoItemRaw = Number(i.prazo_contrato || prazoContratoMeses || 1);
+      const prazoItem = Math.max(0, prazoItemRaw - Number(prazoInstalacaoMeses || 0));
 
-      t.investimento += i.custo_total_aquisicao * q;
+      const faturamentoMensalItem = (i.kit_valor_mensal || i.faturamento_mensal || i.valor_mensal || 0) * q;
       const impostos = i.impostos_mensal * q;
+      
+      const custoMonitoramentoMensal = Number(i.kit_custo_monitoramento_unit || 0) * q;
+      const custoManutencaoMensal = Number(i.custo_op_mensal_kit || 0) * q;
+      const custoOpMensal = custoMonitoramentoMensal + custoManutencaoMensal;
+
 
       if (i.is_kit_instalacao) {
-        t.totalInstalacao += (i.faturamento_mensal || i.valor_mensal || 0) * q;
+        t.totalInstalacao += faturamentoMensalItem;
         t.investimentoInstalacao += i.custo_total_aquisicao * q;
         t.impostosInstalacaoTotal += impostos;
-        t.custoOpInstalacaoTotal += (i.custo_op_mensal_kit || 0) * q;
+        t.custoOpInstalacaoTotal += custoOpMensal;
+        
+        t.faturamentoTotal += faturamentoMensalItem;
+        t.impostosTotal += impostos;
+        t.custoOpTotal += custoOpMensal;
       } else {
-        t.faturamentoMensal += (i.faturamento_mensal || i.valor_mensal) * q;
+        t.faturamentoMensal += faturamentoMensalItem;
         t.impostosMensal += impostos;
         t.receitaLiqMensal += (i.receita_liquida_mensal || i.kit_receita_liquida || 0) * q;
         t.custoMensal += i.custo_total_mensal * q;
         t.lucroMensal += i.lucro_mensal * q;
-        t.custoOpMensalTotal += (i.custo_op_mensal_kit || 0) * q;
+        t.custoOpMensalTotal += custoOpMensal;
+        
+        t.faturamentoTotal += faturamentoMensalItem * prazoItem;
+        t.impostosTotal += impostos * prazoItem;
+        t.custoOpTotal += custoOpMensal * prazoItem;
       }
 
       const difal_ipi_st = ((i.difal_unit || 0) + (i.ipi_unit || 0) + (i.icms_st_unit || 0)) * q;
       const frete = (i.frete_unit || 0) * q;
+      const comissaoItem = Number(i.kit_comissao || 0) * q;
+      const impostoInstalacaoItem = Number(i.kit_imposto_instalacao || 0) * q;
 
+      t.investimento += (Number(i.kit_investimento_total || 0) || (i.custo_total_aquisicao * q)) + comissaoItem;
+
+      t.comissaoTotal += comissaoItem;
       t.impostosCompraTotal += difal_ipi_st;
+      t.impostoInstalacaoKitTotal += impostoInstalacaoItem;
       t.freteTotal += frete;
-      t.fornecedoresTotal += (i.custo_total_aquisicao * q) - difal_ipi_st - frete;
+      // Fornecedores = Total sem DIFAL = custo_aquisicao_total - total_difal
+      const custoAqTotal = Number(i.kit_custo_produtos || 0) + Number(i.kit_custo_servicos || 0) || (i.custo_total_aquisicao * q);
+      t.fornecedoresTotal += custoAqTotal - (Number(i.difal_unit || 0) * q);
 
       // Breakdown monthly taxes
       const isInstalacao = i.is_kit_instalacao;
       const tTarget = isInstalacao ? t.impostosInstalacaoDetalhados : t.impostosDetalhados;
 
+      let loc = 0, man = 0, mon = 0;
+      let rate_pis = 0, rate_cofins = 0, rate_csll = 0, rate_irpj = 0, rate_iss = 0;
+      let isSep = false;
+      const isCom = i.tipo_contrato_kit === 'COMODATO' || i.tipo_contrato_kit === 'INSTALACAO' || (!i.opportunity_kit_id && rentalDefaults.tipo_receita_rental === 'COMODATO');
+
       if (i.opportunity_kit_id) {
-        const isCom = i.tipo_contrato_kit === 'COMODATO' || i.tipo_contrato_kit === 'INSTALACAO';
-        const pImp = (i.kit_pis || 0) + (i.kit_cofins || 0) + (i.kit_csll || 0) + (i.kit_irpj || 0) + (isCom ? (i.kit_iss || 0) : 0);
-        if (pImp > 0) {
-          tTarget.pis += impostos * ((i.kit_pis || 0) / pImp);
-          tTarget.cofins += impostos * ((i.kit_cofins || 0) / pImp);
-          tTarget.csll += impostos * ((i.kit_csll || 0) / pImp);
-          tTarget.irpj += impostos * ((i.kit_irpj || 0) / pImp);
-          if (isCom) tTarget.iss += impostos * ((i.kit_iss || 0) / pImp);
-        }
+        const faturamento = (i.kit_valor_mensal || i.faturamento_mensal || i.valor_mensal || 0) * q;
+        mon = (i.kit_venda_unit_monitoramento || 0) * q;
+        loc = (i.kit_parcela_locacao || 0) * q;
+        man = Math.max(0, faturamento - loc - mon);
+        
+        rate_pis = i.kit_pis || 0;
+        rate_cofins = i.kit_cofins || 0;
+        rate_csll = i.kit_csll || 0;
+        rate_irpj = i.kit_irpj || 0;
+        rate_iss = i.kit_iss || 0;
+        isSep = !!i.kit_faturamento_separado;
       } else {
-        let pImp = Number(rentalDefaults.perc_pis_rental || 0) + Number(rentalDefaults.perc_cofins_rental || 0) + Number(rentalDefaults.perc_csll_rental || 0) + Number(rentalDefaults.perc_irpj_rental || 0);
-        const isCom = rentalDefaults.tipo_receita_rental === 'COMODATO' || i.tipo_contrato_kit === 'COMODATO';
-        if (isCom) pImp += Number(rentalDefaults.perc_iss_rental || 0);
-        if (pImp > 0) {
-          tTarget.pis += impostos * ((Number(rentalDefaults.perc_pis_rental) || 0) / pImp);
-          tTarget.cofins += impostos * ((Number(rentalDefaults.perc_cofins_rental) || 0) / pImp);
-          tTarget.csll += impostos * ((Number(rentalDefaults.perc_csll_rental) || 0) / pImp);
-          tTarget.irpj += impostos * ((Number(rentalDefaults.perc_irpj_rental) || 0) / pImp);
-          if (isCom) tTarget.iss += impostos * ((Number(rentalDefaults.perc_iss_rental) || 0) / pImp);
-        }
+        loc = (i.faturamento_mensal || i.valor_mensal || 0) * q;
+        rate_pis = Number(rentalDefaults.perc_pis_rental || 0);
+        rate_cofins = Number(rentalDefaults.perc_cofins_rental || 0);
+        rate_csll = Number(rentalDefaults.perc_csll_rental || 0);
+        rate_irpj = Number(rentalDefaults.perc_irpj_rental || 0);
+        rate_iss = Number(rentalDefaults.perc_iss_rental || 0);
+        isSep = false;
+      }
+
+      const calcTax = (isIss: boolean, rate: number) => {
+        if (rate <= 0) return 0;
+        if (isIss && !isCom) return 0;
+        if (!isSep) return (loc + man + mon) * (rate / 100);
+        if (isIss) return (man + mon) * (rate / 100);
+        return (loc + man + mon) * (rate / 100);
+      };
+
+      const cPis = calcTax(false, rate_pis);
+      const cCofins = calcTax(false, rate_cofins);
+      const cCsll = calcTax(false, rate_csll);
+      const cIrpj = calcTax(false, rate_irpj);
+      const cIss = calcTax(true, rate_iss);
+      const totalCalc = cPis + cCofins + cCsll + cIrpj + cIss;
+      
+      const ratio = totalCalc > 0 ? impostos / totalCalc : 1;
+
+      if (totalCalc > 0 || impostos > 0) {
+        tTarget.pis += cPis * ratio;
+        tTarget.cofins += cCofins * ratio;
+        tTarget.csll += cCsll * ratio;
+        tTarget.irpj += cIrpj * ratio;
+        tTarget.iss += cIss * ratio;
       }
     });
-
-    // Calculate global totals using the global contract term card
-    const prazoFaturamento = Math.max(0, (prazoContratoMeses || 1) - (prazoInstalacaoMeses || 0));
-    t.faturamentoTotal = (t.faturamentoMensal * prazoFaturamento) + t.totalInstalacao;
-    t.impostosTotal = (t.impostosMensal * prazoFaturamento) + t.impostosInstalacaoTotal;
-    t.custoOpTotal = (t.custoOpMensalTotal * prazoFaturamento) + t.custoOpInstalacaoTotal;
 
     const divisor_roi = (t.faturamentoTotal - t.impostosTotal) / (prazoContratoMeses || 1);
     const roiMeses = divisor_roi > 0 ? ((t.investimento + t.custoOpTotal) / divisor_roi) : 0;
@@ -1460,10 +1523,12 @@ export function SalesBudgetForm() {
           kit_iss: Number(updatedKit.aliq_iss || 0),
           kit_vlt_manut: Number(updatedKit.summary?.vlt_manut || 0),
           kit_valor_mensal: updatedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(updatedKit.summary?.venda_equipamentos_total || 0) : Number(updatedKit.summary?.valor_mensal_antes_impostos ?? updatedKit.summary?.valor_mensal_kit ?? 0),
-          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos ?? 0),
+          kit_valor_impostos: Number(updatedKit.summary?.valor_impostos || 0),
           kit_receita_liquida: Number(updatedKit.summary?.receita_liquida_mensal_kit || 0),
           kit_lucro_mensal: Number(updatedKit.summary?.lucro_mensal_kit || 0),
-          kit_margem: Number(updatedKit.summary?.margem_kit || 0)
+          kit_margem: Number(updatedKit.summary?.margem_kit || 0),
+          kit_imposto_instalacao: Number(updatedKit.summary?.imposto_instalacao || 0),
+          kit_custo_monitoramento_unit: Number(updatedKit.summary?.custo_monitoramento_unitario || updatedKit.custo_monitoramento_unitario || 0)
         }, rentalDefaults);
       });
 
@@ -1611,6 +1676,7 @@ export function SalesBudgetForm() {
           kit_receita_liquida: i.kit_receita_liquida != null ? +i.kit_receita_liquida : null,
           kit_lucro_mensal: i.kit_lucro_mensal != null ? +i.kit_lucro_mensal : null,
           kit_margem: i.kit_margem != null ? +i.kit_margem : null,
+          kit_faturamento_separado: !!i.kit_faturamento_separado,
           quantidade: +i.quantidade,
           perc_instalacao_item: i.perc_instalacao_item != null ? +i.perc_instalacao_item : null,
           valor_instalacao_item: i.valor_instalacao_item != null ? +i.valor_instalacao_item : null,
@@ -2616,7 +2682,7 @@ export function SalesBudgetForm() {
 
             if (saldoInvestimento <= 0 && paybackMes === null) {
               paybackMes = m;
-              const fraction = receitaLivre > 0 ? (quitarMes / receitaLivre) : 1;
+
             }
 
             chartData.push({
@@ -2896,7 +2962,9 @@ export function SalesBudgetForm() {
                         <div className="font-bold text-white border-b border-gray-600 pb-1">Composição do Custo</div>
                         <div className="flex justify-between text-sm"><span>Fornecedores:</span> <span className="font-medium text-white">{fmt(rentalTotals.fornecedoresTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Impostos Compra:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosCompraTotal)}</span></div>
+                        {rentalTotals.impostoInstalacaoKitTotal > 0 && <div className="flex justify-between text-sm"><span>Imp. Instalação:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostoInstalacaoKitTotal)}</span></div>}
                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Comissão:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
                       </div>
                     }>
                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
@@ -2910,39 +2978,38 @@ export function SalesBudgetForm() {
 
                     {/* Impostos */}
                     <Tooltip content={
-                      <div className="w-max min-w-[340px] space-y-2 text-gray-200 pr-2">
-                        <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2">Desmembramento de Impostos</div>
-                        <table className="w-full text-sm text-right border-collapse">
+                      <div className="w-max min-w-[280px] space-y-2 text-gray-200 pr-1">
+                        <div className="font-bold text-amber-400 border-b border-gray-600 pb-1 mb-2 text-sm">Desmembramento de Impostos</div>
+                        <table className="w-full text-xs text-right border-collapse">
                           <thead>
-                            <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
+                            <tr className="text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-600">
                               <th className="text-left pb-1 font-bold">Imposto</th>
-                              <th className="pb-1 font-bold pl-3">Alíq.</th>
-                              {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-4">Inst.</th>}
-                              <th className="pb-1 font-bold pl-4">Mensal</th>
-                              <th className="pb-1 font-bold pl-4">Total</th>
+                              <th className="pb-1 font-bold pl-2">Alíq.</th>
+                              {rentalTotals.totalInstalacao > 0 && <th className="pb-1 font-bold pl-2">Inst.</th>}
+                              <th className="pb-1 font-bold pl-2">Mensal</th>
+                              <th className="pb-1 font-bold pl-2">Total</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-700/50">
                             {[
-                              { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis },
-                              { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins },
-                              { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll },
-                              { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj },
-                              { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss }
+                              { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis, nom: rentalTotals.nominalTaxes.pis },
+                              { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins, nom: rentalTotals.nominalTaxes.cofins },
+                              { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll, nom: rentalTotals.nominalTaxes.csll },
+                              { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj, nom: rentalTotals.nominalTaxes.irpj },
+                              { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss, nom: rentalTotals.nominalTaxes.iss }
                             ].map(imp => {
-                              const rFat = rentalTotals.faturamentoMensal > 0 ? rentalTotals.faturamentoMensal : rentalTotals.totalInstalacao;
-                              const rVal = rentalTotals.faturamentoMensal > 0 ? imp.valMen : imp.valInst;
-                              const pct = rFat > 0 ? (rVal / rFat) * 100 : 0;
+
+                              const pct = imp.nom;
                               const totMensalPrazo = imp.valMen * prazoContratoMeses;
                               const tot = totMensalPrazo + imp.valInst;
                               if (pct === 0 && tot === 0) return null;
                               return (
                                 <tr key={imp.label} className="hover:bg-white/5 transition-colors">
                                   <td className="text-left font-medium text-white py-1">{imp.label}</td>
-                                  <td className="text-xs text-amber-400 pl-3">{fmtPct(pct)}</td>
-                                  {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pl-4">{fmt(imp.valInst)}</td>}
-                                  <td className="text-gray-300 pl-4">{fmt(imp.valMen)}</td>
-                                  <td className="text-white font-medium pl-4">{fmt(tot)}</td>
+                                  <td className="text-[10px] text-amber-400 pl-2">{fmtPct(pct)}</td>
+                                  {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pl-2">{fmt(imp.valInst)}</td>}
+                                  <td className="text-gray-300 pl-2">{fmt(imp.valMen)}</td>
+                                  <td className="text-white font-medium pl-2">{fmt(tot)}</td>
                                 </tr>
                               );
                             })}
@@ -2951,9 +3018,9 @@ export function SalesBudgetForm() {
                             <tr className="border-t border-gray-600 font-bold">
                               <td className="text-left text-white pt-1.5">Total</td>
                               <td className="pt-1.5"></td>
-                              {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosInstalacaoTotal)}</td>}
-                              <td className="text-gray-300 pt-1.5 pl-4">{fmt(rentalTotals.impostosMensal)}</td>
-                              <td className="text-amber-400 pt-1.5 pl-4">{fmt(rentalTotals.impostosTotal)}</td>
+                              {rentalTotals.totalInstalacao > 0 && <td className="text-gray-300 pt-1.5 pl-2">{fmt(rentalTotals.impostosInstalacaoTotal)}</td>}
+                              <td className="text-gray-300 pt-1.5 pl-2">{fmt(rentalTotals.impostosMensal)}</td>
+                              <td className="text-amber-400 pt-1.5 pl-2">{fmt(rentalTotals.impostosTotal)}</td>
                             </tr>
                           </tfoot>
                         </table>
@@ -2984,58 +3051,83 @@ export function SalesBudgetForm() {
                       </div>
                     </Tooltip>
 
-                    {/* ROI Final */}
-                    <Tooltip content={
-                      <div className="w-72 space-y-1 text-gray-200">
-                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
-                        <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
-                      </div>
-                    }>
-                      <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                          ROI Final
-                          <HelpCircle className="w-3" />
-                        </span>
-                        <p className="text-lg font-black text-brand-secondary">
-                          {base_roi.toFixed(1)} <span className="text-[10px] font-semibold text-brand-primary/60 ml-0.5 uppercase tracking-widest">meses</span>
-                        </p>
-                      </div>
-                    </Tooltip>
+                    {/* 3 Metrics Row: ROI Final, MKP Geral, Comissão */}
+                    <div className="col-span-2 grid grid-cols-3 divide-x divide-border-subtle border-t border-border-subtle bg-surface/20">
+                      {/* ROI Final */}
+                      <Tooltip content={
+                        <div className="w-72 space-y-1 text-gray-200">
+                          <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                          <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
+                        </div>
+                      }>
+                        <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03]">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                            ROI Final
+                            <HelpCircle className="w-3" />
+                          </span>
+                          <p className="text-lg font-black text-brand-secondary">
+                            {base_roi.toFixed(1)} <span className="text-[10px] font-semibold text-brand-primary/60 ml-0.5 uppercase tracking-widest">meses</span>
+                          </p>
+                        </div>
+                      </Tooltip>
 
-                    {/* MKP Geral */}
-                    {(() => {
-                      const mkpDivisor = rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal;
-                      const mkpGeral = mkpDivisor > 0 ? rentalTotals.faturamentoTotal / mkpDivisor : 0;
-                      return (
-                        <Tooltip content={
-                          <div className="w-72 space-y-2 text-gray-200">
-                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">MKP Geral (Markup Global)</div>
-                            <div className="text-[11px] space-y-1">
-                              <div className="flex justify-between"><span>Faturamento Total:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span></div>
-                              <div className="flex justify-between"><span>Custo Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
-                              <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
-                              <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
-                              <div className="border-t border-gray-600 pt-1 mt-1 flex justify-between font-bold">
-                                <span>Divisor:</span><span className="text-white">{fmt(mkpDivisor)}</span>
+                      {/* MKP Geral & Comissão */}
+                      {(() => {
+                        const mkpDivisor = rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal;
+                        const mkpGeral = mkpDivisor > 0 ? rentalTotals.faturamentoTotal / mkpDivisor : 0;
+                        const pctComissao = rentalTotals.nominalPercComissao;
+                        return (
+                          <>
+                            <Tooltip content={
+                              <div className="w-72 space-y-2 text-gray-200">
+                                <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">MKP Geral (Markup Global)</div>
+                                <div className="text-[11px] space-y-1">
+                                  <div className="flex justify-between"><span>Faturamento Total:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span></div>
+                                  <div className="flex justify-between"><span>Custo Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                                  <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
+                                  <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
+                                  <div className="border-t border-gray-600 pt-1 mt-1 flex justify-between font-bold">
+                                    <span>Divisor:</span><span className="text-white">{fmt(mkpDivisor)}</span>
+                                  </div>
+                                </div>
+                                <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1">
+                                  MKP = Faturamento / (Custo Aq. + Impostos + Custo Op.)
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1">
-                              MKP = Faturamento / (Custo Aq. + Impostos + Custo Op.)
-                            </div>
-                          </div>
-                        }>
-                          <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] border-t border-border-subtle">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                              MKP Geral
-                              <HelpCircle className="w-3" />
-                            </span>
-                            <p className={`text-lg font-black ${mkpGeral >= 1 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {mkpGeral.toFixed(4)}
-                            </p>
-                          </div>
-                        </Tooltip>
-                      );
-                    })()}
+                            }>
+                              <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/10">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                                  MKP Geral
+                                  <HelpCircle className="w-3" />
+                                </span>
+                                <p className={`text-lg font-black ${mkpGeral >= 1 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                  {mkpGeral.toFixed(4)}
+                                </p>
+                              </div>
+                            </Tooltip>
+
+                            <Tooltip content={
+                              <div className="w-64 space-y-2 text-gray-200">
+                                <div className="font-bold text-white border-b border-gray-600 pb-1">Comissão Comercial</div>
+                                <div className="flex justify-between text-sm"><span>Valor Total:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
+                                <div className="flex justify-between text-sm"><span>% sobre Fat.:</span> <span className="font-medium text-white">{pctComissao.toFixed(2)}%</span></div>
+                              </div>
+                            }>
+                              <div className="p-4 hover:bg-green-500/5 transition-colors cursor-help group bg-green-500/10">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-green-500 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                                  Comissão
+                                  <HelpCircle className="w-3" />
+                                </span>
+                                <div className="flex flex-col">
+                                  <p className="text-lg font-black text-green-500">{pctComissao.toFixed(2)}%</p>
+                                  <p className="text-[10px] font-semibold text-green-500/80 -mt-1">{fmt(rentalTotals.comissaoTotal)}</p>
+                                </div>
+                              </div>
+                            </Tooltip>
+                          </>
+                        );
+                      })()}
+                    </div>
 
                   </div>
                 </div>
@@ -3060,7 +3152,6 @@ export function SalesBudgetForm() {
             {[
               { label: 'Prazo Contrato (meses)', val: prazoContratoMeses, set: setPrazoContratoMeses, step: '1' },
               { label: 'Prazo Instalação (meses)', val: prazoInstalacaoMeses, set: setPrazoInstalacaoMeses, step: '1' },
-              { label: 'Comissão %', val: percComissaoRental, set: setPercComissaoRental },
             ].map(p => (
               <div key={p.label}>
                 <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
@@ -3107,19 +3198,19 @@ export function SalesBudgetForm() {
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-border-subtle">
-                    <th className="px-1.5 py-2 text-left font-semibold text-text-muted uppercase tracking-wider">Produto</th>
-                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Qtd</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Custo Aquis.</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Custo Aq. Total</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Operacional Mensal do Kit (1 uni)">Custo Op. Mensal Unit.</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo Op. Mensal * Quantidade">Custo Op. Total</th>
-                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14">Prazo</th>
+                    <th className="px-1.5 py-2 text-left font-semibold text-text-muted uppercase tracking-wider">Nome do Kit</th>
+                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-12">Qtd</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Investimento Total">Custo Aquisição</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Comissão</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instalação</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Unit.</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Vlr Mensal</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Vlr Mensal x Prazo">Vlr Total</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Impostos</th>
-                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">ROI</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Locação Mensal</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Custo de Manutenção Mensal">Manutenção (Mês)</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Monitoramento</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Fat. Mensal</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Faturamento Mensal * Qtd">Fat. Mensal Total</th>
+                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-12">Prazo</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Fat. Mensal Total * Prazo">Vlr Total</th>
+                    <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Impostos Mensal</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-8"></th>
                   </tr>
                 </thead>
@@ -3128,7 +3219,7 @@ export function SalesBudgetForm() {
                     return (
                       <tr key={ri.id || idx} className="hover:bg-bg-deep/50 transition-colors">
                         <td className="px-1.5 py-2">
-                          <div className="max-w-[220px] font-medium text-text-primary flex items-center gap-2">
+                          <div className="max-w-[150px] font-medium text-text-primary flex items-center gap-2">
                             <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>
                             {ri.opportunity_kit_id && (
                               <button onClick={() => setViewingKitId(ri.opportunity_kit_id!)} className="flex-shrink-0 p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer" title="Ver Itens do Kit">
@@ -3140,36 +3231,24 @@ export function SalesBudgetForm() {
                         </td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" min="1" value={ri.quantidade} onChange={e => updateRentalItem(idx, 'quantidade', +e.target.value)} disabled={isReadonly}
-                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
+                            className="w-10 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right">
-                          <CurrencyCellInput
-                            value={ri.custo_aquisicao_unit}
-                            onChange={(val: number) => updateRentalItem(idx, 'custo_aquisicao_unit', val)}
-                            disabled={isReadonly}
-                            className="w-24 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-right focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60"
-                          />
-                        </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted font-medium">
-                          {fmt(ri.custo_aquisicao_unit * ri.quantidade)}
-                        </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
-                          {fmt(ri.custo_op_mensal_kit || 0)}
-                        </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted font-medium">
-                          {fmt((ri.custo_op_mensal_kit || 0) * ri.quantidade)}
-                        </td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_investimento_total || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_comissao || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_vlr_instal_calc || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_parcela_locacao || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_vlt_manut || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_venda_unit_monitoramento || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{fmt(ri.kit_valor_mensal || ri.valor_mensal || 0)}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade)}</td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" min="1" value={ri.prazo_contrato}
                             onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)}
                             onBlur={e => handleBlurRentalItem(idx, 'prazo_contrato', +e.target.value)}
                             disabled={isReadonly}
-                            className="w-12 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
+                            className="w-10 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{ri.is_kit_instalacao ? fmt(ri.faturamento_mensal || ri.valor_mensal) : '-'}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{ri.is_kit_instalacao ? fmt(0) : fmt(ri.faturamento_mensal || ri.valor_mensal)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{ri.is_kit_instalacao ? fmt(0) : fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{ri.is_kit_instalacao ? fmt((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) : fmt(((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * Math.max(0, (ri.prazo_contrato || 0) - (rentalDefaults.prazo_instalacao_meses || 0)))}</td>
+                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade * (ri.prazo_contrato || 0))}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">
                           <Tooltip content={
                             <div className="w-56 space-y-1">
@@ -3226,9 +3305,6 @@ export function SalesBudgetForm() {
                             <span className="cursor-help border-b border-dashed text-brand-danger/90 border-brand-danger/50">{fmt(ri.impostos_mensal * ri.quantidade)}</span>
                           </Tooltip>
                         </td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right font-semibold text-brand-secondary">
-                          {ri.roi_meses ? `${ri.roi_meses.toFixed(1)} m` : '-'}
-                        </td>
                         <td className="px-1 py-2 text-center">
                           {!isReadonly && (
                             <button onClick={() => removeRentalItem(idx)} className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer" title="Remover">
@@ -3242,16 +3318,19 @@ export function SalesBudgetForm() {
                 </tbody>
                 <tfoot className="bg-bg-subtle/50 font-bold border-t-2 border-border-subtle">
                   <tr>
-                    <td colSpan={3} className="px-1.5 py-2 text-right">Total:</td>
-                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_aquisicao_unit * ri.quantidade), 0))}</td>
-                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.custo_op_mensal_kit || 0), 0))}</td>
-                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.custo_op_mensal_kit || 0) * ri.quantidade), 0))}</td>
-                    <td colSpan={2}></td>
-                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : (ri.faturamento_mensal || ri.valor_mensal)), 0))}</td>
-                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? 0 : ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade)), 0))}</td>
-                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.is_kit_instalacao ? ((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) : (((ri.faturamento_mensal || ri.valor_mensal) * ri.quantidade) * Math.max(0, (ri.prazo_contrato || 0) - (rentalDefaults.prazo_instalacao_meses || 0)))), 0))}</td>
+                    <td colSpan={2} className="px-1.5 py-2 text-right">Total:</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_investimento_total || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_comissao || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_vlr_instal_calc || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_parcela_locacao || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_vlt_manut || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_venda_unit_monitoramento || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.kit_valor_mensal || ri.valor_mensal || 0), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade), 0))}</td>
+                    <td></td>
+                    <td className="px-1.5 py-2 text-right text-brand-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade * (ri.prazo_contrato || 0)), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-brand-danger/90">{fmt(rentalItems.reduce((acc, ri) => acc + (ri.impostos_mensal * ri.quantidade), 0))}</td>
-                    <td colSpan={2}></td>
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>
@@ -3558,15 +3637,18 @@ export function SalesBudgetForm() {
                           frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
                           icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
                           difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
+                          kit_imposto_instalacao: Number(savedKit.summary?.imposto_instalacao || 0),
                           taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
                           fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
                           prazo_contrato: Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
                           kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
+                          kit_custo_monitoramento_unit: Number(savedKit.summary?.custo_monitoramento_unitario || savedKit.custo_monitoramento_unitario || 0),
                           kit_valor_mensal: billingValue,
                           kit_valor_impostos: impostosKit,
                           kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
                           kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
                           kit_margem: Number(savedKit.summary?.margem_kit || 0),
+                          kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
                           // Computed display fields
                           faturamento_mensal: billingValue,
                           valor_mensal: billingValue,

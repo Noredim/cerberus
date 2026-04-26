@@ -974,7 +974,7 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
             cred_outorgado_valor = icms_st_normal * DESCONTO_CREDITO_OUTORGADO
             calc_icms_st_final = max(0.0, icms_st_normal - cred_outorgado_valor)
 
-    ALIQUOTA_INTERESTADUAL_PADRAO = 0.12
+    ALIQUOTA_INTERESTADUAL_PADRAO = icms_entrada_effective / 100.0
     difal_unitario = 0.0
 
     if op_interestadual:

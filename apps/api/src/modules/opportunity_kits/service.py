@@ -55,8 +55,8 @@ class OpportunityKitService:
             "cost": custo_base,
             "tipo": tipo,
             "base_unitario": Decimal(comp.get("base_unitario", 0)),
-            "ipi": Decimal(comp.get("ipi_final", 0)),
-            "frete_cif": Decimal(comp.get("frete_cif_final", 0)),
+            "ipi": Decimal(comp.get("ipi_unitario", 0)),
+            "frete_cif": Decimal(comp.get("frete_cif_unitario", 0)),
             "difal": Decimal(comp.get("difal_unitario", 0)),
             "icms_st": icms_st,
             "tem_st": icms_st > 0 or bool(comp.get("has_st", False)),
@@ -571,30 +571,19 @@ class OpportunityKitService:
             # --- END UPFRONT INSTALLATION TAX CALCULATION ---
 
             if faturamento_separado:
-                # Split locacao into equipment and installation
-                if kit.instalacao_inclusa:
-                    locacao_equipamento = (custo_aquisicao_kit * fator_margem) * tx_locacao
-                    locacao_instalacao = Decimal("0.0") # <-- REMOVED from monthly tax base!
-                else:
-                    locacao_equipamento = valor_mensal_locacao_base
-                    locacao_instalacao = Decimal("0.0")
-
-                # Grupo 1: Produtos/Equipamentos (Locação Base pura) sem ISS
+                # Group 1: Products/Equipment (Full Locação Base including diluted installation) without ISS
+                locacao_equipamento = valor_mensal_locacao_base
                 impostos_grupo_1 = locacao_equipamento * aliq_base
-                # Grupo 2: Serviços (Instalação, Manutenção e Monitoramento) com ISS
-                impostos_grupo_2 = (locacao_instalacao + manutencao_mensal + venda_unit_monitoramento) * (aliq_base + aliq_iss_pct)
+                
+                # Group 2: Services (Maintenance and Monitoring) with ISS
+                impostos_grupo_2 = (manutencao_mensal + venda_unit_monitoramento) * (aliq_base + aliq_iss_pct)
                 
                 valor_impostos = impostos_grupo_1 + impostos_grupo_2
                 if valor_mensal_kit > 0:
                     aliq_total_impostos = valor_impostos / valor_mensal_kit
             else:
-                # Se unificado, a instalação está embutida no valor_mensal_kit, precisamos deduzir para não tributar mensalmente
-                if kit.instalacao_inclusa:
-                    loc_instalacao_mensal = (locals().get("vlr_instal_calc_base_manut", Decimal("0.0")) * fator_margem) * tx_locacao
-                    mensal_tributavel = valor_mensal_kit - loc_instalacao_mensal
-                else:
-                    mensal_tributavel = valor_mensal_kit
-
+                # If unificado, the entire monthly value is taxed equally (including ISS)
+                mensal_tributavel = valor_mensal_kit
                 valor_impostos = mensal_tributavel * aliq_total_impostos
 
         # 16. Receita Liquida
@@ -735,6 +724,7 @@ class OpportunityKitService:
                 "margem_manutencao": round(margem_manutencao, 2), # type: ignore
                 
                 "venda_unit_monitoramento": round(locals().get("venda_unit_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                "custo_monitoramento_unitario": round(locals().get("custo_monitoramento_unitario", Decimal("0.0")), 2),  # type: ignore
                 "receita_total_monitoramento": round(locals().get("receita_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
                 "custo_total_monitoramento": round(locals().get("custo_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
                 "lucro_total_monitoramento": round(locals().get("lucro_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
