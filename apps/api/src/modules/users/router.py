@@ -216,7 +216,8 @@ def list_my_companies(
             "company_id": str(uc.company_id),
             "is_default": uc.is_default,
             "company_name": uc.company.razao_social,
-            "company_cnpj": uc.company.cnpj
+            "company_cnpj": uc.company.cnpj,
+            "company_logo_url": uc.company.logo_url
         }
         for uc in user_comps
     ]
@@ -244,7 +245,8 @@ def list_user_companies(
             "company_id": str(uc.company_id),
             "is_default": uc.is_default,
             "company_name": uc.company.razao_social,
-            "company_cnpj": uc.company.cnpj
+            "company_cnpj": uc.company.cnpj,
+            "company_logo_url": uc.company.logo_url
         }
         for uc in user_comps
     ]
@@ -300,7 +302,8 @@ def assign_user_company(
         "company_id": str(new_assignment.company_id),
         "is_default": new_assignment.is_default,
         "company_name": company.razao_social,
-        "company_cnpj": company.cnpj
+        "company_cnpj": company.cnpj,
+        "company_logo_url": company.logo_url
     }
 
 @router.delete("/{user_id}/companies/{company_id}")

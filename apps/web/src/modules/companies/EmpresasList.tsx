@@ -16,6 +16,25 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import type { Company } from './types';
 
+const CompanyLogo = ({ url, name }: { url?: string | null, name: string }) => {
+    const [error, setError] = useState(false);
+    
+    if (!url || error) {
+        return <Building2 className="w-4 h-4" />;
+    }
+    
+    const fullUrl = url.startsWith('http') ? url : `${api.defaults.baseURL || 'http://localhost:8000'}${url}`;
+    
+    return (
+        <img 
+            src={fullUrl} 
+            alt={name} 
+            className="w-full h-full object-contain bg-white dark:bg-transparent"
+            onError={() => setError(true)}
+        />
+    );
+};
+
 const EmpresasList: React.FC = () => {
     const navigate = useNavigate();
     const [companies, setCompanies] = useState<Company[]>([]);
@@ -127,11 +146,7 @@ const EmpresasList: React.FC = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-md bg-brand-primary/10 flex items-center justify-center text-brand-primary overflow-hidden border border-brand-primary/20">
-                                                    {company.logo_url ? (
-                                                        <img src={company.logo_url} alt={company.nome_fantasia || company.razao_social} className="w-full h-full object-contain bg-white dark:bg-transparent" />
-                                                    ) : (
-                                                        <Building2 className="w-4 h-4" />
-                                                    )}
+                                                    <CompanyLogo url={company.logo_url} name={company.nome_fantasia || company.razao_social} />
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="font-semibold text-text-primary">{company.nome_fantasia || company.razao_social}</span>

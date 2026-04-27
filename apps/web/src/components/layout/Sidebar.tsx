@@ -99,7 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         <motion.aside
             initial={false}
             animate={{ width: isOpen ? 256 : 64 }}
-            className="bg-surface h-screen sticky top-0 flex flex-col transition-all duration-300 z-50 border-r border-border-subtle shadow-sm overflow-hidden"
+            className="bg-surface h-screen sticky top-0 flex flex-col transition-all duration-300 z-50 border-r border-border-subtle shadow-sm overflow-hidden print:hidden"
         >
             <div className="h-16 flex items-center justify-between px-4 bg-brand-primary text-white shrink-0">
                 <div className="flex items-center gap-2 overflow-hidden">

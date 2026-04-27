@@ -43,11 +43,11 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
     const activeCompany = userCompanies.find((c: any) => c.company_id === activeCompanyId);
 
     return (
-        <div className="flex h-screen overflow-hidden bg-bg-deep text-text-primary">
+        <div className="flex h-screen overflow-hidden bg-bg-deep text-text-primary print:h-auto print:overflow-visible print:bg-white">
             <Sidebar isOpen={sidebarOpen} toggle={() => setSidebarOpen(!sidebarOpen)} />
 
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-16 border-b border-border-subtle flex items-center justify-between px-8 bg-bg-surface sticky top-0 z-40 shadow-sm shrink-0">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible">
+                <header className="h-16 border-b border-border-subtle flex items-center justify-between px-8 bg-bg-surface sticky top-0 z-40 shadow-sm shrink-0 print:hidden">
                     <label htmlFor="top-search" className="flex items-center gap-3 bg-bg-deep px-4 py-1.5 rounded-full border border-border-subtle w-96 cursor-text transition-colors focus-within:border-brand-primary">
                         <Search className="w-4 h-4 text-text-muted" />
                         <span className="text-xs text-text-muted font-medium">Buscar:</span>
@@ -130,7 +130,7 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto p-6" role="main">
+                <main className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible print:block" role="main">
                     {children}
                 </main>
 

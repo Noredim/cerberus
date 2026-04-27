@@ -36,6 +36,7 @@ class UserCompanyResponse(BaseModel):
     # We can include partial Company data to avoid extra lookups
     company_name: str
     company_cnpj: str
+    company_logo_url: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -16,6 +16,7 @@ export interface UserCompany {
     is_default: boolean;
     company_name: string;
     company_cnpj: string;
+    company_logo_url?: string | null;
 }
 
 interface AuthContextData {
