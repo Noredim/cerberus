@@ -187,10 +187,12 @@ class RentalBudgetItem(Base):
     kit_receita_liquida = Column(Numeric(15, 4), nullable=True)
     kit_lucro_mensal = Column(Numeric(15, 4), nullable=True)
     kit_margem = Column(Numeric(10, 4), nullable=True)
+    kit_faturamento_separado = Column(Boolean, nullable=True, default=False)
     
     # Grid Detailed Fields Snapshot
     kit_investimento_total = Column(Numeric(15, 4), nullable=True)
     kit_comissao = Column(Numeric(15, 4), nullable=True)
+    kit_perc_comissao = Column(Numeric(6, 4), nullable=True)
     kit_vlr_instal_calc = Column(Numeric(15, 4), nullable=True)
     kit_parcela_locacao = Column(Numeric(15, 4), nullable=True)
     kit_venda_unit_monitoramento = Column(Numeric(15, 4), nullable=True)

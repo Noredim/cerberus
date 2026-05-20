@@ -50,6 +50,7 @@ class RentalBudgetItemBase(BaseModel):
     kit_receita_liquida: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_lucro_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_margem: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=4)
+    kit_faturamento_separado: Optional[bool] = Field(default=False)
     
     kit_investimento_total: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_comissao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)

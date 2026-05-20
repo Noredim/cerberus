@@ -133,6 +133,7 @@ class OpportunityKitBase(BaseModel):
     custo_suporte_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_seguro_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_logistica_mensal_kit: Decimal = Field(default=Decimal(0.0))
+    custo_software_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_itens_acessorios_mensal_kit: Decimal = Field(default=Decimal(0.0))
     
     # Parâmetros de Monitoramento
@@ -236,6 +237,7 @@ class OpportunityKitFinancialSummary(BaseModel):
     receita_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
     custo_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
     lucro_total_monitoramento: Optional[Decimal] = Field(default=Decimal(0))
+    custo_mensal_bloco_7: Optional[Decimal] = Field(default=Decimal(0))
     
     # ROI payback period in months (LOCACAO/COMODATO only)
     roi_meses: Optional[float] = Field(default=0.0)

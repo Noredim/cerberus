@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -252,6 +252,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         descricao_item: c.product?.nome || c.descricao_item || 'Serviço'
       }));
       data.faturamento_servico_separado = data.faturamento_servico_separado || false;
+      
+      // Sanitize null values to empty strings to prevent React 'value prop on input should not be null' warnings
+      data.nome_kit = data.nome_kit ?? '';
+      data.descricao_kit = data.descricao_kit ?? '';
+      data.percentual_instalacao = data.percentual_instalacao ?? '';
+      data.qtd_meses_manutencao = data.qtd_meses_manutencao ?? '';
+      data.perc_frete_venda = data.perc_frete_venda ?? 0;
+      data.perc_despesas_adm = data.perc_despesas_adm ?? 0;
+      data.perc_comissao = data.perc_comissao ?? 0;
+      data.taxa_juros_mensal = data.taxa_juros_mensal ?? 0;
+      data.taxa_manutencao_anual = data.taxa_manutencao_anual ?? 0;
+      data.custo_monitoramento_unitario = data.custo_monitoramento_unitario ?? 0;
+      data.forma_execucao = data.forma_execucao || 'H. NORMAL';
+
       setForm(data);
       // Ensure we record the loaded contract type so it doesn't trigger the change detection later
       prevTipoContratoRef.current = data.tipo_contrato;
@@ -614,13 +628,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       items: [
         ...prev.items,
         {
-          product_id: null,
-          own_service_id: data.own_service?.id,
+          product_id: data.product?.id || null,
+          own_service_id: data.own_service?.id || null,
           tipo_item: data.tipo_item,
-          descricao_item: data.descricao_item || data.own_service?.nome_servico || 'Serviço Próprio',
+          descricao_item: data.descricao_item || data.product?.nome || data.own_service?.nome_servico || 'Serviço Próprio',
           quantidade_no_kit: data.quantidade,
-          product: null,
-          own_service: data.own_service
+          product: data.product || null,
+          own_service: data.own_service || null
         }
       ]
     }));
@@ -722,6 +736,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     }
   };
 
+  const handlePrintPdf = () => {
+    let iframe = document.getElementById('print-iframe') as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'print-iframe';
+      iframe.style.position = 'absolute';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+    }
+    iframe.src = `/relatorios/kit-analitico?kitId=${kitId}&print=true`;
+  };
+
   const fmtC = (val: number | undefined) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
@@ -767,6 +795,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               Cancelar
             </Button>
           )}
+          {kitId && (
+            <Button 
+              variant="outline" 
+              size="lg" 
+              type="button" 
+              onClick={handlePrintPdf}
+            >
+              <Printer className="w-5 h-5 mr-2" />
+              Imprimir Kit Analítico
+            </Button>
+          )}
           <Button variant="primary" size="lg" onClick={onSubmit}>
             <Save className="w-5 h-5 mr-2" />
             Salvar Kit de Oportunidade
@@ -780,24 +819,29 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         // it would show financials computed from an invalid (below-minimum) factor.
         if (policyAlert) return null;
 
-        const isVenda = form.tipo_contrato === 'VENDA_EQUIPAMENTOS';
+        const isVenda = ['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato);
 
         if (isVenda) {
           // ── Bloco 4: item_summaries (produtos + serviços)
           const itemSums = financials?.item_summaries || [];
-          const custoB4 = itemSums.reduce((a: number, s: any) => a + (s.custo_base_unitario_item || 0) * (s.quantidade_no_kit || 1), 0);
+          const custoB4 = itemSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
           const vendaB4 = itemSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
           const lucroB4 = itemSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
 
           // ── Bloco 5: cost_summaries INSTALACAO
           const instSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo === 'INSTALACAO');
-          const custoB5 = instSums.reduce((a: number, s: any) => a + (s.custo_base_unitario_item || 0) * (s.quantidade || 1), 0);
+          const custoB5 = instSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
           const vendaB5 = instSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
-          const lucroB5 = instSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
+          let lucroB5 = instSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
+          if (form.instalacao_inclusa) {
+            const percInst = Number(form.percentual_instalacao) || 0;
+            const custoAqTotal = Number(financials?.summary?.custo_aquisicao_kit || 0);
+            lucroB5 = custoAqTotal * (percInst / 100);
+          }
 
           // ── Bloco 6: cost_summaries MANUTENCAO
           const opSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo !== 'INSTALACAO');
-          const custoB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.custo_base_unitario_item || 0) * (s.quantidade || 1), 0) : 0;
+          const custoB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0) : 0;
           const vendaMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0) : 0;
           const lucroMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0) : 0;
           const qtdMeses = Number(form.qtd_meses_manutencao) || 0;
@@ -857,7 +901,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 onClick={() => setIsCalcExpanded(!isCalcExpanded)}
               >
                 <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
-                  <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo — Venda de Equipamentos
+                  <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo — {form.tipo_contrato === 'INSTALACAO' ? 'Instalação' : 'Venda de Equipamentos'}
                 </h3>
                 <div className="flex items-center gap-3">
                   {isCalculating ? (
@@ -1139,8 +1183,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
         const totalInvestimento = custoAq + valorComissaoLocacao + impostoInstalacao;
         const impostosMensais = financials?.summary?.valor_impostos || 0;
-        const custoMonitoramentoMensal = Number(form.custo_monitoramento_unitario) || 0;
-        const denominadorROI = faturamentoMensal - custoMonitoramentoMensal - impostosMensais - custoOpMensal;
+        // const denominadorROI = faturamentoMensal - (Number(form.custo_monitoramento_unitario) || 0) - impostosMensais - custoOpMensal;
         const totalReceitaContrato = (faturamentoMensal * mesesFaturados) + (form.instalacao_inclusa ? instalacaoEmbutida : 0);
         const roiMeses = financials?.summary?.roi_meses || 0;
         const roiEquipamentoMeses = financials?.summary?.roi_equipamento_meses || 0;
@@ -1351,7 +1394,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <div className="flex justify-between items-center gap-2">
                     <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Manut. (custo):</span>
                     <span className="font-semibold tabular-nums text-text-primary">
-                      {fmtC((!form.havera_manutencao || form.manutencao_inclusa) ? 0 : custoOpMensal)}
+                      {fmtC(custoOpMensal)}
                     </span>
                   </div>
                   {/* Bloco 7 – Custos Mensais do Contrato */}
@@ -1854,8 +1897,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && form.items.length > 0 && (
                   <Button variant="outline" size="sm" onClick={() => {
                     if (!form.forma_execucao) {
-                      setAlertMessage('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
-                      return;
+                      handleInputChange('forma_execucao', 'H. NORMAL');
                     }
                     setShowItemServiceSearch(true);
                   }}>
@@ -1876,8 +1918,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) && (
                     <Button variant="outline" type="button" onClick={() => {
                       if (!form.forma_execucao) {
-                        alert('Selecione a Forma de Execução no bloco Informações Gerais antes de incluir Serviços Próprios.');
-                        return;
+                        handleInputChange('forma_execucao', 'H. NORMAL');
                       }
                       setShowItemServiceSearch(true);
                     }}>
@@ -2004,25 +2045,31 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       Detalhamento de Impostos
                                     </div>
                                     <div className="space-y-1.5 font-mono text-text-muted text-sm">
-                                      <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC(summary?.pis_unit || 0)}</span></div>
-                                      <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC(summary?.cofins_unit || 0)}</span></div>
-                                      <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC(summary?.csll_unit || 0)}</span></div>
-                                      <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC(summary?.irpj_unit || 0)}</span></div>
+                                      <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC((summary?.pis_unit || 0) * item.quantidade_no_kit)}</span></div>
+                                      <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC((summary?.cofins_unit || 0) * item.quantidade_no_kit)}</span></div>
+                                      <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC((summary?.csll_unit || 0) * item.quantidade_no_kit)}</span></div>
+                                      <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC((summary?.irpj_unit || 0) * item.quantidade_no_kit)}</span></div>
                                       {['SERVICO', 'LICENCA'].includes(summary?.tipo_item) ? (
-                                        <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC(summary?.iss_unit || 0)}</span></div>
+                                        <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC((summary?.iss_unit || 0) * item.quantidade_no_kit)}</span></div>
                                       ) : (
                                         <div className="flex justify-between">
                                           <span>ICMS ({(summary?.perc_icms || 0).toFixed(2)}%){summary?.tem_st ? ' — ST isento' : ''}</span>
-                                          <span>{fmtC(summary?.icms_unit || 0)}</span>
+                                          <span>{fmtC((summary?.icms_unit || 0) * item.quantidade_no_kit)}</span>
+                                        </div>
+                                      )}
+                                      {((summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)) || 0) > 0 && (
+                                        <div className="flex justify-between text-brand-success">
+                                          <span>Créd. ICMS (Compra)</span>
+                                          <span>- {fmtC(summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit))}</span>
                                         </div>
                                       )}
                                       <div className="border-t border-white/20 mt-2 pt-2 flex justify-between font-bold text-text-primary">
-                                        <span>Total Impostos</span><span>{fmtC(summary?.imposto_venda_item || 0)}</span>
+                                        <span>Total Impostos (Líquido)</span><span>{fmtC((summary?.imposto_venda_item || 0) - (summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)))}</span>
                                       </div>
                                     </div>
                                   </div>
                                 }>
-                                  <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.imposto_venda_item)}</span>
+                                  <span className="cursor-help border-b border-dashed border-text-muted">{fmtC((summary?.imposto_venda_item || 0) - (summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)))}</span>
                                 </Tooltip>
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
@@ -2110,11 +2157,16 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                         <>
                           <td className="px-4 py-3"></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.icms_st_total || 0), 0) || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.custo_total_item_no_kit || 0), 0) || 0)}</td>
                           <td className="px-4 py-3"></td>
                           <td className="px-4 py-3"></td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.frete_venda_item || 0), 0) || 0)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.imposto_venda_item || 0), 0) || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => {
+                            const originalItem = form.items.find(i => (b.product_id && i.product_id === b.product_id) || (b.own_service_id && i.own_service_id === b.own_service_id)) || form.items[0]; // fallback if not found
+                            const qty = originalItem?.quantidade_no_kit || 1;
+                            const icmsAbatido = b.icms_abatido_total != null ? b.icms_abatido_total : ((b.icms_abatido || 0) * qty);
+                            return a + ((b.imposto_venda_item || 0) - icmsAbatido);
+                          }, 0) || 0)}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.desp_adm_item || 0), 0) || 0)}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.comissao_item || 0), 0) || 0)}</td>
                           <td className="px-4 py-3"></td>

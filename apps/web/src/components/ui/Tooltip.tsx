@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 interface TooltipProps {
@@ -9,7 +9,9 @@ interface TooltipProps {
 export function Tooltip({ children, content }: TooltipProps) {
   const [show, setShow] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const [offset, setOffset] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const calculatePosition = () => {
     if (ref.current) {
@@ -23,6 +25,7 @@ export function Tooltip({ children, content }: TooltipProps) {
   };
 
   const handleEnter = () => {
+    setOffset(0);
     calculatePosition();
     setShow(true);
   };
@@ -39,6 +42,28 @@ export function Tooltip({ children, content }: TooltipProps) {
     };
   }, [show]);
 
+  useLayoutEffect(() => {
+    if (show && tooltipRef.current) {
+      const rect = tooltipRef.current.getBoundingClientRect();
+      
+      // Calculate original bounds ignoring current offset transform
+      const unoffsetedLeft = rect.left - offset;
+      const unoffsetedRight = rect.right - offset;
+      
+      const padding = 16;
+      const overflowRight = unoffsetedRight - (window.innerWidth - padding);
+      const overflowLeft = padding - unoffsetedLeft;
+
+      if (overflowRight > 0) {
+        setOffset(-overflowRight);
+      } else if (overflowLeft > 0) {
+        setOffset(overflowLeft);
+      } else {
+        setOffset(0);
+      }
+    }
+  }, [show, coords, offset]);
+
   return (
     <div
       ref={ref}
@@ -50,14 +75,20 @@ export function Tooltip({ children, content }: TooltipProps) {
       {show &&
         createPortal(
           <div
-            className="absolute z-[999999] bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 min-w-[200px]"
+            className="absolute z-[999999]"
             style={{
-              left: Math.max(10, coords.x), // Prevent clipping on extreme left 
+              left: coords.x, 
               top: Math.max(10, coords.y), // Prevent clipping extreme top
               transform: 'translate(-50%, -100%)',
             }}
           >
-            {content}
+            <div 
+              ref={tooltipRef}
+              className="bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 min-w-[200px]"
+              style={{ transform: `translateX(${offset}px)` }}
+            >
+              {content}
+            </div>
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
           </div>,
           document.body

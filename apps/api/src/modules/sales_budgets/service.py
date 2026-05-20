@@ -197,6 +197,11 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             tx_locacao = Decimal("1") / Decimal(prazo_mensalidades)
             
         parcela_locacao_unit = _round(valor_base_venda_unit * tx_locacao)
+        
+        # --- EXACT OVERRIDES FOR PARCELA LOCACAO (Prevents recalculation when prazo changes) ---
+        if getattr(item_data, "kit_parcela_locacao", None) is not None:
+            parcela_locacao_unit = _d(item_data.kit_parcela_locacao)
+
         valor_base_final_unit = parcela_locacao_unit + manutencao_mensal_unit + custo_op_mensal_unit
 
         p_imp = Decimal("0")
@@ -819,12 +824,39 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
     return new_budget
 
 
-def list_budgets(db: Session, tenant_id: str, company_id: Optional[str] = None) -> list:
-    query = db.query(SalesBudget).filter(SalesBudget.tenant_id == tenant_id)
+def list_budgets(
+    db: Session,
+    tenant_id: str,
+    company_id: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 25,
+    q: Optional[str] = None,
+    status: Optional[str] = None
+) -> Tuple[List[SalesBudget], int]:
+    from sqlalchemy import or_
+    
+    query = db.query(SalesBudget).outerjoin(Customer, SalesBudget.customer_id == Customer.id).filter(SalesBudget.tenant_id == tenant_id)
     if company_id:
         query = query.filter(SalesBudget.company_id == company_id)
-    return query.order_by(SalesBudget.created_at.desc()).all()
-
+        
+    if status:
+        query = query.filter(SalesBudget.status == status)
+        
+    if q:
+        search_term = f"%{q}%"
+        query = query.filter(
+            or_(
+                SalesBudget.titulo.ilike(search_term),
+                SalesBudget.numero_orcamento.ilike(search_term),
+                Customer.nome_fantasia.ilike(search_term),
+                Customer.razao_social.ilike(search_term)
+            )
+        )
+        
+    total = query.count()
+    items = query.order_by(SalesBudget.created_at.desc()).offset(skip).limit(limit).all()
+    
+    return items, total
 
 def get_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[SalesBudget]:
     return db.query(SalesBudget).filter(

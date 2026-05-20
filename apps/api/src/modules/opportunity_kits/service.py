@@ -1,5 +1,5 @@
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -78,9 +78,9 @@ class OpportunityKitService:
         custo_operacional_mensal_kit = Decimal("0.0")
         custo_instalacao_avulso = Decimal("0.0")
         
-        perc_frete_venda = Decimal(kit.perc_frete_venda or 0) / Decimal(100.0)
-        perc_despesas_adm = Decimal(kit.perc_despesas_adm or 0) / Decimal(100.0)
-        perc_comissao = Decimal(kit.perc_comissao or 0) / Decimal(100.0)
+        perc_frete_venda = Decimal(str(kit.perc_frete_venda or 0)) / Decimal(100.0)
+        perc_despesas_adm = Decimal(str(kit.perc_despesas_adm or 0)) / Decimal(100.0)
+        perc_comissao = Decimal(str(kit.perc_comissao or 0)) / Decimal(100.0)
 
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
@@ -89,13 +89,13 @@ class OpportunityKitService:
         
         # We need aliq_servicos for costs, which we compute here:
         aliq_base = sum([
-            Decimal(kit.aliq_pis or 0),
-            Decimal(kit.aliq_cofins or 0),
-            Decimal(kit.aliq_csll or 0),
-            Decimal(kit.aliq_irpj or 0)
+            Decimal(str(kit.aliq_pis or 0)),
+            Decimal(str(kit.aliq_cofins or 0)),
+            Decimal(str(kit.aliq_csll or 0)),
+            Decimal(str(kit.aliq_irpj or 0))
         ]) / Decimal(100.0)
-        aliq_servicos = aliq_base + (Decimal(kit.aliq_iss or 0) / Decimal(100.0))
-        aliq_produtos = aliq_base + (Decimal(kit.aliq_icms or 0) / Decimal(100.0))
+        aliq_servicos = aliq_base + (Decimal(str(kit.aliq_iss or 0)) / Decimal(100.0))
+        aliq_produtos = aliq_base + (Decimal(str(kit.aliq_icms or 0)) / Decimal(100.0))
         
         if hasattr(kit, 'costs') and kit.costs:
             for cost in kit.costs:
@@ -113,12 +113,12 @@ class OpportunityKitService:
                         'H.E. Dom./Fer.': 'hora_extra_domingos_feriados',
                         'H.E. Dom./Fer. Not.': 'hora_extra_domingos_feriados_noturno',
                     }
-                    field_name = EXEC_MAP.get(kit.forma_execucao)
+                    field_name = EXEC_MAP.get(str(kit.forma_execucao))
                     if field_name:
                         from src.modules.own_services.models import OwnServiceItem
                         from src.modules.man_hours.models import ManHour
                         
-                        current_year = datetime.utcnow().year
+                        current_year = datetime.now(timezone.utc).year
                         comp_id = str(kit.company_id) if kit.company_id else None
                         
                         if comp_id:
@@ -144,7 +144,7 @@ class OpportunityKitService:
                                 dyn_total = Decimal("0.0")
                                 for os_item in os_items:
                                     role_rate = mh_by_role.get(str(os_item.role_id), Decimal("0.0"))
-                                    minutes = Decimal(os_item.tempo_minutos or 0)
+                                    minutes = Decimal(str(os_item.tempo_minutos or 0))
                                     dyn_total += (role_rate / Decimal(60.0)) * minutes
                                 
                                 if dyn_total > 0:
@@ -168,7 +168,7 @@ class OpportunityKitService:
                     meses_manut = Decimal(getattr(kit, 'qtd_meses_manutencao', 1) or 1)
                     custo_total_final = vl_tot * meses_manut
                 
-                if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
                     venda_unitario_item = vl_un * fator_cost
                     venda_total_item = custo_total_final * fator_cost
                     imposto_venda_item = venda_total_item * aliq_servicos
@@ -183,10 +183,10 @@ class OpportunityKitService:
 
                 # Requisito: Tooltip Breakdown details
                 aliq_base_federais = sum([
-                    Decimal(kit.aliq_pis or 0),
-                    Decimal(kit.aliq_cofins or 0),
-                    Decimal(kit.aliq_csll or 0),
-                    Decimal(kit.aliq_irpj or 0)
+                    Decimal(str(kit.aliq_pis or 0)),
+                    Decimal(str(kit.aliq_cofins or 0)),
+                    Decimal(str(kit.aliq_csll or 0)),
+                    Decimal(str(kit.aliq_irpj or 0))
                 ]) / Decimal(100.0)
 
                 cost_summaries.append({
@@ -208,16 +208,16 @@ class OpportunityKitService:
                     "margem_item": round(margem_item, 2),  # type: ignore
                     # Para match com Tooltip do array
                     "tipo_item": "SERVICO",
-                    "perc_pis": float(kit.aliq_pis or 0),
-                    "perc_cofins": float(kit.aliq_cofins or 0),
-                    "perc_csll": float(kit.aliq_csll or 0),
-                    "perc_irpj": float(kit.aliq_irpj or 0),
-                    "perc_iss": float(kit.aliq_iss or 0),
-                    "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),  # type: ignore
-                    "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),  # type: ignore
-                    "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),  # type: ignore
-                    "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),  # type: ignore
-                    "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2),  # type: ignore
+                    "perc_pis": float(str(kit.aliq_pis or 0)),
+                    "perc_cofins": float(str(kit.aliq_cofins or 0)),
+                    "perc_csll": float(str(kit.aliq_csll or 0)),
+                    "perc_irpj": float(str(kit.aliq_irpj or 0)),
+                    "perc_iss": float(str(kit.aliq_iss or 0)),
+                    "pis_unit": round(venda_total_item * (Decimal(str(kit.aliq_pis or 0)) / Decimal(100)), 2),  # type: ignore
+                    "cofins_unit": round(venda_total_item * (Decimal(str(kit.aliq_cofins or 0)) / Decimal(100)), 2),  # type: ignore
+                    "csll_unit": round(venda_total_item * (Decimal(str(kit.aliq_csll or 0)) / Decimal(100)), 2),  # type: ignore
+                    "irpj_unit": round(venda_total_item * (Decimal(str(kit.aliq_irpj or 0)) / Decimal(100)), 2),  # type: ignore
+                    "iss_unit": round(venda_total_item * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100)), 2),  # type: ignore
                 })
 
         custo_mensal_bloco_7 = Decimal("0.0")
@@ -233,15 +233,15 @@ class OpportunityKitService:
         custo_aquisicao_servicos = Decimal("0.0")
         total_difal_kit = Decimal("0.0")
         
-        fator_margem = Decimal(kit.fator_margem_locacao or 1)
+        fator_margem = Decimal(str(kit.fator_margem_locacao or 1))
 
-        iss_val = Decimal(kit.aliq_iss or 0) if kit.tipo_contrato in ["COMODATO", "INSTALACAO"] else Decimal("0.0")
-        icms_val = Decimal(kit.aliq_icms or 0) if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else Decimal("0.0")
+        iss_val = Decimal(str(kit.aliq_iss or 0)) if kit.tipo_contrato in ["COMODATO", "INSTALACAO"] else Decimal("0.0")
+        icms_val = Decimal(str(kit.aliq_icms or 0)) if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else Decimal("0.0")
         aliq_total_impostos = sum([
-            Decimal(kit.aliq_pis or 0),
-            Decimal(kit.aliq_cofins or 0),
-            Decimal(kit.aliq_csll or 0),
-            Decimal(kit.aliq_irpj or 0),
+            Decimal(str(kit.aliq_pis or 0)),
+            Decimal(str(kit.aliq_cofins or 0)),
+            Decimal(str(kit.aliq_csll or 0)),
+            Decimal(str(kit.aliq_irpj or 0)),
             iss_val,
             icms_val
         ]) / Decimal(100.0)
@@ -270,12 +270,12 @@ class OpportunityKitService:
                         'H.E. Dom./Fer.': 'hora_extra_domingos_feriados',
                         'H.E. Dom./Fer. Not.': 'hora_extra_domingos_feriados_noturno',
                     }
-                    field_name = EXEC_MAP.get(kit.forma_execucao)
+                    field_name = EXEC_MAP.get(str(kit.forma_execucao))
                     if field_name:
                         from src.modules.own_services.models import OwnServiceItem
                         from src.modules.man_hours.models import ManHour
                         
-                        current_year = datetime.utcnow().year
+                        current_year = datetime.now(timezone.utc).year
                         comp_id = str(kit.company_id) if kit.company_id else None
                         
                         if comp_id:
@@ -299,26 +299,40 @@ class OpportunityKitService:
                                 dyn_total = Decimal("0.0")
                                 for os_item in os_items:
                                     role_rate = mh_by_role.get(str(os_item.role_id), Decimal("0.0"))
-                                    minutes = Decimal(os_item.tempo_minutos or 0)
+                                    minutes = Decimal(str(os_item.tempo_minutos or 0))
                                     dyn_total += (role_rate / Decimal(60.0)) * minutes
                                 
                                 if dyn_total > 0:
                                     custo_base_unitario_item = dyn_total
             else:
-                info = self.get_product_info(str(item.product_id), tenant_id, kit.tipo_contrato, company_id)
-                custo_base_unitario_item = info["cost"]
+                if item.product_id:
+                    info = self.get_product_info(str(item.product_id), tenant_id, str(kit.tipo_contrato) if kit.tipo_contrato else None, company_id)
+                else:
+                    info = {
+                        "cost": Decimal("0.0"),
+                        "tipo": "SERVICO",
+                        "base_unitario": Decimal("0.0"),
+                        "ipi": Decimal("0.0"),
+                        "frete_cif": Decimal("0.0"),
+                        "difal": Decimal("0.0"),
+                        "icms_st": Decimal("0.0"),
+                        "tem_st": False,
+                        "perfil_st_ativo": False,
+                        "icms_abatido_unit": Decimal("0.0")
+                    }
+                custo_base_unitario_item = Decimal(str(info["cost"]))
                 tipo_produto = info["tipo"]
-                difal_unitario = info["difal"]
-                icms_st = info.get("icms_st", Decimal("0.0"))
-                icms_abatido_unit = info.get("icms_abatido_unit", Decimal("0.0"))
+                difal_unitario = Decimal(str(info["difal"]))
+                icms_st = Decimal(str(info.get("icms_st", 0)))
+                icms_abatido_unit = Decimal(str(info.get("icms_abatido_unit", 0)))
             
-            custo_total_item_no_kit = custo_base_unitario_item * Decimal(item.quantidade_no_kit or 1)
-            difal_total_item = difal_unitario * Decimal(item.quantidade_no_kit or 1)
-            icms_st_total = icms_st * Decimal(item.quantidade_no_kit or 1)
+            custo_total_item_no_kit = custo_base_unitario_item * Decimal(str(item.quantidade_no_kit or 1))
+            difal_total_item = difal_unitario * Decimal(str(item.quantidade_no_kit or 1))
+            icms_st_total = icms_st * Decimal(str(item.quantidade_no_kit or 1))
             
             custo_aquisicao_kit += custo_total_item_no_kit
             total_difal_kit += difal_total_item
-            credito_icms_compra_total += icms_abatido_unit * Decimal(item.quantidade_no_kit or 1)
+            credito_icms_compra_total += icms_abatido_unit * Decimal(str(item.quantidade_no_kit or 1))
             
             if tipo_produto in ["SERVICO", "LICENCA"]:
                 custo_aquisicao_servicos += custo_total_item_no_kit
@@ -329,19 +343,24 @@ class OpportunityKitService:
             venda_total_item = Decimal("0.0")
             imposto_venda_item = Decimal("0.0")
             
-            if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
                 fator_item = fator_margem
-                aliq_pis_val = Decimal(kit.aliq_pis or 0) / Decimal(100.0)
-                aliq_cofins_val = Decimal(kit.aliq_cofins or 0) / Decimal(100.0)
-                aliq_csll_val = Decimal(kit.aliq_csll or 0) / Decimal(100.0)
-                aliq_irpj_val = Decimal(kit.aliq_irpj or 0) / Decimal(100.0)
-                aliq_iss_val = Decimal(kit.aliq_iss or 0) / Decimal(100.0)
-                aliq_icms_val = Decimal(kit.aliq_icms or 0) / Decimal(100.0)
+                aliq_pis_val = Decimal(str(kit.aliq_pis or 0)) / Decimal(100.0)
+                aliq_cofins_val = Decimal(str(kit.aliq_cofins or 0)) / Decimal(100.0)
+                aliq_csll_val = Decimal(str(kit.aliq_csll or 0)) / Decimal(100.0)
+                aliq_irpj_val = Decimal(str(kit.aliq_irpj or 0)) / Decimal(100.0)
+                aliq_iss_val = Decimal(str(kit.aliq_iss or 0)) / Decimal(100.0)
+                aliq_icms_val = Decimal(str(kit.aliq_icms or 0)) / Decimal(100.0)
                 
                 perc_icms_aplicado = aliq_icms_val
                 
-                if tipo_produto in ["SERVICO", "LICENCA"]:
+                if kit.tipo_contrato == "INSTALACAO":
+                    fator_item = fator_margem
+                    perc_icms_aplicado = Decimal("0.0")
+                    imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + aliq_iss_val
+                elif tipo_produto in ["SERVICO", "LICENCA"]:
                     fator_item = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
+                    perc_icms_aplicado = Decimal("0.0")
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + aliq_iss_val
                 else:
                     perfil_st_ativo = info.get("perfil_st_ativo", True)
@@ -361,8 +380,8 @@ class OpportunityKitService:
             desp_adm_item = venda_total_item * perc_despesas_adm
             comissao_item = venda_total_item * perc_comissao
             
-            lucro_total_item = venda_total_item - custo_total_item_no_kit - imposto_venda_item - frete_venda_item - desp_adm_item - comissao_item + (icms_abatido_unit * Decimal(item.quantidade_no_kit or 1))
-            lucro_unitario_item = (lucro_total_item / Decimal(item.quantidade_no_kit or 1)) if Decimal(item.quantidade_no_kit or 1) > 0 else Decimal("0.0")
+            lucro_total_item = venda_total_item - custo_total_item_no_kit - imposto_venda_item - frete_venda_item - desp_adm_item - comissao_item + (icms_abatido_unit * Decimal(str(item.quantidade_no_kit or 1)))
+            lucro_unitario_item = (lucro_total_item / Decimal(str(item.quantidade_no_kit or 1))) if Decimal(str(item.quantidade_no_kit or 1)) > 0 else Decimal("0.0")
             margem_item = (lucro_total_item / venda_total_item * Decimal(100.0)) if venda_total_item > 0 else Decimal("0.0")
 
             item_summaries.append({
@@ -394,21 +413,21 @@ class OpportunityKitService:
                 "frete_cif_unit": round(info.get("frete_cif", 0), 2),  # type: ignore
                 "tem_st": info.get("tem_st", False),
                 "perfil_st_ativo": info.get("perfil_st_ativo", True),
-                "perc_pis": float(kit.aliq_pis or 0),
-                "perc_cofins": float(kit.aliq_cofins or 0),
-                "perc_csll": float(kit.aliq_csll or 0),
-                "perc_irpj": float(kit.aliq_irpj or 0),
-                "perc_icms": float(kit.aliq_icms or 0),
-                "perc_iss": float(kit.aliq_iss or 0),
-                "pis_unit": round(venda_total_item * (Decimal(kit.aliq_pis or 0) / Decimal(100)), 2),  # type: ignore
-                "cofins_unit": round(venda_total_item * (Decimal(kit.aliq_cofins or 0) / Decimal(100)), 2),  # type: ignore
-                "csll_unit": round(venda_total_item * (Decimal(kit.aliq_csll or 0) / Decimal(100)), 2),  # type: ignore
-                "irpj_unit": round(venda_total_item * (Decimal(kit.aliq_irpj or 0) / Decimal(100)), 2),  # type: ignore
-                "icms_unit": round(venda_total_item * locals().get("perc_icms_aplicado", Decimal(0)), 2) if tipo_produto not in ["SERVICO", "LICENCA"] else 0,  # type: ignore
-                "iss_unit": round(venda_total_item * (Decimal(kit.aliq_iss or 0) / Decimal(100)), 2) if tipo_produto in ["SERVICO", "LICENCA"] else 0,  # type: ignore
+                "perc_pis": float(str(kit.aliq_pis or 0)),
+                "perc_cofins": float(str(kit.aliq_cofins or 0)),
+                "perc_csll": float(str(kit.aliq_csll or 0)),
+                "perc_irpj": float(str(kit.aliq_irpj or 0)),
+                "perc_icms": float(str(kit.aliq_icms or 0)),
+                "perc_iss": float(str(kit.aliq_iss or 0)),
+                "pis_unit": round(venda_total_item * (Decimal(str(kit.aliq_pis or 0)) / Decimal(100)), 2),  # type: ignore
+                "cofins_unit": round(venda_total_item * (Decimal(str(kit.aliq_cofins or 0)) / Decimal(100)), 2),  # type: ignore
+                "csll_unit": round(venda_total_item * (Decimal(str(kit.aliq_csll or 0)) / Decimal(100)), 2),  # type: ignore
+                "irpj_unit": round(venda_total_item * (Decimal(str(kit.aliq_irpj or 0)) / Decimal(100)), 2),  # type: ignore
+                "icms_unit": round(venda_total_item * locals().get("perc_icms_aplicado", Decimal(0)), 2) if (tipo_produto not in ["SERVICO", "LICENCA"] and kit.tipo_contrato != "INSTALACAO") else 0,  # type: ignore
+                "iss_unit": round(venda_total_item * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100)), 2) if (tipo_produto in ["SERVICO", "LICENCA"] or kit.tipo_contrato == "INSTALACAO") else 0,  # type: ignore
             })
 
-        custo_aquisicao_total = custo_aquisicao_kit * Decimal(kit.quantidade_kits or 1)
+        custo_aquisicao_total = custo_aquisicao_kit * Decimal(str(kit.quantidade_kits or 1))
 
         # 10. Depreciacao (Removido da formacao de custos)
         
@@ -416,30 +435,42 @@ class OpportunityKitService:
 
         # 12. Calculo da Taxa de Locação
         tx_locacao = Decimal("0.0")
-        juros = Decimal(kit.taxa_juros_mensal or 0) / Decimal(100.0)
+        juros = Decimal(str(kit.taxa_juros_mensal or 0)) / Decimal(100.0)
         
         if kit.tipo_contrato == "INSTALACAO":
             tx_locacao = Decimal("1.0")
         elif kit.prazo_contrato_meses > 0 and juros > 0:
             # txLocacao = taxa / (1 - (1 + taxa)^(-prazo_contrato))
             base = Decimal(1.0) + juros
-            tx_locacao = juros / (Decimal(1.0) - (base ** -kit.prazo_contrato_meses))
+            tx_locacao = juros / (Decimal(1.0) - (base ** -int(str(kit.prazo_contrato_meses or 0))))
         elif kit.prazo_contrato_meses > 0 and juros == 0:
-            tx_locacao = Decimal(1.0) / Decimal(kit.prazo_contrato_meses)
+            tx_locacao = Decimal(1.0) / Decimal(str(kit.prazo_contrato_meses or 1))
 
         # 13. Formação do Valor
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
         
         # We always compute the base for the installation percentage, used for maintenance
-        perc_inst = Decimal(kit.percentual_instalacao or 0) / Decimal(100.0)
+        perc_inst = Decimal(str(kit.percentual_instalacao or 0)) / Decimal(100.0)
         vlr_instal_calc_base_manut = custo_aquisicao_kit * perc_inst
         
         vlr_instal_calc = Decimal("0.0")
+        valor_venda_instalacao = Decimal("0.0")
+        valor_venda_produtos = Decimal("0.0")
+        valor_venda_manutencao = Decimal("0.0")
+        venda_unit_monitoramento = Decimal("0.0")
+        impostos_produtos_base = Decimal("0.0")
+        impostos_instalacao = Decimal("0.0")
+        impostos_manutencao = Decimal("0.0")
+
         
-        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
-            # For Sales: Flat value application based on independent markup factors
-            fator_margem_serv_prod = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+            # For Sales/Install: Flat value application based on independent markup factors
+            if kit.tipo_contrato == "INSTALACAO":
+                fator_margem_serv_prod = fator_margem
+            else:
+                fator_margem_serv_prod = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
+                
             valor_venda_produtos = (custo_aquisicao_produtos * fator_margem) + (custo_aquisicao_servicos * fator_margem_serv_prod)
             
             if kit.instalacao_inclusa:
@@ -486,46 +517,41 @@ class OpportunityKitService:
             custo_monitoramento_unitario = Decimal(getattr(kit, 'custo_monitoramento_unitario', 0) or 0)
             fator_monitoramento = Decimal(getattr(kit, 'fator_monitoramento', 1) or 1)
             venda_unit_monitoramento = custo_monitoramento_unitario * fator_monitoramento
-            receita_total_monitoramento = venda_unit_monitoramento * Decimal(kit.prazo_contrato_meses or 1)
-            custo_total_monitoramento = custo_monitoramento_unitario * Decimal(kit.prazo_contrato_meses or 1)
+            receita_total_monitoramento = venda_unit_monitoramento * Decimal(str(kit.prazo_contrato_meses or 1))
+            custo_total_monitoramento = custo_monitoramento_unitario * Decimal(str(kit.prazo_contrato_meses or 1))
             lucro_total_monitoramento = receita_total_monitoramento - custo_total_monitoramento
 
             # Manutenção
             vlt_manut = Decimal("0.0")
             
             if kit.manutencao_inclusa:
-                tx_manut = (Decimal(kit.taxa_manutencao_anual or 0) / Decimal(12.0)) / Decimal(100.0)
+                tx_manut = (Decimal(str(kit.taxa_manutencao_anual or 0)) / Decimal(12.0)) / Decimal(100.0)
                 vlt_manut = (custo_aquisicao_kit + vlr_instal_calc_base_manut) * fator_margem * tx_manut
             else:
-                fator_manut = Decimal(kit.fator_manutencao if kit.fator_manutencao is not None else 1)
+                fator_manut = Decimal(str(kit.fator_manutencao if kit.fator_manutencao is not None else 1))
                 vlt_manut = custo_operacional_mensal_kit * fator_manut
                     
             valor_parcela_locacao = valor_mensal_locacao_base
             manutencao_mensal = vlt_manut
 
-            if kit.tipo_contrato == "INSTALACAO":
-                valor_base_final = valor_parcela_locacao + custo_operacional_mensal_kit
-            else:
-                valor_base_final = valor_parcela_locacao + manutencao_mensal + venda_unit_monitoramento
-
+            # Removing duplicate INSTALACAO check here as it is handled by the unified sales block
+            valor_base_final = valor_parcela_locacao + manutencao_mensal + venda_unit_monitoramento
             # custo_operacional_mensal_kit = raw Block 6 cost (DO NOT MUTATE)
             # custo_total_mensal_kit = all operational costs for profitability calc
             custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut)) + custo_monitoramento_unitario
 
         # 14. Calculo de Impostos
         # aliq_total_impostos was calculated at the top
+        # Pre-initialize so static analysis never sees these as potentially uninitialized
+        aliq_base = Decimal("0.0")
+        aliq_iss_pct = Decimal("0.0")
 
         
         if aliq_total_impostos >= Decimal(1.0):
             aliq_total_impostos = Decimal("0.99") # Safety fallback
             
-        if kit.tipo_contrato == "INSTALACAO":
-            # For INSTALACAO typically taxes are inside the final value
-            valor_mensal_kit = valor_base_final
-            valor_impostos = valor_mensal_kit * aliq_total_impostos
-            valor_mensal_antes_impostos = valor_base_final
-        elif kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
-            # For Sales exactly like Orçamento de Venda: impostos are calculated ON the final price.
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+            # For Sales and Installation exactly like Orçamento de Venda: impostos are calculated ON the final price.
             # But wait, now some items used aliq_produtos and others aliq_servicos! 
             # So the total `valor_impostos` should be the sum of all `imposto_venda_item` for products
             # PLUS the maintenance and installation taxes (which are usually ISS)
@@ -548,12 +574,12 @@ class OpportunityKitService:
             faturamento_separado = getattr(kit, 'faturamento_servico_separado', False)
             
             aliq_base = sum([
-                Decimal(kit.aliq_pis or 0),
-                Decimal(kit.aliq_cofins or 0),
-                Decimal(kit.aliq_csll or 0),
-                Decimal(kit.aliq_irpj or 0)
+                Decimal(str(kit.aliq_pis or 0)),
+                Decimal(str(kit.aliq_cofins or 0)),
+                Decimal(str(kit.aliq_csll or 0)),
+                Decimal(str(kit.aliq_irpj or 0))
             ]) / Decimal(100.0)
-            aliq_iss_pct = Decimal(kit.aliq_iss or 0) / Decimal(100.0)
+            aliq_iss_pct = Decimal(str(kit.aliq_iss or 0)) / Decimal(100.0)  # always initialized in this branch
 
             # --- START UPFRONT INSTALLATION TAX CALCULATION ---
             imposto_instalacao_upfront = Decimal("0.0")
@@ -590,9 +616,7 @@ class OpportunityKitService:
         receita_liquida_mensal_kit = valor_mensal_kit - valor_impostos
 
         # 17. Lucro Mensal
-        if kit.tipo_contrato == "INSTALACAO":
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_aquisicao_kit - custo_operacional_mensal_kit - custo_mensal_bloco_7
-        elif kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
             lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total
         else:
             lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
@@ -613,7 +637,7 @@ class OpportunityKitService:
         margem_equipamentos = Decimal("0.0")
         venda_equipamentos_total = Decimal("0.0")
 
-        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
             # Maintenance Metrics
             venda_manutencao_total = valor_venda_manutencao
             custo_manut_total_calc = vlt_manut
@@ -680,12 +704,12 @@ class OpportunityKitService:
             faturamento_total_venda = venda_equipamentos_total + venda_manutencao_total
         else:
             # Locação/Comodato: calculate from aliquots × faturamento
-            vlt_pis = faturamento_total_venda * (Decimal(kit.aliq_pis or 0) / Decimal(100))
-            vlt_cofins = faturamento_total_venda * (Decimal(kit.aliq_cofins or 0) / Decimal(100))
-            vlt_csll = faturamento_total_venda * (Decimal(kit.aliq_csll or 0) / Decimal(100))
-            vlt_irpj = faturamento_total_venda * (Decimal(kit.aliq_irpj or 0) / Decimal(100))
+            vlt_pis = faturamento_total_venda * (Decimal(str(kit.aliq_pis or 0)) / Decimal(100))
+            vlt_cofins = faturamento_total_venda * (Decimal(str(kit.aliq_cofins or 0)) / Decimal(100))
+            vlt_csll = faturamento_total_venda * (Decimal(str(kit.aliq_csll or 0)) / Decimal(100))
+            vlt_irpj = faturamento_total_venda * (Decimal(str(kit.aliq_irpj or 0)) / Decimal(100))
             vlt_icms = Decimal("0")  # Locação doesn't apply ICMS on revenue
-            vlt_iss = faturamento_total_venda * (Decimal(kit.aliq_iss or 0) / Decimal(100))
+            vlt_iss = faturamento_total_venda * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100))
 
         vlt_frete_venda = faturamento_total_venda * perc_frete_venda
         vlt_despesas_adm = faturamento_total_venda * perc_despesas_adm
@@ -738,6 +762,7 @@ class OpportunityKitService:
                 "receita_total_monitoramento": round(locals().get("receita_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
                 "custo_total_monitoramento": round(locals().get("custo_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
                 "lucro_total_monitoramento": round(locals().get("lucro_total_monitoramento", Decimal("0.0")), 2),  # type: ignore
+                "custo_mensal_bloco_7": round(locals().get("custo_mensal_bloco_7", Decimal("0.0")), 2),  # type: ignore
                 # Granular tax/expense breakdown for Fechamento de Venda
                 "faturamento_total_venda": round(faturamento_total_venda, 2), # type: ignore
                 "vlt_pis": round(vlt_pis, 2), # type: ignore
@@ -829,6 +854,7 @@ class OpportunityKitService:
             aliq_irpj=data.aliq_irpj,
             aliq_iss=data.aliq_iss,
             aliq_icms=data.aliq_icms,
+            faturamento_servico_separado=data.faturamento_servico_separado,
             custo_manut_mensal_kit=data.custo_manut_mensal_kit,
             custo_suporte_mensal_kit=data.custo_suporte_mensal_kit,
             custo_seguro_mensal_kit=data.custo_seguro_mensal_kit,
@@ -957,7 +983,7 @@ class OpportunityKitService:
         """Endpoint used to preview financials without saving to DB"""
         # Create a mock objects
         kit = OpportunityKit(**data.model_dump(exclude={"items", "costs", "monthly_costs"}))
-        kit.company_id = company_id
+        setattr(kit, "company_id", UUID(company_id) if company_id else None)  # type: ignore[arg-type]
         kit.items = [OpportunityKitItem(**item_data.model_dump()) for item_data in data.items]
         kit.costs = [OpportunityKitCost(**cost_data.model_dump()) for cost_data in data.costs]
         

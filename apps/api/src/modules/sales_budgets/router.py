@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
-
+from typing import Optional
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
@@ -15,13 +15,19 @@ from src.modules.sales_budgets.schemas import (
 router = APIRouter(prefix="/sales-budgets", tags=["Sales Budgets"])
 
 
+from fastapi import Query
+
 @router.get("")
 def list_budgets(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=1000),
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
 ):
-    budgets = service.list_budgets(db, current_user.tenant_id, company_id)
+    budgets, total = service.list_budgets(db, current_user.tenant_id, company_id, skip, limit, q, status)
     result = []
     for b in budgets:
         lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items)
@@ -39,9 +45,9 @@ def list_budgets(
         valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
         
         # Adjust prazo_contrato internally for the header view
-        total_faturamento_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) * max(0, int(ri.prazo_contrato or 0) - int(getattr(b, "prazo_instalacao_meses", 0) or 0)) for ri in valid_rentals)
+        total_faturamento_rental = sum(float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0) * float(ri.quantidade or 1) * max(0, int(ri.prazo_contrato or 0) - int(getattr(b, "prazo_instalacao_meses", 0) or 0)) for ri in valid_rentals)
         # Adding instalacao to the display of total faturamento rental
-        total_faturamento_rental += sum(float(getattr(ri, "valor_instalacao_item", 0) or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+        total_faturamento_rental += sum(float(getattr(ri, "kit_vlr_instal_calc", 0) or getattr(ri, "valor_instalacao_item", 0) or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
         
         valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
         prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
@@ -65,7 +71,7 @@ def list_budgets(
             "margem_geral": mg,
             "created_at": b.created_at,
         })
-    return result
+    return {"total": total, "items": result}
 
 
 def _calc_margem_venda(items, rental_items) -> tuple[float, float]:
@@ -92,24 +98,32 @@ def _calc_margem_rental(rental_items, prazo_instalacao: int = 0) -> tuple[float,
         pCtrRaw = int(ri.prazo_contrato or 36)
         pCtr = max(0, pCtrRaw - (prazo_instalacao or 0))
         
-        fat_mensal = float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0)
-        instalacao = float(getattr(ri, "valor_instalacao_item", 0) or 0)
-        fat_lifetime = (fat_mensal * pCtr + instalacao) * q
+        is_instalacao = getattr(ri, "tipo_contrato_kit", None) == 'INSTALACAO' or getattr(ri, "is_kit_instalacao", False)
         
-        investimento = float(ri.custo_total_aquisicao or 0) * q
+        fat_mensal = float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0)
+        instalacao = float(getattr(ri, "kit_vlr_instal_calc", 0) or getattr(ri, "valor_instalacao_item", 0) or 0)
         
         impostos_mensal = float(ri.impostos_mensal or getattr(ri, "kit_valor_impostos", 0) or 0)
         perc_impostos = float(ri.perc_impostos_total or 0) / 100.0
-        impostos_total = (impostos_mensal * pCtr + instalacao * perc_impostos) * q
         
         custo_op_mensal = float(ri.custo_total_mensal or ri.custo_manut_mensal or getattr(ri, "kit_vlt_manut", 0) or 0)
-        custo_op_total = (custo_op_mensal * pCtr) * q
-        
         comissao_mensal = float(ri.comissao_mensal or 0)
         perc_comissao = float(ri.perc_comissao or 0) / 100.0
-        comissao_final = (comissao_mensal * pCtr + instalacao * perc_comissao) * q
         
-        custo_lifetime = investimento + impostos_total + custo_op_total + comissao_final
+        if is_instalacao:
+            fat_lifetime = fat_mensal * q
+            impostos_total = impostos_mensal * q
+            custo_op_total = custo_op_mensal * q
+            comissao_total = comissao_mensal * q
+            investimento = float(ri.custo_total_aquisicao or 0) * q
+        else:
+            fat_lifetime = (fat_mensal * pCtr + instalacao) * q
+            impostos_total = (impostos_mensal * pCtr + instalacao * perc_impostos) * q
+            custo_op_total = (custo_op_mensal * pCtr) * q
+            comissao_total = (comissao_mensal * pCtr + instalacao * perc_comissao) * q
+            investimento = float(ri.custo_total_aquisicao or 0) * q
+            
+        custo_lifetime = investimento + impostos_total + custo_op_total + comissao_total
         
         total_faturamento += fat_lifetime
         total_custo += custo_lifetime
@@ -310,6 +324,15 @@ def _budget_to_dict(budget) -> dict:
             "taxa_manutencao_anual_item": float(ri.taxa_manutencao_anual_item) if ri.taxa_manutencao_anual_item is not None else None,
             "perc_instalacao_item": float(ri.perc_instalacao_item) if ri.perc_instalacao_item is not None else None,
             "valor_instalacao_item": float(ri.valor_instalacao_item) if ri.valor_instalacao_item is not None else None,
+            "kit_parcela_locacao": float(ri.kit_parcela_locacao) if ri.kit_parcela_locacao is not None else None,
+            "kit_faturamento_separado": ri.kit_faturamento_separado if hasattr(ri, 'kit_faturamento_separado') else False,
+            "kit_perc_comissao": float(ri.kit_perc_comissao) if getattr(ri, 'kit_perc_comissao', None) is not None else None,
+            "kit_imposto_instalacao": float(ri.kit_imposto_instalacao) if getattr(ri, 'kit_imposto_instalacao', None) is not None else None,
+            "kit_comissao": float(ri.kit_comissao) if getattr(ri, 'kit_comissao', None) is not None else None,
+            "kit_vlr_instal_calc": float(ri.kit_vlr_instal_calc) if getattr(ri, 'kit_vlr_instal_calc', None) is not None else None,
+            "kit_venda_unit_monitoramento": float(ri.kit_venda_unit_monitoramento) if getattr(ri, 'kit_venda_unit_monitoramento', None) is not None else None,
+            "kit_custo_monitoramento_unit": float(ri.kit_custo_monitoramento_unit) if getattr(ri, 'kit_custo_monitoramento_unit', None) is not None else None,
+            "kit_investimento_total": float(ri.kit_investimento_total) if getattr(ri, 'kit_investimento_total', None) is not None else None,
             "custo_manut_mensal": float(ri.custo_manut_mensal or 0),
             "custo_total_mensal": float(ri.custo_total_mensal or 0),
             "fator_margem": float(ri.fator_margem or 1),

@@ -54,20 +54,49 @@ export function SalesBudgetList() {
   const [budgets, setBudgets] = useState<SalesBudgetSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 25;
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [budgetToDelete, setBudgetToDelete] = useState<SalesBudgetSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // Reset to first page on new search
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter]);
+
+  useEffect(() => {
     loadBudgets();
-  }, []);
+  }, [page, debouncedSearch, statusFilter]);
 
   const loadBudgets = async () => {
+    setLoading(true);
     try {
-      const res = await api.get('/sales-budgets');
-      setBudgets(res.data);
+      const skip = (page - 1) * itemsPerPage;
+      const params = new URLSearchParams({
+        skip: skip.toString(),
+        limit: itemsPerPage.toString(),
+      });
+      if (debouncedSearch) params.append('q', debouncedSearch);
+      if (statusFilter) params.append('status', statusFilter);
+
+      const res = await api.get(`/sales-budgets?${params.toString()}`);
+      setBudgets(res.data.items || []);
+      setTotalItems(res.data.total || 0);
+      setTotalPages(Math.ceil((res.data.total || 0) / itemsPerPage));
     } catch (err) {
       console.error('Erro ao carregar orçamentos:', err);
     } finally {
@@ -98,13 +127,7 @@ export function SalesBudgetList() {
     }
   };
 
-  const filtered = budgets.filter(b => {
-    const matchSearch = !search || b.titulo.toLowerCase().includes(search.toLowerCase()) ||
-      b.numero_orcamento?.toLowerCase().includes(search.toLowerCase()) ||
-      b.customer_nome?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = !statusFilter || b.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filtered = budgets;
 
   return (
     <div className="p-6 space-y-6">
@@ -268,6 +291,52 @@ export function SalesBudgetList() {
               ))}
             </tbody>
           </table>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border-subtle bg-bg-deep/50">
+              <div className="text-sm text-text-muted">
+                Mostrando <span className="font-medium text-text-primary">{(page - 1) * itemsPerPage + 1}</span> a{' '}
+                <span className="font-medium text-text-primary">
+                  {Math.min(page * itemsPerPage, totalItems)}
+                </span>{' '}
+                de <span className="font-medium text-text-primary">{totalItems}</span> resultados
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1 text-xs"
+                >
+                  Anterior
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`w-7 h-7 rounded flex items-center justify-center text-xs font-medium transition-colors ${
+                        page === p
+                          ? 'bg-brand-primary text-white'
+                          : 'text-text-muted hover:bg-border-subtle'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 text-xs"
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
