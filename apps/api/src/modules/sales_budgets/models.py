@@ -24,7 +24,9 @@ class SalesBudget(Base):
     titulo = Column(String(255), nullable=False)
     observacoes = Column(Text, nullable=True)
     data_orcamento = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    status = Column(String(20), nullable=False, default="RASCUNHO")  # RASCUNHO, APROVADO, ARQUIVADO
+    status = Column(String(20), nullable=False, default="EM_LANCAMENTO")  # EM_LANCAMENTO, ENVIADO_APROVACAO, RETORNADO_VENDEDOR, APROVADO, CANCELADO, GANHO
+    versao = Column(Integer, nullable=False, default=1)
+    valor_total = Column(Numeric(15, 4), nullable=False, default=0.0)
 
     # ── Sale tab defaults ──
     markup_padrao = Column(Numeric(10, 4), nullable=False, default=1.0)
@@ -75,6 +77,8 @@ class SalesBudget(Base):
     items = relationship("SalesBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     rental_items = relationship("RentalBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     responsaveis = relationship("SalesBudgetResponsavel", back_populates="budget", cascade="all, delete-orphan")
+    history = relationship("SalesBudgetHistory", back_populates="budget", cascade="all, delete-orphan", order_by="SalesBudgetHistory.data_movimentacao.desc()")
+    approvals = relationship("SalesBudgetApproval", back_populates="budget", cascade="all, delete-orphan")
 
 
 class SalesBudgetResponsavel(Base):
@@ -264,4 +268,38 @@ class RentalBudgetItem(Base):
         if self.opportunity_kit:
             return "KIT-GLOBAL"
         return self.product.codigo if self.product else None
+
+
+class SalesBudgetHistory(Base):
+    __tablename__ = "sales_budget_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(String, nullable=False)
+    versao = Column(Integer, nullable=False)
+    status_anterior = Column(String, nullable=False)
+    status_novo = Column(String, nullable=False)
+    usuario_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    cargo_usuario = Column(String, nullable=True)
+    descricao = Column(Text, nullable=False)
+    data_movimentacao = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+    budget = relationship("SalesBudget", back_populates="history")
+    usuario = relationship("User")
+
+
+class SalesBudgetApproval(Base):
+    __tablename__ = "sales_budget_approvals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(String, nullable=False)
+    usuario_aprovador_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    cargo_aprovador = Column(String, nullable=False)
+    data_aprovacao = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    observacao = Column(Text, nullable=True)
+
+    budget = relationship("SalesBudget", back_populates="approvals")
+    usuario_aprovador = relationship("User")
+
 

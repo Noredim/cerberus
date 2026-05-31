@@ -27,7 +27,7 @@ from src.modules.ncm_st.models import NcmStHeader, NcmStItem  # type: ignore
 from src.modules.suppliers.models import Supplier  # type: ignore
 from src.modules.products.models import Product, ProductSupplier  # type: ignore
 from src.modules.customers.models import Customer  # type: ignore
-from src.modules.purchase_budgets.models import PaymentCondition, PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem  # type: ignore
+from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem  # type: ignore
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetResponsavel, SalesBudgetItem  # type: ignore
 from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem, OpportunityKitCost  # type: ignore
 from src.modules.profiles.models import FunctionalProfile  # type: ignore

@@ -8,7 +8,8 @@ from src.modules.users.models import User
 from src.modules.sales_budgets import service
 from src.modules.sales_budgets.schemas import (
     SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetOut,
-    SalesBudgetStatusUpdate, SalesBudgetHeaderUpdate
+    SalesBudgetStatusUpdate, SalesBudgetHeaderUpdate,
+    WorkflowTransitionSchema
 )
 
 
@@ -177,6 +178,45 @@ def create_budget(
     return _budget_to_dict(budget, db)
 
 
+@router.get("/aprovacoes-pendentes")
+def list_aprovacoes_pendentes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header obrigatório")
+    # Check if is approver
+    is_app, cargo = service.check_is_approver(db, current_user.id, current_user.tenant_id, company_id)
+    if not is_app:
+         raise HTTPException(status_code=403, detail="Acesso negado: apenas aprovadores podem listar aprovações pendentes.")
+         
+    # Query budgets with status ENVIADO_APROVACAO in this company/tenant
+    from src.modules.sales_budgets.models import SalesBudget
+    budgets = db.query(SalesBudget).filter(
+        SalesBudget.tenant_id == current_user.tenant_id,
+        SalesBudget.company_id == company_id,
+        SalesBudget.status == "ENVIADO_APROVACAO"
+    ).order_by(SalesBudget.updated_at.desc()).all()
+    
+    result = []
+    for b in budgets:
+        # Get last history entry for justification
+        last_hist = sorted(b.history, key=lambda x: x.data_movimentacao, reverse=True)
+        justificativa = last_hist[0].descricao if last_hist else ""
+        result.append({
+            "id": b.id,
+            "numero_orcamento": b.numero_orcamento,
+            "titulo": b.titulo,
+            "status": b.status,
+            "valor_total": float(b.valor_total or 0),
+            "vendedor_nome": b.vendedor.name if b.vendedor else "Não atribuído",
+            "justificativa": justificativa,
+            "data_envio": b.updated_at.isoformat()
+        })
+    return result
+
+
 @router.get("/{budget_id}")
 def get_budget(
     budget_id: UUID,
@@ -197,7 +237,7 @@ def update_budget(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        budget = service.update_budget(db, current_user.tenant_id, str(budget_id), data)
+        budget = service.update_budget(db, current_user.tenant_id, str(budget_id), data, user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not budget:
@@ -212,7 +252,7 @@ def update_header(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.update_header(db, current_user.tenant_id, str(budget_id), data)
+    budget = service.update_header(db, current_user.tenant_id, str(budget_id), data, user_id=current_user.id)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget, db)
@@ -418,6 +458,126 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "responsavel_ids": [r.user_id for r in budget.responsaveis],
         "items": items,
         "rental_items": rental_items,
+        "versao": budget.versao,
+        "valor_total": float(budget.valor_total or 0),
+        "history": [{
+            "id": str(h.id),
+            "sales_budget_id": str(h.sales_budget_id),
+            "tenant_id": h.tenant_id,
+            "versao": h.versao,
+            "status_anterior": h.status_anterior,
+            "status_novo": h.status_novo,
+            "usuario_id": h.usuario_id,
+            "cargo_usuario": h.cargo_usuario,
+            "descricao": h.descricao,
+            "data_movimentacao": h.data_movimentacao.isoformat() if h.data_movimentacao else None
+        } for h in budget.history],
+        "approvals": [{
+            "id": str(ap.id),
+            "sales_budget_id": str(ap.sales_budget_id),
+            "tenant_id": ap.tenant_id,
+            "usuario_aprovador_id": ap.usuario_aprovador_id,
+            "cargo_aprovador": ap.cargo_aprovador,
+            "data_aprovacao": ap.data_aprovacao.isoformat() if ap.data_aprovacao else None,
+            "observacao": ap.observacao
+        } for ap in budget.approvals],
         "created_at": budget.created_at,
         "updated_at": budget.updated_at,
     }
+
+
+@router.post("/{budget_id}/enviar-aprovacao")
+def enviar_para_aprovacao(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.enviar_para_aprovacao(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{budget_id}/aprovar")
+def aprovar_oportunidade(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.aprovar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/{budget_id}/retornar")
+def retornar_ao_vendedor(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.retornar_ao_vendedor(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/{budget_id}/cancelar")
+def cancelar_oportunidade(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.cancelar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{budget_id}/ganhar")
+def ganhar_oportunidade(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.ganhar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{budget_id}/historico")
+def get_historico(
+    budget_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    budget = service.get_budget(db, current_user.tenant_id, str(budget_id))
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    return [{
+        "id": str(h.id),
+        "sales_budget_id": str(h.sales_budget_id),
+        "tenant_id": h.tenant_id,
+        "versao": h.versao,
+        "status_anterior": h.status_anterior,
+        "status_novo": h.status_novo,
+        "usuario_id": h.usuario_id,
+        "cargo_usuario": h.cargo_usuario,
+        "descricao": h.descricao,
+        "data_movimentacao": h.data_movimentacao.isoformat() if h.data_movimentacao else None
+    } for h in budget.history]

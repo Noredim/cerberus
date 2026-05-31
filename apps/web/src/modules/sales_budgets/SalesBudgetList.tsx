@@ -26,15 +26,21 @@ interface SalesBudgetSummary {
 }
 
 const statusColors: Record<string, string> = {
-  RASCUNHO: 'bg-amber-100 text-amber-800',
-  APROVADO: 'bg-emerald-100 text-emerald-800',
-  ARQUIVADO: 'bg-gray-100 text-gray-600',
+  EM_LANCAMENTO: 'bg-slate-100 text-slate-800 border border-slate-200',
+  ENVIADO_APROVACAO: 'bg-blue-100 text-blue-800 border border-blue-200',
+  RETORNADO_VENDEDOR: 'bg-amber-100 text-amber-800 border border-amber-200',
+  APROVADO: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  CANCELADO: 'bg-rose-100 text-rose-800 border border-rose-200',
+  GANHO: 'bg-teal-100 text-teal-800 border border-teal-200',
 };
 
 const statusLabels: Record<string, string> = {
-  RASCUNHO: 'Rascunho',
+  EM_LANCAMENTO: 'Em Lançamento',
+  ENVIADO_APROVACAO: 'Em Aprovação',
+  RETORNADO_VENDEDOR: 'Devolvido',
   APROVADO: 'Aprovado',
-  ARQUIVADO: 'Arquivado',
+  CANCELADO: 'Cancelado',
+  GANHO: 'Orçamento Ganho',
 };
 
 function MarginBadge({ margin }: { margin: number }) {
@@ -164,9 +170,12 @@ export function SalesBudgetList() {
           className="px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
         >
           <option value="">Todos os status</option>
-          <option value="RASCUNHO">Rascunho</option>
+          <option value="EM_LANCAMENTO">Em Lançamento</option>
+          <option value="ENVIADO_APROVACAO">Em Aprovação</option>
+          <option value="RETORNADO_VENDEDOR">Devolvido</option>
           <option value="APROVADO">Aprovado</option>
-          <option value="ARQUIVADO">Arquivado</option>
+          <option value="CANCELADO">Cancelado</option>
+          <option value="GANHO">Ganho</option>
         </select>
       </div>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -11,6 +11,7 @@ import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 import { EvolutivoChartModal } from './EvolutivoChartModal';
 import { BudgetItemsGrid } from '../purchase_budgets/components/BudgetItemsGrid';
 import { Building2, UserSquare2, BadgeDollarSign, Truck as TruckIcon } from 'lucide-react';
+import Modal from '../../components/modals/Modal';
 import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportModal';
 import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
@@ -378,6 +379,15 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 
+const statusLabels: Record<string, string> = {
+  EM_LANCAMENTO: 'Em Lançamento',
+  ENVIADO_APROVACAO: 'Em Aprovação',
+  RETORNADO_VENDEDOR: 'Devolvido',
+  APROVADO: 'Aprovado',
+  CANCELADO: 'Cancelado',
+  GANHO: 'Orçamento Ganho',
+};
+
 export function SalesBudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -429,9 +439,21 @@ export function SalesBudgetForm() {
   const [customerId, setCustomerId] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [dataOrcamento, setDataOrcamento] = useState(new Date().toISOString().slice(0, 10));
-  const [status, setStatus] = useState('RASCUNHO');
+  const [status, setStatus] = useState('EM_LANCAMENTO');
   const [numeroOrcamento, setNumeroOrcamento] = useState('');
   const [responsavelIds, setResponsavelIds] = useState<string[]>([]);
+  const [versao, setVersao] = useState(1);
+  const [valorTotal, setValorTotal] = useState(0);
+  const [history, setHistory] = useState<any[]>([]);
+  const [approvals, setApprovals] = useState<any[]>([]);
+  const [isApprover, setIsApprover] = useState(false);
+  const [justificativa, setJustificativa] = useState('');
+  const [workflowModal, setWorkflowModal] = useState<{ isOpen: boolean; action: string; title: string; placeholder: string }>({
+    isOpen: false,
+    action: '',
+    title: '',
+    placeholder: '',
+  });
 
   // Defaults
   const [markupPadrao, setMarkupPadrao] = useState(1.35);
@@ -544,7 +566,8 @@ export function SalesBudgetForm() {
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
 
-  const isReadonly = status !== 'RASCUNHO';
+  const isReadonly = status === 'ENVIADO_APROVACAO' || status === 'CANCELADO' || status === 'GANHO';
+  const isFactorDisabled = isReadonly && !(status === 'ENVIADO_APROVACAO' && isApprover);
 
   // Unused defaults useMemo removed
 
@@ -596,6 +619,19 @@ export function SalesBudgetForm() {
     };
     loadData();
   }, []);
+
+  useEffect(() => {
+    const checkApproverStatus = async () => {
+      if (!activeCompanyId) return;
+      try {
+        await api.get('/sales-budgets/aprovacoes-pendentes');
+        setIsApprover(true);
+      } catch (err) {
+        setIsApprover(false);
+      }
+    };
+    checkApproverStatus();
+  }, [activeCompanyId]);
 
   // Always load company _venda taxes for the modal display, regardless of isEditing
   useEffect(() => {
@@ -681,6 +717,10 @@ export function SalesBudgetForm() {
       setObservacoes(d.observacoes || '');
       setDataOrcamento(d.data_orcamento?.slice(0, 10) || '');
       setStatus(d.status);
+      setVersao(d.versao || 1);
+      setValorTotal(d.valor_total || 0);
+      setHistory(d.history || []);
+      setApprovals(d.approvals || []);
       setNumeroOrcamento(d.numero_orcamento || '');
       setResponsavelIds(d.responsavel_ids || []);
       setFormaPagamentoId(d.forma_pagamento_id || '');
@@ -1833,13 +1873,73 @@ export function SalesBudgetForm() {
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleWorkflowTransition = async (action: string, justificationText: string) => {
+    setSaving(true);
     try {
-      await api.patch(`/sales-budgets/${id}/status`, { status: newStatus });
-      setStatus(newStatus);
-    } catch (err) {
+      await api.post(`/sales-budgets/${id}/${action}`, { justificativa: justificationText });
+      
+      // Re-fetch the budget after transition to ensure UI is 100% updated
+      const res = await api.get(`/sales-budgets/${id}`);
+      const d = res.data;
+      
+      setStatus(d.status);
+      setVersao(d.versao || 1);
+      setValorTotal(d.valor_total || 0);
+      setHistory(d.history || []);
+      setApprovals(d.approvals || []);
+      if (d.venda_markup_produtos) setFatorMargemProdutos(d.venda_markup_produtos);
+      if (d.venda_markup_servicos) setFatorMargemServicos(d.venda_markup_servicos);
+      if (d.venda_markup_instalacao) setFatorMargemInstalacao(d.venda_markup_instalacao);
+      if (d.venda_markup_manutencao) setFatorMargemManutencao(d.venda_markup_manutencao);
+      setVendaHaveraManutencao(!!d.venda_havera_manutencao);
+      setVendaQtdMesesManutencao(d.venda_qtd_meses_manutencao || 0);
+      
+      setItems(d.items || []);
+      
+      const enrichedRental = await Promise.all(
+        (d.rental_items || []).map(async (item: any) => {
+          if (item.product_id) {
+            try {
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO&sales_budget_id=${id}`);
+              return { ...item, cost_composition: cc };
+            } catch { /* fallback */ }
+          }
+          return item;
+        })
+      );
+      const rDefaults = {
+        prazo_contrato_meses: d.prazo_contrato_meses,
+        prazo_instalacao_meses: d.prazo_instalacao_meses,
+        taxa_juros_mensal: d.taxa_juros_mensal,
+        taxa_manutencao_anual: d.taxa_manutencao_anual,
+        fator_margem_padrao: 1,
+        fator_manutencao_padrao: 1,
+        perc_instalacao_padrao: d.perc_instalacao_padrao,
+        perc_comissao_rental: d.perc_comissao_rental,
+        perc_pis_rental: d.perc_pis_rental,
+        perc_cofins_rental: d.perc_cofins_rental,
+        perc_csll_rental: d.perc_csll_rental,
+        perc_irpj_rental: d.perc_irpj_rental,
+        perc_iss_rental: d.perc_iss_rental,
+        perc_comissao_diretoria: d.perc_comissao_diretoria,
+        tipo_receita_rental: d.tipo_receita_rental,
+      };
+      setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
+      
+      setHasUnsavedChanges(false);
+      setWorkflowModal(prev => ({ ...prev, isOpen: false }));
+      setJustificativa('');
+    } catch (err: any) {
       console.error(err);
+      alert('Falha na transição: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const handlePrintProposal = () => {
+    if (status !== 'APROVADO') return;
+    window.print();
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
@@ -1871,8 +1971,15 @@ export function SalesBudgetForm() {
               const clienteLabel = clienteName ? (clienteName.nome_fantasia || clienteName.razao_social) : null;
               return (
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${status === 'RASCUNHO' ? 'bg-amber-100 text-amber-800' : status === 'APROVADO' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
-                    {status === 'RASCUNHO' ? 'Rascunho' : status === 'APROVADO' ? 'Aprovado' : 'Arquivado'}
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                    status === 'EM_LANCAMENTO' ? 'bg-slate-100 text-slate-800 border border-slate-200' :
+                    status === 'ENVIADO_APROVACAO' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                    status === 'RETORNADO_VENDEDOR' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                    status === 'APROVADO' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                    status === 'CANCELADO' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                    status === 'GANHO' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {statusLabels[status] || status}
                   </span>
                   {clienteLabel && (
                     <span className="flex items-center gap-1 text-xs text-text-muted">
@@ -1886,16 +1993,93 @@ export function SalesBudgetForm() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isEditing && status === 'RASCUNHO' && (
-            <Button onClick={() => handleStatusChange('APROVADO')} variant="outline" className="text-emerald-600 border-emerald-300 hover:bg-emerald-50">
-              Aprovar
+          {isEditing && (status === 'EM_LANCAMENTO' || status === 'RETORNADO_VENDEDOR') && (
+            <Button
+              onClick={() => setWorkflowModal({
+                isOpen: true,
+                action: 'enviar-aprovacao',
+                title: 'Enviar para Aprovação',
+                placeholder: 'Descreva os principais destaques comerciais ou justificativas desta oportunidade para análise do aprovador...'
+              })}
+              variant="primary"
+            >
+              Enviar para Aprovação
             </Button>
           )}
+
+          {isEditing && status === 'ENVIADO_APROVACAO' && isApprover && (
+            <>
+              <Button
+                onClick={() => setWorkflowModal({
+                  isOpen: true,
+                  action: 'aprovar',
+                  title: 'Aprovar Oportunidade',
+                  placeholder: 'Descreva observações ou ressalvas sobre esta aprovação comercial (opcional)...'
+                })}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              >
+                Aprovar
+              </Button>
+              <Button
+                onClick={() => setWorkflowModal({
+                  isOpen: true,
+                  action: 'retornar',
+                  title: 'Devolver ao Vendedor',
+                  placeholder: 'Justifique a devolução, listando os ajustes de custo, margem ou escopo necessários...'
+                })}
+                variant="outline"
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
+              >
+                Devolver
+              </Button>
+            </>
+          )}
+
           {isEditing && status === 'APROVADO' && (
-            <Button onClick={() => handleStatusChange('ARQUIVADO')} variant="outline" className="text-gray-600">
-              Arquivar
+            <Button
+              onClick={() => setWorkflowModal({
+                isOpen: true,
+                action: 'ganhar',
+                title: 'Orçamento Ganho (Fechamento)',
+                placeholder: 'Insira observações de fechamento (ex: OC do cliente, data prevista de início, etc.)...'
+              })}
+              className="bg-teal-600 hover:bg-teal-700 text-white border-0"
+            >
+              Ganhar Oportunidade
             </Button>
           )}
+
+          {isEditing && status !== 'CANCELADO' && status !== 'GANHO' && (
+            <Button
+              onClick={() => setWorkflowModal({
+                isOpen: true,
+                action: 'cancelar',
+                title: 'Cancelar Oportunidade / Perda',
+                placeholder: 'Justifique o motivo do cancelamento ou da perda desta oportunidade...'
+              })}
+              variant="ghost"
+              className="text-rose-600 hover:bg-rose-50 border-0"
+            >
+              Cancelar
+            </Button>
+          )}
+
+          {isEditing && (
+            <Tooltip content={status !== 'APROVADO' ? "A proposta só pode ser emitida após aprovação gerencial." : ""}>
+              <div>
+                <Button
+                  onClick={handlePrintProposal}
+                  disabled={status !== 'APROVADO'}
+                  variant="outline"
+                  className="flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" />
+                  Emitir Proposta
+                </Button>
+              </div>
+            </Tooltip>
+          )}
+
           {!isReadonly && (
             <Button type="button" onClick={() => handleSave()} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
@@ -1904,6 +2088,96 @@ export function SalesBudgetForm() {
           )}
         </div>
       </div>
+
+      {/* Workflow Visual Timeline */}
+      {isEditing && (() => {
+        let currentStep = 1;
+        if (status === 'ENVIADO_APROVACAO') currentStep = 2;
+        else if (status === 'APROVADO') currentStep = 3;
+        else if (status === 'GANHO' || status === 'CANCELADO') currentStep = 4;
+
+        const steps = [
+          {
+            index: 1,
+            label: status === 'RETORNADO_VENDEDOR' ? 'Devolvido' : 'Lançamento',
+            desc: status === 'RETORNADO_VENDEDOR' ? 'Necessita Ajustes' : 'Rascunho comercial',
+            activeClass: status === 'RETORNADO_VENDEDOR' ? 'bg-amber-500 text-white' : 'bg-slate-800 text-white'
+          },
+          {
+            index: 2,
+            label: 'Aprovação',
+            desc: 'Análise de margens',
+            activeClass: 'bg-blue-600 text-white'
+          },
+          {
+            index: 3,
+            label: 'Aprovado',
+            desc: 'Proposta liberada',
+            activeClass: 'bg-emerald-600 text-white'
+          },
+          {
+            index: 4,
+            label: status === 'CANCELADO' ? 'Cancelado' : 'Ganho',
+            desc: status === 'CANCELADO' ? 'Oportunidade perdida' : 'Negócio fechado',
+            activeClass: status === 'CANCELADO' ? 'bg-rose-600 text-white' : 'bg-teal-600 text-white'
+          }
+        ];
+
+        return (
+          <div className="w-full bg-surface border border-border-subtle rounded-xl p-5 mb-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Workflow</span>
+                <div className="flex items-center gap-1.5 bg-bg-deep border border-border-subtle rounded-lg px-2.5 py-1 text-xs">
+                  <span className="text-text-muted">Versão:</span>
+                  <span className="font-mono font-bold text-brand-primary">{versao}</span>
+                </div>
+                {valorTotal > 0 && (
+                  <div className="flex items-center gap-1.5 bg-bg-deep border border-border-subtle rounded-lg px-2.5 py-1 text-xs">
+                    <span className="text-text-muted">Valor Total:</span>
+                    <span className="font-bold text-text-primary">
+                      {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Timeline steps */}
+              <div className="flex items-center w-full lg:w-auto overflow-x-auto py-2 gap-2 lg:gap-4 select-none scrollbar-none">
+                {steps.map((s, idx) => {
+                  const isCompleted = currentStep > s.index;
+                  const isActive = currentStep === s.index;
+                  
+                  return (
+                    <React.Fragment key={s.index}>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
+                          isActive 
+                            ? s.activeClass
+                            : isCompleted
+                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                              : 'bg-bg-deep text-text-muted border border-border-subtle'
+                        }`}>
+                          {isCompleted ? '✓' : s.index}
+                        </div>
+                        <div>
+                          <p className={`text-xs font-bold ${isActive ? 'text-text-primary' : 'text-text-muted'}`}>{s.label}</p>
+                          <p className="text-[10px] text-text-muted line-clamp-1">{s.desc}</p>
+                        </div>
+                      </div>
+                      {idx < steps.length - 1 && (
+                        <div className={`h-0.5 w-8 lg:w-12 shrink-0 rounded transition-colors ${
+                          currentStep > s.index ? 'bg-emerald-400' : 'bg-border-subtle'
+                        }`} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Header */}
       <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden">
@@ -1973,18 +2247,26 @@ export function SalesBudgetForm() {
       </div>
 
       {/* Tab Bar */}
-      <div className="flex border-b border-border-subtle bg-surface">
-        <button onClick={() => setSearchParams({ tab: 'venda' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>
+      <div className="flex border-b border-border-subtle bg-surface overflow-x-auto">
+        <button onClick={() => setSearchParams({ tab: 'venda' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'venda' ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-muted hover:text-text-primary'}`}>
           <Receipt className="w-4 h-4" />
           Venda
         </button>
-        <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>
+        <button onClick={() => setSearchParams({ tab: 'locacao' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'locacao' ? 'text-teal-600 border-b-2 border-teal-500' : 'text-text-muted hover:text-text-primary'}`}>
           <TrendingUp className="w-4 h-4" />
           Locação / Comodato
         </button>
-        <button onClick={() => setSearchParams({ tab: 'compra' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 ${activeTab === 'compra' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-text-muted hover:text-text-primary'}`}>
+        <button onClick={() => setSearchParams({ tab: 'comercial' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'comercial' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-text-muted hover:text-text-primary'}`}>
+          <BadgeDollarSign className="w-4 h-4" />
+          Condições Comerciais
+        </button>
+        <button onClick={() => setSearchParams({ tab: 'compra' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'compra' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-text-muted hover:text-text-primary'}`}>
           <Package className="w-4 h-4" />
           Orçamento de Compra
+        </button>
+        <button onClick={() => setSearchParams({ tab: 'historico' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'historico' ? 'text-slate-600 border-b-2 border-slate-500' : 'text-text-muted hover:text-text-primary'}`}>
+          <History className="w-4 h-4" />
+          Histórico de Aprovação
         </button>
       </div>
 
@@ -2227,7 +2509,7 @@ export function SalesBudgetForm() {
               ].map(p => (
                 <div key={p.label}>
                   <label className="block text-xs font-medium text-text-muted mb-1">{p.label}</label>
-                  <Decimal4Input value={p.val} onChange={(val: number) => { p.set(val); setMarkupPadrao(val); }} disabled={isReadonly}
+                  <Decimal4Input value={p.val} onChange={(val: number) => { p.set(val); setMarkupPadrao(val); }} disabled={isFactorDisabled}
                     className="w-full px-2 py-1.5 border border-brand-primary/30 rounded-lg bg-brand-primary/5 text-text-primary text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
                 </div>
               ))}
@@ -4108,6 +4390,77 @@ export function SalesBudgetForm() {
         </div>
       )}
 
+      {/* ─── HISTÓRICO TAB ─── */}
+      {activeTab === 'historico' && (
+        <div className="bg-surface border border-border-subtle rounded-xl p-6 space-y-6">
+          <div className="flex justify-between items-center border-b border-border-subtle pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                <Clock className="w-5 h-5 text-slate-500" />
+                Histórico de Movimentações
+              </h2>
+              <p className="text-xs text-text-muted mt-1">Timeline completa de alterações, aprovações e controle de versões.</p>
+            </div>
+          </div>
+          
+          {history.length === 0 ? (
+            <div className="text-center py-12 text-text-muted">
+              Nenhuma movimentação registrada para esta oportunidade ainda.
+            </div>
+          ) : (
+            <div className="relative border-l border-border-subtle pl-6 space-y-8 ml-4">
+              {history.map((h, idx) => {
+                const userObj = users.find(u => u.id === h.usuario_id);
+                const userName = userObj ? userObj.name : 'Sistema / Automático';
+                
+                return (
+                  <div key={h.id || idx} className="relative">
+                    {/* Circle marker */}
+                    <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-surface border border-brand-primary" />
+                    
+                    <div className="bg-bg-deep border border-border-subtle rounded-lg p-4 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-text-primary">{userName}</span>
+                          {h.cargo_usuario && (
+                            <span className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded text-[10px] font-bold uppercase">
+                              {h.cargo_usuario}
+                            </span>
+                          )}
+                          <span className="text-xs text-text-muted">
+                            • Versão {h.versao}
+                          </span>
+                        </div>
+                        <span className="text-xs text-text-muted">
+                          {new Date(h.data_movimentacao).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-text-muted">Transição:</span>
+                        <span className="font-semibold text-text-primary bg-surface border border-border-subtle px-2 py-0.5 rounded">
+                          {statusLabels[h.status_anterior] || h.status_anterior}
+                        </span>
+                        <span className="text-text-muted">→</span>
+                        <span className="font-semibold text-text-primary bg-surface border border-border-subtle px-2 py-0.5 rounded">
+                          {statusLabels[h.status_novo] || h.status_novo}
+                        </span>
+                      </div>
+                      
+                      {h.descricao && (
+                        <div className="text-sm text-text-secondary bg-surface/50 border border-border-subtle/50 rounded-lg p-3 italic">
+                          "{h.descricao}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Overwrite Confirmation Modal */}
       {showOverwriteModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -4115,8 +4468,8 @@ export function SalesBudgetForm() {
             <h3 className="text-xl font-bold mb-4 text-text-primary">Confirmar Substituição</h3>
             <p className="text-text-muted mb-6">
               Esta ação irá <b>salvar a oportunidade atual</b> e aplicar os valores de <br /><br />
-              âÔé¼┬ó Prazo de contrato<br />
-              âÔé¼┬ó Prazo de instalação (Carência)<br /><br />
+              • Prazo de contrato<br />
+              • Prazo de instalação (Carência)<br /><br />
               em <b>todos os kits lançados</b> nesta oportunidade, sobrepondo os valores atuais e recalculando tudo automaticamente. Deseja prosseguir?
             </p>
             <div className="flex justify-end gap-3">
@@ -4127,6 +4480,55 @@ export function SalesBudgetForm() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Workflow Transition Confirmation Modal */}
+      {workflowModal.isOpen && (
+        <Modal
+          isOpen={workflowModal.isOpen}
+          onClose={() => !saving && setWorkflowModal(prev => ({ ...prev, isOpen: false }))}
+          title={workflowModal.title}
+        >
+          <div className="space-y-4 font-sans">
+            <div className="space-y-1.5">
+              <label className="text-sm font-bold text-text-muted uppercase tracking-wider">
+                Justificativa / Observações *
+              </label>
+              <textarea
+                required
+                value={justificativa}
+                onChange={e => setJustificativa(e.target.value)}
+                placeholder={workflowModal.placeholder}
+                rows={4}
+                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary resize-none"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4 border-t border-border-subtle">
+              <Button
+                variant="outline"
+                onClick={() => setWorkflowModal(prev => ({ ...prev, isOpen: false }))}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => handleWorkflowTransition(workflowModal.action, justificativa)}
+                disabled={saving || !justificativa.trim()}
+                variant="primary"
+                className={
+                  workflowModal.action === 'aprovar' ? 'bg-emerald-600 hover:bg-emerald-700 border-0' :
+                  workflowModal.action === 'retornar' ? 'bg-amber-600 hover:bg-amber-700 border-0' :
+                  workflowModal.action === 'cancelar' ? 'bg-rose-600 hover:bg-rose-700 border-0' :
+                  workflowModal.action === 'ganhar' ? 'bg-teal-600 hover:bg-teal-700 border-0' : ''
+                }
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                Confirmar
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Product Search Modal — Rental */}

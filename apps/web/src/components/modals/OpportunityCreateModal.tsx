@@ -97,7 +97,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
            vendedor_id: vendedorId,
            responsavel_ids: user?.id ? [user.id] : [],
            data_orcamento: new Date().toISOString().slice(0, 10),
-           status: 'RASCUNHO'
+           status: 'EM_LANCAMENTO'
          };
          const res = await api.post('/sales-budgets', payload);
          onSuccess(res.data.id, titulo, customerId);

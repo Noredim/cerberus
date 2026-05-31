@@ -13,9 +13,12 @@ class ItemTypeEnum(str, Enum):
 
 
 class BudgetStatusEnum(str, Enum):
-    RASCUNHO = "RASCUNHO"
+    EM_LANCAMENTO = "EM_LANCAMENTO"
+    ENVIADO_APROVACAO = "ENVIADO_APROVACAO"
+    RETORNADO_VENDEDOR = "RETORNADO_VENDEDOR"
     APROVADO = "APROVADO"
-    ARQUIVADO = "ARQUIVADO"
+    CANCELADO = "CANCELADO"
+    GANHO = "GANHO"
 
 
 # ─── Rental (Locação) Items ───
@@ -246,15 +249,50 @@ class SalesBudgetStatusUpdate(BaseModel):
     status: BudgetStatusEnum
 
 
+class SalesBudgetHistoryOut(BaseModel):
+    id: UUID
+    sales_budget_id: UUID
+    tenant_id: str
+    versao: int
+    status_anterior: str
+    status_novo: str
+    usuario_id: str
+    cargo_usuario: Optional[str] = None
+    descricao: str
+    data_movimentacao: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalesBudgetApprovalOut(BaseModel):
+    id: UUID
+    sales_budget_id: UUID
+    tenant_id: str
+    usuario_aprovador_id: str
+    cargo_aprovador: str
+    data_aprovacao: datetime
+    observacao: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowTransitionSchema(BaseModel):
+    justificativa: str = Field(..., min_length=1, description="Justificativa obrigatória para movimentação")
+
+
 class SalesBudgetOut(SalesBudgetBase):
     id: UUID
     tenant_id: str
     company_id: UUID
     numero_orcamento: Optional[str] = None
     status: BudgetStatusEnum
+    versao: int = 1
+    valor_total: Decimal = Decimal('0.00')
     items: List[SalesBudgetItemOut] = []
     rental_items: List[RentalBudgetItemOut] = []
     responsavel_ids: List[str] = []
+    history: List[SalesBudgetHistoryOut] = []
+    approvals: List[SalesBudgetApprovalOut] = []
     created_at: datetime
     updated_at: datetime
 

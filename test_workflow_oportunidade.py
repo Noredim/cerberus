@@ -1,0 +1,318 @@
+import sys
+sys.path.append('c:/cerberus/apps/api')
+
+import uuid
+from decimal import Decimal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from src.core.base import Base
+from src.modules.users.models import User, UserRole, UserRoleEnum
+from src.modules.professionals.models import Professional
+from src.modules.roles.models import Role
+from src.modules.companies.models import Company
+from src.modules.customers.models import Customer
+from src.modules.products.models import Product
+from src.modules.opportunity_kits.models import OpportunityKit
+from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, SalesBudgetHistory, SalesBudgetApproval
+from src.modules.sales_budgets.schemas import SalesBudgetUpdate, SalesBudgetItemCreate
+from src.modules.sales_budgets.service import (
+    create_budget,
+    update_budget,
+    update_header,
+    enviar_para_aprovacao,
+    aprovar_oportunidade,
+    retornar_ao_vendedor,
+    cancelar_oportunidade,
+    ganhar_oportunidade,
+    check_is_approver
+)
+
+def run_tests():
+    print("Initializing test database connection...")
+    engine = create_engine("postgresql://cerberus_user:cerberus_password@localhost:5433/cerberus")
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = SessionLocal()
+
+    try:
+        # 1. Fetch seed user or create dummy
+        admin_user = db.query(User).filter(User.email == "wars@warslab.com.br").first()
+        if not admin_user:
+            print("Creating dummy admin user...")
+            admin_user = User(
+                id=str(uuid.uuid4()),
+                tenant_id="master_tenant",
+                name="Test Admin",
+                email="wars@warslab.com.br",
+                password_hash="pw",
+                is_active=True
+            )
+            db.add(admin_user)
+            db.flush()
+            admin_role = UserRole(
+                id=str(uuid.uuid4()),
+                user_id=admin_user.id,
+                role=UserRoleEnum.ADMIN
+            )
+            db.add(admin_role)
+            db.flush()
+
+        tenant_id = admin_user.tenant_id
+
+        # 2. Get/create Company
+        company = db.query(Company).filter(Company.tenant_id == tenant_id).first()
+        if not company:
+            print("Creating test Company...")
+            company = Company(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                razao_social="Test Company",
+                cnpj="12345678000199",
+                state_id="SP"
+            )
+            db.add(company)
+            db.flush()
+
+        # 3. Get/create Customer
+        customer = db.query(Customer).filter(Customer.tenant_id == tenant_id).first()
+        if not customer:
+            print("Creating test Customer...")
+            customer = Customer(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                razao_social="Test Customer",
+                cnpj="98765432000188",
+                state_id="SP"
+            )
+            db.add(customer)
+            db.flush()
+
+        # 4. Create salesman user & Professional role with unique email per run to avoid database pollution
+        run_id = str(uuid.uuid4())[:8]
+        vendedor_email = f"vendedor_{run_id}@test.com"
+        peon_email = f"peon_{run_id}@test.com"
+
+        salesman_user = User(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            name="Test Vendedor",
+            email=vendedor_email,
+            password_hash="pw",
+            is_active=True
+        )
+        db.add(salesman_user)
+        db.flush()
+
+        # Create Role "GERENTE" in this company
+        gerente_role = db.query(Role).filter(Role.company_id == company.id, Role.name == "GERENTE").first()
+        if not gerente_role:
+            gerente_role = Role(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                company_id=company.id,
+                name="GERENTE"
+            )
+            db.add(gerente_role)
+            db.flush()
+
+        # Create professional associated with salesman mapped to GERENTE
+        manager_professional = Professional(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            company_id=company.id,
+            name="Test Professional Manager",
+            cpf="11122233344",
+            role_id=gerente_role.id,
+            user_id=salesman_user.id
+        )
+        db.add(manager_professional)
+        db.flush()
+
+        # 5. Create basic salesman user with no approval permissions
+        peon_user = User(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            name="Test Peon",
+            email=peon_email,
+            password_hash="pw",
+            is_active=True
+        )
+        db.add(peon_user)
+        db.flush()
+
+        # Commit setup
+        db.commit()
+
+        # ── Test 1: Check Approver Role Resolution ──
+        print("\n--- Test 1: Approver Verification ---")
+        print(f"DEBUG: company.id = {company.id} ({type(company.id)})")
+        print(f"DEBUG: salesman_user.id = {salesman_user.id} ({type(salesman_user.id)})")
+        prof = db.query(Professional).filter(Professional.user_id == salesman_user.id).first()
+        print(f"DEBUG: prof = {prof}")
+        if prof:
+            print(f"DEBUG: prof.company_id = {prof.company_id} ({type(prof.company_id)})")
+            print(f"DEBUG: prof.tenant_id = {prof.tenant_id} ({type(prof.tenant_id)})")
+            print(f"DEBUG: prof.role_id = {prof.role_id}")
+            print(f"DEBUG: prof.role = {prof.role}")
+            if prof.role:
+                print(f"DEBUG: prof.role.name = {prof.role.name}")
+
+        is_admin_app, role_admin = check_is_approver(db, admin_user.id, tenant_id, company.id)
+        is_mgr_app, role_mgr = check_is_approver(db, salesman_user.id, tenant_id, company.id)
+        is_peon_app, role_peon = check_is_approver(db, peon_user.id, tenant_id, company.id)
+
+        print(f"Admin: is_approver={is_admin_app}, role={role_admin} (Expected: True, ADMIN)")
+        print(f"Manager: is_approver={is_mgr_app}, role={role_mgr} (Expected: True, GERENTE)")
+        print(f"Peon: is_approver={is_peon_app}, role={role_peon} (Expected: False, VENDEDOR)")
+        assert is_admin_app and role_admin in ("ADMIN", "DIRETORIA")
+        assert is_mgr_app and role_mgr == "GERENTE"
+        assert not is_peon_app
+
+        # ── Test 2: Create Budget starts in EM_LANCAMENTO ──
+        print("\n--- Test 2: Budget Creation ---")
+        from src.modules.sales_budgets.schemas import SalesBudgetCreate
+        create_payload = SalesBudgetCreate(
+            customer_id=str(customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo="Oportunidade Teste Workflow",
+            observacoes="Obs de teste",
+            data_orcamento="2026-05-31T12:00:00",
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"),
+                    markup=Decimal("1.5"),
+                    quantidade=Decimal("5"),
+                )
+            ]
+        )
+        budget = create_budget(db, tenant_id, str(company.id), create_payload)
+        print(f"Created budget. Status: {budget.status} (Expected: EM_LANCAMENTO)")
+        print(f"Created budget. Valor Total: {budget.valor_total} (Expected: 750.00)")
+        assert budget.status == "EM_LANCAMENTO"
+        assert float(budget.valor_total) == 750.0
+
+        # ── Test 3: Standard workflow transition blocks ──
+        print("\n--- Test 3: Transitions & Permission Blocks ---")
+        # Try to approve without status ENVIADO_APROVACAO
+        try:
+            aprovar_oportunidade(db, tenant_id, str(budget.id), admin_user.id, "Auto approval attempt")
+            assert False, "Should have failed to approve a budget that is in EM_LANCAMENTO"
+        except ValueError as e:
+            print(f"Successfully blocked approval from EM_LANCAMENTO: {e}")
+
+        # Try to submit to approval
+        budget = enviar_para_aprovacao(db, tenant_id, str(budget.id), peon_user.id, "Por favor aprovar orçamento.")
+        print(f"Submitted. Status: {budget.status} (Expected: ENVIADO_APROVACAO)")
+        assert budget.status == "ENVIADO_APROVACAO"
+        
+        # Verify history log was created
+        assert len(budget.history) == 1
+        assert budget.history[0].status_anterior == "EM_LANCAMENTO"
+        assert budget.history[0].status_novo == "ENVIADO_APROVACAO"
+        assert budget.history[0].usuario_id == peon_user.id
+        print("History entry verified successfully!")
+
+        # Try to edit in ENVIADO_APROVACAO status
+        try:
+            update_payload = SalesBudgetUpdate(**create_payload.model_dump())
+            update_budget(db, tenant_id, str(budget.id), update_payload, peon_user.id)
+            assert False, "Should have blocked editing in ENVIADO_APROVACAO status"
+        except ValueError as e:
+            print(f"Successfully blocked edit in ENVIADO_APROVACAO status: {e}")
+
+        # ── Test 4: Approval & Returning ──
+        print("\n--- Test 4: Returning to Seller & Approving ---")
+        # Try to approve with Peon user (non-approver)
+        try:
+            aprovar_oportunidade(db, tenant_id, str(budget.id), peon_user.id, "Approval attempt by peon")
+            assert False, "Should have blocked approval by non-approver"
+        except PermissionError as e:
+            print(f"Successfully blocked approval by non-approver: {e}")
+
+        # Retornar ao vendedor
+        budget = retornar_ao_vendedor(db, tenant_id, str(budget.id), salesman_user.id, "Falta ajustar margens.")
+        print(f"Returned. Status: {budget.status} (Expected: RETORNADO_VENDEDOR)")
+        assert budget.status == "RETORNADO_VENDEDOR"
+        assert len(budget.history) == 2
+        assert budget.history[0].status_novo == "RETORNADO_VENDEDOR"
+
+        # Submit again
+        budget = enviar_para_aprovacao(db, tenant_id, str(budget.id), peon_user.id, "Margens ajustadas!")
+        assert budget.status == "ENVIADO_APROVACAO"
+
+        # Approve opportunity
+        budget = aprovar_oportunidade(db, tenant_id, str(budget.id), salesman_user.id, "Aprovado com ressalvas.")
+        print(f"Approved. Status: {budget.status} (Expected: APROVADO)")
+        assert budget.status == "APROVADO"
+        assert len(budget.approvals) == 1
+        assert budget.approvals[0].usuario_aprovador_id == salesman_user.id
+        assert budget.approvals[0].cargo_aprovador == "GERENTE"
+        print("Approval details recorded successfully!")
+
+        # ── Test 5: Reopening and Auto-Versioning on Edit ──
+        print("\n--- Test 5: Auto-Versioning on Edit ---")
+        # Let's perform an edit
+        update_payload = SalesBudgetUpdate(
+            customer_id=str(customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo="Oportunidade Teste Workflow (Edição Aprovada)",
+            observacoes="Obs de teste alterada",
+            data_orcamento="2026-05-31T12:00:00",
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"),
+                    markup=Decimal("2.0"), # Changed markup
+                    quantidade=Decimal("5"),
+                )
+            ]
+        )
+        budget = update_budget(db, tenant_id, str(budget.id), update_payload, peon_user.id)
+        print(f"After update. Status: {budget.status} (Expected: EM_LANCAMENTO)")
+        print(f"After update. Version: {budget.versao} (Expected: 2)")
+        print(f"After update. Valor Total: {budget.valor_total} (Expected: 1000.00)")
+        assert budget.status == "EM_LANCAMENTO"
+        assert budget.versao == 2
+        assert float(budget.valor_total) == 1000.0
+        
+        # Verify approval was invalidated (deleted)
+        assert len(budget.approvals) == 0
+        
+        # Verify history recorded reopening
+        assert len(budget.history) == 5 # Enviar, Retornar, Enviar, Aprovar, Reabrir
+        assert budget.history[0].status_anterior == "APROVADO"
+        assert budget.history[0].status_novo == "EM_LANCAMENTO"
+        assert "Reabertura" in budget.history[0].descricao
+        print("Auto-versioning, approval invalidation, and history entries verified!")
+
+        # ── Test 6: Win/Lose Transitions ──
+        print("\n--- Test 6: Win/Lose Transitions ---")
+        # Try to win in EM_LANCAMENTO state
+        try:
+            ganhar_oportunidade(db, tenant_id, str(budget.id), peon_user.id, "Ganhamos o contrato!")
+            assert False, "Should have blocked winning a non-approved opportunity"
+        except ValueError as e:
+            print(f"Successfully blocked winning in EM_LANCAMENTO state: {e}")
+
+        # Send for approval and approve again
+        budget = enviar_para_aprovacao(db, tenant_id, str(budget.id), peon_user.id, "Por favor aprovar versao 2.")
+        budget = aprovar_oportunidade(db, tenant_id, str(budget.id), admin_user.id, "Aprovado versao 2.")
+        assert budget.status == "APROVADO"
+        
+        # Win opportunity
+        budget = ganhar_oportunidade(db, tenant_id, str(budget.id), peon_user.id, "Contrato fechado com sucesso!")
+        print(f"Won. Status: {budget.status} (Expected: GANHO)")
+        assert budget.status == "GANHO"
+
+        print("\nALL WORKFLOW WORK PATTERNS COMPLETED SUCCESSFULLY!")
+
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    run_tests()

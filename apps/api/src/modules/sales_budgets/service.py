@@ -495,7 +495,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         titulo=data.titulo,
         observacoes=data.observacoes,
         data_orcamento=data.data_orcamento,
-        status="RASCUNHO",
+        status="EM_LANCAMENTO",
         # Sale defaults
         markup_padrao=c_mkp,
         perc_despesa_adm=c_desp,
@@ -559,21 +559,31 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
 
     from src.modules.payment_methods.service import PaymentMethodsService
     PaymentMethodsService.sync_sales_budget_planning(db, budget)
+    recalculate_budget_total(db, budget)
 
     db.commit()
     db.refresh(budget)
     return budget
 
 
-def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetUpdate) -> Optional[SalesBudget]:
+def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetUpdate, user_id: Optional[str] = None) -> Optional[SalesBudget]:
     budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
     ).first()
     if not budget:
         return None
-    if budget.status != "RASCUNHO":
-        raise ValueError("Orçamento aprovado/arquivado não pode ser editado.")
+    if budget.status in ("ENVIADO_APROVACAO", "CANCELADO", "GANHO"):
+        raise ValueError(f"Orçamento no status {budget.status} não pode ser editado.")
+
+    is_reopened = False
+    old_status = budget.status
+    if budget.status == "APROVADO":
+        is_reopened = True
+        budget.versao += 1
+        budget.status = "EM_LANCAMENTO"
+        from src.modules.sales_budgets.models import SalesBudgetApproval
+        db.query(SalesBudgetApproval).filter(SalesBudgetApproval.sales_budget_id == budget.id).delete()
 
     # Update header + sale defaults
     budget.customer_id = data.customer_id
@@ -664,13 +674,30 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
 
     from src.modules.payment_methods.service import PaymentMethodsService
     PaymentMethodsService.sync_sales_budget_planning(db, budget)
+    recalculate_budget_total(db, budget)
+
+    if is_reopened and user_id:
+        cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+        from src.modules.sales_budgets.models import SalesBudgetHistory
+        history_entry = SalesBudgetHistory(
+            sales_budget_id=budget.id,
+            tenant_id=tenant_id,
+            versao=budget.versao,
+            status_anterior=old_status,
+            status_novo=budget.status,
+            usuario_id=user_id,
+            cargo_usuario=cargo_usuario,
+            descricao="Reabertura automática por alteração nos itens da oportunidade aprovada."
+        )
+        db.add(history_entry)
+        db.flush()
 
     db.commit()
     db.refresh(budget)
     return budget
 
 
-def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetHeaderUpdate) -> Optional[SalesBudget]:
+def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetHeaderUpdate, user_id: Optional[str] = None) -> Optional[SalesBudget]:
     budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
@@ -678,10 +705,47 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     if not budget:
         return None
         
+    if budget.status in ("ENVIADO_APROVACAO", "CANCELADO", "GANHO"):
+        raise ValueError(f"Orçamento no status {budget.status} não pode ser editado.")
+        
+    is_reopened = False
+    old_status = budget.status
+    
+    has_changes = False
+    if data.titulo is not None and data.titulo != budget.titulo:
+        has_changes = True
+    if data.customer_id is not None and data.customer_id != budget.customer_id:
+        has_changes = True
+        
+    if has_changes and budget.status == "APROVADO":
+        is_reopened = True
+        budget.versao += 1
+        budget.status = "EM_LANCAMENTO"
+        from src.modules.sales_budgets.models import SalesBudgetApproval
+        db.query(SalesBudgetApproval).filter(SalesBudgetApproval.sales_budget_id == budget.id).delete()
+        
     if data.titulo is not None:
         budget.titulo = data.titulo
     if data.customer_id is not None:
         budget.customer_id = data.customer_id
+        
+    recalculate_budget_total(db, budget)
+    
+    if is_reopened and user_id:
+        cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+        from src.modules.sales_budgets.models import SalesBudgetHistory
+        history_entry = SalesBudgetHistory(
+            sales_budget_id=budget.id,
+            tenant_id=tenant_id,
+            versao=budget.versao,
+            status_anterior=old_status,
+            status_novo=budget.status,
+            usuario_id=user_id,
+            cargo_usuario=cargo_usuario,
+            descricao="Reabertura automática por alteração nos dados do cabeçalho da oportunidade aprovada."
+        )
+        db.add(history_entry)
+        db.flush()
         
     db.commit()
     db.refresh(budget)
@@ -717,7 +781,7 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[Sa
         titulo=f"{original.titulo} (Cópia)",
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
-        status="RASCUNHO",
+        status="EM_LANCAMENTO",
         venda_havera_manutencao=original.venda_havera_manutencao,
         venda_qtd_meses_manutencao=original.venda_qtd_meses_manutencao,
         # Sale defaults
@@ -1092,3 +1156,264 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
         "perfil_st_ativo": perfil_st_ativo,
         "icms_abatido": round(icms_abatido_unitario, 2),
     }
+
+
+def check_is_approver(db: Session, user_id: str, tenant_id: str, company_id: Any) -> Tuple[bool, str]:
+    from src.modules.users.models import UserRole, UserRoleEnum
+    from src.modules.professionals.models import Professional
+
+    if isinstance(company_id, str):
+        try:
+            company_id = UUID(company_id)
+        except ValueError:
+            pass
+
+    # 1. Check system roles first (ADMIN or DIRETORIA on UserRole)
+    user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
+    for ur in user_roles:
+        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA):
+            return True, ur.role.value
+
+    # 2. Check Professional role in active company (GERENTE or DIRETOR)
+    professional = db.query(Professional).filter(
+        Professional.user_id == user_id,
+        Professional.company_id == company_id,
+        Professional.tenant_id == tenant_id
+    ).first()
+    
+    if professional and professional.role:
+        role_name_upper = professional.role.name.upper()
+        if role_name_upper in ("GERENTE", "DIRETOR"):
+            return True, role_name_upper
+
+    return False, "VENDEDOR"
+
+
+def get_user_role_name(db: Session, user_id: str, tenant_id: str, company_id: Any) -> str:
+    is_app, role_name = check_is_approver(db, user_id, tenant_id, company_id)
+    if role_name != "VENDEDOR":
+        return role_name
+    
+    if isinstance(company_id, str):
+        try:
+            company_id = UUID(company_id)
+        except ValueError:
+            pass
+
+    from src.modules.professionals.models import Professional
+    professional = db.query(Professional).filter(
+        Professional.user_id == user_id,
+        Professional.company_id == company_id,
+        Professional.tenant_id == tenant_id
+    ).first()
+    if professional and professional.role:
+        return professional.role.name.upper()
+    return "VENDEDOR"
+
+
+def recalculate_budget_total(db: Session, budget: SalesBudget):
+    db.flush()
+    sale_total = Decimal("0")
+    for item in budget.items:
+        sale_total += _d(item.total_venda)
+    for ri in budget.rental_items:
+        if getattr(ri, "tipo_contrato_kit", None) == 'VENDA_EQUIPAMENTOS':
+            sale_total += _d(ri.kit_valor_mensal) * _d(ri.quantidade)
+            
+    valid_rentals = [ri for ri in budget.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+    rental_total = Decimal("0")
+    for ri in valid_rentals:
+        p_inst = int(getattr(budget, "prazo_instalacao_meses", 0) or 0)
+        p_ctr = max(0, int(ri.prazo_contrato or 0) - p_inst)
+        val_mensal = _d(ri.valor_mensal) if ri.valor_mensal is not None else _d(getattr(ri, "kit_valor_mensal", 0))
+        qty = _d(ri.quantidade)
+        instalacao = _d(getattr(ri, "kit_vlr_instal_calc", 0) or getattr(ri, "valor_instalacao_item", 0) or 0)
+        rental_total += (val_mensal * p_ctr + instalacao) * qty
+        
+    budget.valor_total = sale_total + rental_total
+
+
+def enviar_para_aprovacao(db: Session, tenant_id: str, budget_id: str, user_id: str, justificativa: str) -> SalesBudget:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        raise ValueError("Oportunidade não encontrada.")
+    
+    if budget.status not in ("EM_LANCAMENTO", "RETORNADO_VENDEDOR"):
+        raise ValueError(f"Não é possível enviar para aprovação a partir do status {budget.status}.")
+        
+    if len(budget.items) == 0 and len(budget.rental_items) == 0:
+        raise ValueError("Oportunidade deve conter pelo menos um item/kit para ser enviada para aprovação.")
+        
+    old_status = budget.status
+    budget.status = "ENVIADO_APROVACAO"
+    
+    cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+    from src.modules.sales_budgets.models import SalesBudgetHistory
+    history_entry = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao,
+        status_anterior=old_status,
+        status_novo=budget.status,
+        usuario_id=user_id,
+        cargo_usuario=cargo_usuario,
+        descricao=justificativa
+    )
+    db.add(history_entry)
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
+def aprovar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: str, observacao: Optional[str] = None) -> SalesBudget:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        raise ValueError("Oportunidade não encontrada.")
+        
+    if budget.status != "ENVIADO_APROVACAO":
+        raise ValueError("Apenas oportunidades no status ENVIADO_APROVACAO podem ser aprovadas.")
+        
+    is_approver, cargo_aprovador = check_is_approver(db, user_id, tenant_id, budget.company_id)
+    if not is_approver:
+        raise PermissionError("Usuário não possui cargo de aprovação (Gerente ou Diretor).")
+        
+    old_status = budget.status
+    budget.status = "APROVADO"
+    
+    from src.modules.sales_budgets.models import SalesBudgetApproval, SalesBudgetHistory
+    approval_entry = SalesBudgetApproval(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        usuario_aprovador_id=user_id,
+        cargo_aprovador=cargo_aprovador,
+        observacao=observacao
+    )
+    db.add(approval_entry)
+    
+    cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+    desc = f"Aprovado por {cargo_aprovador}."
+    if observacao:
+        desc += f" Obs: {observacao}"
+        
+    history_entry = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao,
+        status_anterior=old_status,
+        status_novo=budget.status,
+        usuario_id=user_id,
+        cargo_usuario=cargo_usuario,
+        descricao=desc
+    )
+    db.add(history_entry)
+    
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
+def retornar_ao_vendedor(db: Session, tenant_id: str, budget_id: str, user_id: str, justificativa: str) -> SalesBudget:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        raise ValueError("Oportunidade não encontrada.")
+        
+    if budget.status != "ENVIADO_APROVACAO":
+        raise ValueError("Apenas oportunidades enviadas para aprovação podem retornar ao vendedor.")
+        
+    is_approver, cargo_aprovador = check_is_approver(db, user_id, tenant_id, budget.company_id)
+    if not is_approver:
+        raise PermissionError("Apenas aprovadores podem retornar a oportunidade ao vendedor.")
+        
+    old_status = budget.status
+    budget.status = "RETORNADO_VENDEDOR"
+    
+    cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+    from src.modules.sales_budgets.models import SalesBudgetHistory
+    history_entry = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao,
+        status_anterior=old_status,
+        status_novo=budget.status,
+        usuario_id=user_id,
+        cargo_usuario=cargo_usuario,
+        descricao=justificativa
+    )
+    db.add(history_entry)
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
+def cancelar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: str, justificativa: str) -> SalesBudget:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        raise ValueError("Oportunidade não encontrada.")
+        
+    if budget.status in ("CANCELADO", "GANHO"):
+        raise ValueError(f"Não é possível cancelar uma oportunidade já no status {budget.status}.")
+        
+    old_status = budget.status
+    budget.status = "CANCELADO"
+    
+    cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+    from src.modules.sales_budgets.models import SalesBudgetHistory
+    history_entry = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao,
+        status_anterior=old_status,
+        status_novo=budget.status,
+        usuario_id=user_id,
+        cargo_usuario=cargo_usuario,
+        descricao=justificativa
+    )
+    db.add(history_entry)
+    db.commit()
+    db.refresh(budget)
+    return budget
+
+
+def ganhar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: str, justificativa: str) -> SalesBudget:
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+    if not budget:
+        raise ValueError("Oportunidade não encontrada.")
+        
+    if budget.status != "APROVADO":
+        raise ValueError("Apenas oportunidades com status APROVADO podem ser ganhas.")
+        
+    old_status = budget.status
+    budget.status = "GANHO"
+    
+    cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+    from src.modules.sales_budgets.models import SalesBudgetHistory
+    history_entry = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao,
+        status_anterior=old_status,
+        status_novo=budget.status,
+        usuario_id=user_id,
+        cargo_usuario=cargo_usuario,
+        descricao=justificativa
+    )
+    db.add(history_entry)
+    db.commit()
+    db.refresh(budget)
+    return budget
+
