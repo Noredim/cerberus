@@ -265,17 +265,26 @@ def run_test():
                 {
                     "product_id": str(product_difal.id),
                     "difal_unitario": 12.35,
-                    "icms_st_unitario": 0.00
+                    "icms_st_unitario": 0.00,
+                    "custo_base_unitario_item": 85.00,
+                    "venda_unitario_item": 150.00,
+                    "imposto_venda_item": 180.00  # 18.00 * 10
                 },
                 {
                     "product_id": str(product_st.id),
                     "difal_unitario": 0.00,
-                    "icms_st_unitario": 34.60
+                    "icms_st_unitario": 34.60,
+                    "custo_base_unitario_item": 220.00,
+                    "venda_unitario_item": 400.00,
+                    "imposto_venda_item": 96.00  # 48.00 * 2
                 },
                 {
                     "product_id": str(product_no_tax.id),
                     "difal_unitario": 0.00,
-                    "icms_st_unitario": 0.00
+                    "icms_st_unitario": 0.00,
+                    "custo_base_unitario_item": 60.00,
+                    "venda_unitario_item": 100.00,
+                    "imposto_venda_item": 0.00
                 }
             ]
         }
@@ -322,8 +331,8 @@ def run_test():
         
         print("All parser unit tests PASSED!")
 
-        # 4. Generate PDF Report via service
-        print("Invoking OpportunitiesReportService...")
+        # 4. Generate PDF Report via service (Fechamento Fornecedores)
+        print("Invoking OpportunitiesReportService (Fechamento Fornecedores)...")
         response = OpportunitiesReportService.generate_fechamento_fornecedores_pdf(db, opp.id, user)
         
         # Read the streaming body response asynchronously
@@ -338,17 +347,31 @@ def run_test():
             return b"".join(chunks)
             
         pdf_bytes = asyncio.run(read_stream(response.body_iterator))
-
         
         # 5. Assert PDF header
         if pdf_bytes.startswith(b"%PDF"):
-            print("SUCCESS: PDF generated successfully! Header starts with %PDF")
+            print("SUCCESS: Fechamento Fornecedores PDF generated successfully! Header starts with %PDF")
             print(f"PDF size: {len(pdf_bytes)} bytes")
             with open("test_output.pdf", "wb") as f:
                 f.write(pdf_bytes)
             print("Saved PDF to test_output.pdf")
         else:
-            print("FAILED: PDF generated but header is invalid.")
+            print("FAILED: Fechamento Fornecedores PDF generated but header is invalid.")
+            sys.exit(1)
+
+        # 6. Generate PDF Report via service (Venda Approval)
+        print("Invoking OpportunitiesReportService (Venda Approval)...")
+        response_venda = OpportunitiesReportService.generate_venda_approval_pdf(db, opp.id, user)
+        pdf_bytes_venda = asyncio.run(read_stream(response_venda.body_iterator))
+
+        if pdf_bytes_venda.startswith(b"%PDF"):
+            print("SUCCESS: Venda Approval PDF generated successfully! Header starts with %PDF")
+            print(f"PDF size: {len(pdf_bytes_venda)} bytes")
+            with open("test_venda_approval_output.pdf", "wb") as f:
+                f.write(pdf_bytes_venda)
+            print("Saved PDF to test_venda_approval_output.pdf")
+        else:
+            print("FAILED: Venda Approval PDF generated but header is invalid.")
             sys.exit(1)
             
     except Exception as e:

@@ -838,3 +838,634 @@ class OpportunitiesReportService:
                     "Content-Disposition": f"attachment; filename=fechamento-fornecedores-{opportunity_dict['numero_orcamento']}.pdf"
                 }
             )
+
+    @staticmethod
+    def generate_venda_approval_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
+        # 1. Fetch Opportunity
+        opportunity = db.query(SalesBudget).filter(
+            SalesBudget.id == opportunity_id,
+            SalesBudget.tenant_id == current_user.tenant_id
+        ).first()
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
+
+        # 2. Fetch associated Purchase Budgets (Supplier Budgets)
+        purchase_budgets = db.query(PurchaseBudget).filter(
+            PurchaseBudget.sales_budget_id == opportunity_id,
+            PurchaseBudget.tenant_id == current_user.tenant_id
+        ).all()
+
+        # Build tax lookup map: product_id -> {difal, st, source}
+        opp_product_taxes = {}
+        
+        # A. Direct items in opportunity.rental_items
+        for item in opportunity.rental_items:
+            if not item.opportunity_kit_id and item.product_id:
+                difal = float(item.difal_unit) if item.difal_unit is not None else 0.0
+                st = float(item.icms_st_unit) if item.icms_st_unit is not None else 0.0
+                opp_product_taxes[item.product_id] = {
+                    "difal": difal,
+                    "st": st,
+                    "source": "opportunity_item"
+                }
+
+        # B. Kit items (both in opportunity.items and opportunity.rental_items)
+        kit_service = OpportunityKitService(db)
+        kit_ids = set()
+        for item in opportunity.items:
+            if item.opportunity_kit_id:
+                kit_ids.add(item.opportunity_kit_id)
+        for item in opportunity.rental_items:
+            if item.opportunity_kit_id:
+                kit_ids.add(item.opportunity_kit_id)
+                
+        kits_by_id = {}
+        for kit_id in kit_ids:
+            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit:
+                kits_by_id[kit.id] = kit
+                try:
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    for item_sum in kit_financials.get("item_summaries", []):
+                        p_id = item_sum.get("product_id")
+                        if p_id:
+                            p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                            difal_val = float(item_sum.get("difal_unitario") or 0.0)
+                            st_val = float(item_sum.get("icms_st_unitario") or 0.0)
+                            opp_product_taxes[p_uuid] = {
+                                "difal": difal_val,
+                                "st": st_val,
+                                "source": "opportunity_kit"
+                            }
+                except Exception as e:
+                    print(f"[Warning] Failed to calculate financials for kit {kit_id}: {e}")
+
+        # Build supplier lookup map: product_id -> {fornecedor, pb_item, pb}
+        product_suppliers = {}
+        for pb in purchase_budgets:
+            for pb_item in pb.items:
+                if pb_item.product_id:
+                    product_suppliers[pb_item.product_id] = {
+                        "fornecedor": pb.supplier_nome_fantasia,
+                        "pb_item": pb_item,
+                        "pb": pb
+                    }
+
+        # Extract types from kits
+        sales_types = set()
+        purchase_tax_types = set()
+        contract_types_mapping = {
+            "VENDA_EQUIPAMENTOS": "Venda",
+            "LOCACAO": "Locação",
+            "COMODATO": "Comodato",
+            "INSTALACAO": "Instalação"
+        }
+        for kit in kits_by_id.values():
+            if kit.tipo_contrato:
+                sales_types.add(contract_types_mapping.get(kit.tipo_contrato, kit.tipo_contrato))
+            if kit.considerar_st_ou_difal:
+                purchase_tax_types.add(kit.considerar_st_ou_difal)
+
+        tipo_venda = ", ".join(sorted(list(sales_types))) if sales_types else "Venda"
+        forma_compra = ", ".join(sorted(list(purchase_tax_types))) if purchase_tax_types else "DIFAL"
+
+        # Now consolidate items_details (Block 1)
+        items_details = []
+
+        # Helper to retrieve purchase tax unit for a product
+        def get_purchase_tax_unit(prod_id, pb_item):
+            tax_info = opp_product_taxes.get(prod_id)
+            origem = None
+            if tax_info:
+                difal = tax_info["difal"]
+                st = tax_info["st"]
+                origem = tax_info["source"]
+            else:
+                difal = 0.0
+                st = 0.0
+            
+            # Fallback to purchase budget item if zero/missing
+            if difal == 0.0 and pb_item and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
+                difal = float(pb_item.difal_unitario)
+                origem = "purchase_budget"
+            if st == 0.0 and pb_item and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
+                st = float(pb_item.st_unitario)
+                origem = "purchase_budget"
+            
+            if origem is None:
+                origem = "fallback_zero"
+                
+            return difal + st, origem
+
+        # A. Loop standard items
+        for item in opportunity.items:
+            qty = float(item.quantidade)
+            if not item.opportunity_kit_id and item.product_id:
+                # Standalone item
+                pb_info = product_suppliers.get(item.product_id)
+                supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                pb_item = pb_info["pb_item"] if pb_info else None
+                
+                custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
+                purchase_tax_unit, origem_imposto = get_purchase_tax_unit(item.product_id, pb_item)
+                
+                # Sales tax unit
+                sales_tax_unit = float(
+                    (item.pis_unit or 0.0) +
+                    (item.cofins_unit or 0.0) +
+                    (item.csll_unit or 0.0) +
+                    (item.irpj_unit or 0.0) +
+                    (item.icms_unit or 0.0) +
+                    (item.iss_unit or 0.0)
+                )
+                
+                venda_unit = float(item.venda_unit or 0.0)
+                venda_total = venda_unit * qty
+                custo_total = custo_unit * qty
+                purchase_tax_total = purchase_tax_unit * qty
+                sales_tax_total = sales_tax_unit * qty
+                
+                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
+                mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                
+                items_details.append({
+                    "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento"),
+                    "fornecedor": supplier_name,
+                    "quantidade": qty,
+                    "custo_unitario": format_currency(custo_unit),
+                    "imposto_compra_unit": format_currency(purchase_tax_unit),
+                    "markup": f"{mkp_venda:.2f}",
+                    "valor_venda": format_currency(venda_unit),
+                    "venda_total": format_currency(venda_total),
+                    "impostos_venda": format_currency(sales_tax_total),
+                    "lucro_total": format_currency(lucro_total),
+                    "origem_imposto": origem_imposto,
+                    # Numeric for summaries
+                    "_venda_total": venda_total,
+                    "_custo_total": custo_total,
+                    "_purchase_tax_total": purchase_tax_total,
+                    "_sales_tax_total": sales_tax_total,
+                    "_lucro_total": lucro_total
+                })
+            elif item.opportunity_kit_id:
+                # Kit item (unpack components)
+                kit = kits_by_id.get(item.opportunity_kit_id)
+                if kit:
+                    try:
+                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                        for summary in kit_financials.get("item_summaries", []):
+                            p_id = summary.get("product_id")
+                            p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                            
+                            # Find matching kit item to get the quantity per kit
+                            kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+                            qty_in_kit = float(kit_item.quantidade_no_kit) if kit_item else 1.0
+                            component_qty = qty * qty_in_kit
+                            
+                            pb_info = product_suppliers.get(p_uuid)
+                            supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                            pb_item = pb_info["pb_item"] if pb_info else None
+                            
+                            custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
+                            purchase_tax_unit, origem_imposto = get_purchase_tax_unit(p_uuid, pb_item)
+                            
+                            # Sales tax from kit summary
+                            sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            
+                            venda_unit = float(summary.get("venda_unitario_item") or 0.0)
+                            venda_total = venda_unit * component_qty
+                            custo_total = custo_unit * component_qty
+                            purchase_tax_total = purchase_tax_unit * component_qty
+                            sales_tax_total = sales_tax_unit * component_qty
+                            
+                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
+                            mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                            
+                            product_desc = summary.get("descricao")
+                            if not product_desc and kit_item:
+                                product_desc = kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente")
+                                
+                            items_details.append({
+                                "descricao": product_desc or "Componente do Kit",
+                                "fornecedor": supplier_name,
+                                "quantidade": component_qty,
+                                "custo_unitario": format_currency(custo_unit),
+                                "imposto_compra_unit": format_currency(purchase_tax_unit),
+                                "markup": f"{mkp_venda:.2f}",
+                                "valor_venda": format_currency(venda_unit),
+                                "venda_total": format_currency(venda_total),
+                                "impostos_venda": format_currency(sales_tax_total),
+                                "lucro_total": format_currency(lucro_total),
+                                "origem_imposto": origem_imposto,
+                                # Numeric for summaries
+                                "_venda_total": venda_total,
+                                "_custo_total": custo_total,
+                                "_purchase_tax_total": purchase_tax_total,
+                                "_sales_tax_total": sales_tax_total,
+                                "_lucro_total": lucro_total
+                            })
+                    except Exception as e:
+                        print(f"[Warning] Failed to unpack kit standard item {item.id}: {e}")
+
+        # B. Loop rental items
+        for item in opportunity.rental_items:
+            qty = float(item.quantidade)
+            if not item.opportunity_kit_id and item.product_id:
+                # Standalone rental item
+                pb_info = product_suppliers.get(item.product_id)
+                supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                pb_item = pb_info["pb_item"] if pb_info else None
+                
+                custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
+                purchase_tax_unit, origem_imposto = get_purchase_tax_unit(item.product_id, pb_item)
+                
+                sales_tax_unit = float(
+                    (item.pis_unit or 0.0) +
+                    (item.cofins_unit or 0.0) +
+                    (item.csll_unit or 0.0) +
+                    (item.irpj_unit or 0.0) +
+                    (item.icms_unit or 0.0) +
+                    (item.iss_unit or 0.0)
+                )
+                
+                venda_unit = float(item.venda_unit or 0.0)
+                venda_total = venda_unit * qty
+                custo_total = custo_unit * qty
+                purchase_tax_total = purchase_tax_unit * qty
+                sales_tax_total = sales_tax_unit * qty
+                
+                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
+                mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                
+                items_details.append({
+                    "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento Locado"),
+                    "fornecedor": supplier_name,
+                    "quantidade": qty,
+                    "custo_unitario": format_currency(custo_unit),
+                    "imposto_compra_unit": format_currency(purchase_tax_unit),
+                    "markup": f"{mkp_venda:.2f}",
+                    "valor_venda": format_currency(venda_unit),
+                    "venda_total": format_currency(venda_total),
+                    "impostos_venda": format_currency(sales_tax_total),
+                    "lucro_total": format_currency(lucro_total),
+                    "origem_imposto": origem_imposto,
+                    # Numeric for summaries
+                    "_venda_total": venda_total,
+                    "_custo_total": custo_total,
+                    "_purchase_tax_total": purchase_tax_total,
+                    "_sales_tax_total": sales_tax_total,
+                    "_lucro_total": lucro_total
+                })
+            elif item.opportunity_kit_id:
+                # Rental kit item
+                kit = kits_by_id.get(item.opportunity_kit_id)
+                if kit:
+                    try:
+                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                        for summary in kit_financials.get("item_summaries", []):
+                            p_id = summary.get("product_id")
+                            p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                            
+                            kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+                            qty_in_kit = float(kit_item.quantidade_no_kit) if kit_item else 1.0
+                            component_qty = qty * qty_in_kit
+                            
+                            pb_info = product_suppliers.get(p_uuid)
+                            supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                            pb_item = pb_info["pb_item"] if pb_info else None
+                            
+                            custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
+                            purchase_tax_unit, origem_imposto = get_purchase_tax_unit(p_uuid, pb_item)
+                            
+                            sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            
+                            venda_unit = float(summary.get("venda_unitario_item") or 0.0)
+                            venda_total = venda_unit * component_qty
+                            custo_total = custo_unit * component_qty
+                            purchase_tax_total = purchase_tax_unit * component_qty
+                            sales_tax_total = sales_tax_unit * component_qty
+                            
+                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
+                            mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                            
+                            product_desc = summary.get("descricao")
+                            if not product_desc and kit_item:
+                                product_desc = kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente")
+                                
+                            items_details.append({
+                                "descricao": product_desc or "Componente do Kit",
+                                "fornecedor": supplier_name,
+                                "quantidade": component_qty,
+                                "custo_unitario": format_currency(custo_unit),
+                                "imposto_compra_unit": format_currency(purchase_tax_unit),
+                                "markup": f"{mkp_venda:.2f}",
+                                "valor_venda": format_currency(venda_unit),
+                                "venda_total": format_currency(venda_total),
+                                "impostos_venda": format_currency(sales_tax_total),
+                                "lucro_total": format_currency(lucro_total),
+                                "origem_imposto": origem_imposto,
+                                # Numeric for summaries
+                                "_venda_total": venda_total,
+                                "_custo_total": custo_total,
+                                "_purchase_tax_total": purchase_tax_total,
+                                "_sales_tax_total": sales_tax_total,
+                                "_lucro_total": lucro_total
+                            })
+                    except Exception as e:
+                        print(f"[Warning] Failed to unpack rental kit item {item.id}: {e}")
+
+        # 3. Calculate Consolidated proposal KPIs
+        venda_consolidada = sum(x["_venda_total"] for x in items_details)
+        custo_consolidado = sum(x["_custo_total"] for x in items_details)
+        custo_impostos = sum(x["_purchase_tax_total"] for x in items_details)
+        impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
+        
+        lucro_total = venda_consolidada - custo_consolidado - custo_impostos - impostos_venda
+        margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+        
+        # Markup geral
+        markup = (venda_consolidada / (custo_consolidado + custo_impostos)) if (custo_consolidado + custo_impostos) > 0 else 1.0
+
+        kpis = {
+            "venda_consolidada": format_currency(venda_consolidada),
+            "custo_consolidado": format_currency(custo_consolidado),
+            "custo_impostos": format_currency(custo_impostos),
+            "impostos_venda": format_currency(impostos_venda),
+            "lucro_total": format_currency(lucro_total),
+            "margem_percentual": f"{margem_percentual:.2f}",
+            "markup": f"{markup:.2f}",
+            "custo_total_com_impostos": format_currency(custo_consolidado + custo_impostos)
+        }
+
+        # 4. Block 2: Supplier Summaries
+        supplier_summaries = []
+        for pb in purchase_budgets:
+            s_name = pb.supplier_nome_fantasia
+            
+            s_items_cost = 0.0
+            for pb_item in pb.items:
+                match_items = [x for x in items_details if x["fornecedor"] == s_name and x["descricao"] == pb_item.product_nome]
+                qty_used = sum(float(x["quantidade"]) for x in match_items)
+                if qty_used <= 0:
+                    qty_used = float(pb_item.quantidade)
+                
+                val_unit = float(pb_item.valor_unitario)
+                purchase_tax_unit, _ = get_purchase_tax_unit(pb_item.product_id, pb_item)
+                
+                s_items_cost += (val_unit + purchase_tax_unit) * qty_used
+                
+            payment_desc = "Não informado"
+            if pb.forma_pagamento:
+                payment_desc = pb.forma_pagamento.descricao
+            elif pb.forma_pagamento_snapshot:
+                payment_desc = pb.forma_pagamento_snapshot.get("descricao", "Não informado")
+                
+            supplier_summaries.append({
+                "orcamento": pb.numero_orcamento or str(pb.id)[:8],
+                "fornecedor": s_name,
+                "total_custo": format_currency(s_items_cost),
+                "forma_pagamento": payment_desc
+            })
+
+        # 5. Opportunity dict
+        status_labels = {
+            "EM_LANCAMENTO": "RASCUNHO",
+            "ENVIADO_APROVACAO": "EM APROVAÇÃO",
+            "RETORNADO_VENDEDOR": "REPROVADA",
+            "APROVADO": "APROVADA",
+            "CANCELADO": "CANCELADA",
+            "GANHO": "GANHA"
+        }
+        opportunity_dict = {
+            "id": str(opportunity.id),
+            "numero_orcamento": opportunity.numero_orcamento or str(opportunity.id)[:8],
+            "titulo": opportunity.titulo,
+            "customer_nome": opportunity.customer.nome_fantasia or opportunity.customer.razao_social if opportunity.customer else "Cliente Não Informado",
+            "vendedor_nome": opportunity.vendedor.name if opportunity.vendedor else "Não Informado",
+            "status_label": status_labels.get(opportunity.status, opportunity.status),
+            "company_nome": opportunity.company.nome_fantasia or opportunity.company.razao_social if opportunity.company else "Empresa Não Informada"
+        }
+
+        now = datetime.datetime.now()
+        emissao_data_hora = now.strftime("%d/%m/%Y às %H:%M")
+        auditoria = {
+            "usuario_emissor": current_user.name or current_user.email,
+            "data": now.strftime("%d/%m/%Y"),
+            "hora": now.strftime("%H:%M"),
+            "versao": "1.0.0"
+        }
+
+        # 6. Render Template
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        templates_dir = os.path.join(base_dir, "templates", "reports")
+        
+        # Determine company logo path
+        company_logo = None
+        if opportunity.company and opportunity.company.logo_url:
+            root_dir = os.path.dirname(os.path.dirname(base_dir))
+            clean_path = opportunity.company.logo_url.lstrip("/")
+            abs_logo_path = os.path.join(root_dir, clean_path)
+            if os.path.exists(abs_logo_path):
+                normalized_path = abs_logo_path.replace("\\", "/")
+                company_logo = f"file:///{normalized_path}"
+
+        css_path = os.path.join(templates_dir, "venda_approval_v1.css")
+        html_path = os.path.join(templates_dir, "venda_approval_v1.html")
+
+        # Load stylesheet
+        css_content = ""
+        if os.path.exists(css_path):
+            with open(css_path, "r", encoding="utf-8") as f:
+                css_content = f.read()
+
+        # Load HTML
+        html_template = ""
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_template = f.read()
+        else:
+            raise HTTPException(status_code=500, detail="Report HTML template file not found.")
+
+        # Render Jinja2 template
+        from jinja2 import Template
+        template = Template(html_template)
+        rendered_html = template.render(
+            css_content=css_content,
+            opportunity=opportunity_dict,
+            company_logo=company_logo,
+            emissao_data_hora=emissao_data_hora,
+            kpis=kpis,
+            tipo_venda=tipo_venda,
+            forma_compra=forma_compra,
+            items_details=items_details,
+            supplier_summaries=supplier_summaries,
+            auditoria=auditoria
+        )
+
+        # 7. PDF Generation with WeasyPrint & Fallback to ReportLab
+        try:
+            from weasyprint import HTML
+            pdf_bytes = HTML(string=rendered_html).write_pdf()
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=approval-venda-{opportunity_dict['numero_orcamento']}.pdf"
+                }
+            )
+        except Exception as weasy_err:
+            print(f"[Warning] WeasyPrint failed. Falling back to ReportLab. Error: {weasy_err}")
+            # REPORTLAB FALLBACK
+            from reportlab.lib.pagesizes import letter, landscape
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+            pdf_buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buffer, 
+                pagesize=landscape(letter),
+                rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+            )
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Define styles
+            title_style = ParagraphStyle(
+                'ReportTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                textColor=colors.HexColor('#0f172a'),
+                spaceAfter=10
+            )
+            sub_style = ParagraphStyle(
+                'SubStyle',
+                parent=styles['Normal'],
+                fontSize=8.5,
+                textColor=colors.HexColor('#475569'),
+                spaceAfter=10
+            )
+            table_header_style = ParagraphStyle(
+                'TableHeader',
+                parent=styles['Normal'],
+                fontSize=7.5,
+                fontName='Helvetica-Bold',
+                textColor=colors.white
+            )
+            table_cell_style = ParagraphStyle(
+                'TableCell',
+                parent=styles['Normal'],
+                fontSize=7.5,
+                textColor=colors.HexColor('#1e293b')
+            )
+
+            story.append(Paragraph(f"Relatório Executivo de Approval de Venda - #{opportunity_dict['numero_orcamento']}", title_style))
+            story.append(Paragraph(f"Cliente: {opportunity_dict['customer_nome']} | Vendedor: {opportunity_dict['vendedor_nome']} | Tipo: {tipo_venda} | Forma Compra: {forma_compra}", sub_style))
+
+            kpi_data = [
+                ["Venda Consolidada", "Custo Consolidado", "Custo Impostos", "Imp. Venda", "Lucro Total", "Margem"],
+                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['custo_impostos']}", f"R$ {kpis['impostos_venda']}", f"R$ {kpis['lucro_total']}", f"{kpis['margem_percentual']}%"]
+            ]
+            kpi_table = Table(kpi_data, colWidths=[115]*6)
+            kpi_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('FONTSIZE', (0,0), (-1,-1), 8.5),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#e2e8f0')),
+            ]))
+            story.append(kpi_table)
+            story.append(Spacer(1, 15))
+
+            story.append(Paragraph("Detalhamento Comercial dos Produtos/Serviços", styles['Heading2']))
+            table_data = [[
+                Paragraph("Produto", table_header_style), 
+                Paragraph("Fornecedor", table_header_style), 
+                Paragraph("Qtd", table_header_style), 
+                Paragraph("Custo Unit", table_header_style), 
+                Paragraph("Imp Compra", table_header_style), 
+                Paragraph("MKP", table_header_style), 
+                Paragraph("Val Venda", table_header_style), 
+                Paragraph("Venda Total", table_header_style), 
+                Paragraph("Imp Venda", table_header_style), 
+                Paragraph("Lucro", table_header_style)
+            ]]
+            for item in items_details:
+                table_data.append([
+                    Paragraph(item["descricao"], table_cell_style),
+                    Paragraph(item["fornecedor"], table_cell_style),
+                    Paragraph(str(item["quantidade"]), table_cell_style),
+                    Paragraph(f"R$ {item['custo_unitario']}", table_cell_style),
+                    Paragraph(f"R$ {item['imposto_compra_unit']}", table_cell_style),
+                    Paragraph(item["markup"], table_cell_style),
+                    Paragraph(f"R$ {item['valor_venda']}", table_cell_style),
+                    Paragraph(f"R$ {item['venda_total']}", table_cell_style),
+                    Paragraph(f"R$ {item['impostos_venda']}", table_cell_style),
+                    Paragraph(f"R$ {item['lucro_total']}", table_cell_style)
+                ])
+
+            table_data.append([
+                Paragraph("TOTAL CONSOLIDADO", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph(f"{kpis['markup']}x", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph(f"R$ {kpis['venda_consolidada']}", table_cell_style),
+                Paragraph(f"R$ {kpis['impostos_venda']}", table_cell_style),
+                Paragraph(f"R$ {kpis['lucro_total']}", table_cell_style)
+            ])
+
+            items_table = Table(table_data, colWidths=[150, 110, 30, 60, 60, 40, 60, 65, 65, 70])
+            items_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(items_table)
+            story.append(Spacer(1, 15))
+
+            story.append(Paragraph("Resumo Financeiro por Fornecedor (Custos de Aquisição)", styles['Heading2']))
+            sup_data = [[
+                Paragraph("Orçamento", table_header_style),
+                Paragraph("Fornecedor", table_header_style),
+                Paragraph("Total Custo (c/ Impostos)", table_header_style),
+                Paragraph("Forma de Pagamento", table_header_style)
+            ]]
+            for f in supplier_summaries:
+                sup_data.append([
+                    Paragraph(f["orcamento"], table_cell_style),
+                    Paragraph(f["fornecedor"], table_cell_style),
+                    Paragraph(f"R$ {f['total_custo']}", table_cell_style),
+                    Paragraph(f["forma_pagamento"], table_cell_style)
+                ])
+            sup_data.append([
+                Paragraph("TOTAL DE CUSTOS", table_cell_style),
+                Paragraph("-", table_cell_style),
+                Paragraph(f"R$ {kpis['custo_consolidado']}", table_cell_style),
+                Paragraph("-", table_cell_style)
+            ])
+            sup_table = Table(sup_data, colWidths=[150, 200, 150, 200])
+            sup_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(sup_table)
+
+            doc.build(story)
+            pdf_buffer.seek(0)
+            return StreamingResponse(
+                pdf_buffer,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=approval-venda-{opportunity_dict['numero_orcamento']}.pdf"
+                }
+            )

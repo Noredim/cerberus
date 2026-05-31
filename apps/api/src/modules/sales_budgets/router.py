@@ -622,6 +622,17 @@ def download_fechamento_fornecedores_report(
     return OpportunitiesReportService.generate_fechamento_fornecedores_pdf(db, opportunity_id, current_user)
 
 
+@router.get("/{opportunity_id}/reports/venda-approval")
+def download_venda_approval_report(
+    opportunity_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from src.modules.sales_budgets.reports import OpportunitiesReportService
+    return OpportunitiesReportService.generate_venda_approval_pdf(db, opportunity_id, current_user)
+
+
+
 @router.get("/{budget_id}/historico")
 def get_historico(
     budget_id: UUID,

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Relatório Executivo de Approval de Venda do sistema Cerberus.">
+    <meta property="og:title" content="Relatório Executivo de Approval de Venda">
+    <meta property="og:description" content="Detalhamento comercial completo com custos, impostos de compra/venda, lucro e margens.">
+    <title>Relatório Executivo de Approval de Venda</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO EXECUTIVO (APENAS NA PRIMEIRA PÁGINA) -->
+    <div class="first-page-header">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+            <tr>
+                <!-- LOGO DA EMPRESA SELECIONADA -->
+                <td style="width: 30%; vertical-align: middle; padding: 0;">
+                    {% if company_logo %}
+                        <img src="{{ company_logo }}" alt="Logo Empresa" style="max-height: 40px; max-width: 200px; display: block;" />
+                    {% else %}
+                        <div style="font-size: 14pt; font-weight: bold; color: #0f172a; text-transform: uppercase; font-family: 'Outfit', 'Inter', sans-serif;">
+                            {{ opportunity.company_nome }}
+                        </div>
+                    {% endif %}
+                </td>
+                
+                <!-- DADOS DA OPORTUNIDADE -->
+                <td style="width: 70%; text-align: right; vertical-align: middle; padding: 0; font-size: 7.5pt; color: #475569; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <div style="font-size: 11pt; font-weight: bold; color: #0f172a; margin-bottom: 2px;">
+                        Relatório Executivo de Approval de Venda
+                    </div>
+                    <div>
+                        <strong>Oportunidade:</strong> #{{ opportunity.numero_orcamento }} - {{ opportunity.titulo }}
+                    </div>
+                    <div style="margin-top: 2px;">
+                        <strong>Cliente:</strong> {{ opportunity.customer_nome }} &nbsp;|&nbsp; 
+                        <strong>Vendedor:</strong> {{ opportunity.vendedor_nome }} &nbsp;|&nbsp; 
+                        <strong>Status:</strong> 
+                        <span class="status-badge {% if opportunity.status_label == 'APROVADA' or opportunity.status_label == 'GANHA' %}approved{% elif opportunity.status_label == 'EM APROVAÇÃO' %}pending{% elif opportunity.status_label == 'REPROVADA' or opportunity.status_label == 'CANCELADA' %}rejected{% else %}default{% endif %}">
+                            {{ opportunity.status_label }}
+                        </span>
+                    </div>
+                    <div style="margin-top: 2px; font-size: 8pt; color: #0f172a;">
+                        <strong>Tipo da Venda:</strong> {{ tipo_venda }} &nbsp;|&nbsp;
+                        <strong>Forma de Compra (Impostos):</strong> {{ forma_compra }}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <div class="compact-kpi-row">
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Venda Total</span>
+                <span class="kpi-val" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Custo Total</span>
+                <span class="kpi-val">R$ {{ kpis.custo_consolidado }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Impostos Compra</span>
+                <span class="kpi-val">R$ {{ kpis.custo_impostos }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Impostos Venda</span>
+                <span class="kpi-val">R$ {{ kpis.impostos_venda }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Lucro Total</span>
+                <span class="kpi-val" style="color: #16a34a;">R$ {{ kpis.lucro_total }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Margem</span>
+                <span class="kpi-val">{{ kpis.margem_percentual }}%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- BLOCO 1: DETALHAMENTO COMERCIAL DA PROPOSTA -->
+    <div class="avoid-break" style="margin-top: 10px;">
+        <div class="section-title">Detalhamento Comercial dos Produtos/Serviços</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Produto / Serviço</th>
+                    <th style="width: 15%;">Fornecedor</th>
+                    <th class="text-center" style="width: 5%;">Qtd</th>
+                    <th class="text-right" style="width: 8%;">Custo Unit.</th>
+                    <th class="text-right" style="width: 9%;">Imp. Compra</th>
+                    <th class="text-center" style="width: 6%;">MKP</th>
+                    <th class="text-right" style="width: 9%;">Val. Venda</th>
+                    <th class="text-right" style="width: 9%;">Venda Total</th>
+                    <th class="text-right" style="width: 9%;">Imp. Venda</th>
+                    <th class="text-right" style="width: 9%;">Lucro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items_details %}
+                <tr>
+                    <td>{{ item.descricao }}</td>
+                    <td>{{ item.fornecedor }}</td>
+                    <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-right">R$ {{ item.custo_unitario }}</td>
+                    <td class="text-right">
+                        R$ {{ item.imposto_compra_unit }}
+                        {% if item.imposto_compra_unit != '0,00' and item.origem_imposto != 'fallback_zero' %}
+                            <span style="font-size: 5.5pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">{{ item.markup }}x</td>
+                    <td class="text-right">R$ {{ item.valor_venda }}</td>
+                    <td class="text-right font-bold">R$ {{ item.venda_total }}</td>
+                    <td class="text-right">R$ {{ item.impostos_venda }}</td>
+                    <td class="text-right font-bold" style="color: #16a34a;">R$ {{ item.lucro_total }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td colspan="2">TOTAL CONSOLIDADO</td>
+                    <td class="text-center">-</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">-</td>
+                    <td class="text-center">{{ kpis.markup }}x</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</td>
+                    <td class="text-right">R$ {{ kpis.impostos_venda }}</td>
+                    <td class="text-right" style="color: #16a34a;">R$ {{ kpis.lucro_total }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- BLOCO 2: FECHAMENTO E TOTALIZADOR POR FORNECEDOR -->
+    <div class="avoid-break" style="margin-top: 12px;">
+        <div class="section-title">Resumo Financeiro por Fornecedor (Custos de Aquisição)</div>
+        <table class="data-table" style="max-width: 800px; margin-top: 4px;">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Orçamento / Cotação</th>
+                    <th style="width: 30%;">Fornecedor</th>
+                    <th class="text-right" style="width: 20%;">Total Custo (c/ Impostos)</th>
+                    <th style="width: 25%;">Forma de Pagamento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in supplier_summaries %}
+                <tr>
+                    <td>{{ f.orcamento }}</td>
+                    <td>{{ f.fornecedor }}</td>
+                    <td class="text-right font-bold">R$ {{ f.total_custo }}</td>
+                    <td>{{ f.forma_pagamento }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td>TOTAL DE CUSTOS</td>
+                    <td>-</td>
+                    <td class="text-right" style="color: #0f172a;">R$ {{ kpis.custo_total_com_impostos }}</td>
+                    <td>-</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="audit-info">
+            Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ opportunity.id }} | Versão do Relatório: {{ auditoria.versao }}
+        </div>
+    </div>
+
+</body>
+</html>

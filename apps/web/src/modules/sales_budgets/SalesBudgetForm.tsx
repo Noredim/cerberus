@@ -405,6 +405,7 @@ export function SalesBudgetForm() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
+  const [downloadingVendaReport, setDownloadingVendaReport] = useState(false);
   const [showReportsDropdown, setShowReportsDropdown] = useState(false);
 
   useEffect(() => {
@@ -1121,6 +1122,32 @@ export function SalesBudgetForm() {
       alert("Falha ao gerar relatório executivo.");
     } finally {
       setDownloadingReport(false);
+    }
+  };
+
+  const handleDownloadVendaApprovalReport = async () => {
+    if (opportunityPurchaseBudgets.length === 0) {
+      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
+      return;
+    }
+    setDownloadingVendaReport(true);
+    try {
+      const response = await api.get(`/sales-budgets/${id}/reports/venda-approval`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `approval-venda-${numeroOrcamento || id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error("Erro ao gerar relatório de approval de venda:", err);
+      alert("Falha ao gerar relatório de approval de venda.");
+    } finally {
+      setDownloadingVendaReport(false);
     }
   };
 
@@ -2161,6 +2188,17 @@ export function SalesBudgetForm() {
                   >
                     {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Fechamento de Fornecedores
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowReportsDropdown(false);
+                      handleDownloadVendaApprovalReport();
+                    }}
+                    disabled={downloadingVendaReport}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    Approval de Venda
                   </button>
                 </div>
               )}
