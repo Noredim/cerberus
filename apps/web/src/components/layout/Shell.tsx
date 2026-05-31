@@ -3,7 +3,8 @@ import Sidebar from './Sidebar';
 import { Bell, Search, User, Sun, Moon, Building2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import CompanySelectionModal from '../modals/CompanySelectionModal';
-import NotificationsModal, { NotificationItem } from '../modals/NotificationsModal';
+import NotificationsModal from '../modals/NotificationsModal';
+import type { NotificationItem } from '../modals/NotificationsModal';
 import { api } from '../../services/api';
 
 interface ShellProps {

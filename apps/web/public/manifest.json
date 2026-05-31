@@ -4,6 +4,7 @@
   "description": "Motor de Vendas & Inteligência Tributária",
   "start_url": "/",
   "display": "standalone",
+  "capture_links": "none",
   "orientation": "any",
   "theme_color": "#0F172A",
   "background_color": "#FFFFFF",

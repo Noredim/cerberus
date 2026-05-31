@@ -116,13 +116,12 @@ export default function PWAManager() {
       }
       localStorage.setItem('pwa-install-checked-major-version', currentMajor.toString());
 
-      // Validate recurrence timing
-      const ignoredUntil = localStorage.getItem('pwa-install-ignored-until');
-      const now = Date.now();
-
-      if (!ignoredUntil || now > parseInt(ignoredUntil, 10)) {
-        setShowInstallBanner(true);
-      }
+      // Do not automatically show the install banner on load. The user can install PWA from UserProfileModal.
+      // const ignoredUntil = localStorage.getItem('pwa-install-ignored-until');
+      // const now = Date.now();
+      // if (!ignoredUntil || now > parseInt(ignoredUntil, 10)) {
+      //   setShowInstallBanner(true);
+      // }
     };
 
     const handleAppInstalled = () => {
