@@ -10,7 +10,7 @@ import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKi
 import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 import { EvolutivoChartModal } from './EvolutivoChartModal';
 import { BudgetItemsGrid } from '../purchase_budgets/components/BudgetItemsGrid';
-import { Building2 } from 'lucide-react';
+import { Building2, UserSquare2, BadgeDollarSign, Truck as TruckIcon } from 'lucide-react';
 import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportModal';
 import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
@@ -33,6 +33,34 @@ interface CostComposition {
   custo_unit_final: number;
   icms_abatido?: number;
   perfil_st_ativo?: boolean;
+}
+
+interface FormaPagamentoParcela {
+  sequencia: number;
+  descricao: string;
+  intervalo_dias: number;
+  percentual: number | null;
+  valor_fixo: number | null;
+}
+
+interface FormaPagamento {
+  id: string;
+  descricao: string;
+  tipo_uso: 'VENDA' | 'COMPRA' | 'AMBOS';
+  tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
+  ativo: boolean;
+  observacao?: string | null;
+  parcelas: FormaPagamentoParcela[];
+}
+
+interface InstSimulada {
+  id?: string;
+  numero_parcela: number;
+  descricao: string;
+  data_prevista: string;
+  valor_previsto: number;
+  tipo_movimento: 'RECEBIMENTO' | 'PAGAMENTO';
+  status: 'PREVISTO' | 'REALIZADO';
 }
 
 
@@ -442,8 +470,27 @@ export function SalesBudgetForm() {
   const [vendaKits, setVendaKits] = useState<VendaKitItem[]>([]);
   const [showApplyKitsModal, setShowApplyKitsModal] = useState(false);
 
+  // Formas de Pagamento e Planejamento Financeiro States
+  const [formaPagamentoId, setFormaPagamentoId] = useState<string>('');
+  const [dataVencimentoInicial, setDataVencimentoInicial] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [salesFormasPagamento, setSalesFormasPagamento] = useState<FormaPagamento[]>([]);
+  const [financialPlanning, setFinancialPlanning] = useState<InstSimulada[]>([]);
+  const [simulatedInstallments, setSimulatedInstallments] = useState<InstSimulada[]>([]);
+
+  const [purchaseFormaPagamentoId, setPurchaseFormaPagamentoId] = useState<string>('');
+  const [purchaseDataVencimentoInicial, setPurchaseDataVencimentoInicial] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [purchaseFormasPagamento, setPurchaseFormasPagamento] = useState<FormaPagamento[]>([]);
+
   // Purchase Budget State
   const [purchaseBudgetId, setPurchaseBudgetId] = useState<string | null>(null);
+  const [purchaseNumeroOrcamento, setPurchaseNumeroOrcamento] = useState<string>('');
+  const [purchaseDataOrcamento, setPurchaseDataOrcamento] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [purchaseTipoOrcamento, setPurchaseTipoOrcamento] = useState<'REVENDA' | 'ATIVO_IMOBILIZADO_USO_CONSUMO'>('REVENDA');
+  const [purchaseVendedorNome, setPurchaseVendedorNome] = useState<string>('');
+  const [purchaseVendedorTelefone, setPurchaseVendedorTelefone] = useState<string>('');
+  const [purchaseVendedorEmail, setPurchaseVendedorEmail] = useState<string>('');
+  const [purchaseCriarCenarioDifal, setPurchaseCriarCenarioDifal] = useState<boolean>(false);
+  
   const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
   const [purchasePaymentConditionId, setPurchasePaymentConditionId] = useState<string>('');
   const [purchaseFreteTipo, setPurchaseFreteTipo] = useState<'CIF' | 'FOB'>('FOB');
@@ -454,6 +501,10 @@ export function SalesBudgetForm() {
   const [isPurchaseReconciliationModalOpen, setIsPurchaseReconciliationModalOpen] = useState(false);
   const [purchaseUnresolvedItems, setPurchaseUnresolvedItems] = useState<any[]>([]);
   const [isQuickSupplierModalOpen, setIsQuickSupplierModalOpen] = useState(false);
+
+  const [opportunityPurchaseBudgets, setOpportunityPurchaseBudgets] = useState<any[]>([]);
+  const [showPurchaseBudgetModal, setShowPurchaseBudgetModal] = useState(false);
+  const [savingPurchaseBudget, setSavingPurchaseBudget] = useState(false);
 
   // Tab
   const activeTab = searchParams.get('tab') || 'venda';
@@ -522,18 +573,23 @@ export function SalesBudgetForm() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [custRes, prodRes, supRes, profRes, usersRes] = await Promise.all([
+        const [custRes, prodRes, supRes, profRes, usersRes, fpRes] = await Promise.all([
           api.get('/cadastro/clientes', { params: { limit: 200 } }),
           api.get('/cadastro/produtos', { params: { limit: 500 } }),
           api.get('/cadastro/fornecedores', { params: { limit: 200 } }),
           api.get('/professionals', { params: { limit: 500 } }),
           api.get('/users', { params: { limit: 500 } }),
+          api.get('/cadastro/formas-pagamento'),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data.items || []);
         setSuppliers(Array.isArray(supRes.data) ? supRes.data : supRes.data.items || []);
         setProfessionals(Array.isArray(profRes.data) ? profRes.data : profRes.data.items || []);
         setUsers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.items || []);
+
+        const activeFps = fpRes.data || [];
+        setSalesFormasPagamento(activeFps.filter((fp: any) => fp.ativo && (fp.tipo_uso === 'VENDA' || fp.tipo_uso === 'AMBOS')));
+        setPurchaseFormasPagamento(activeFps.filter((fp: any) => fp.ativo && (fp.tipo_uso === 'COMPRA' || fp.tipo_uso === 'AMBOS')));
       } catch (err) {
         console.error(err);
       }
@@ -627,6 +683,9 @@ export function SalesBudgetForm() {
       setStatus(d.status);
       setNumeroOrcamento(d.numero_orcamento || '');
       setResponsavelIds(d.responsavel_ids || []);
+      setFormaPagamentoId(d.forma_pagamento_id || '');
+      setDataVencimentoInicial(d.data_vencimento_inicial ? d.data_vencimento_inicial.slice(0, 10) : '');
+      setFinancialPlanning(d.financial_planning || []);
       if (d.markup_padrao) setMarkupPadrao(d.markup_padrao);
       if (d.venda_markup_produtos) setFatorMargemProdutos(d.venda_markup_produtos);
       if (d.venda_markup_servicos) setFatorMargemServicos(d.venda_markup_servicos);
@@ -708,7 +767,7 @@ export function SalesBudgetForm() {
         } else {
           try {
             if (item.product_id) {
-              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}`);
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}${id ? `?sales_budget_id=${id}` : ''}`);
               // When company does NOT adhere to ST (perfil_st_ativo=false),
               // override the saved ST flag and recalculate ICMS on the sale.
               // Items saved before this fix have icms_unit=0 (ST zeroed it out).
@@ -736,7 +795,7 @@ export function SalesBudgetForm() {
         loadedRental.map(async (item: RentalBudgetItem) => {
           if (item.product_id) {
             try {
-              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO`);
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO${id ? `&sales_budget_id=${id}` : ''}`);
               return {
                 ...item,
                 custo_aquisicao_unit: cc.base_unitario ?? item.custo_aquisicao_unit,
@@ -803,43 +862,19 @@ export function SalesBudgetForm() {
 
       setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
 
-      // Load Purchase Budget
+      // Load Purchase Budgets
       try {
         const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
-        if (pbData && pbData.length > 0) {
-          const pb = pbData[0];
-          setPurchaseBudgetId(pb.id);
-          setPurchaseSupplierId(pb.supplier_id);
-          setPurchasePaymentConditionId(pb.payment_condition_id || '');
-          setPurchaseFreteTipo(pb.frete_tipo);
-          setPurchaseFretePercent(pb.frete_percent);
-          setPurchaseIpiCalculado(pb.ipi_calculado);
-
-          if (pb.items) {
-            setPurchaseItems(pb.items.map((i: any) => ({
-              product_id: i.product_id,
-              product_nome: i.product?.nome || '',
-              product_codigo: i.product?.codigo || '',
-              codigo_fornecedor: i.codigo_fornecedor || '',
-              ncm: i.ncm || '',
-              quantidade: i.quantidade,
-              valor_unitario: i.valor_unitario,
-              frete_percent: i.frete_percent,
-              ipi_percent: i.ipi_percent,
-              icms_percent: i.icms_percent,
-              frete_valor: i.frete_valor,
-              ipi_valor: i.ipi_valor,
-              total_item: i.total_item
-            })));
-          }
-        }
+        setOpportunityPurchaseBudgets(pbData || []);
       } catch (err) {
-        console.error('Failed to load purchase budget associated with sales budget', err);
+        console.error('Failed to load purchase budgets associated with sales budget', err);
       }
 
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [id]);
+
+
 
 
   // ── Rental item functions ──
@@ -1000,9 +1035,81 @@ export function SalesBudgetForm() {
     });
   };
 
-  const removeVendaKit = (idx: number) => {
+  const handleRemoveKitVenda = (idx: number) => {
     setHasUnsavedChanges(true);
     setVendaKits(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDeletePurchaseBudget = async (pbId: string) => {
+    if (!window.confirm("Deseja realmente excluir este orçamento de compra?")) return;
+    try {
+      await api.delete(`/purchase-budgets/${pbId}`);
+      // Recarregar os orçamentos
+      const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
+      setOpportunityPurchaseBudgets(pbData || []);
+      alert("Orçamento de compra excluído com sucesso!");
+    } catch (err: any) {
+      console.error("Failed to delete purchase budget", err);
+      const detail = err.response?.data?.detail;
+      alert("Erro ao excluir: " + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
+    }
+  };
+
+  const handleSavePurchaseBudget = async () => {
+    if (!purchaseSupplierId) {
+      alert("Por favor, selecione um fornecedor.");
+      return;
+    }
+    setSavingPurchaseBudget(true);
+    const pbPayload = {
+      supplier_id: purchaseSupplierId,
+      payment_condition_id: purchasePaymentConditionId || null,
+      forma_pagamento_id: purchaseFormaPagamentoId || null,
+      data_vencimento_inicial: purchaseDataVencimentoInicial ? new Date(purchaseDataVencimentoInicial).toISOString() : null,
+      sales_budget_id: id,
+      numero_orcamento: purchaseNumeroOrcamento,
+      data_orcamento: purchaseDataOrcamento ? new Date(purchaseDataOrcamento).toISOString() : new Date().toISOString(),
+      tipo_orcamento: purchaseTipoOrcamento,
+      vendedor_nome: purchaseVendedorNome || null,
+      vendedor_telefone: purchaseVendedorTelefone || null,
+      vendedor_email: purchaseVendedorEmail || null,
+      frete_tipo: purchaseFreteTipo,
+      frete_percent: purchaseFretePercent,
+      ipi_calculado: purchaseIpiCalculado,
+      items: purchaseItems.map(i => ({
+        product_id: i.product_id,
+        codigo_fornecedor: i.codigo_fornecedor || '',
+        ncm: i.ncm || '',
+        quantidade: i.quantidade,
+        valor_unitario: i.valor_unitario,
+        frete_percent: i.frete_percent,
+        ipi_percent: i.ipi_percent,
+        icms_percent: i.icms_percent
+      }))
+    };
+
+    try {
+      if (purchaseBudgetId) {
+        await api.put(`/purchase-budgets/${purchaseBudgetId}`, pbPayload);
+      } else {
+        await api.post('/purchase-budgets', pbPayload);
+      }
+      setShowPurchaseBudgetModal(false);
+      // Reload list of purchase budgets
+      const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
+      setOpportunityPurchaseBudgets(pbData || []);
+      alert('Orçamento de compra salvo com sucesso!');
+    } catch (err: any) {
+      console.error('Failed to save purchase budget', err);
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        alert('Erro de validação:\n' + detail.map((d: any) => `${d.loc?.join('.')} - ${d.msg}`).join('\n'));
+      } else {
+        alert('Erro ao salvar orçamento de compra: ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
+      }
+    } finally {
+      setSavingPurchaseBudget(false);
+    }
   };
 
   const handleApplyKitsParams = (e?: any) => {
@@ -1427,6 +1534,78 @@ export function SalesBudgetForm() {
     return { ...t, margem: t.faturamentoMensal > 0 ? (t.lucroMensal / t.faturamentoMensal * 100) : 0, roiMeses };
   }, [rentalItems, rentalDefaults, prazoContratoMeses]);
 
+  // Real-time simulated financial planning
+  useEffect(() => {
+    if (isReadonly) return;
+
+    const simulate = async () => {
+      let salesInstallments: InstSimulada[] = [];
+      const selectedFp = salesFormasPagamento.find(fp => fp.id === formaPagamentoId);
+
+      if (selectedFp && dataVencimentoInicial && totals.venda > 0) {
+        try {
+          const response = await api.post('/cadastro/formas-pagamento/simular', {
+            valor_total: totals.venda,
+            data_inicial: dataVencimentoInicial,
+            tipo_distribuicao: selectedFp.tipo_distribuicao,
+            parcelas: selectedFp.parcelas.map((p: FormaPagamentoParcela) => ({
+              sequencia: p.sequencia,
+              descricao: p.descricao,
+              intervalo_dias: p.intervalo_dias,
+              percentual: p.percentual,
+              valor_fixo: p.valor_fixo
+            }))
+          });
+          salesInstallments = (response.data || []).map((inst: { sequencia: number; descricao: string; data_prevista: string; valor_previsto: number }) => ({
+            numero_parcela: inst.sequencia,
+            descricao: inst.descricao,
+            data_prevista: inst.data_prevista,
+            valor_previsto: inst.valor_previsto,
+            tipo_movimento: 'RECEBIMENTO' as const,
+            status: 'PREVISTO' as const
+          }));
+        } catch (err) {
+          console.error('Error simulating installments:', err);
+        }
+      }
+
+      // Option C: recurring monthly lease schedules
+      const leases: InstSimulada[] = [];
+      const validRentals = rentalItems.filter(ri => ri.tipo_contrato_kit !== 'VENDA_EQUIPAMENTOS');
+      validRentals.forEach(ri => {
+        const prazo = ri.prazo_contrato || 0;
+        const valorMensal = (ri.valor_mensal || 0) * (ri.quantidade || 1);
+        if (valorMensal > 0 && prazo > 0 && dataVencimentoInicial) {
+          for (let m = 1; m <= prazo; m++) {
+            const baseDate = new Date(dataVencimentoInicial + 'T12:00:00');
+            baseDate.setMonth(baseDate.getMonth() + m);
+            const dataPrevista = baseDate.toISOString().slice(0, 10);
+            leases.push({
+              numero_parcela: m,
+              descricao: `Mensalidade ${m}/${prazo} - ${ri.product_nome || ri.product_codigo || 'Locação'}`,
+              data_prevista: dataPrevista,
+              valor_previsto: valorMensal,
+              tipo_movimento: 'RECEBIMENTO',
+              status: 'PREVISTO'
+            });
+          }
+        }
+      });
+
+      const combined = [...salesInstallments, ...leases];
+      combined.sort((a, b) => {
+        if (a.data_prevista !== b.data_prevista) {
+          return a.data_prevista.localeCompare(b.data_prevista);
+        }
+        return a.numero_parcela - b.numero_parcela;
+      });
+
+      setSimulatedInstallments(combined);
+    };
+
+    simulate();
+  }, [formaPagamentoId, dataVencimentoInicial, totals.venda, rentalItems, salesFormasPagamento, isReadonly]);
+
 
 
   const handleGlobalKitOverwrite = async () => {
@@ -1498,6 +1677,8 @@ export function SalesBudgetForm() {
         titulo,
         observacoes: observacoes || null,
         data_orcamento: new Date(dataOrcamento).toISOString(),
+        forma_pagamento_id: formaPagamentoId || null,
+        data_vencimento_inicial: dataVencimentoInicial ? new Date(dataVencimentoInicial).toISOString() : null,
         markup_padrao: +markupPadrao,
         perc_despesa_adm: +percDespesaAdm,
         perc_comissao: +percComissao,
@@ -1626,42 +1807,6 @@ export function SalesBudgetForm() {
       } else {
         const res = await api.post('/sales-budgets', payload);
         currentSalesBudgetId = res.data.id;
-      }
-
-      // Save Purchase Budget if filled
-      if (purchaseSupplierId) {
-        const pbPayload = {
-          supplier_id: purchaseSupplierId,
-          payment_condition_id: purchasePaymentConditionId || null,
-          sales_budget_id: currentSalesBudgetId,
-          numero_orcamento: numeroOrcamento,
-          data_orcamento: new Date(dataOrcamento).toISOString(),
-          tipo_orcamento: 'REVENDA',
-          frete_tipo: purchaseFreteTipo,
-          frete_percent: purchaseFretePercent,
-          ipi_calculado: purchaseIpiCalculado,
-          items: purchaseItems.map(i => ({
-            product_id: i.product_id,
-            codigo_fornecedor: i.codigo_fornecedor || '',
-            ncm: i.ncm || '',
-            quantidade: i.quantidade,
-            valor_unitario: i.valor_unitario,
-            frete_percent: i.frete_percent,
-            ipi_percent: i.ipi_percent,
-            icms_percent: i.icms_percent
-          }))
-        };
-        try {
-          if (purchaseBudgetId) {
-            await api.put(`/purchase-budgets/${purchaseBudgetId}`, pbPayload);
-          } else {
-            const pbRes = await api.post('/purchase-budgets', pbPayload);
-            setPurchaseBudgetId(pbRes.data.id);
-          }
-        } catch (err) {
-          console.error('Failed to save purchase budget', err);
-          alert('Erro ao salvar aba de orçamento de compra.');
-        }
       }
 
       setHasUnsavedChanges(false);
@@ -3312,105 +3457,558 @@ export function SalesBudgetForm() {
         </div>
       </>)}
 
-      {/* â•┬Éâ•┬Éâ•┬É COMPRA TAB â•┬Éâ•┬Éâ•┬É */}
-      {activeTab === 'compra' && (
+      {/* ─── COMERCIAL TAB ─── */}
+      {activeTab === 'comercial' && (
         <div className="space-y-6">
           <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
             <h2 className="font-semibold text-text-primary text-lg flex items-center gap-2">
-              <Package className="w-5 h-5 text-orange-500" />
-              Dados da Compra
+              <Receipt className="w-5 h-5 text-blue-500" />
+              Condições Comerciais
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-medium text-text-primary flex items-center gap-1.5">
-                    <Building2 className="w-4 h-4 text-text-muted" />
-                    Fornecedor
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickSupplierModalOpen(true)}
-                    className="text-xs text-brand-primary hover:text-brand-primary-hover font-medium flex items-center gap-1"
-                    disabled={isReadonly}
-                  >
-                    <Plus className="w-3 h-3" /> Novo
-                  </button>
-                </div>
+                <label className="block text-sm font-medium text-text-muted mb-1.5">Forma de Pagamento</label>
                 <select
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
-                  value={purchaseSupplierId}
-                  onChange={e => { setPurchaseSupplierId(e.target.value); setHasUnsavedChanges(true); }}
+                  value={formaPagamentoId}
+                  onChange={e => { setFormaPagamentoId(e.target.value); setHasUnsavedChanges(true); }}
                   disabled={isReadonly}
                 >
-                  <option value="">Selecione o Fornecedor...</option>
-                  {suppliers.map((s: any) => (
-                    <option key={s.id} value={s.id}>{s.nome_fantasia || s.razao_social}</option>
+                  <option value="">Selecione...</option>
+                  {salesFormasPagamento.map((fp) => (
+                    <option key={fp.id} value={fp.id}>{fp.descricao}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-text-muted mb-1.5">Tipo de Frete</label>
-                <div className="flex bg-bg-deep rounded-lg p-1 border border-border-subtle">
-                  <button type="button" onClick={() => { setPurchaseFreteTipo('FOB'); setHasUnsavedChanges(true); }} disabled={isReadonly}
-                    className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${purchaseFreteTipo === 'FOB' ? 'bg-surface text-text-primary shadow-sm border border-border-subtle/50' : 'text-text-muted hover:text-text-primary'}`}>FOB</button>
-                  <button type="button" onClick={() => { setPurchaseFreteTipo('CIF'); setHasUnsavedChanges(true); }} disabled={isReadonly}
-                    className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${purchaseFreteTipo === 'CIF' ? 'bg-blue-500 text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}>CIF</button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-text-muted mb-1.5">% Frete Fixo</label>
-                <div className="relative">
-                  <input type="number" step="0.01" min="0" value={purchaseFretePercent} onChange={e => { setPurchaseFretePercent(+e.target.value); setHasUnsavedChanges(true); }} disabled={isReadonly}
-                    className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 pl-8 disabled:opacity-60" />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-bold text-sm">%</span>
-                </div>
-              </div>
-
-              <div className="flex items-center pt-6">
-                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100">
-                  <input type="checkbox" checked={purchaseIpiCalculado} onChange={e => { setPurchaseIpiCalculado(e.target.checked); setHasUnsavedChanges(true); }} disabled={isReadonly}
-                    className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" />
-                  Calcular IPI na Base do ICMS
-                </label>
+                <label className="block text-sm font-medium text-text-muted mb-1.5">Data Inicial de Vencimento</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
+                  value={dataVencimentoInicial}
+                  onChange={e => { setDataVencimentoInicial(e.target.value); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly}
+                />
               </div>
             </div>
           </div>
 
           <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
-            <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex justify-between items-center">
               <div>
-                <h2 className="text-base font-semibold text-text-primary">Itens da Oportunidade</h2>
-                <p className="text-xs text-text-muted mt-0.5">Adicione os produtos manualmente ou importe via planilha.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = '/modelo_orcamento.xlsx';
-                  link.download = 'modelo_orcamento.xlsx';
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                }}>
-                  <Download className="w-4 h-4 mr-2 text-brand-primary" />
-                  Baixar Modelo Excel
-                </Button>
-                <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => setIsPurchaseImportModalOpen(true)}>
-                  <Upload className="w-4 h-4 mr-2 text-brand-primary" />
-                  Importar Planilha
-                </Button>
+                <h2 className="text-base font-semibold text-text-primary">
+                  {isReadonly ? "Planejamento Financeiro Consolidado" : "Simulação do Planejamento Financeiro"}
+                </h2>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {isReadonly 
+                    ? "Registros oficiais de contas a receber no financeiro" 
+                    : "Simulação das parcelas previstas com base na forma de pagamento e locações"}
+                </p>
               </div>
             </div>
 
-            <div className="p-6 pt-2">
-              <BudgetItemsGrid
-                items={purchaseItems}
-                onChange={(newItems: any[]) => { setPurchaseItems(newItems); setHasUnsavedChanges(true); }}
-                freteTipoCabecalho={purchaseFreteTipo}
-                fretePercentCabecalho={purchaseFretePercent}
-                ipiCalculado={purchaseIpiCalculado}
-              />
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-bg-subtle border-b border-border-subtle text-xs font-bold text-text-muted uppercase">
+                    <th className="px-6 py-3">Parcela</th>
+                    <th className="px-6 py-3">Descrição</th>
+                    <th className="px-6 py-3">Vencimento Previsto</th>
+                    <th className="px-6 py-3 text-right">Valor Previsto</th>
+                    <th className="px-6 py-3">Movimento</th>
+                    <th className="px-6 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {(isReadonly ? financialPlanning : simulatedInstallments).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-sm text-text-muted">
+                        Nenhuma parcela gerada. Selecione uma forma de pagamento ou adicione itens.
+                      </td>
+                    </tr>
+                  ) : (
+                    (isReadonly ? financialPlanning : simulatedInstallments).map((pf, idx) => (
+                      <tr key={idx} className="hover:bg-bg-deep transition-colors text-sm text-text-primary">
+                        <td className="px-6 py-3.5 font-medium">{pf.numero_parcela}</td>
+                        <td className="px-6 py-3.5">{pf.descricao}</td>
+                        <td className="px-6 py-3.5">
+                          {pf.data_prevista 
+                            ? new Date(pf.data_prevista + 'T12:00:00').toLocaleDateString('pt-BR') 
+                            : '-'}
+                        </td>
+                        <td className="px-6 py-3.5 text-right font-semibold text-brand-primary">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pf.valor_previsto)}
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                            {pf.tipo_movimento === 'RECEBIMENTO' ? 'Recebimento' : 'Pagamento'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pf.status === 'PREVISTO' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {pf.status === 'PREVISTO' ? 'Previsto' : 'Realizado'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ┬É┬É┬É COMPRA TAB ┬É┬É┬É */}
+      {activeTab === 'compra' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {!id ? (
+            <div className="bg-surface border border-border-subtle rounded-xl p-8 text-center shadow-sm">
+              <p className="text-text-secondary font-medium">
+                Por favor, salve os dados principais da oportunidade antes de lançar orçamentos de compra.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center bg-surface border border-border-subtle rounded-xl px-6 py-4 shadow-sm">
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary">Orçamentos de Fornecedores</h2>
+                  <p className="text-xs text-text-muted mt-0.5 font-sans">
+                    Gerencie múltiplos orçamentos de compra de fornecedores diferentes vinculados a esta oportunidade.
+                  </p>
+                </div>
+                <Button 
+                  onClick={() => {
+                    // Novo Orçamento: Limpar os estados
+                    setPurchaseBudgetId(null);
+                    setPurchaseSupplierId('');
+                    setPurchasePaymentConditionId('');
+                    setPurchaseFormaPagamentoId('');
+                    setPurchaseDataVencimentoInicial(new Date().toISOString().slice(0, 10));
+                    setPurchaseFreteTipo('FOB');
+                    setPurchaseFretePercent(0);
+                    setPurchaseIpiCalculado(false);
+                    setPurchaseNumeroOrcamento('');
+                    setPurchaseDataOrcamento(new Date().toISOString().slice(0, 10));
+                    setPurchaseTipoOrcamento('REVENDA');
+                    setPurchaseVendedorNome('');
+                    setPurchaseVendedorTelefone('');
+                    setPurchaseVendedorEmail('');
+                    setPurchaseItems([]);
+                    setShowPurchaseBudgetModal(true);
+                  }}
+                  variant="primary"
+                  className="bg-orange-500 hover:bg-orange-600 text-white border-0 flex items-center gap-1.5"
+                  disabled={isReadonly}
+                >
+                  <Plus className="w-4 h-4" />
+                  Lançar Orçamento
+                </Button>
+              </div>
+
+              {opportunityPurchaseBudgets.length === 0 ? (
+                <div className="bg-surface border border-border-subtle border-dashed rounded-xl p-12 text-center shadow-sm">
+                  <BadgeDollarSign className="w-12 h-12 text-orange-500/30 mx-auto mb-3" />
+                  <p className="text-text-secondary font-medium mb-1 font-sans">Nenhum orçamento de compra lançado.</p>
+                  <p className="text-text-muted text-sm max-w-sm mx-auto mb-6 font-sans">
+                    Lance orçamentos de fornecedores diferentes para compor os custos dos itens da oportunidade.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-bg-subtle text-text-muted font-medium border-b border-border-subtle">
+                        <tr>
+                          <th className="px-6 py-3 font-sans">Fornecedor</th>
+                          <th className="px-6 py-3 font-sans">Nº Orçamento</th>
+                          <th className="px-6 py-3 font-sans">Data</th>
+                          <th className="px-6 py-3 font-sans">Tipo</th>
+                          <th className="px-6 py-3 text-right font-sans">Valor Total</th>
+                          <th className="px-6 py-3 text-center font-sans">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle text-text-primary">
+                        {opportunityPurchaseBudgets.map((pb: any) => {
+                          const valorTotal = pb.items?.reduce((sum: number, item: any) => sum + (Number(item.total_item) || 0), 0) || 0;
+                          return (
+                            <tr key={pb.id} className="hover:bg-bg-deep/50 transition-colors">
+                              <td className="px-6 py-4 font-medium font-sans">
+                                {pb.supplier_nome_fantasia || pb.vendedor_nome || 'Fornecedor Manual'}
+                              </td>
+                              <td className="px-6 py-4 font-mono">{pb.numero_orcamento || '-'}</td>
+                              <td className="px-6 py-4 font-sans">
+                                {pb.data_orcamento ? new Date(pb.data_orcamento).toLocaleDateString('pt-BR') : '-'}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold font-sans ${pb.tipo_orcamento === 'REVENDA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {pb.tipo_orcamento === 'REVENDA' ? 'Revenda' : 'Uso/Consumo'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right font-semibold font-mono">
+                                {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <div className="flex items-center justify-center gap-3">
+                                  <button
+                                    onClick={() => {
+                                      // Carregar dados nos estados de edição
+                                      setPurchaseBudgetId(pb.id);
+                                      setPurchaseSupplierId(pb.supplier_id || '');
+                                      setPurchasePaymentConditionId(pb.payment_condition_id || '');
+                                      setPurchaseFormaPagamentoId(pb.forma_pagamento_id || '');
+                                      setPurchaseDataVencimentoInicial(pb.data_vencimento_inicial ? pb.data_vencimento_inicial.slice(0, 10) : '');
+                                      setPurchaseFreteTipo(pb.frete_tipo || 'FOB');
+                                      setPurchaseFretePercent(pb.frete_percent || 0);
+                                      setPurchaseIpiCalculado(Boolean(pb.ipi_calculado));
+                                      setPurchaseNumeroOrcamento(pb.numero_orcamento || '');
+                                      setPurchaseDataOrcamento(pb.data_orcamento ? pb.data_orcamento.slice(0, 10) : '');
+                                      setPurchaseTipoOrcamento(pb.tipo_orcamento || 'REVENDA');
+                                      setPurchaseVendedorNome(pb.vendedor_nome || '');
+                                      setPurchaseVendedorTelefone(pb.vendedor_telefone || '');
+                                      setPurchaseVendedorEmail(pb.vendedor_email || '');
+                                      setPurchaseItems(
+                                        (pb.items || []).map((i: any) => ({
+                                          product_id: i.product_id,
+                                          product_nome: i.product?.nome || '',
+                                          product_codigo: i.product?.codigo || '',
+                                          codigo_fornecedor: i.codigo_fornecedor || '',
+                                          ncm: i.ncm || '',
+                                          quantidade: Number(i.quantidade) || 1,
+                                          valor_unitario: Number(i.valor_unitario) || 0,
+                                          frete_percent: Number(i.frete_percent) || 0,
+                                          ipi_percent: Number(i.ipi_percent) || 0,
+                                          icms_percent: Number(i.icms_percent) || 0,
+                                          frete_valor: Number(i.frete_valor) || 0,
+                                          ipi_valor: Number(i.ipi_valor) || 0,
+                                          total_item: Number(i.total_item) || 0
+                                        }))
+                                      );
+                                      setShowPurchaseBudgetModal(true);
+                                    }}
+                                    className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"
+                                    title="Editar Orçamento"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePurchaseBudget(pb.id)}
+                                    className="p-1 hover:bg-red-50 rounded transition-colors text-red-400 hover:text-red-600"
+                                    title="Excluir Orçamento"
+                                    disabled={isReadonly}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Purchase Budget Edit Modal */}
+      {showPurchaseBudgetModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
+              <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2 font-display">
+                <BadgeDollarSign className="w-5 h-5 text-orange-500" />
+                {purchaseBudgetId ? 'Editar Orçamento de Compra' : 'Novo Orçamento de Compra'}
+              </h3>
+              <button 
+                onClick={() => {
+                  if (confirm("Deseja realmente fechar o orçamento? Qualquer alteração não salva será perdida.")) {
+                    setShowPurchaseBudgetModal(false);
+                  }
+                }} 
+                className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 bg-bg-deep space-y-6">
+              {/* Bloco 1: Dados do Orçamento */}
+              <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+                <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex items-center gap-2">
+                  <BadgeDollarSign className="w-5 h-5 text-orange-500" />
+                  <h2 className="text-base font-semibold text-text-primary font-sans">Dados do Orçamento</h2>
+                </div>
+                
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Nº do Orçamento</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      placeholder="Ex: ORC-2023-001"
+                      value={purchaseNumeroOrcamento} 
+                      onChange={e => setPurchaseNumeroOrcamento(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Data do Orçamento</label>
+                    <input 
+                      type="date" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      value={purchaseDataOrcamento} 
+                      onChange={e => setPurchaseDataOrcamento(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-medium text-text-primary flex items-center gap-1.5 font-sans">
+                        <Building2 className="h-4 w-4 text-text-muted" />
+                        Fornecedor
+                      </label>
+                      <button 
+                        type="button"
+                        onClick={() => setIsQuickSupplierModalOpen(true)}
+                        className="text-xs text-brand-primary hover:text-brand-primary-hover font-medium flex items-center gap-1 font-sans"
+                        disabled={isReadonly}
+                      >
+                        <Plus className="w-3 h-3" /> Novo
+                      </button>
+                    </div>
+                    <select 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      value={purchaseSupplierId} 
+                      onChange={e => setPurchaseSupplierId(e.target.value)}
+                      disabled={isReadonly}
+                    >
+                      <option value="">Selecione um fornecedor...</option>
+                      {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.razao_social || s.nome_fantasia}</option>)}
+                    </select>
+                  </div>
+                  
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Tipo de Orçamento</label>
+                    <select 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      value={purchaseTipoOrcamento} 
+                      onChange={e => setPurchaseTipoOrcamento(e.target.value as any)}
+                      disabled={isReadonly}
+                    >
+                      <option value="REVENDA">Revenda (Mercadoria para Comercialização)</option>
+                      <option value="ATIVO_IMOBILIZADO_USO_CONSUMO">Ativo Imobilizado / Uso e Consumo</option>
+                    </select>
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Forma de Pagamento</label>
+                    <select 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      value={purchaseFormaPagamentoId} 
+                      onChange={e => setPurchaseFormaPagamentoId(e.target.value)}
+                      disabled={isReadonly}
+                    >
+                      <option value="">Selecione...</option>
+                      {purchaseFormasPagamento.map((fp: any) => <option key={fp.id} value={fp.id}>{fp.descricao}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Data Inicial de Vencimento</label>
+                    <input 
+                      type="date" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      value={purchaseDataVencimentoInicial} 
+                      onChange={e => setPurchaseDataVencimentoInicial(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 2: Contato Comercial */}
+              <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+                <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex items-center gap-2">
+                  <UserSquare2 className="w-5 h-5 text-orange-500" />
+                  <h2 className="text-base font-semibold text-text-primary font-sans">Contato Comercial (Vendedor)</h2>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Nome do Vendedor</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      placeholder="Ex: João Silva" 
+                      value={purchaseVendedorNome} 
+                      onChange={e => setPurchaseVendedorNome(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Telefone</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      placeholder="(00) 00000-0000" 
+                      value={purchaseVendedorTelefone} 
+                      onChange={e => setPurchaseVendedorTelefone(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">E-mail</label>
+                    <input 
+                      type="email" 
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                      placeholder="joao@fornecedor.com.br" 
+                      value={purchaseVendedorEmail} 
+                      onChange={e => setPurchaseVendedorEmail(e.target.value)} 
+                      disabled={isReadonly}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 3: Impostos e Logística */}
+              <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+                <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex items-center gap-2">
+                  <TruckIcon className="w-5 h-5 text-orange-500" />
+                  <h2 className="text-base font-semibold text-text-primary font-sans">Impostos e Logística</h2>
+                </div>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Tipo de frete</label>
+                      <select 
+                        className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
+                        value={purchaseFreteTipo} 
+                        onChange={e => setPurchaseFreteTipo(e.target.value as any)}
+                        disabled={isReadonly}
+                      >
+                        <option value="FOB font-sans">FOB (Comprador paga)</option>
+                        <option value="CIF font-sans">CIF (Fornecedor paga)</option>
+                      </select>
+                      <p className="text-xs text-text-muted mt-1 font-sans">
+                        {purchaseFreteTipo === 'FOB' ? 'O frete será somado ao custo.' : 'O frete já está incluso no preço do produto.'}
+                      </p>
+                    </div>
+                    
+                    {purchaseFreteTipo === 'FOB' && (
+                      <div className="animate-in fade-in slide-in-from-top-1">
+                        <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">Frete Fixo (%) Rateio Geral</label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 pr-8 disabled:opacity-60" 
+                            placeholder="0.00"
+                            value={purchaseFretePercent} 
+                            onChange={e => setPurchaseFretePercent(parseFloat(e.target.value) || 0)} 
+                            disabled={isReadonly}
+                          />
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
+                            %
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-border-subtle">
+                     <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100 font-sans">
+                       <input 
+                         type="checkbox" 
+                         checked={purchaseIpiCalculado} 
+                         onChange={e => setPurchaseIpiCalculado(e.target.checked)} 
+                         disabled={isReadonly}
+                         className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" 
+                       />
+                       IPI Incluso na Base? (Somar IPI no total)
+                     </label>
+                     
+                     {purchaseTipoOrcamento === 'REVENDA' && (
+                       <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100 animate-in fade-in font-sans">
+                          <input 
+                            type="checkbox" 
+                            checked={purchaseCriarCenarioDifal} 
+                            onChange={e => setPurchaseCriarCenarioDifal(e.target.checked)} 
+                            disabled={isReadonly}
+                            className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" 
+                          />
+                          Criar Cenário DIFAL
+                       </label>
+                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 4: Itens */}
+              <div className="bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+                <div className="bg-bg-subtle px-6 py-4 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-text-primary font-sans">Itens do Orçamento</h2>
+                    <p className="text-xs text-text-muted mt-0.5 font-sans">Adicione os produtos manualmente ou importe via planilha.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = '/modelo_orcamento.xlsx';
+                      link.download = 'modelo_orcamento.xlsx';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}>
+                      <Download className="w-4 h-4 mr-2 text-brand-primary" />
+                      Baixar Modelo Excel
+                    </Button>
+                    <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => setIsPurchaseImportModalOpen(true)}>
+                      <Upload className="w-4 h-4 mr-2 text-brand-primary" />
+                      Importar Planilha
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-6 pt-2">
+                  <BudgetItemsGrid
+                    items={purchaseItems}
+                    onChange={(newItems: any[]) => setPurchaseItems(newItems)}
+                    freteTipoCabecalho={purchaseFreteTipo}
+                    fretePercentCabecalho={purchaseFretePercent}
+                    ipiCalculado={purchaseIpiCalculado}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-border-subtle bg-bg-surface flex justify-end gap-3 shrink-0">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  if (confirm("Deseja realmente fechar o orçamento? Qualquer alteração não salva será perdida.")) {
+                    setShowPurchaseBudgetModal(false);
+                  }
+                }} 
+                disabled={savingPurchaseBudget}
+                className="font-sans"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSavePurchaseBudget} 
+                disabled={savingPurchaseBudget || isReadonly} 
+                className="bg-orange-500 hover:bg-orange-600 text-white border-0 flex items-center gap-1.5 font-sans font-semibold"
+              >
+                {savingPurchaseBudget ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar Orçamento
+              </Button>
             </div>
           </div>
         </div>
@@ -3538,6 +4136,7 @@ export function SalesBudgetForm() {
           onOpenChange={setShowAddRentalItemModal}
           defaultInstalacaoPct={rentalDefaults.perc_instalacao_padrao || 0}
           onConfirm={handleAddRentalItem}
+          salesBudgetId={id}
         />
       )}
       {/* Kit Search Modal - Rental */}

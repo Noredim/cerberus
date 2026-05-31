@@ -11,9 +11,10 @@ interface AddRentalItemModalProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: (item: any) => void;
   defaultInstalacaoPct: number;
+  salesBudgetId?: string;
 }
 
-export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInstalacaoPct }: AddRentalItemModalProps) {
+export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInstalacaoPct, salesBudgetId }: AddRentalItemModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,7 +74,8 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
       }
       setLoadingCost(true);
       try {
-        const res = await api.get(`/sales-budgets/product-cost-composition/${selectedProduct.id}?tipo=USO_CONSUMO`);
+        const url = `/sales-budgets/product-cost-composition/${selectedProduct.id}?tipo=USO_CONSUMO` + (salesBudgetId ? `&sales_budget_id=${salesBudgetId}` : '');
+        const res = await api.get(url);
         setCostComp(res.data);
       } catch (error) {
         console.error('Error fetching cost composition', error);
@@ -82,7 +84,7 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
       }
     }
     loadCost();
-  }, [selectedProduct]);
+  }, [selectedProduct, salesBudgetId]);
 
   const handleProductSelect = (p: any) => {
     setSelectedProduct(p);

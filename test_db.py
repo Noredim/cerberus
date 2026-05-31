@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from src.modules.opportunity_kits.models import OpportunityKit
 from src.modules.opportunity_kits.service import OpportunityKitService
 
-engine = create_engine("postgresql://postgres:postgres@localhost:5432/cerberus")
+engine = create_engine("postgresql://cerberus_user:cerberus_password@localhost:5433/cerberus")
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 db = SessionLocal()
 

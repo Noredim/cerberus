@@ -25,6 +25,8 @@ export function BudgetForm() {
   const [vendedorEmail, setVendedorEmail] = useState('');
   const [tipoOrcamento, setTipoOrcamento] = useState<'ATIVO_IMOBILIZADO_USO_CONSUMO' | 'REVENDA'>('REVENDA');
   const [supplierId, setSupplierId] = useState('');
+  const [formaPagamentoId, setFormaPagamentoId] = useState('');
+  const [dataVencimentoInicial, setDataVencimentoInicial] = useState(new Date().toISOString().slice(0, 10));
   const [freteTipo, setFreteTipo] = useState<'CIF' | 'FOB'>('FOB');
   const [fretePercent, setFretePercent] = useState<number>(0);
   const [ipiCalculado, setIpiCalculado] = useState<boolean>(true);
@@ -41,14 +43,18 @@ export function BudgetForm() {
 
   // Carregar dados auxiliares
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [formasPagamento, setFormasPagamento] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadAuxData() {
       try {
-        const [supRes] = await Promise.all([
-          api.get('/cadastro/fornecedores', { params: { limit: 100 } })
+        const [supRes, fpRes] = await Promise.all([
+          api.get('/cadastro/fornecedores', { params: { limit: 100 } }),
+          api.get('/cadastro/formas-pagamento')
         ]);
         setSuppliers(supRes.data);
+        const activeFps = (fpRes.data || []).filter((fp: any) => fp.ativo && (fp.tipo_uso === 'COMPRA' || fp.tipo_uso === 'AMBOS'));
+        setFormasPagamento(activeFps);
       } catch (err) {
         console.error('Error loading aux data', err);
       }
@@ -78,6 +84,8 @@ export function BudgetForm() {
       setFreteTipo(b.frete_tipo || 'FOB');
       setFretePercent(b.frete_percent || 0);
       setIpiCalculado(Boolean(b.ipi_calculado));
+      setFormaPagamentoId(b.forma_pagamento_id || '');
+      setDataVencimentoInicial(b.data_vencimento_inicial ? new Date(b.data_vencimento_inicial).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
 
       if (b.items && b.items.length > 0) {
         setItems(b.items.map((item: any) => ({
@@ -122,7 +130,8 @@ export function BudgetForm() {
       vendedor_email: vendedorEmail,
       tipo_orcamento: tipoOrcamento,
       supplier_id: supplierId || null,
-      payment_condition_id: null,
+      forma_pagamento_id: formaPagamentoId || null,
+      data_vencimento_inicial: dataVencimentoInicial || null,
       frete_tipo: freteTipo,
       frete_percent: round4(fretePercent),
       ipi_calculado: ipiCalculado,
@@ -281,6 +290,19 @@ export function BudgetForm() {
                 <option value="REVENDA">Revenda (Mercadoria para Comercialização)</option>
                 <option value="ATIVO_IMOBILIZADO_USO_CONSUMO">Ativo Imobilizado / Uso e Consumo</option>
               </select>
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-text-primary mb-1.5">Forma de Pagamento</label>
+              <select className="input-primary w-full" value={formaPagamentoId} onChange={e => setFormaPagamentoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {formasPagamento.map(fp => <option key={fp.id} value={fp.id}>{fp.descricao}</option>)}
+              </select>
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-text-primary mb-1.5">Data Inicial de Vencimento</label>
+              <input type="date" className="input-primary w-full" value={dataVencimentoInicial} onChange={e => setDataVencimentoInicial(e.target.value)} />
             </div>
           </div>
         </div>

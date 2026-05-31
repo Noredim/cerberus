@@ -33,6 +33,7 @@ def create_product(
 def list_products(
     q: Optional[str] = Query(None),
     tipo: Optional[str] = Query(None),
+    sales_budget_id: Optional[UUID] = Query(None),
     skip: int = Query(0),
     limit: int = Query(100),
     db: Session = Depends(get_db),
@@ -40,7 +41,7 @@ def list_products(
     company_id: str = Depends(get_active_company)
 ):
     service = ProductService(db)
-    return service.list_products(current_user.tenant_id, q, tipo, skip, limit, company_id)
+    return service.list_products(current_user.tenant_id, q, tipo, skip, limit, company_id, sales_budget_id)
 
 @router.get("/mva-preview", response_model=MvaLookupResult)
 def preview_mva(

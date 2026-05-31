@@ -1,10 +1,11 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Numeric, Text, Integer
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.professionals.models
+import src.modules.payment_methods.models
 
 
 class SalesBudget(Base):
@@ -15,6 +16,9 @@ class SalesBudget(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id = Column(String, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     vendedor_id = Column(String, ForeignKey("professionals.id", ondelete="SET NULL"), nullable=True, index=True)
+    forma_pagamento_id = Column(UUID(as_uuid=True), ForeignKey("formas_pagamento.id", ondelete="SET NULL"), nullable=True, index=True)
+    data_vencimento_inicial = Column(DateTime(timezone=True), nullable=True)
+    forma_pagamento_snapshot = Column(JSONB, nullable=True)
 
     numero_orcamento = Column(String(50), nullable=True)
     titulo = Column(String(255), nullable=False)
@@ -67,6 +71,7 @@ class SalesBudget(Base):
     company = relationship("Company")
     customer = relationship("Customer")
     vendedor = relationship("Professional")
+    forma_pagamento = relationship("FormaPagamento")
     items = relationship("SalesBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     rental_items = relationship("RentalBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     responsaveis = relationship("SalesBudgetResponsavel", back_populates="budget", cascade="all, delete-orphan")

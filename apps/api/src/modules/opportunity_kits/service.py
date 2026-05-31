@@ -18,38 +18,78 @@ class OpportunityKitService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_product_info(self, product_id: str, tenant_id: str, tipo_contrato: Optional[str] = None, company_id: Optional[str] = None) -> dict:
+    def get_product_info(self, product_id: str, tenant_id: str, considerar_st_ou_difal: str = "DIFAL", company_id: Optional[str] = None, sales_budget_id: Optional[str] = None) -> dict:
         from src.modules.sales_budgets.service import calculate_product_cost_composition
 
-        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, "REVENDA" if tipo_contrato == "VENDA_EQUIPAMENTOS" else "USO_CONSUMO", sales_company_id=company_id)
+        tipo_calc = "REVENDA" if considerar_st_ou_difal == "ST" else "USO_CONSUMO"
+        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, tipo_calc, sales_company_id=company_id, sales_budget_id=sales_budget_id)
         if not comp:
             product = self.db.query(Product).filter(
                 Product.id == product_id,
                 Product.tenant_id == tenant_id
             ).first()
             if not product:
-                return {"cost": Decimal("0.0"), "tipo": "MERCADORIA", "difal": Decimal("0.0"), "icms_st": Decimal("0.0")}
-            custo_base = getattr(product, "vlr_referencia_revenda", 0) if tipo_contrato == "VENDA_EQUIPAMENTOS" else getattr(product, "vlr_referencia_uso_consumo", 0)
+                return {
+                    "cost": Decimal("0.0"),
+                    "tipo": "MERCADORIA",
+                    "difal": Decimal("0.0"),
+                    "icms_st": Decimal("0.0"),
+                    "base_unitario": Decimal("0.0"),
+                    "ipi": Decimal("0.0"),
+                    "frete_cif": Decimal("0.0"),
+                    "tem_st": False,
+                    "perfil_st_ativo": True,
+                    "icms_abatido_unit": Decimal("0.0"),
+                    "ipi_percent": 0.0,
+                    "icms_st_normal": Decimal("0.0"),
+                    "cred_outorgado_percent": 0.0,
+                    "cred_outorgado_valor": Decimal("0.0"),
+                    "is_bit": False,
+                    "is_intrastate": True,
+                    "uf_origem": "",
+                    "uf_destino": "",
+                    "custo_unit_final": Decimal("0.0"),
+                }
+            custo_base = getattr(product, "vlr_referencia_revenda", 0) if considerar_st_ou_difal == "ST" else getattr(product, "vlr_referencia_uso_consumo", 0)
+            tipo = product.tipo or "MERCADORIA"
+            difal_val = Decimal("0.0") if (tipo in ["SERVICO", "LICENCA"] or considerar_st_ou_difal != "DIFAL") else Decimal(getattr(product, "vlr_referencia_difal", 0) or 0)
             return {
                 "cost": Decimal(custo_base or 0),
-                "tipo": product.tipo or "MERCADORIA",
-                "difal": Decimal(getattr(product, "vlr_referencia_difal", 0) or 0),
-                "icms_st": Decimal("0.0")
+                "tipo": tipo,
+                "base_unitario": Decimal(custo_base or 0),
+                "ipi": Decimal("0.0"),
+                "frete_cif": Decimal("0.0"),
+                "difal": difal_val,
+                "icms_st": Decimal("0.0"),
+                "tem_st": False,
+                "perfil_st_ativo": True,
+                "icms_abatido_unit": Decimal("0.0"),
+                "ipi_percent": 0.0,
+                "icms_st_normal": Decimal("0.0"),
+                "cred_outorgado_percent": 0.0,
+                "cred_outorgado_valor": Decimal("0.0"),
+                "is_bit": False,
+                "is_intrastate": True,
+                "uf_origem": "",
+                "uf_destino": "",
+                "custo_unit_final": Decimal(custo_base or 0),
             }
 
         product = self.db.query(Product).filter(Product.id == product_id).first()
         tipo = product.tipo if product else "MERCADORIA"
 
-        if tipo_contrato == "VENDA_EQUIPAMENTOS":
+        if considerar_st_ou_difal == "ST":
             if tipo in ["SERVICO", "LICENCA"]:
                 custo_base = Decimal(comp.get("base_unitario", 0))
                 icms_st = Decimal("0.0")
             else:
                 custo_base = Decimal(comp.get("custo_unit_final", 0))
                 icms_st = Decimal(comp.get("icms_st_final", 0))
+            difal_val = Decimal("0.0")
         else:
             custo_base = Decimal(comp.get("custo_unit_final", 0))
             icms_st = Decimal("0.0")
+            difal_val = Decimal("0.0") if tipo in ["SERVICO", "LICENCA"] else Decimal(comp.get("difal_unitario", 0))
 
         return {
             "cost": custo_base,
@@ -57,11 +97,20 @@ class OpportunityKitService:
             "base_unitario": Decimal(comp.get("base_unitario", 0)),
             "ipi": Decimal(comp.get("ipi_unitario", 0)),
             "frete_cif": Decimal(comp.get("frete_cif_unitario", 0)),
-            "difal": Decimal(comp.get("difal_unitario", 0)),
+            "difal": difal_val,
             "icms_st": icms_st,
             "tem_st": icms_st > 0 or bool(comp.get("has_st", False)),
             "perfil_st_ativo": comp.get("perfil_st_ativo", True),
-            "icms_abatido_unit": Decimal(comp.get("icms_abatido", 0))
+            "icms_abatido_unit": Decimal(comp.get("icms_abatido", 0)),
+            "ipi_percent": float(comp.get("ipi_percent", 0.0)),
+            "icms_st_normal": Decimal(comp.get("icms_st_normal", 0.0)),
+            "cred_outorgado_percent": float(comp.get("cred_outorgado_percent", 0.0)),
+            "cred_outorgado_valor": Decimal(comp.get("cred_outorgado_valor", 0.0)),
+            "is_bit": bool(comp.get("is_bit", False)),
+            "is_intrastate": bool(comp.get("is_intrastate", True)),
+            "uf_origem": comp.get("uf_origem", ""),
+            "uf_destino": comp.get("uf_destino", ""),
+            "custo_unit_final": Decimal(comp.get("custo_unit_final", custo_base))
         }
 
     def calculate_financials(self, kit: OpportunityKit, tenant_id: str) -> dict:
@@ -232,6 +281,8 @@ class OpportunityKitService:
         custo_aquisicao_produtos = Decimal("0.0")
         custo_aquisicao_servicos = Decimal("0.0")
         total_difal_kit = Decimal("0.0")
+        total_st_kit = Decimal("0.0")
+        total_ipi_kit = Decimal("0.0")
         
         fator_margem = Decimal(str(kit.fator_margem_locacao or 1))
 
@@ -306,7 +357,8 @@ class OpportunityKitService:
                                     custo_base_unitario_item = dyn_total
             else:
                 if item.product_id:
-                    info = self.get_product_info(str(item.product_id), tenant_id, str(kit.tipo_contrato) if kit.tipo_contrato else None, company_id)
+                    tax_mode = "ST" if (kit.tipo_contrato == "VENDA_EQUIPAMENTOS" or getattr(kit, "considerar_st_ou_difal", "DIFAL") == "ST") else "DIFAL"
+                    info = self.get_product_info(str(item.product_id), tenant_id, tax_mode, company_id, sales_budget_id=str(sales_budget.id) if sales_budget else None)
                 else:
                     info = {
                         "cost": Decimal("0.0"),
@@ -318,7 +370,16 @@ class OpportunityKitService:
                         "icms_st": Decimal("0.0"),
                         "tem_st": False,
                         "perfil_st_ativo": False,
-                        "icms_abatido_unit": Decimal("0.0")
+                        "icms_abatido_unit": Decimal("0.0"),
+                        "ipi_percent": 0.0,
+                        "icms_st_normal": Decimal("0.0"),
+                        "cred_outorgado_percent": 0.0,
+                        "cred_outorgado_valor": Decimal("0.0"),
+                        "is_bit": False,
+                        "is_intrastate": True,
+                        "uf_origem": "",
+                        "uf_destino": "",
+                        "custo_unit_final": Decimal("0.0")
                     }
                 custo_base_unitario_item = Decimal(str(info["cost"]))
                 tipo_produto = info["tipo"]
@@ -329,9 +390,12 @@ class OpportunityKitService:
             custo_total_item_no_kit = custo_base_unitario_item * Decimal(str(item.quantidade_no_kit or 1))
             difal_total_item = difal_unitario * Decimal(str(item.quantidade_no_kit or 1))
             icms_st_total = icms_st * Decimal(str(item.quantidade_no_kit or 1))
+            ipi_total = Decimal(str(info.get("ipi", 0.0))) * Decimal(str(item.quantidade_no_kit or 1))
             
             custo_aquisicao_kit += custo_total_item_no_kit
             total_difal_kit += difal_total_item
+            total_st_kit += icms_st_total
+            total_ipi_kit += ipi_total
             credito_icms_compra_total += icms_abatido_unit * Decimal(str(item.quantidade_no_kit or 1))
             
             if tipo_produto in ["SERVICO", "LICENCA"]:
@@ -413,6 +477,15 @@ class OpportunityKitService:
                 "frete_cif_unit": round(info.get("frete_cif", 0), 2),  # type: ignore
                 "tem_st": info.get("tem_st", False),
                 "perfil_st_ativo": info.get("perfil_st_ativo", True),
+                "ipi_percent": info.get("ipi_percent", 0.0),
+                "icms_st_normal": round(info.get("icms_st_normal", 0), 2),
+                "cred_outorgado_percent": info.get("cred_outorgado_percent", 0.0),
+                "cred_outorgado_valor": round(info.get("cred_outorgado_valor", 0), 2),
+                "is_bit": info.get("is_bit", False),
+                "is_intrastate": info.get("is_intrastate", True),
+                "uf_origem": info.get("uf_origem", ""),
+                "uf_destino": info.get("uf_destino", ""),
+                "custo_unit_final": round(info.get("custo_unit_final", custo_base_unitario_item), 2),
                 "perc_pis": float(str(kit.aliq_pis or 0)),
                 "perc_cofins": float(str(kit.aliq_cofins or 0)),
                 "perc_csll": float(str(kit.aliq_csll or 0)),
@@ -728,6 +801,8 @@ class OpportunityKitService:
                 "custo_aquisicao_servicos": round(custo_aquisicao_servicos, 2),  # type: ignore
                 "custo_aquisicao_total": round(custo_aquisicao_total, 2),  # type: ignore
                 "total_difal_kit": round(total_difal_kit, 2),  # type: ignore
+                "total_st_kit": round(total_st_kit, 2),  # type: ignore
+                "total_ipi_kit": round(total_ipi_kit, 2),  # type: ignore
                 "custo_total_mensal_kit": round(custo_total_mensal_kit, 2),  # type: ignore
                 "tx_locacao": round(tx_locacao, 6),  # type: ignore
                 "vlr_instal_calc": round(vlr_instal_calc, 2),  # type: ignore

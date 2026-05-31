@@ -151,11 +151,12 @@ def check_st(
 def get_product_cost_composition(
     product_id: str,
     tipo: str = "REVENDA",
+    sales_budget_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Return the full cost composition breakdown for a product."""
-    res = service.calculate_product_cost_composition(db, product_id, current_user.tenant_id, tipo)
+    res = service.calculate_product_cost_composition(db, product_id, current_user.tenant_id, tipo, sales_budget_id=sales_budget_id)
     if not res:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return res
@@ -173,7 +174,7 @@ def create_budget(
     budget = service.create_budget(
         db, current_user.tenant_id, company_id, data
     )
-    return _budget_to_dict(budget)
+    return _budget_to_dict(budget, db)
 
 
 @router.get("/{budget_id}")
@@ -185,7 +186,7 @@ def get_budget(
     budget = service.get_budget(db, current_user.tenant_id, str(budget_id))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
-    return _budget_to_dict(budget)
+    return _budget_to_dict(budget, db)
 
 
 @router.put("/{budget_id}")
@@ -201,7 +202,7 @@ def update_budget(
         raise HTTPException(status_code=400, detail=str(e))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
-    return _budget_to_dict(budget)
+    return _budget_to_dict(budget, db)
 
 
 @router.patch("/{budget_id}/header")
@@ -214,7 +215,7 @@ def update_header(
     budget = service.update_header(db, current_user.tenant_id, str(budget_id), data)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
-    return _budget_to_dict(budget)
+    return _budget_to_dict(budget, db)
 
 
 @router.patch("/{budget_id}/status")
@@ -239,7 +240,7 @@ def duplicate_budget(
     budget = service.duplicate_budget(db, current_user.tenant_id, str(budget_id))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
-    return _budget_to_dict(budget)
+    return _budget_to_dict(budget, db)
 
 
 @router.delete("/{budget_id}")
@@ -254,7 +255,7 @@ def delete_budget(
     return {"message": "Orçamento excluído com sucesso"}
 
 
-def _budget_to_dict(budget) -> dict:
+def _budget_to_dict(budget, db: Session = None) -> dict:
     """Serialize budget to response dict."""
     items = []
     for i in budget.items:
@@ -349,12 +350,34 @@ def _budget_to_dict(budget) -> dict:
             "margem": float(ri.margem or 0),
         })
 
+    planning = []
+    if db:
+        from src.modules.payment_methods.models import PlanejamentoFinanceiro
+        planning_rows = db.query(PlanejamentoFinanceiro).filter(
+            PlanejamentoFinanceiro.origem_id == budget.id,
+            PlanejamentoFinanceiro.origem_tipo == 'SALES_BUDGET'
+        ).order_by(PlanejamentoFinanceiro.data_prevista.asc(), PlanejamentoFinanceiro.numero_parcela.asc()).all()
+        for p in planning_rows:
+            planning.append({
+                "id": str(p.id),
+                "numero_parcela": p.numero_parcela,
+                "descricao": p.descricao,
+                "data_prevista": p.data_prevista.isoformat() if p.data_prevista else None,
+                "valor_previsto": float(p.valor_previsto),
+                "tipo_movimento": p.tipo_movimento,
+                "status": p.status
+            })
+
     return {
         "id": budget.id,
         "tenant_id": budget.tenant_id,
         "company_id": budget.company_id,
         "customer_id": budget.customer_id,
         "vendedor_id": str(budget.vendedor_id) if budget.vendedor_id else None,
+        "forma_pagamento_id": str(budget.forma_pagamento_id) if budget.forma_pagamento_id else None,
+        "data_vencimento_inicial": budget.data_vencimento_inicial.isoformat() if budget.data_vencimento_inicial else None,
+        "forma_pagamento_snapshot": budget.forma_pagamento_snapshot,
+        "financial_planning": planning,
         "numero_orcamento": budget.numero_orcamento,
         "titulo": budget.titulo,
         "observacoes": budget.observacoes,

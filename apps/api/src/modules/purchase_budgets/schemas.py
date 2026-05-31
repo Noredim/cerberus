@@ -27,28 +27,6 @@ class ProductSupplierLinkCreate(BaseModel):
     product_id: UUID
     codigo_fornecedor: str
 
-class PaymentConditionBase(BaseModel):
-    descricao: str
-    prazo: int = 0
-    parcelas: int = 1
-
-    @model_validator(mode='before')
-    @classmethod
-    def uppercase_all(cls, data):
-        return _uppercase_strings(data) if isinstance(data, dict) else data
-
-class PaymentConditionCreate(PaymentConditionBase):
-    pass
-
-class PaymentConditionOut(PaymentConditionBase):
-    id: UUID
-    tenant_id: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 # --- Items ---
 class PurchaseBudgetItemBase(BaseModel):
     product_id: UUID
@@ -118,7 +96,9 @@ class PurchaseBudgetNegotiationOut(PurchaseBudgetNegotiationBase):
 class PurchaseBudgetBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     supplier_id: str
-    payment_condition_id: Optional[UUID] = None
+    forma_pagamento_id: Optional[UUID] = None
+    data_vencimento_inicial: Optional[datetime] = None
+    forma_pagamento_snapshot: Optional[dict] = None
     sales_budget_id: Optional[UUID] = None
     numero_orcamento: Optional[str] = None
     data_orcamento: datetime

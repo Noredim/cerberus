@@ -21,6 +21,7 @@ interface AddOperationalCostModalProps {
   disabledOwnServices?: boolean;
   kitFormaExecucao?: string;
   isKitItemFlow?: boolean;
+  salesBudgetId?: string;
 }
 
 const COST_TYPES = [
@@ -40,7 +41,17 @@ const EXEC_MAP: Record<string, string> = {
 };
 const execOptions = Object.keys(EXEC_MAP);
 
-export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultType, isKitBasedExecucao, disabledOwnServices, kitFormaExecucao, isKitItemFlow }: AddOperationalCostModalProps) {
+export function AddOperationalCostModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  defaultType, 
+  isKitBasedExecucao, 
+  disabledOwnServices, 
+  kitFormaExecucao, 
+  isKitItemFlow,
+  salesBudgetId 
+}: AddOperationalCostModalProps) {
   const [tipoItem, setTipoItem] = useState<'PRODUTO' | 'SERVICO_PROPRIO'>('PRODUTO');
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -82,17 +93,31 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
 
   // Handle Search Input Change
   useEffect(() => {
-    if (selectedProduct) return;
+    if (!isOpen || selectedProduct) return;
     const delayDebounceFn = setTimeout(() => {
       async function fetchData() {
-        if (!searchTerm || searchTerm.trim().length < 2) {
-          setResults([]);
-          return;
+        if (tipoItem === 'PRODUTO') {
+          if (!salesBudgetId && (!searchTerm || searchTerm.trim().length < 2)) {
+            setResults([]);
+            return;
+          }
+        } else {
+          if (!searchTerm || searchTerm.trim().length < 2) {
+            setResults([]);
+            return;
+          }
         }
         setIsSearching(true);
         try {
           if (tipoItem === 'PRODUTO') {
-            const res = await api.get('/cadastro/produtos', { params: { q: searchTerm, limit: 50 } });
+            const params: any = { limit: 100 };
+            if (searchTerm && searchTerm.trim().length >= 2) {
+              params.q = searchTerm;
+            }
+            if (salesBudgetId) {
+              params.sales_budget_id = salesBudgetId;
+            }
+            const res = await api.get('/cadastro/produtos', { params });
             const filtered = res.data.filter((p: any) => p.tipo === 'SERVICO' || p.tipo === 'LICENCA').slice(0, 20);
             setResults(filtered);
           } else {
@@ -112,7 +137,7 @@ export function AddOperationalCostModal({ isOpen, onClose, onConfirm, defaultTyp
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, selectedProduct, tipoItem]);
+  }, [searchTerm, selectedProduct, tipoItem, salesBudgetId, isOpen]);
 
   const handleSelectItem = async (item: any) => {
     if (tipoItem === 'PRODUTO') {

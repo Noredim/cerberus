@@ -58,6 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'NCM ST', path: '/cadastros/ncm-st' },
                 { label: 'Produtos', path: '/cadastro/produtos' },
                 { label: 'Benefícios fiscais', path: '/beneficios' },
+                { label: 'Formas de Pagamento', path: '/cadastros/formas-pagamento' },
             ]
         },
         {

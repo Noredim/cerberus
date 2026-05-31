@@ -488,6 +488,9 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         company_id=company_id,
         customer_id=data.customer_id,
         vendedor_id=data.vendedor_id,
+        forma_pagamento_id=data.forma_pagamento_id,
+        data_vencimento_inicial=data.data_vencimento_inicial,
+        forma_pagamento_snapshot=data.forma_pagamento_snapshot,
         numero_orcamento=get_next_numero(db, tenant_id, company_id),
         titulo=data.titulo,
         observacoes=data.observacoes,
@@ -554,6 +557,9 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
     rental_defaults = _build_rental_defaults(budget)
     _process_rental_items(db, budget, data.rental_items, rental_defaults)
 
+    from src.modules.payment_methods.service import PaymentMethodsService
+    PaymentMethodsService.sync_sales_budget_planning(db, budget)
+
     db.commit()
     db.refresh(budget)
     return budget
@@ -574,6 +580,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.titulo = data.titulo
     budget.observacoes = data.observacoes
     budget.data_orcamento = data.data_orcamento
+    budget.forma_pagamento_id = data.forma_pagamento_id
+    budget.data_vencimento_inicial = data.data_vencimento_inicial
+    budget.forma_pagamento_snapshot = data.forma_pagamento_snapshot
     budget.markup_padrao = data.markup_padrao
     budget.perc_despesa_adm = data.perc_despesa_adm
     budget.perc_comissao = data.perc_comissao
@@ -652,6 +661,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     
     for orphan in orphans:
         db.delete(orphan)
+
+    from src.modules.payment_methods.service import PaymentMethodsService
+    PaymentMethodsService.sync_sales_budget_planning(db, budget)
 
     db.commit()
     db.refresh(budget)
@@ -876,7 +888,7 @@ def delete_budget(db: Session, tenant_id: str, budget_id: str) -> bool:
     db.commit()
     return True
 
-def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA", sales_company_id: Optional[str] = None) -> dict:
+def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA", sales_company_id: Optional[str] = None, sales_budget_id: Optional[str] = None) -> dict:
     from src.modules.products.models import Product
     from src.modules.products.service import ProductService
     from src.modules.ncm.services.ncm_service import NcmService
@@ -891,12 +903,28 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
 
     # Select reference price + budget based on tipo
     uso_consumo = tipo.upper() == "USO_CONSUMO"
+    
+    ref_budget_id = None
+    if sales_budget_id:
+        # Query across all purchase budgets linked to this opportunity that contain the product
+        linked_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+            PurchaseBudget.sales_budget_id == sales_budget_id,
+            PurchaseBudget.tenant_id == tenant_id,
+            PurchaseBudgetItem.product_id == product_id
+        ).first()
+        if linked_item:
+            ref_budget_id = linked_item.budget_id
+
+    if not ref_budget_id:
+        if uso_consumo:
+            ref_budget_id = product.orcamento_referencia_uso_consumo_id
+        else:
+            ref_budget_id = product.orcamento_referencia_revenda_id
+
     if uso_consumo:
         custo_ref = float(product.vlr_referencia_uso_consumo or 0)
-        ref_budget_id = product.orcamento_referencia_uso_consumo_id
     else:
         custo_ref = float(product.vlr_referencia_revenda or 0)
-        ref_budget_id = product.orcamento_referencia_revenda_id
 
     result = {
         "base_unitario": custo_ref,
@@ -1029,7 +1057,13 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
                     difal_unitario = max(0.0, c_valor_difal_base)
 
     icms_abatido_unitario = 0.0
-    if uso_consumo:
+    if product and product.tipo in ["SERVICO", "LICENCA"]:
+        difal_unitario = 0.0
+        calc_icms_st_final = 0.0
+        icms_st_normal = 0.0
+        cred_outorgado_valor = 0.0
+        custo_unit_final = base_unitario + ipi_unitario + frete_unitario
+    elif uso_consumo:
         custo_unit_final = base_unitario + ipi_unitario + frete_unitario + difal_unitario
     else:
         if not perfil_st_ativo:

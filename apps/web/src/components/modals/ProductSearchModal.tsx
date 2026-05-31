@@ -8,9 +8,10 @@ interface ProductSearchModalProps {
   onClose: () => void;
   onSelect: (product: any) => void;
   title?: string;
+  salesBudgetId?: string;
 }
 
-export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto' }: ProductSearchModalProps) {
+export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId }: ProductSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -25,15 +26,24 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
+
     const delayDebounceFn = setTimeout(() => {
       async function fetchProducts() {
-        if (!searchTerm || searchTerm.trim().length < 2) {
+        if (!salesBudgetId && (!searchTerm || searchTerm.trim().length < 2)) {
           setResults([]);
           return;
         }
         setIsSearching(true);
         try {
-          const res = await api.get('/cadastro/produtos', { params: { q: searchTerm, limit: 20 } });
+          const params: any = { limit: 100 };
+          if (searchTerm && searchTerm.trim().length >= 2) {
+            params.q = searchTerm;
+          }
+          if (salesBudgetId) {
+            params.sales_budget_id = salesBudgetId;
+          }
+          const res = await api.get('/cadastro/produtos', { params });
           setResults(res.data);
         } catch (err) {
           console.error('Erro ao buscar produtos', err);
@@ -45,7 +55,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
+  }, [searchTerm, salesBudgetId, isOpen]);
 
   if (!isOpen) return null;
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -68,11 +68,170 @@ const Decimal4Input = ({ value, onChange, onBlur, disabled, placeholder = "0.000
   );
 };
 
+const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: number; isST: boolean }) => {
+  const fmtC = (val: number | undefined) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
+  const ipiPercent = summary?.ipi_percent || 0;
+
+  if (isST) {
+    return (
+      <div className="w-72 p-1 text-xs text-text-secondary leading-relaxed">
+        <div className="flex items-center gap-2 text-text-primary font-bold text-sm mb-3 border-b border-border-subtle/50 pb-2">
+          <span className="text-brand-primary">ⓘ</span>
+          <span>Formação de custo REVENDA</span>
+        </div>
+        
+        <div className="mb-4">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-text-muted mb-1.5">Por unidade</div>
+          <div className="space-y-1 font-mono">
+            <div className="flex justify-between">
+              <span>Base (Unit.):</span>
+              <span className="text-text-primary">{fmtC(summary?.base_fornecedor)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>IPI ({ipiPercent}%):</span>
+              <span className="text-brand-warning">+ {fmtC(summary?.ipi_unit)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Frete CIF:</span>
+              <span className="text-brand-warning">+ {fmtC(summary?.frete_cif_unit)}</span>
+            </div>
+            
+            <div className="border-t border-border-subtle/50 my-1"></div>
+            
+            {summary?.is_bit ? (
+              <div className="flex justify-between text-brand-warning">
+                <span>ICMS-ST (BIT) unit.:</span>
+                <span>+ {fmtC(summary?.icms_st_normal)}</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between text-brand-warning">
+                  <span>ICMS-ST unit.:</span>
+                  <span>+ {fmtC(summary?.icms_st_normal)}</span>
+                </div>
+                {(summary?.cred_outorgado_valor || 0) > 0 && (
+                  <div className="flex justify-between text-brand-success">
+                    <span>Cred. Outorgado ({(summary?.cred_outorgado_percent || 0).toFixed(0)}%):</span>
+                    <span>- {fmtC(summary?.cred_outorgado_valor)}</span>
+                  </div>
+                )}
+              </>
+            )}
+            
+            <div className="flex justify-between font-bold text-brand-warning">
+              <span>ICMS-ST Final unit.:</span>
+              <span>+ {fmtC(summary?.icms_st_unitario)}</span>
+            </div>
+            
+            <div className="border-t border-border-subtle/50 my-1.5"></div>
+            
+            <div className="flex justify-between font-bold text-text-primary text-sm">
+              <span>Custo Unit. Final:</span>
+              <span className="text-brand-primary">{fmtC(summary?.custo_unit_final || summary?.custo_base_unitario_item)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase font-bold tracking-wider text-text-muted mb-1.5">Totais (× {qty} Un.)</div>
+          <div className="space-y-1 font-mono">
+            <div className="flex justify-between font-bold text-text-primary">
+              <span>Total Cotação:</span>
+              <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
+            </div>
+            <div className="flex justify-between text-brand-warning">
+              <span>Total Impostos:</span>
+              <span>+ {fmtC((summary?.icms_st_unitario || 0) * qty)}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-text-muted pl-2">
+              <span>↳ ICMS-ST total:</span>
+              <span>+ {fmtC((summary?.icms_st_unitario || 0) * qty)}</span>
+            </div>
+            
+            <div className="mt-3 p-2 bg-brand-primary/5 rounded-lg border border-brand-primary/20 flex justify-between items-center font-bold text-sm text-brand-primary">
+              <span>Total Geral:</span>
+              <span>{fmtC((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  } else {
+    return (
+      <div className="w-72 p-1 text-xs text-text-secondary leading-relaxed">
+        <div className="flex items-center gap-2 text-text-primary font-bold text-sm mb-3 border-b border-border-subtle/50 pb-2">
+          <span className="text-brand-primary">📋</span>
+          <span>Formação de custo COMODATO/LOCAÇÃO</span>
+        </div>
+        
+        <div className="mb-4">
+          <div className="text-[10px] uppercase font-bold tracking-wider text-text-muted mb-1.5">Por unidade</div>
+          <div className="space-y-1 font-mono">
+            <div className="flex justify-between">
+              <span>Base (Unit.):</span>
+              <span className="text-text-primary">{fmtC(summary?.base_fornecedor)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>IPI ({ipiPercent}%):</span>
+              <span className="text-brand-warning">+ {fmtC(summary?.ipi_unit)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Frete CIF:</span>
+              <span className="text-brand-warning">+ {fmtC(summary?.frete_cif_unit)}</span>
+            </div>
+            
+            <div className="border-t border-border-subtle/50 my-1"></div>
+            
+            <div className="flex justify-between font-bold text-brand-warning">
+              <span>DIFAL Unit:</span>
+              <span>+ {fmtC(summary?.difal_unitario)}</span>
+            </div>
+            
+            <div className="border-t border-border-subtle/50 my-1.5"></div>
+            
+            <div className="flex justify-between font-bold text-text-primary text-sm">
+              <span>Custo Unit. Final:</span>
+              <span className="text-brand-primary">{fmtC(summary?.custo_unit_final || summary?.custo_base_unitario_item)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase font-bold tracking-wider text-text-muted mb-1.5">Totais (× {qty} Un.)</div>
+          <div className="space-y-1 font-mono">
+            <div className="flex justify-between font-bold text-text-primary">
+              <span>Total da Cotação:</span>
+              <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
+            </div>
+            <div className="flex justify-between text-brand-warning">
+              <span>Frete CIF:</span>
+              <span>+ {fmtC((summary?.frete_cif_unit || 0) * qty)}</span>
+            </div>
+            <div className="text-brand-warning font-bold mt-1">Total Impostos:</div>
+            <div className="flex justify-between text-[11px] text-brand-warning pl-2">
+              <span>– DIFAL:</span>
+              <span>+ {fmtC((summary?.difal_unitario || 0) * qty)}</span>
+            </div>
+            
+            <div className="mt-3 p-2 bg-brand-primary/5 rounded-lg border border-brand-primary/20 flex justify-between items-center font-bold text-sm text-brand-primary">
+              <span>Total Geral:</span>
+              <span>{fmtC((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+};
+
 interface KitFormValues {
   nome_kit: string;
   descricao_kit: string;
   quantidade_kits: number;
   tipo_contrato: string;
+  considerar_st_ou_difal: string;
   prazo_contrato_meses: number;
   prazo_instalacao_meses: number;
   fator_margem_locacao: number;
@@ -154,6 +313,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isCalcExpanded, setIsCalcExpanded] = useState(true);
+  const [isPolicyExpanded, setIsPolicyExpanded] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
@@ -176,6 +336,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     descricao_kit: '',
     quantidade_kits: 1,
     tipo_contrato: initialTipoContrato,
+    considerar_st_ou_difal: 'DIFAL',
     prazo_contrato_meses: 36,
     prazo_instalacao_meses: 0,
     fator_margem_locacao: 1.0,
@@ -264,6 +425,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       data.taxa_juros_mensal = data.taxa_juros_mensal ?? 0;
       data.taxa_manutencao_anual = data.taxa_manutencao_anual ?? 0;
       data.custo_monitoramento_unitario = data.custo_monitoramento_unitario ?? 0;
+      data.considerar_st_ou_difal = data.considerar_st_ou_difal || 'DIFAL';
       data.forma_execucao = data.forma_execucao || 'H. NORMAL';
 
       setForm(data);
@@ -812,188 +974,233 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           </Button>
         </div>
       </div>
+             {/* SPLIT LAYOUT: LEFT SIDEBAR FOR CALCULO SIMULTANEO, RIGHT FOR FORM SECTIONS */}
+      <div className="flex flex-col lg:flex-row items-start gap-6 mt-6 w-full">
 
-      {/* STICKY TOP HUD */}
-      {(() => {
-        // While the policy-violation modal is open, suppress the HUD entirely —
-        // it would show financials computed from an invalid (below-minimum) factor.
-        if (policyAlert) return null;
+        {/* LEFT SIDEBAR (Cálculo Simultâneo) */}
+        <aside
+          className={`w-full shrink-0 transition-all duration-300 lg:sticky lg:top-6 lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto z-40
+            ${isCalcExpanded ? 'lg:w-[420px]' : 'lg:w-16'}`}
+        >
+          {(() => {
+            // While the policy-violation modal is open, suppress the HUD entirely —
+            // it would show financials computed from an invalid (below-minimum) factor.
+            if (policyAlert) return null;
 
-        const isVenda = ['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato);
+            const isVenda = ['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato);
 
-        if (isVenda) {
-          // ── Bloco 4: item_summaries (produtos + serviços)
-          const itemSums = financials?.item_summaries || [];
-          const custoB4 = itemSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
-          const vendaB4 = itemSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
-          const lucroB4 = itemSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
+            if (isVenda) {
+              // ── Bloco 4: item_summaries (produtos + serviços)
+              const itemSums = financials?.item_summaries || [];
+              const custoB4 = itemSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
+              const vendaB4 = itemSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
+              const lucroB4 = itemSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
 
-          // ── Bloco 5: cost_summaries INSTALACAO
-          const instSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo === 'INSTALACAO');
-          const custoB5 = instSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
-          const vendaB5 = instSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
-          let lucroB5 = instSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
-          if (form.instalacao_inclusa) {
-            const percInst = Number(form.percentual_instalacao) || 0;
-            const custoAqTotal = Number(financials?.summary?.custo_aquisicao_kit || 0);
-            lucroB5 = custoAqTotal * (percInst / 100);
-          }
+              // ── Bloco 5: cost_summaries INSTALACAO
+              const instSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo === 'INSTALACAO');
+              const custoB5 = instSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
+              const vendaB5 = instSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
+              let lucroB5 = instSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0);
+              if (form.instalacao_inclusa) {
+                const percInst = Number(form.percentual_instalacao) || 0;
+                const custoAqTotal = Number(financials?.summary?.custo_aquisicao_kit || 0);
+                lucroB5 = custoAqTotal * (percInst / 100);
+              }
 
-          // ── Bloco 6: cost_summaries MANUTENCAO
-          const opSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo !== 'INSTALACAO');
-          const custoB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0) : 0;
-          const vendaMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0) : 0;
-          const lucroMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0) : 0;
-          const qtdMeses = Number(form.qtd_meses_manutencao) || 0;
+              // ── Bloco 6: cost_summaries MANUTENCAO
+              const opSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo !== 'INSTALACAO');
+              const custoB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0) : 0;
+              const vendaMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0) : 0;
+              const lucroMensalB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.lucro_total_item || 0), 0) : 0;
+              const qtdMeses = Number(form.qtd_meses_manutencao) || 0;
 
-          // ── Totalizadores (SOT no Backend)
-          const custoB6Total = custoB6 * qtdMeses;
-          const custoAquisicao = Number(financials?.summary?.custo_aquisicao_total || 0) + custoB6Total;
-          const totalVenda = Number(financials?.summary?.venda_equipamentos_total || 0);
-          const totalManutencao = Number(financials?.summary?.venda_manutencao_total || 0);
-          const faturamentoTotal = totalVenda + totalManutencao;
-          const lucroVenda = Number(financials?.summary?.lucro_equipamentos || 0);
-          const margemVenda = Number(financials?.summary?.margem_equipamentos || 0);
+              // ── Totalizadores (SOT no Backend)
+              const custoB6Total = custoB6 * qtdMeses;
+              const custoAquisicao = Number(financials?.summary?.custo_aquisicao_total || 0) + custoB6Total;
+              const totalVenda = Number(financials?.summary?.venda_equipamentos_total || 0);
+              const totalManutencao = Number(financials?.summary?.venda_manutencao_total || 0);
+              const faturamentoTotal = totalVenda + totalManutencao;
+              const lucroVenda = Number(financials?.summary?.lucro_equipamentos || 0);
+              const margemVenda = Number(financials?.summary?.margem_equipamentos || 0);
 
-          const lucroManutMensal = totalManutencao > 0 ? Number(financials?.summary?.lucro_manutencao || 0) / qtdMeses : 0;
-          const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
-          const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
+              const lucroManutMensal = totalManutencao > 0 ? Number(financials?.summary?.lucro_manutencao || 0) / qtdMeses : 0;
+              const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
+              const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
 
-
-          // ── Impostos B4 + B5 discriminados
-          const taxFields = ['pis', 'cofins', 'csll', 'irpj', 'icms', 'iss'] as const;
-          const taxLabelB45: Record<string, { label: string; mensal: number; total: number }> = {};
-          [...itemSums, ...instSums].forEach((s: any) => {
-            taxFields.forEach(t => {
-              const unit = s[`${t}_unit`] || 0;
-              const qty = s.quantidade_no_kit || s.quantidade || 1;
-              if (!taxLabelB45[t]) taxLabelB45[t] = { label: t.toUpperCase(), mensal: 0, total: 0 };
-              taxLabelB45[t].total += unit * qty;
-            });
-          });
-          const impostosB45 = Object.values(taxLabelB45).reduce((a, b) => a + b.total, 0);
-
-          // ── Impostos B6 discriminados (mensal e total)
-          const taxLabelB6: Record<string, { label: string; mensal: number; total: number }> = {};
-          if (form.havera_manutencao) {
-            opSums.forEach((s: any) => {
-              taxFields.forEach(t => {
-                const unit = s[`${t}_unit`] || 0;
-                const qty = s.quantidade || 1;
-                if (!taxLabelB6[t]) taxLabelB6[t] = { label: t.toUpperCase(), mensal: 0, total: 0 };
-                taxLabelB6[t].mensal += unit * qty;
-                taxLabelB6[t].total += unit * qty * qtdMeses;
+              // ── Impostos B4 + B5 discriminados
+              const taxFields = ['pis', 'cofins', 'csll', 'irpj', 'icms', 'iss'] as const;
+              const taxLabelB45: Record<string, { label: string; mensal: number; total: number }> = {};
+              [...itemSums, ...instSums].forEach((s: any) => {
+                taxFields.forEach(t => {
+                  const unit = s[`${t}_unit`] || 0;
+                  const qty = s.quantidade_no_kit || s.quantidade || 1;
+                  if (!taxLabelB45[t]) taxLabelB45[t] = { label: t.toUpperCase(), mensal: 0, total: 0 };
+                  taxLabelB45[t].total += unit * qty;
+                });
               });
-            });
-          }
-          const impostosMensalB6 = Object.values(taxLabelB6).reduce((a, b) => a + b.mensal, 0);
+              const impostosB45 = Object.values(taxLabelB45).reduce((a, b) => a + b.total, 0);
 
-          // ── Desp. de venda B4+B5
-          const despVendaB4 = itemSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
-          const despVendaB5 = instSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
-          const despVenda = despVendaB4 + despVendaB5;
+              // ── Impostos B6 discriminados (mensal e total)
+              const taxLabelB6: Record<string, { label: string; mensal: number; total: number }> = {};
+              if (form.havera_manutencao) {
+                opSums.forEach((s: any) => {
+                  taxFields.forEach(t => {
+                    const unit = s[`${t}_unit`] || 0;
+                    const qty = s.quantidade || 1;
+                    if (!taxLabelB6[t]) taxLabelB6[t] = { label: t.toUpperCase(), mensal: 0, total: 0 };
+                    taxLabelB6[t].mensal += unit * qty;
+                    taxLabelB6[t].total += unit * qty * qtdMeses;
+                  });
+                });
+              }
+              const impostosMensalB6 = Object.values(taxLabelB6).reduce((a, b) => a + b.mensal, 0);
 
-          return (
-            <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-6 transition-all">
-              {/* Header row */}
-              <div 
-                className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
-                onClick={() => setIsCalcExpanded(!isCalcExpanded)}
-              >
-                <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
-                  <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo — {form.tipo_contrato === 'INSTALACAO' ? 'Instalação' : 'Venda de Equipamentos'}
-                </h3>
-                <div className="flex items-center gap-3">
-                  {isCalculating ? (
-                    <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
-                      <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
-                  )}
-                  <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
-                    {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+              // ── Desp. de venda B4+B5
+              const despVendaB4 = itemSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
+              const despVendaB5 = instSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
+              const despVenda = despVendaB4 + despVendaB5;
 
-              {isCalcExpanded && (
-                <>
-                  {/* Persistent Policy Panel — always visible */}
-                  <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
-                    {/* Panel header */}
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-bg-subtle border-b border-border-subtle">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Política Comercial</span>
-                      {activePolicy && (
-                        <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
-                          {activePolicy.nome_politica} — {activePolicy.comissao_percentual}% comissão
+              if (!isCalcExpanded) {
+                return (
+                  <>
+                    {/* Desktop collapsed */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCalcExpanded(true)}
+                      className="hidden lg:flex flex-col items-center justify-center gap-4 bg-bg-surface border border-border-subtle hover:bg-bg-subtle/50 transition-all shadow-sm rounded-2xl py-6 px-3 w-12 cursor-pointer group"
+                      title="Expandir Cálculo Simultâneo"
+                    >
+                      <Calculator className="w-5 h-5 text-brand-primary group-hover:scale-110 transition-transform" />
+                      <div className="[writing-mode:vertical-lr] rotate-180 text-[10px] font-bold uppercase tracking-widest text-text-muted whitespace-nowrap">
+                        Cálculo Simultâneo
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-text-muted mt-2" />
+                    </button>
+                    {/* Mobile collapsed */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCalcExpanded(true)}
+                      className="w-full lg:hidden flex items-center justify-between bg-bg-surface border border-border-subtle hover:bg-bg-subtle/50 transition-all shadow-sm rounded-2xl p-4 cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-text-primary tracking-tight flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-brand-primary" />
+                        Cálculo Simultâneo — Venda
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-text-muted" />
+                    </button>
+                  </>
+                );
+              }
+
+              return (
+                <div className="bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-5 transition-all">
+                  {/* Header row */}
+                  <div className="flex items-center justify-between border-b border-border-subtle pb-3 mb-3">
+                    <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center">
+                      <Calculator className="w-4 h-4 mr-2 text-brand-primary" /> Cálculo Simultâneo — Venda
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      {isCalculating ? (
+                        <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse">
+                          <Calculator className="w-3 h-3 mr-1 animate-pulse" /> Calculando
                         </span>
+                      ) : (
+                        <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
                       )}
+                      <button 
+                        type="button" 
+                        onClick={() => setIsCalcExpanded(false)}
+                        className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                        title="Recolher painel"
+                      >
+                        <ChevronLeft className="w-4 h-4 hidden lg:block" />
+                        <ChevronUp className="w-4 h-4 lg:hidden" />
+                      </button>
                     </div>
+                  </div>
 
-                    {/* Tier list — three states: loading, empty, populated */}
-                    {!policiesLoaded ? (
-                      <div className="flex items-center gap-2 px-3 py-2">
-                        <div className="w-3 h-3 rounded-full border-2 border-brand-primary border-t-transparent animate-spin shrink-0" />
-                        <span className="text-[10px] text-text-muted">Carregando políticas...</span>
+                  {/* Collapsible Rules (Política Comercial) */}
+                  <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
+                    <button 
+                      type="button"
+                      onClick={() => setIsPolicyExpanded(!isPolicyExpanded)}
+                      className="w-full flex items-center justify-between px-3 py-2 bg-bg-subtle text-xs font-bold text-text-secondary border-b border-border-subtle cursor-pointer hover:bg-bg-deep/50 transition-colors"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Regras de Negócio</span>
+                      <div className="flex items-center gap-2">
+                        {activePolicy && !isPolicyExpanded && (
+                          <span className="text-[9px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                            {activePolicy.nome_politica} ({activePolicy.comissao_percentual}%)
+                          </span>
+                        )}
+                        {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
                       </div>
-                    ) : userPolicies.length === 0 ? (
-                      <div className="px-3 py-2">
-                        <span className="text-[10px] text-text-muted italic">Nenhuma política comercial configurada para esta empresa.</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-stretch divide-x divide-border-subtle">
-                        {userPolicies.map((p: any) => {
-                          const isActive = activePolicy?.id === p.id;
-                          const nextTier = userPolicies.find((np: any) => Number(np.fator_limite) > Number(p.fator_limite));
-                          const rangeLabel = nextTier
-                            ? `${Number(p.fator_limite).toFixed(2)} ≤ x < ${Number(nextTier.fator_limite).toFixed(2)}`
-                            : `≥ ${Number(p.fator_limite).toFixed(2)}`;
-                          return (
-                            <div
-                              key={p.id}
-                              className={`flex-1 px-3 py-2 transition-colors ${isActive
-                                  ? 'bg-brand-primary/8 border-t-2 border-t-brand-primary'
-                                  : 'bg-bg-surface opacity-60'
-                                }`}
-                            >
-                              <p className={`text-[10px] font-bold uppercase tracking-wide truncate mb-0.5 ${isActive ? 'text-brand-primary' : 'text-text-muted'}`}>
-                                {p.nome_politica}
-                              </p>
-                              <p className={`text-xs font-bold tabular-nums ${isActive ? 'text-text-primary' : 'text-text-muted'}`}>
-                                {Number(p.comissao_percentual).toFixed(2)}%
-                              </p>
-                              <p className="text-[9px] text-text-muted mt-0.5 truncate">{rangeLabel}</p>
-                            </div>
-                          );
-                        })}
+                    </button>
+
+                    {isPolicyExpanded && (
+                      <div className="p-3 bg-bg-surface">
+                        {/* Tier list — three states: loading, empty, populated */}
+                        {!policiesLoaded ? (
+                          <div className="flex items-center gap-2 px-3 py-2">
+                            <div className="w-3 h-3 rounded-full border-2 border-brand-primary border-t-transparent animate-spin shrink-0" />
+                            <span className="text-[10px] text-text-muted">Carregando políticas...</span>
+                          </div>
+                        ) : userPolicies.length === 0 ? (
+                          <div className="px-3 py-2">
+                            <span className="text-[10px] text-text-muted italic">Nenhuma política comercial configurada para esta empresa.</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2 divide-y divide-border-subtle/55">
+                            {userPolicies.map((p: any) => {
+                              const isActive = activePolicy?.id === p.id;
+                              const nextTier = userPolicies.find((np: any) => Number(np.fator_limite) > Number(p.fator_limite));
+                              const rangeLabel = nextTier
+                                ? `${Number(p.fator_limite).toFixed(2)} ≤ x < ${Number(nextTier.fator_limite).toFixed(2)}`
+                                : `≥ ${Number(p.fator_limite).toFixed(2)}`;
+                              return (
+                                <div
+                                  key={p.id}
+                                  className={`px-3 py-1.5 rounded-lg transition-colors ${isActive
+                                      ? 'bg-brand-primary/8 border-l-4 border-l-brand-primary'
+                                      : 'bg-bg-surface opacity-60'
+                                    }`}
+                                >
+                                  <p className={`text-[10px] font-bold uppercase tracking-wide truncate mb-0.5 ${isActive ? 'text-brand-primary' : 'text-text-muted'}`}>
+                                    {p.nome_politica}
+                                  </p>
+                                  <p className={`text-xs font-bold tabular-nums ${isActive ? 'text-text-primary' : 'text-text-muted'}`}>
+                                    {Number(p.comissao_percentual).toFixed(2)}% comissão
+                                  </p>
+                                  <p className="text-[9px] text-text-muted mt-0.5 truncate">{rangeLabel}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Row 1 — Custos e vendas por bloco */}
-
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     {/* Custo de Aquisição */}
-                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
-                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
-                      <div className="text-xl font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
-                      <div className="text-[10px] text-text-muted mt-1 space-x-2 truncate">
-                        <span title="Bloco 4 – Itens">B4: {fmtC(custoB4)}</span>
-                        <span>·</span>
-                        <span title="Bloco 5 – Instalação">B5: {fmtC(custoB5)}</span>
-                        <span>·</span>
-                        <span title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}>B6: {fmtC(custoB6Total)}</span>
+                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
+                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+                      <div className="text-base font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
+                      <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
+                        <div className="flex justify-between" title="Bloco 4 – Itens"><span>B4 (Itens):</span><span>{fmtC(custoB4)}</span></div>
+                        <div className="flex justify-between" title="Bloco 5 – Instalação"><span>B5 (Inst.):</span><span>{fmtC(custoB5)}</span></div>
+                        <div className="flex justify-between" title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}><span>B6 (Manut.):</span><span>{fmtC(custoB6Total)}</span></div>
                       </div>
                     </div>
 
                     {/* Total da Venda (B4 + B5) */}
-                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
-                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
-                      <div className="text-xl font-bold text-brand-primary">{fmtC(totalVenda)}</div>
-                      <div className="text-[10px] text-text-muted mt-1 truncate">
-                        <span title="Itens (B4)">Itens: {fmtC(vendaB4)}</span>
-                        {vendaB5 > 0 && <><span> · </span><span title="Instalação (B5)">Inst: {fmtC(vendaB5)}</span></>}
+                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
+                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Total da Venda</span>
+                      <div className="text-base font-bold text-brand-primary">{fmtC(totalVenda)}</div>
+                      <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
+                        <div className="flex justify-between" title="Itens (B4)"><span>Itens:</span><span>{fmtC(vendaB4)}</span></div>
+                        {vendaB5 > 0 && <div className="flex justify-between" title="Instalação (B5)"><span>Inst.:</span><span>{fmtC(vendaB5)}</span></div>}
                       </div>
                       {impostosB45 > 0 && (
                         <Tooltip content={
@@ -1009,7 +1216,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             </div>
                           </div>
                         }>
-                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+                          <span className="text-[9px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
                             Imp: {fmtC(impostosB45)}
                           </span>
                         </Tooltip>
@@ -1017,11 +1224,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     </div>
 
                     {/* Total de Manutenção (B6 × meses) */}
-                    <div className={`border rounded-xl p-4 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
-                      <span className="block text-[10px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manutenção</span>
-                      <div className="text-xl font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
-                      <div className="text-[10px] text-text-muted mt-1 truncate">
-                        {fmtC(vendaMensalB6)}/mês × {qtdMeses || '—'} meses
+                    <div className={`border rounded-xl p-3 flex flex-col justify-center ${form.havera_manutencao ? 'bg-bg-subtle border-border-subtle' : 'bg-bg-deep/50 border-border-subtle/50 opacity-50'}`}>
+                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Total de Manutenção</span>
+                      <div className="text-base font-bold text-brand-warning">{fmtC(totalManutencao)}</div>
+                      <div className="text-[9px] text-text-muted mt-1">
+                        {fmtC(vendaMensalB6)}/m × {qtdMeses || '—'} meses
                       </div>
                       {impostosMensalB6 > 0 && (
                         <Tooltip content={
@@ -1044,557 +1251,375 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             </div>
                           </div>
                         }>
-                          <span className="text-[10px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+                          <span className="text-[9px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
                             Imp/mês: {fmtC(impostosMensalB6)}
                           </span>
                         </Tooltip>
                       )}
                       {!form.havera_manutencao && (
-                        <span className="text-[10px] text-brand-warning mt-1 font-semibold">
-                          Inativo ("Haverá Manutenção" desmarcado)
+                        <span className="text-[9px] text-brand-warning mt-1 font-semibold">
+                          Inativo
                         </span>
                       )}
                     </div>
 
                     {/* Faturamento Total */}
-                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden">
+                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-20 h-20 bg-brand-primary/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
-                      <span className="block text-[10px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
-                      <div className="text-2xl font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
-                      <div className="text-[10px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
-                        <span>Venda {form.havera_manutencao && `+ Manutenção (${qtdMeses || '—'}m)`}</span>
+                      <span className="block text-[9px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
+                      <div className="text-lg font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
+                      <div className="text-[9px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
+                        <span>Venda {form.havera_manutencao && `+ Manut. (${qtdMeses || '—'}m)`}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-3 border-t border-border-subtle">
+                  <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border-subtle">
                     {/* Lucro da Venda */}
-                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                    <div className={`rounded-xl p-3 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
                       <div>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro da Venda (Fechamento)</span>
-                        <div className={`text-xl font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
-                        <div className="text-[10px] text-text-muted mt-0.5">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Venda</span>
+                        <div className={`text-base font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
+                        <div className="text-[9px] text-text-muted mt-0.5">
                           Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
                         </div>
-                        <div className="text-[10px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
-                          <span>Fat. <span className="text-text-muted font-semibold">{fmtC(totalVenda)}</span></span>
-                          <span>Custo Aq. <span className="text-text-muted font-semibold">{fmtC(custoB4 + custoB5)}</span></span>
-                          <span>Impostos <span className="text-rose-400 font-semibold">{fmtC(impostosB45)}</span></span>
-                          {((financials?.summary?.credito_icms_compra_total || 0) > 0) && (
-                            <span className="col-span-2">Créd. ICMS <span className="text-brand-success font-semibold">-{fmtC(financials?.summary?.credito_icms_compra_total || 0)}</span></span>
-                          )}
-                          <span>Desp. Venda <span className="text-text-muted font-semibold">{fmtC(despVenda)}</span></span>
+                        <div className="text-[9px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
+                          <span>Fat: {fmtC(totalVenda)}</span>
+                          <span>Aq: {fmtC(custoB4 + custoB5)}</span>
+                          <span>Imp: {fmtC(impostosB45)}</span>
+                          <span>Desp: {fmtC(despVenda)}</span>
                         </div>
                       </div>
-                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
-                        <span className="text-lg font-black">{margemVenda.toFixed(1)}%</span>
+                      <div className={`text-right ml-4 shrink-0 px-2.5 py-1.5 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                        <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+                        <span className="text-sm font-black">{margemVenda.toFixed(1)}%</span>
                       </div>
                     </div>
 
                     {/* Lucro Manutenção 12m */}
-                    <div className={`rounded-xl p-4 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                    <div className={`rounded-xl p-3 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
                       <div>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manutenção (12 meses)</span>
-                        <div className={`text-xl font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
-                        <div className="text-[10px] text-text-muted mt-0.5">
-                          {fmtC(lucroMensalB6)}/mês projetado em 12m
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manut. (12m)</span>
+                        <div className={`text-base font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
+                        <div className="text-[9px] text-text-muted mt-0.5 font-mono">
+                          {fmtC(lucroMensalB6)}/mês em 12m
                         </div>
                       </div>
-                      <div className={`text-right ml-4 shrink-0 px-3 py-2 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
-                        <span className="text-lg font-black">{margemManut12m.toFixed(1)}%</span>
+                      <div className={`text-right ml-4 shrink-0 px-2.5 py-1.5 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                        <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+                        <span className="text-sm font-black">{margemManut12m.toFixed(1)}%</span>
                       </div>
                     </div>
 
                     {/* Fator Geral Média */}
-                    <div className="rounded-xl p-4 flex items-center justify-between border bg-bg-subtle border-border-subtle">
+                    <div className="rounded-xl p-3 flex items-center justify-between border bg-bg-subtle border-border-subtle font-medium">
                       <div>
-                        <span className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral</span>
-                        <div className="text-xl font-black text-text-primary">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral (Média)</span>
+                        <div className="text-base font-black text-text-primary">
                           {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
                         </div>
-                        <div className="text-[10px] text-text-muted mt-0.5">
-                          Média: F. Margem + F. Manut. (Demonstrativo)
-                        </div>
                       </div>
                     </div>
-
                   </div>
+                </div>
+              );
+            }
+
+            // ── Bloco de Cards — Locação / Comodato ──
+            if (form.tipo_contrato === 'INSTALACAO') return null;
+
+            const custoAq = financials?.summary?.custo_aquisicao_kit || 0;
+            const custo_produtos = financials?.summary?.custo_aquisicao_produtos || 0;
+            const custo_servicos = financials?.summary?.custo_aquisicao_servicos || 0;
+
+            const percInst = Number(form.percentual_instalacao) || 0;
+            const instalacaoEmbutida = (form.instalacao_inclusa && percInst > 0)
+              ? custoAq * (percInst / 100)
+              : 0;
+            const instalacaoLabel = (form.instalacao_inclusa && percInst > 0)
+              ? `Embutido (${percInst}% aq.)`
+              : 'Sem inst. embutida';
+
+            const fatorMargem = Number(form.fator_margem_locacao) || 1;
+            const txLocDecimal = financials?.summary?.tx_locacao || 0;
+            const txLocPerc = txLocDecimal * 100;
+            const locacaoMensal = ((custoAq + instalacaoEmbutida) * fatorMargem) * txLocDecimal;
+
+            const taxaManutAnual = Number(form.taxa_manutencao_anual) || 0;
+            const txManutPerc = taxaManutAnual / 12;
+            const manutencaoCalculada = ((custoAq + instalacaoEmbutida) * fatorMargem) * (txManutPerc / 100);
+            const custoOpMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
+            const fatorManut = Number(form.fator_manutencao) || 1;
+            const manutencaoMensal = form.manutencao_inclusa ? manutencaoCalculada : (custoOpMensal * fatorManut);
+            const manutencaoLegenda = form.manutencao_inclusa
+              ? `TX: ${txManutPerc.toFixed(4)}%`
+              : (fatorManut !== 1
+                ? `FM: ${fatorManut.toFixed(2)} x Custo`
+                : (custoOpMensal > 0 ? 'Custos Operacionais' : 'Sem custos op.'));
+
+            const vendaUnitMonitoramento = financials?.summary?.venda_unit_monitoramento || 0;
+            const receitaTotalMonitoramento = financials?.summary?.receita_total_monitoramento || 0;
+            const custoTotalMonitoramento = financials?.summary?.custo_total_monitoramento || 0;
+            const lucroTotalMonitoramento = financials?.summary?.lucro_total_monitoramento || 0;
+
+            const faturamentoMensal = locacaoMensal + manutencaoMensal + vendaUnitMonitoramento;
+            const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
+
+            const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
+            // const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
+            // const totalInvestimento = custoAq + valorComissaoLocacao + impostoInstalacao;
+            // const impostosMensais = financials?.summary?.valor_impostos || 0;
+            // const totalReceitaContrato = (faturamentoMensal * mesesFaturados) + (form.instalacao_inclusa ? instalacaoEmbutida : 0);
+            const roiMeses = financials?.summary?.roi_meses || 0;
+            const roiEquipamentoMeses = financials?.summary?.roi_equipamento_meses || 0;
+
+            const tipoLabel = form.tipo_contrato === 'LOCACAO' ? 'Locação' : 'Comodato';
+
+            if (!isCalcExpanded) {
+              return (
+                <>
+                  {/* Desktop collapsed */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCalcExpanded(true)}
+                    className="hidden lg:flex flex-col items-center justify-center gap-4 bg-bg-surface border border-border-subtle hover:bg-bg-subtle/50 transition-all shadow-sm rounded-2xl py-6 px-3 w-12 cursor-pointer group animate-fade-in"
+                    title="Expandir Cálculo Simultâneo"
+                  >
+                    <Calculator className="w-5 h-5 text-brand-primary group-hover:scale-110 transition-transform" />
+                    <div className="[writing-mode:vertical-lr] rotate-180 text-[10px] font-bold uppercase tracking-widest text-text-muted whitespace-nowrap">
+                      Cálculo Simultâneo
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted mt-2" />
+                  </button>
+                  {/* Mobile collapsed */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCalcExpanded(true)}
+                    className="w-full lg:hidden flex items-center justify-between bg-bg-surface border border-border-subtle hover:bg-bg-subtle/50 transition-all shadow-sm rounded-2xl p-4 cursor-pointer"
+                  >
+                    <span className="text-xs font-bold text-text-primary tracking-tight flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-brand-primary" />
+                      Cálculo Simultâneo — {tipoLabel}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-text-muted" />
+                  </button>
                 </>
-              )}
-            </div>
-          );
-        }
+              );
+            }
 
-        // ── Bloco de Cards — Locação / Comodato ──
-        // INSTALACAO: sem bloco de cards
-        if (form.tipo_contrato === 'INSTALACAO') return null;
-
-        const custoAq = financials?.summary?.custo_aquisicao_kit || 0;
-        const custo_produtos = financials?.summary?.custo_aquisicao_produtos || 0;
-        const custo_servicos = financials?.summary?.custo_aquisicao_servicos || 0;
-
-        // Card Instalação — só mostra se flag + % preenchido
-        const percInst = Number(form.percentual_instalacao) || 0;
-        const instalacaoEmbutida = (form.instalacao_inclusa && percInst > 0)
-          ? custoAq * (percInst / 100)
-          : 0;
-        const instalacaoLabel = (form.instalacao_inclusa && percInst > 0)
-          ? `Embutido (${percInst}% aq.)`
-          : 'Sem instalação embutida';
-
-        // Card Locação Mensal — ((custoAq + instalacao) * fatorMargem) * txLoc
-
-        const fatorMargem = Number(form.fator_margem_locacao) || 1;
-        const txLocDecimal = financials?.summary?.tx_locacao || 0;         // já calculado pelo backend
-        const txLocPerc = txLocDecimal * 100;
-        const locacaoMensal = ((custoAq + instalacaoEmbutida) * fatorMargem) * txLocDecimal;
-
-        // Card Manutenção — TX manut = taxa_manutencao_anual / 12
-        // Quando inclusa: ((custoAq + instalacao) * fatorMargem) * (txManut / 100)
-        // Quando não inclusa: soma do Bloco 6
-        const taxaManutAnual = Number(form.taxa_manutencao_anual) || 0;
-        const txManutPerc = taxaManutAnual / 12;
-        const manutencaoCalculada = ((custoAq + instalacaoEmbutida) * fatorMargem) * (txManutPerc / 100);
-        const custoOpMensal = financials?.summary?.custo_operacional_mensal_kit || 0;
-        const fatorManut = Number(form.fator_manutencao) || 1;
-        const manutencaoMensal = form.manutencao_inclusa ? manutencaoCalculada : (custoOpMensal * fatorManut);
-        const manutencaoLegenda = form.manutencao_inclusa
-          ? `TX manut: ${txManutPerc.toFixed(4)}%`
-          : (fatorManut !== 1
-            ? `FM: ${fatorManut.toFixed(2)} x Custo Op.`
-            : (custoOpMensal > 0 ? 'Custos Operacionais' : 'Sem custos operacionais'));
-
-        // Monitoramento
-        const vendaUnitMonitoramento = financials?.summary?.venda_unit_monitoramento || 0;
-        const receitaTotalMonitoramento = financials?.summary?.receita_total_monitoramento || 0;
-        const custoTotalMonitoramento = financials?.summary?.custo_total_monitoramento || 0;
-        const lucroTotalMonitoramento = financials?.summary?.lucro_total_monitoramento || 0;
-
-        // Card Faturamento Mensal = Locação Mensal + Manutenção + Monitoramento
-        const faturamentoMensal = locacaoMensal + manutencaoMensal + vendaUnitMonitoramento;
-        const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
-
-        // ROI = Investimento / (Fat. Mensal - Monitoramento (Custo/Mês) - Custo Bloco6 (bruto) - Impostos Mensais)
-        // Manut no denominador = custo real do Bloco 6 (sem fator), nao o valor faturado
-        const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
-        const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
-        const totalInvestimento = custoAq + valorComissaoLocacao + impostoInstalacao;
-        const impostosMensais = financials?.summary?.valor_impostos || 0;
-        // const denominadorROI = faturamentoMensal - (Number(form.custo_monitoramento_unitario) || 0) - impostosMensais - custoOpMensal;
-        const totalReceitaContrato = (faturamentoMensal * mesesFaturados) + (form.instalacao_inclusa ? instalacaoEmbutida : 0);
-        const roiMeses = financials?.summary?.roi_meses || 0;
-        const roiEquipamentoMeses = financials?.summary?.roi_equipamento_meses || 0;
-
-
-        const tipoLabel = form.tipo_contrato === 'LOCACAO' ? 'Locação' : 'Comodato';
-
-        return (
-          <div className="sticky top-0 z-[60] -mt-2 mb-6 bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-5 transition-all">
-            {/* Header */}
-            <div
-              className={`flex items-center justify-between border-border-subtle cursor-pointer select-none group ${isCalcExpanded ? 'mb-3 border-b pb-3' : ''}`}
-              onClick={() => setIsCalcExpanded(!isCalcExpanded)}
-            >
-              <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-brand-primary" />
-                Cálculo Simultâneo — {tipoLabel}
-              </h3>
-              <div className="flex items-center gap-3">
-                {isCalculating ? (
-                  <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
-                    <Calculator className="w-3 h-3 animate-pulse" /> Calculando
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
-                )}
-                <button type="button" className="text-text-muted group-hover:text-text-primary transition-colors">
-                  {isCalcExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {isCalcExpanded && (
-              <>
-                {/* Active Policy info row */}
-                {activePolicy ? (
-              <div className="flex items-center gap-3 mb-4 px-3 py-2 bg-brand-primary/5 border border-brand-primary/20 rounded-lg">
-                <div className="w-6 h-6 rounded-full bg-brand-primary flex items-center justify-center shrink-0">
-                  <span className="text-white text-[10px] font-black">P</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Política Comercial Ativa</p>
-                  <p className="text-sm font-bold text-brand-primary truncate">{activePolicy.nome_politica}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Fator Mín.</p>
-                  <p className="text-sm font-bold text-text-primary">{Number(activePolicy.fator_limite).toFixed(4)}</p>
-                </div>
-                <div className="shrink-0 text-right border-l border-brand-primary/20 pl-3">
-                  <p className="text-[10px] text-text-muted uppercase tracking-wide">Comissão</p>
-                  <p className="text-sm font-bold text-brand-primary">{activePolicy.comissao_percentual}%</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-bg-subtle border border-border-subtle rounded-lg">
-                <span className="text-[10px] text-text-muted italic">Nenhuma política comercial ativa para o seu cargo.</span>
-              </div>
-            )}
-
-            {/* Cards Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-
-              {/* Card 1: Custo de Aquisição */}
-              <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
-                <div className="text-base font-bold text-text-primary tabular-nums">{fmtC(custoAq)}</div>
-                <div className="text-[9px] text-text-muted mt-1.5 space-y-0.5">
-                  <div className="flex justify-between gap-1"><span>Produtos</span><span className="font-semibold tabular-nums">{fmtC(custo_produtos)}</span></div>
-                  <div className="flex justify-between gap-1"><span>Serviços</span><span className="font-semibold tabular-nums">{fmtC(custo_servicos)}</span></div>
-                </div>
-              </div>
-
-              {/* Card 1.5: Comissão */}
-              <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center">
-                <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">Comissão (%)</span>
-                <div className="text-base font-bold text-brand-primary tabular-nums">{fmtC(valorComissaoLocacao)}</div>
-                <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium">
-                  {Number(form.perc_comissao || 0).toFixed(2)}% sobre a venda base
-                </div>
-              </div>
-
-              {/* Card 2: Instalação */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center ${instalacaoEmbutida > 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Instalação</span>
-                <div className={`text-base font-bold tabular-nums ${instalacaoEmbutida > 0 ? 'text-amber-500' : 'text-text-muted'}`}>
-                  {fmtC(instalacaoEmbutida)}
-                </div>
-                <div className={`text-[9px] mt-1.5 font-medium ${instalacaoEmbutida > 0 ? 'text-amber-500/80' : 'text-text-muted'}`}>
-                  {instalacaoLabel}
-                </div>
-              </div>
-
-              {/* Card 3: Locação Mensal — ((aq + inst) * FM) * txLoc */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center relative overflow-hidden ${locacaoMensal > 0 ? 'bg-brand-primary/5 border-brand-primary/20' : 'bg-bg-subtle border-border-subtle'}`}>
-                {locacaoMensal > 0 && (
-                  <div className="absolute top-0 right-0 w-14 h-14 bg-brand-primary/10 rounded-full blur-xl -mr-3 -mt-3 pointer-events-none" />
-                )}
-                <span className={`block text-[9px] font-bold uppercase tracking-wider mb-1 relative z-10 ${locacaoMensal > 0 ? 'text-brand-primary' : 'text-text-muted'}`}>
-                  Locação Mensal
-                </span>
-                <div className={`text-base font-bold tabular-nums relative z-10 ${locacaoMensal > 0 ? 'text-brand-primary' : 'text-text-muted'}`}>
-                  {fmtC(locacaoMensal)}
-                </div>
-                <div className="text-[9px] text-text-muted mt-1.5 relative z-10 space-y-0.5">
-                  <div>FM: {fatorMargem.toFixed(2)} | Tx Loc: {txLocPerc.toFixed(4)}%</div>
-                  <div className="text-text-muted/70">{mesesFaturados}x meses</div>
-                </div>
-              </div>
-
-              {/* Card 4: Manutenção (Mês) */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center ${manutencaoMensal > 0 ? 'bg-orange-500/5 border-orange-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Manutenção (Mês)</span>
-                <div className={`text-base font-bold tabular-nums ${manutencaoMensal > 0 ? 'text-orange-500' : 'text-text-muted'}`}>
-                  {fmtC(manutencaoMensal)}
-                </div>
-                <div className={`text-[9px] mt-1.5 font-medium ${manutencaoMensal > 0 ? 'text-orange-500/70' : 'text-text-muted'}`}>
-                  {manutencaoLegenda}
-                </div>
-                {form.manutencao_inclusa && (
-                  <div className="text-[9px] mt-0.5 text-text-muted/60 italic">Bloco 6 ignorado</div>
-                )}
-              </div>
-
-              {/* Card Monitoramento */}
-              {vendaUnitMonitoramento > 0 && (
-                <div className="border rounded-xl p-3 flex flex-col justify-center bg-cyan-500/5 border-cyan-500/20">
-                  <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Monitoramento</span>
-                  <div className="text-base font-bold tabular-nums text-cyan-500">
-                    {fmtC(vendaUnitMonitoramento)}
-                  </div>
-                  <div className="text-[9px] text-text-muted mt-1.5 space-y-0.5">
-                    <div className="flex justify-between gap-1"><span>Receita Tot.</span><span className="font-semibold tabular-nums">{fmtC(receitaTotalMonitoramento)}</span></div>
-                    <div className="flex justify-between gap-1"><span>Custo Tot.</span><span className="font-semibold tabular-nums">{fmtC(custoTotalMonitoramento)}</span></div>
-                    <div className="flex justify-between gap-1"><span>Lucro Tot.</span><span className="font-semibold tabular-nums text-brand-success">{fmtC(lucroTotalMonitoramento)}</span></div>
+            return (
+              <div className="bg-bg-surface/95 backdrop-blur-xl border border-border-subtle shadow-md rounded-2xl p-4 xl:p-5 transition-all">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-border-subtle pb-3 mb-3">
+                  <h3 className="text-sm font-bold text-text-primary tracking-tight flex items-center gap-2">
+                    <Calculator className="w-4 h-4 text-brand-primary" />
+                    Cálculo Simultâneo — {tipoLabel}
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    {isCalculating ? (
+                      <span className="flex items-center text-[10px] font-semibold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-full animate-pulse gap-1">
+                        <Calculator className="w-3 h-3 animate-pulse" /> Calculando
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-brand-success bg-brand-success/10 border border-brand-success/20 px-2 py-1 rounded-full">Atualizado</span>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={() => setIsCalcExpanded(false)}
+                      className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                      title="Recolher painel"
+                    >
+                      <ChevronLeft className="w-4 h-4 hidden lg:block" />
+                      <ChevronUp className="w-4 h-4 lg:hidden" />
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {/* Card 5: Faturamento Mensal = Locação + Manutenção */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center relative overflow-hidden ${faturamentoMensal > 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-bg-subtle border-border-subtle'}`}>
-                {faturamentoMensal > 0 && (
-                  <div className="absolute top-0 right-0 w-14 h-14 bg-brand-success/10 rounded-full blur-xl -mr-3 -mt-3 pointer-events-none" />
-                )}
-                <span className={`block text-[9px] font-bold uppercase tracking-wider mb-1 relative z-10 ${faturamentoMensal > 0 ? 'text-brand-success' : 'text-text-muted'}`}>
-                  Faturamento Mensal
-                </span>
-                <div className={`text-xl font-black tabular-nums tracking-tight relative z-10 ${faturamentoMensal > 0 ? 'text-brand-success' : 'text-text-muted'}`}>
-                  {fmtC(faturamentoMensal)}
-                </div>
-                <div className="text-[9px] text-text-muted mt-1.5 relative z-10 space-y-0.5">
-                  <div className="flex justify-between gap-1"><span>Locação</span><span className="font-semibold tabular-nums">{fmtC(locacaoMensal)}</span></div>
-                  <div className="flex justify-between gap-1"><span>Manutenção</span><span className="font-semibold tabular-nums">{fmtC(manutencaoMensal)}</span></div>
-                  {vendaUnitMonitoramento > 0 && (
-                    <div className="flex justify-between gap-1"><span>Monitoramento</span><span className="font-semibold tabular-nums">{fmtC(vendaUnitMonitoramento)}</span></div>
-                  )}
-                </div>
-              </div>
-
-              {/* Card 6: ROI Previsto */}
-              <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
-                {roiMeses > 0 && (
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
-                )}
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
-                <div className={`text-xl font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
-                  {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
-                </div>
-
-                <div className="text-[10px] text-text-muted mt-2 space-y-1 relative z-10 border-t border-border-subtle pt-2">
-                  <div className="flex justify-between items-center gap-2 group/roi">
-                    <span className="flex items-center gap-1"><span className="text-brand-success font-bold">+</span> Fat. mensal:</span>
-                    <span className="font-mono text-[9px] text-text-primary bg-bg-deep px-1 rounded">
-                      {fmtC(faturamentoMensal)} <span className="opacity-50">x {mesesFaturados}m</span>
-                    </span>
-                  </div>
-                  {form.instalacao_inclusa && instalacaoEmbutida > 0 && (
-                    <div className="flex justify-between items-center gap-2 group/roi -mt-0.5">
-                      <span className="flex items-center gap-1 pl-4"><span className="text-brand-success font-bold">+</span> Instalação:</span>
-                      <span className="font-mono text-[9px] text-text-primary">{fmtC(instalacaoEmbutida)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center text-[10px] font-bold text-brand-success pl-4 mt-0.5 pt-0.5 border-t border-brand-success/10">
-                    <span className="text-[8px] uppercase tracking-tighter opacity-70">Fat. total:</span>
-                    <span>{fmtC(totalReceitaContrato)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center gap-2 pt-1 border-t border-border-subtle/30 group/roi">
-                    <span className="flex items-center gap-1 pl-4"><span className="text-brand-danger font-bold">-</span> Aquisição:</span>
-                    <span className="font-mono text-[9px] text-text-primary">{fmtC(custoAq)}</span>
-                  </div>
-                  {valorComissaoLocacao > 0 && (
-                    <div className="flex justify-between items-center gap-2 group/roi -mt-0.5">
-                      <span className="flex items-center gap-1 pl-4"><span className="text-brand-danger font-bold">-</span> Comissão:</span>
-                      <span className="font-mono text-[9px] text-text-primary">{fmtC(valorComissaoLocacao)}</span>
-                    </div>
-                  )}
-                  {impostoInstalacao > 0 && (
-                    <div className="flex justify-between items-center gap-2 group/roi -mt-0.5">
-                      <span className="flex items-center gap-1 pl-4"><span className="text-brand-danger font-bold">-</span> Imp. Instalação:</span>
-                      <span className="font-mono text-[9px] text-text-primary">{fmtC(impostoInstalacao)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center text-[10px] font-bold text-brand-danger pl-4 mt-0.5 pt-0.5 border-t border-brand-danger/10">
-                    <span className="text-[8px] uppercase tracking-tighter opacity-70">Investimento Total:</span>
-                    <span className="text-[10px]">{fmtC(totalInvestimento)}</span>
-                  </div>
-                  {/* Manut. = custo bruto Bloco 6, sem fator de margem */}
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Manut. (custo):</span>
-                    <span className="font-semibold tabular-nums text-text-primary">
-                      {fmtC(custoOpMensal)}
-                    </span>
-                  </div>
-                  {/* Bloco 7 – Custos Mensais do Contrato */}
-                  {(form.monthly_costs && form.monthly_costs.length > 0) && (
-                    <div className="flex justify-between items-center gap-2">
-                      <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Custo Mensal:</span>
-                      <span className="font-semibold tabular-nums text-text-primary">{fmtC(form.monthly_costs.reduce((sum, c) => sum + ((c.quantidade || 0) * (c.valor_unitario || 0)), 0))}</span>
-                    </div>
-                  )}
-                  {/* Monitoramento Unitário */}
-                  {(Number(form.custo_monitoramento_unitario) > 0) && (
-                    <div className="flex justify-between items-center gap-2">
-                      <span className="flex items-center gap-1"><span className="text-brand-danger font-bold">-</span> Monitoramento (Custo/Mês):</span>
-                      <span className="font-semibold tabular-nums text-text-primary">{fmtC(Number(form.custo_monitoramento_unitario))}</span>
-                    </div>
-                  )}
-                  {/* Impostos com tooltip de aliquotas */}
-                  <div className="flex justify-between items-center gap-2">
-                    <span className="flex items-center gap-1">
-                      <span className="text-brand-danger font-bold">-</span>
-                      <Tooltip content={
-                        <div className="w-auto min-w-[320px] text-left p-1">
-                          <div className="font-bold text-white text-[13px] mb-3 flex items-center gap-1.5 border-b border-slate-700 pb-2">
-                            <Info className="w-4 h-4 text-cyan-400" />
-                            Detalhamento de Impostos {form.faturamento_servico_separado ? '(Separado)' : '(Unificado)'}
-                          </div>
-                          <div className="font-mono text-slate-300 text-[11px]">
-                            {(() => {
-                              const bases = {
-                                loc: locacaoMensal,
-                                man: manutencaoMensal,
-                                mon: vendaUnitMonitoramento
-                              };
-                              const hasMan = bases.man > 0;
-                              const hasMon = bases.mon > 0;
-                              const isSep = form.faturamento_servico_separado;
-
-                              const aliquotas = {
-                                PIS: Number(form.aliq_pis) || 0,
-                                COFINS: Number(form.aliq_cofins) || 0,
-                                CSLL: Number(form.aliq_csll) || 0,
-                                IRPJ: Number(form.aliq_irpj) || 0,
-                                ISS: Number(form.aliq_iss) || 0,
-                              };
-
-                              let somaTotal = 0;
-
-                              return (
-                                <table className="w-full text-right border-collapse">
-                                  <thead>
-                                    <tr className="border-b border-slate-600 text-slate-400">
-                                      <th className="text-left font-medium pb-2 uppercase tracking-wider text-[9px]">Imp.</th>
-                                      <th className="font-medium pb-2 px-1.5 uppercase tracking-wider text-[9px]">Loc.</th>
-                                      {hasMan && <th className="font-medium pb-2 px-1.5 uppercase tracking-wider text-[9px]">Man.</th>}
-                                      {hasMon && <th className="font-medium pb-2 px-1.5 uppercase tracking-wider text-[9px]">Mon.</th>}
-                                      <th className="font-bold pb-2 pl-2 text-white uppercase tracking-wider text-[9px]">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-700/50">
-                                    {Object.entries(aliquotas).map(([tax, rate]) => {
-                                      if (rate <= 0) return null;
-                                      if (tax === 'ISS' && !['COMODATO', 'INSTALACAO', 'LOCACAO'].includes(form.tipo_contrato)) return null;
-
-                                      const calcRate = (isService: boolean) => {
-                                        if (!isSep) return rate;
-                                        if (tax === 'ISS' && !isService) return 0;
-                                        return rate;
-                                      };
-
-                                      const tLoc = bases.loc * (calcRate(false) / 100);
-                                      const tMan = bases.man * (calcRate(true) / 100);
-                                      const tMon = bases.mon * (calcRate(true) / 100);
-                                      const tRow = tLoc + tMan + tMon;
-                                      somaTotal += tRow;
-
-                                      return (
-                                        <tr key={tax} className="hover:bg-white/5 transition-colors">
-                                          <td className="text-left py-1.5">
-                                            <span className="font-semibold text-slate-200">{tax}</span> <span className="text-slate-500 text-[9px]">({rate.toFixed(2)}%)</span>
-                                          </td>
-                                          <td className="py-1.5 px-1.5 text-slate-300">{tLoc > 0 ? fmtC(tLoc) : '-'}</td>
-                                          {hasMan && <td className="py-1.5 px-1.5 text-slate-300">{tMan > 0 ? fmtC(tMan) : '-'}</td>}
-                                          {hasMon && <td className="py-1.5 px-1.5 text-slate-300">{tMon > 0 ? fmtC(tMon) : '-'}</td>}
-                                          <td className="py-1.5 pl-2 font-bold text-slate-100">{fmtC(tRow)}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                  <tfoot>
-                                    <tr className="border-t border-slate-500 font-bold text-white bg-slate-800/40">
-                                      <td className="text-left py-2 rounded-bl px-1 uppercase tracking-wider text-[10px]">Total Mês</td>
-                                      <td className="py-2 px-1.5 text-slate-500">-</td>
-                                      {hasMan && <td className="py-2 px-1.5 text-slate-500">-</td>}
-                                      {hasMon && <td className="py-2 px-1.5 text-slate-500">-</td>}
-                                      <td className="py-2 pl-2 rounded-br text-rose-300 text-[12px]">{fmtC(impostosMensais)}</td>
-                                    </tr>
-                                  </tfoot>
-                                </table>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      }>
-                        <span className="cursor-help border-b border-dashed border-text-muted/50 flex items-center gap-1">
-                          Impostos mensal: <Info className="w-3 h-3 opacity-50" />
+                {/* Collapsible Rules (Política Comercial) */}
+                <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
+                  <button 
+                    type="button"
+                    onClick={() => setIsPolicyExpanded(!isPolicyExpanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-bg-subtle text-xs font-bold text-text-secondary border-b border-border-subtle cursor-pointer hover:bg-bg-deep/50 transition-colors"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Regras de Negócio</span>
+                    <div className="flex items-center gap-2">
+                      {activePolicy && !isPolicyExpanded && (
+                        <span className="text-[9px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                          {activePolicy.nome_politica} ({activePolicy.comissao_percentual}%)
                         </span>
-                      </Tooltip>
-                    </span>
-                    <span className="font-semibold tabular-nums text-rose-400">{fmtC(impostosMensais)}</span>
-                  </div>
-                </div>
-              </div>
+                      )}
+                      {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
+                    </div>
+                  </button>
 
-              {/* Card 6.5: ROI DE EQUIPAMENTO */}
-              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
-                <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiEquipamentoMeses > 0 ? 'bg-indigo-500/5 border-indigo-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
-                  {roiEquipamentoMeses > 0 && (
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                  {isPolicyExpanded && (
+                    <div className="p-3 bg-bg-surface">
+                      {activePolicy ? (
+                        <div className="flex items-center gap-3 px-3 py-2 bg-brand-primary/5 border border-brand-primary/20 rounded-lg">
+                          <div className="w-6 h-6 rounded-full bg-brand-primary flex items-center justify-center shrink-0">
+                            <span className="text-white text-[10px] font-black">P</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Política Comercial Ativa</p>
+                            <p className="text-xs font-bold text-brand-primary truncate">{activePolicy.nome_politica}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[9px] text-text-muted uppercase tracking-wide">Fator Mín.</p>
+                            <p className="text-xs font-bold text-text-primary">{Number(activePolicy.fator_limite).toFixed(4)}</p>
+                          </div>
+                          <div className="shrink-0 text-right border-l border-brand-primary/20 pl-3">
+                            <p className="text-[9px] text-text-muted uppercase tracking-wide">Comissão</p>
+                            <p className="text-xs font-bold text-brand-primary">{activePolicy.comissao_percentual}%</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-bg-subtle border border-border-subtle rounded-lg">
+                          <span className="text-[10px] text-text-muted italic">Nenhuma política comercial ativa para o seu cargo.</span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  <div className="flex items-center gap-1 text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">
-                    ROI DE EQUIPAMENTO
-                    <Tooltip content={
-                      <div className="w-auto min-w-[320px] text-left p-1">
-                        <div className="font-bold text-white text-[13px] mb-3 flex items-center gap-1.5 border-b border-slate-700 pb-2">
-                          <Info className="w-4 h-4 text-indigo-400" />
-                          Memória de Cálculo (Equipamento)
-                        </div>
-                        <div className="text-[11px] text-slate-300 space-y-1.5">
-                          <div className="flex justify-between items-center gap-2">
-                            <span className="text-slate-400">Custo de Aquisição:</span>
-                            <span className="font-mono text-[10px] text-slate-200">{fmtC(custoAq)}</span>
-                          </div>
-                          {valorComissaoLocacao > 0 && (
-                            <div className="flex justify-between items-center gap-2">
-                              <span className="text-slate-400">Comissão:</span>
-                              <span className="font-mono text-[10px] text-slate-200">{fmtC(valorComissaoLocacao)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-100 mt-1 pt-1 border-t border-slate-700">
-                            <span className="uppercase tracking-tighter opacity-80">Total Investimento (A):</span>
-                            <span>{fmtC(custoAq + valorComissaoLocacao)}</span>
-                          </div>
+                </div>
 
-                          <div className="flex justify-between items-center gap-2 mt-3">
-                            <span className="text-slate-400">Locação Mensal:</span>
-                            <span className="font-mono text-[10px] text-slate-200">{fmtC(financials?.summary?.venda_equipamentos_total || 0)}</span>
-                          </div>
-                          <div className="flex justify-between items-center gap-2">
-                            <span className="text-slate-400">Imposto de Locação:</span>
-                            <span className="font-mono text-[10px] text-rose-400">-{fmtC(financials?.summary?.imposto_equip_loc || 0)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] font-bold text-slate-100 mt-1 pt-1 border-t border-slate-700">
-                            <span className="uppercase tracking-tighter opacity-80">Receita Líquida (B):</span>
-                            <span>{fmtC((financials?.summary?.venda_equipamentos_total || 0) - (financials?.summary?.imposto_equip_loc || 0))}</span>
-                          </div>
+                {/* Cards Grid (Compact 2-columns) */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Card 1: Custo de Aquisição */}
+                  <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
+                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+                    <div className="text-base font-bold text-text-primary tabular-nums">{fmtC(custoAq)}</div>
+                    <div className="text-[9px] text-text-muted mt-1.5 space-y-0.5 font-mono">
+                      <div className="flex justify-between gap-1"><span>Prods:</span><span>{fmtC(custo_produtos)}</span></div>
+                      <div className="flex justify-between gap-1"><span>Servs:</span><span>{fmtC(custo_servicos)}</span></div>
+                    </div>
+                  </div>
 
-                          <div className="flex justify-between items-center text-[11px] font-black text-indigo-400 mt-3 pt-2 border-t border-indigo-500/30">
-                            <span className="uppercase tracking-widest">Resultado (A / B):</span>
-                            <span>{roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(2)} meses` : 'Indisponível'}</span>
-                          </div>
-                        </div>
+                  {/* Card 1.5: Comissão */}
+                  <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center">
+                    <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">Comissão (%)</span>
+                    <div className="text-base font-bold text-brand-primary tabular-nums">{fmtC(valorComissaoLocacao)}</div>
+                    <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
+                      {Number(form.perc_comissao || 0).toFixed(2)}% s/ base
+                    </div>
+                  </div>
+
+                  {/* Card 2: Instalação */}
+                  <div className={`border rounded-xl p-3 flex flex-col justify-center ${instalacaoEmbutida > 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
+                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Instalação</span>
+                    <div className={`text-base font-bold tabular-nums ${instalacaoEmbutida > 0 ? 'text-amber-500' : 'text-text-muted'}`}>
+                      {fmtC(instalacaoEmbutida)}
+                    </div>
+                    <div className={`text-[9px] mt-1.5 font-medium ${instalacaoEmbutida > 0 ? 'text-amber-500/80' : 'text-text-muted'}`}>
+                      {instalacaoLabel}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Locação Mensal */}
+                  <div className={`border rounded-xl p-3 flex flex-col justify-center relative overflow-hidden ${locacaoMensal > 0 ? 'bg-brand-primary/5 border-brand-primary/20' : 'bg-bg-subtle border-border-subtle'}`}>
+                    {locacaoMensal > 0 && (
+                      <div className="absolute top-0 right-0 w-14 h-14 bg-brand-primary/10 rounded-full blur-xl -mr-3 -mt-3 pointer-events-none" />
+                    )}
+                    <span className={`block text-[9px] font-bold uppercase tracking-wider mb-1 relative z-10 ${locacaoMensal > 0 ? 'text-brand-primary' : 'text-text-muted'}`}>
+                      Locação Mensal
+                    </span>
+                    <div className={`text-base font-bold tabular-nums relative z-10 ${locacaoMensal > 0 ? 'text-brand-primary' : 'text-text-muted'}`}>
+                      {fmtC(locacaoMensal)}
+                    </div>
+                    <div className="text-[9px] text-text-muted mt-1.5 relative z-10 space-y-0.5">
+                      <div>FM: {fatorMargem.toFixed(2)} | Tx: {txLocPerc.toFixed(2)}%</div>
+                      <div className="text-text-muted/70">{mesesFaturados}x meses</div>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Manutenção (Mês) */}
+                  <div className={`border rounded-xl p-3 flex flex-col justify-center ${manutencaoMensal > 0 ? 'bg-orange-500/5 border-orange-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
+                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Manutenção (Mês)</span>
+                    <div className={`text-base font-bold tabular-nums ${manutencaoMensal > 0 ? 'text-orange-500' : 'text-text-muted'}`}>
+                      {fmtC(manutencaoMensal)}
+                    </div>
+                    <div className={`text-[9px] mt-1.5 font-medium ${manutencaoMensal > 0 ? 'text-orange-500/70' : 'text-text-muted'}`}>
+                      {manutencaoLegenda}
+                    </div>
+                    {form.manutencao_inclusa && (
+                      <div className="text-[9px] mt-0.5 text-text-muted/60 italic">Bloco 6 ignorado</div>
+                    )}
+                  </div>
+
+                  {/* Card Monitoramento */}
+                  {vendaUnitMonitoramento > 0 && (
+                    <div className="border rounded-xl p-3 flex flex-col justify-center bg-cyan-500/5 border-cyan-500/20">
+                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Monitoramento</span>
+                      <div className="text-base font-bold tabular-nums text-cyan-500">
+                        {fmtC(vendaUnitMonitoramento)}
                       </div>
-                    }>
-                      <Info className="w-3 h-3 text-text-muted cursor-help hover:text-text-primary transition-colors" />
-                    </Tooltip>
-                  </div>
-                  <div className={`text-xl font-black tabular-nums tracking-tighter relative z-10 ${roiEquipamentoMeses > 0 ? 'text-indigo-500' : 'text-text-muted'}`}>
-                    {roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(2)} meses` : <span className="text-sm font-medium">ROI indisponível</span>}
-                  </div>
-                  <div className="text-[9px] text-text-muted mt-1.5 italic relative z-10 leading-tight">
-                    Tempo estimado para retorno do investimento do equipamento
-                  </div>
-                </div>
-              )}
+                      <div className="text-[9px] text-text-muted mt-1.5 space-y-0.5 font-mono">
+                        <div className="flex justify-between gap-1"><span>Rec:</span><span>{fmtC(receitaTotalMonitoramento)}</span></div>
+                        <div className="flex justify-between gap-1"><span>Cust:</span><span>{fmtC(custoTotalMonitoramento)}</span></div>
+                        <div className="flex justify-between gap-1"><span>Luc:</span><span className="text-brand-success">{fmtC(lucroTotalMonitoramento)}</span></div>
+                      </div>
+                    </div>
+                  )}
 
-              {/* Card 7: FATOR GERAL */}
-              <div className="border rounded-xl p-3 flex flex-col justify-center bg-bg-subtle border-border-subtle shadow-sm relative overflow-hidden">
-                <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 p-0 m-0">Fator Geral</span>
-                <div className="text-xl font-black text-text-primary tabular-nums">
-                  {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
-                </div>
-                <div className="text-[9px] text-text-muted mt-1.5 italic">
-                  Média (Demonstrativo)
+                  {/* Card 5: Faturamento Mensal */}
+                  <div className={`border rounded-xl p-3 flex flex-col justify-center relative overflow-hidden ${faturamentoMensal > 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-bg-subtle border-border-subtle'}`}>
+                    {faturamentoMensal > 0 && (
+                      <div className="absolute top-0 right-0 w-14 h-14 bg-brand-success/10 rounded-full blur-xl -mr-3 -mt-3 pointer-events-none" />
+                    )}
+                    <span className={`block text-[9px] font-bold uppercase tracking-wider mb-1 relative z-10 ${faturamentoMensal > 0 ? 'text-brand-success' : 'text-text-muted'}`}>
+                      Faturamento Mensal
+                    </span>
+                    <div className={`text-base font-black tabular-nums tracking-tight relative z-10 ${faturamentoMensal > 0 ? 'text-brand-success' : 'text-text-muted'}`}>
+                      {fmtC(faturamentoMensal)}
+                    </div>
+                    <div className="text-[9px] text-text-muted mt-1.5 relative z-10 space-y-0.5">
+                      <div className="flex justify-between gap-1"><span>Loc:</span><span>{fmtC(locacaoMensal)}</span></div>
+                      <div className="flex justify-between gap-1"><span>Manut:</span><span>{fmtC(manutencaoMensal)}</span></div>
+                      {vendaUnitMonitoramento > 0 && (
+                        <div className="flex justify-between gap-1"><span>Monit:</span><span>{fmtC(vendaUnitMonitoramento)}</span></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 6: ROI Previsto */}
+                  <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                    {roiMeses > 0 && (
+                      <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                    )}
+                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
+                    <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
+                      {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
+                    </div>
+                  </div>
+
+                  {/* Card 6.5: ROI DE EQUIPAMENTO */}
+                  {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                    <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiEquipamentoMeses > 0 ? 'bg-indigo-500/5 border-indigo-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                      {roiEquipamentoMeses > 0 && (
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                      )}
+                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Equipamento</span>
+                      <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiEquipamentoMeses > 0 ? 'text-indigo-500' : 'text-text-muted'}`}>
+                        {roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(1)} meses` : '—'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card 7: FATOR GERAL */}
+                  <div className="border rounded-xl p-3 flex flex-col justify-center bg-bg-subtle border-border-subtle shadow-sm relative overflow-hidden">
+                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Fator Geral</span>
+                    <div className="text-base font-black text-text-primary tabular-nums">
+                      {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
+                    </div>
+                  </div>
                 </div>
               </div>
+            );
+          })()}
+        </aside>
 
-            </div>
-              </>
-            )}
-          </div>
-        );
-      })()}
-
-
-      {/* FULL WIDTH LAYOUT */}
-      <div className="w-full">
-
-        {/* FORM SECTIONS */}
-        <div className="w-full space-y-8">
-
+        {/* RIGHT FORM SECTIONS */}
+        <div className="flex-grow flex-1 w-full min-w-0 space-y-8">
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
             <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
               1. Informações Gerais
@@ -1885,8 +1910,36 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           </section>
 
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-subtle">
-              <h2 className="text-xl font-semibold">4. Itens do kit (produtos + serviços)</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-4 border-b border-border-subtle gap-4">
+              <div className="flex items-center gap-4">
+                <h2 className="text-xl font-semibold">4. Itens do kit (produtos + serviços)</h2>
+                {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && (
+                  <div className="flex items-center gap-1 bg-bg-deep/60 p-0.5 rounded-lg border border-border-subtle shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('considerar_st_ou_difal', 'DIFAL')}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all ${
+                        form.considerar_st_ou_difal === 'DIFAL'
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      DIFAL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('considerar_st_ou_difal', 'ST')}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition-all ${
+                        form.considerar_st_ou_difal === 'ST'
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      ST
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 {form.items.length > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setShowProductSearch(true)}>
@@ -1955,8 +2008,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         <>
                           <th className="px-1.5 py-3 w-20">Quantidade</th>
                           <th className="px-1.5 py-3 text-right">Custo Base</th>
-                          <th className="px-1.5 py-3 text-right">DIFAL (Un.)</th>
-                          <th className="px-1.5 py-3 text-right">Total sem DIFAL</th>
+                          {form.considerar_st_ou_difal === 'ST' ? (
+                            <>
+                              <th className="px-1.5 py-3 text-right">ST (Un.)</th>
+                              <th className="px-1.5 py-3 text-right">Total sem ST</th>
+                            </>
+                          ) : (
+                            <>
+                              <th className="px-1.5 py-3 text-right">DIFAL (Un.)</th>
+                              <th className="px-1.5 py-3 text-right">Total sem DIFAL</th>
+                            </>
+                          )}
                           <th className="px-1.5 py-3 text-right">Custo Total</th>
                         </>
                       )}
@@ -2016,7 +2078,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
-                                      <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                      <div className="border-t border-gray-300 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
                                         <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || 0)}</span>
                                       </div>
                                     </div>
@@ -2063,7 +2125,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                           <span>- {fmtC(summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit))}</span>
                                         </div>
                                       )}
-                                      <div className="border-t border-white/20 mt-2 pt-2 flex justify-between font-bold text-text-primary">
+                                      <div className="border-t border-gray-300 mt-2 pt-2 flex justify-between font-bold text-text-primary">
                                         <span>Total Impostos (Líquido)</span><span>{fmtC((summary?.imposto_venda_item || 0) - (summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)))}</span>
                                       </div>
                                     </div>
@@ -2115,7 +2177,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                           <div className="flex justify-between"><span>Base (Unit.):</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
                                           <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit || 0)}</span></div>
                                           <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit || 0)}</span></div>
-                                          <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                          <div className="border-t border-gray-300 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
                                             <span>Custo Base:</span><span>{fmtC(custoBase)}</span>
                                           </div>
                                         </div>
@@ -2127,10 +2189,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 })()}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                {fmtC(summary?.difal_unitario || 0)}
+                                {form.considerar_st_ou_difal === 'ST' ? (
+                                  <Tooltip content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={true} />}>
+                                    <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.icms_st_unitario || 0)}</span>
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={false} />}>
+                                    <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.difal_unitario || 0)}</span>
+                                  </Tooltip>
+                                )}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                {fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)}
+                                {form.considerar_st_ou_difal === 'ST' ? (
+                                  fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
+                                ) : (
+                                  fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
+                                )}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
                                 {fmtC(summary?.custo_total_item_no_kit)}
@@ -2177,8 +2251,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       ) : (
                         <>
                           <td className="px-4 py-3"></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_difal_kit || 0))}</td>
+                          {form.considerar_st_ou_difal === 'ST' ? (
+                            <>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_st_kit || 0)}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_st_kit || 0))}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_difal_kit || 0))}</td>
+                            </>
+                          )}
                           <td className="px-4 py-3 text-right tabular-nums font-bold">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
                         </>
                       )}
@@ -2192,6 +2275,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               isOpen={showProductSearch}
               onClose={() => setShowProductSearch(false)}
               onSelect={handleAddProduct}
+              salesBudgetId={form.sales_budget_id}
             />
           </section>
 
@@ -2789,6 +2873,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             isKitBasedExecucao={['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato)}
             disabledOwnServices={costSearchType === 'inst' && ['LOCACAO', 'COMODATO'].includes(form.tipo_contrato)}
             kitFormaExecucao={form.forma_execucao || 'H. NORMAL'}
+            salesBudgetId={form.sales_budget_id}
           />
 
           <AddOperationalCostModal
@@ -2802,6 +2887,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             isKitBasedExecucao={true}
             isKitItemFlow={true}
             kitFormaExecucao={form.forma_execucao || 'H. NORMAL'}
+            salesBudgetId={form.sales_budget_id}
           />
         </div>
 

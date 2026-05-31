@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -65,6 +65,35 @@ class RentalBudgetItemBase(BaseModel):
     perc_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     valor_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     fator_margem: Decimal = Field(default=1, max_digits=10, decimal_places=4)
+
+    @model_validator(mode="before")
+    @classmethod
+    def round_decimals(cls, data):
+        if isinstance(data, dict):
+            decimal_fields_4 = [
+                "custo_op_mensal_kit", "kit_custo_produtos", "kit_custo_servicos",
+                "kit_pis", "kit_cofins", "kit_csll", "kit_irpj", "kit_iss",
+                "quantidade", "custo_aquisicao_unit", "ipi_unit", "frete_unit",
+                "icms_st_unit", "difal_unit", "kit_vlt_manut", "kit_valor_mensal",
+                "kit_valor_impostos", "kit_receita_liquida", "kit_lucro_mensal",
+                "kit_margem", "kit_investimento_total", "kit_comissao",
+                "kit_perc_comissao", "kit_vlr_instal_calc", "kit_parcela_locacao",
+                "kit_venda_unit_monitoramento", "taxa_manutencao_anual_item",
+                "perc_instalacao_item", "valor_instalacao_item", "fator_margem"
+            ]
+            for field in decimal_fields_4:
+                val = data.get(field)
+                if val is not None:
+                    try:
+                        data[field] = round(float(val), 4)
+                    except (ValueError, TypeError):
+                        pass
+            if "kit_taxa_juros_mensal" in data and data["kit_taxa_juros_mensal"] is not None:
+                try:
+                    data["kit_taxa_juros_mensal"] = round(float(data["kit_taxa_juros_mensal"]), 6)
+                except (ValueError, TypeError):
+                    pass
+        return data
 
 
 class RentalBudgetItemCreate(RentalBudgetItemBase):
@@ -150,6 +179,9 @@ class SalesBudgetBase(BaseModel):
     model_config = ConfigDict(extra='ignore')
     customer_id: str
     vendedor_id: Optional[str] = None
+    forma_pagamento_id: Optional[UUID] = None
+    data_vencimento_inicial: Optional[datetime] = None
+    forma_pagamento_snapshot: Optional[dict] = None
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime

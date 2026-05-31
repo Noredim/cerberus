@@ -71,20 +71,7 @@ def add_negotiation(
 ):
     return PurchaseBudgetService.add_negotiation(db, current_user.tenant_id, budget_id, data)
 
-@router.get("/payment-conditions", response_model=List[schemas.PaymentConditionOut])
-def list_payment_conditions(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    return PurchaseBudgetService.get_payment_conditions(db, current_user.tenant_id)
 
-@router.post("/payment-conditions", response_model=schemas.PaymentConditionOut)
-def create_payment_condition(
-    data: schemas.PaymentConditionCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    return PurchaseBudgetService.create_payment_condition(db, current_user.tenant_id, data)
 
 @router.post("/import/{supplier_id}")
 async def import_budgets_excel(
@@ -117,3 +104,13 @@ def link_product_to_supplier(
         codigo_fornecedor=data.codigo_fornecedor
     )
     return {"message": "Product linked successfully", "id": str(result.id)}
+
+@router.delete("/{budget_id}", status_code=204)
+def delete_budget(
+    budget_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    PurchaseBudgetService.delete_budget(db, current_user.tenant_id, budget_id, company_id)
+    return None

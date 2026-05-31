@@ -1,21 +1,10 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Numeric, Integer
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
-
-class PaymentCondition(Base):
-    __tablename__ = "payment_conditions"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    descricao = Column(String(100), nullable=False)
-    prazo = Column(Integer, nullable=False, default=0) # e.g. 30 days
-    parcelas = Column(Integer, nullable=False, default=1) # number of installments
-
-    created_at = Column(DateTime(timezone=True), default=func.now())
-    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+import src.modules.payment_methods.models
 
 class PurchaseBudget(Base):
     __tablename__ = "purchase_budgets"
@@ -26,7 +15,9 @@ class PurchaseBudget(Base):
     sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="SET NULL"), nullable=True, index=True)
     
     supplier_id = Column(String, ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True)
-    payment_condition_id = Column(UUID(as_uuid=True), ForeignKey("payment_conditions.id", ondelete="SET NULL"), nullable=True)
+    forma_pagamento_id = Column(UUID(as_uuid=True), ForeignKey("formas_pagamento.id", ondelete="SET NULL"), nullable=True)
+    data_vencimento_inicial = Column(DateTime(timezone=True), nullable=True)
+    forma_pagamento_snapshot = Column(JSONB, nullable=True)
 
     data_orcamento = Column(DateTime(timezone=True), nullable=False, default=func.now())
     validade = Column(DateTime(timezone=True), nullable=True)
@@ -45,7 +36,7 @@ class PurchaseBudget(Base):
 
     # Relationships
     supplier = relationship("Supplier")
-    payment_condition = relationship("PaymentCondition")
+    forma_pagamento = relationship("FormaPagamento")
     items = relationship("PurchaseBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     negotiations = relationship("PurchaseBudgetNegotiation", back_populates="budget", cascade="all, delete-orphan")
 

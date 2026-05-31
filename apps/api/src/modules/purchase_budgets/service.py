@@ -6,12 +6,11 @@ from typing import List, Optional
 
 from fastapi import HTTPException
 
-from .models import PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem, PaymentCondition
+from .models import PurchaseBudget, PurchaseBudgetItem, PurchaseBudgetNegotiation, PurchaseBudgetNegotiationItem
 from .schemas import (
     PurchaseBudgetCreate, 
     PurchaseBudgetNegotiationCreate, 
-    FreightTypeEnum,
-    PaymentConditionCreate
+    FreightTypeEnum
 )
 from src.modules.products.models import Product, ProductSupplier
 import io
@@ -65,7 +64,8 @@ class PurchaseBudgetService:
         # 1. Fetch all budget items for this product in descending order of budget date
         items_desc = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
             PurchaseBudgetItem.product_id == product_id,
-            PurchaseBudget.tenant_id == tenant_id
+            PurchaseBudget.tenant_id == tenant_id,
+            PurchaseBudget.sales_budget_id.is_(None)
         ).order_by(PurchaseBudget.data_orcamento.desc(), PurchaseBudget.created_at.desc()).all()
 
         latest_revenda = None
@@ -274,7 +274,9 @@ class PurchaseBudgetService:
             tenant_id=tenant_id,
             company_id=company_id,
             supplier_id=data.supplier_id,
-            payment_condition_id=data.payment_condition_id,
+            forma_pagamento_id=data.forma_pagamento_id,
+            data_vencimento_inicial=data.data_vencimento_inicial,
+            forma_pagamento_snapshot=data.forma_pagamento_snapshot,
             data_orcamento=data.data_orcamento,
             validade=data.validade,
             numero_orcamento=data.numero_orcamento,
@@ -308,12 +310,16 @@ class PurchaseBudgetService:
             )
             db.add(db_item)
             
+        from src.modules.payment_methods.service import PaymentMethodsService
+        PaymentMethodsService.sync_purchase_budget_planning(db, db_budget)
+            
         db.commit()
         db.refresh(db_budget)
         
         # Fire reference price rule
-        PurchaseBudgetService._update_product_reference_prices(db, db_budget)
-        db.commit()
+        if db_budget.sales_budget_id is None:
+            PurchaseBudgetService._update_product_reference_prices(db, db_budget)
+            db.commit()
         
         return db_budget
 
@@ -326,7 +332,10 @@ class PurchaseBudgetService:
         old_product_ids = {item.product_id for item in db_budget.items}
         
         db_budget.supplier_id = data.supplier_id
-        db_budget.payment_condition_id = data.payment_condition_id
+        if db_budget.forma_pagamento_id != data.forma_pagamento_id:
+            db_budget.forma_pagamento_snapshot = None
+        db_budget.forma_pagamento_id = data.forma_pagamento_id
+        db_budget.data_vencimento_inicial = data.data_vencimento_inicial
         db_budget.numero_orcamento = data.numero_orcamento
         db_budget.data_orcamento = data.data_orcamento
         db_budget.validade = data.validade
@@ -363,13 +372,17 @@ class PurchaseBudgetService:
             )
             db.add(db_item)
 
+        from src.modules.payment_methods.service import PaymentMethodsService
+        PaymentMethodsService.sync_purchase_budget_planning(db, db_budget)
+
         db.commit()
         db.refresh(db_budget)
         
-        PurchaseBudgetService._update_product_reference_prices(db, db_budget)
-        for old_pid in old_product_ids:
-            PurchaseBudgetService.sync_product_reference_prices(db, str(old_pid), tenant_id)
-        db.commit()
+        if db_budget.sales_budget_id is None:
+            PurchaseBudgetService._update_product_reference_prices(db, db_budget)
+            for old_pid in old_product_ids:
+                PurchaseBudgetService.sync_product_reference_prices(db, str(old_pid), tenant_id)
+            db.commit()
             
         return db_budget
 
@@ -419,37 +432,25 @@ class PurchaseBudgetService:
             
             # ATUALIZAÇÃO DO PRODUTO (PRD 17)
             # Sistema atualiza no produto: ultimo_preco_compra, data_ultimo_preco, fornecedor_ultimo_preco
-            product = db.query(Product).filter(Product.id == b_item.product_id).first()
-            if product:
-                product.ultimo_preco_compra = valor_final
-                product.data_ultimo_preco = data.data_negociacao
-                product.fornecedor_ultimo_preco_id = budget.supplier_id
+            if budget.sales_budget_id is None:
+                product = db.query(Product).filter(Product.id == b_item.product_id).first()
+                if product:
+                    product.ultimo_preco_compra = valor_final
+                    product.data_ultimo_preco = data.data_negociacao
+                    product.fornecedor_ultimo_preco_id = budget.supplier_id
                 
         db.commit()
         db.refresh(negotiation)
         
         # Re-fire reference price rule after negotiation
-        PurchaseBudgetService._update_product_reference_prices(db, budget)
-        db.commit()
+        if budget.sales_budget_id is None:
+            PurchaseBudgetService._update_product_reference_prices(db, budget)
+            db.commit()
         
         return negotiation
 
     @staticmethod
-    def get_payment_conditions(db: Session, tenant_id: str):
-        return db.query(PaymentCondition).filter(PaymentCondition.tenant_id == tenant_id).all()
 
-    @staticmethod
-    def create_payment_condition(db: Session, tenant_id: str, data: PaymentConditionCreate):
-        cond = PaymentCondition(
-            tenant_id=tenant_id,
-            descricao=data.descricao,
-            prazo=data.prazo,
-            parcelas=data.parcelas
-        )
-        db.add(cond)
-        db.commit()
-        db.refresh(cond)
-        return cond
 
     @staticmethod
     def parse_excel_items(db: Session, tenant_id: str, supplier_id: str, file_bytes: bytes):
@@ -589,4 +590,39 @@ class PurchaseBudgetService:
         db.commit()
         db.refresh(ps)
         return ps
+
+    @staticmethod
+    def delete_budget(db: Session, tenant_id: str, budget_id: UUID, company_id: Optional[str] = None) -> bool:
+        budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, company_id)
+        
+        # Check if linked to an opportunity and if any product is in exclusive kit
+        if budget.sales_budget_id:
+            from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem, OpportunityKitCost
+            product_ids = [item.product_id for item in budget.items]
+            if product_ids:
+                # Check kits items
+                linked_item = db.query(OpportunityKitItem).join(OpportunityKit).filter(
+                    OpportunityKit.sales_budget_id == budget.sales_budget_id,
+                    OpportunityKitItem.product_id.in_(product_ids)
+                ).first()
+                if linked_item:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Não é possível excluir o orçamento de compra pois há produtos vinculados em kit exclusivo."
+                    )
+                
+                # Check operational costs
+                linked_cost = db.query(OpportunityKitCost).join(OpportunityKit).filter(
+                    OpportunityKit.sales_budget_id == budget.sales_budget_id,
+                    OpportunityKitCost.product_id.in_(product_ids)
+                ).first()
+                if linked_cost:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Não é possível excluir o orçamento de compra pois há produtos vinculados em custos operacionais do kit exclusivo."
+                    )
+        
+        db.delete(budget)
+        db.commit()
+        return True
 

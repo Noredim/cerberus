@@ -97,6 +97,7 @@ class OpportunityKitBase(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: int = Field(default=1)
     tipo_contrato: str
+    considerar_st_ou_difal: Optional[str] = Field(default="DIFAL")
     forma_execucao: Optional[str] = None
     
     prazo_contrato_meses: int
@@ -155,6 +156,7 @@ class OpportunityKitUpdate(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: Optional[int] = None
     tipo_contrato: Optional[str] = None
+    considerar_st_ou_difal: Optional[str] = None
     forma_execucao: Optional[str] = None
     
     prazo_contrato_meses: Optional[int] = None
@@ -286,6 +288,15 @@ class OpportunityKitItemFinancialSummary(BaseModel):
     irpj_unit: Decimal = Field(default=Decimal(0))
     icms_unit: Decimal = Field(default=Decimal(0))
     iss_unit: Decimal = Field(default=Decimal(0))
+    ipi_percent: float = Field(default=0.0)
+    icms_st_normal: Decimal = Field(default=Decimal(0))
+    cred_outorgado_percent: float = Field(default=0.0)
+    cred_outorgado_valor: Decimal = Field(default=Decimal(0))
+    is_bit: bool = Field(default=False)
+    is_intrastate: bool = Field(default=True)
+    uf_origem: str = Field(default="")
+    uf_destino: str = Field(default="")
+    custo_unit_final: Decimal = Field(default=Decimal(0))
 
 class OpportunityKitResponse(OpportunityKitBase):
     id: UUID

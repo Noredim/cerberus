@@ -39,6 +39,8 @@ import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalys
 import { SalesProposalList } from './modules/sales_proposals/SalesProposalList';
 import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
 import KitAnalyticReport from './modules/reports/KitAnalyticReport';
+import FormasPagamentoList from './modules/payment_methods/FormasPagamentoList';
+import FormasPagamentoForm from './modules/payment_methods/FormasPagamentoForm';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -143,6 +145,11 @@ function App() {
             <Route path="/cadastro/produtos/novo" element={<ProductForm />} />
             <Route path="/cadastro/produtos/editar/:id" element={<ProductForm />} />
             <Route path="/cadastro/produtos/detalhes/:id" element={<ProductForm />} />
+
+            {/* Formas de Pagamento */}
+            <Route path="/cadastros/formas-pagamento" element={<FormasPagamentoList />} />
+            <Route path="/cadastros/formas-pagamento/novo" element={<FormasPagamentoForm />} />
+            <Route path="/cadastros/formas-pagamento/editar/:id" element={<FormasPagamentoForm />} />
 
             {/* Purchase Budgets */}
             <Route path="/orcamentos-compras" element={<BudgetsList />} />

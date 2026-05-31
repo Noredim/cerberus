@@ -129,7 +129,9 @@ const KitAnalyticReport: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-4">
+                    <label htmlFor="select-opportunity-kit" className="sr-only">Selecionar Kit de Oportunidade</label>
                     <select
+                        id="select-opportunity-kit"
                         value={selectedKitId}
                         onChange={(e) => setSelectedKitId(e.target.value)}
                         className="bg-bg-deep border border-border-subtle text-text-primary rounded-md py-2 px-4 outline-none focus:border-brand-primary min-w-[300px]"
