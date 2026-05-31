@@ -178,6 +178,18 @@ def create_budget(
     return _budget_to_dict(budget, db)
 
 
+@router.get("/check-approver")
+def check_approver(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: Optional[str] = Depends(get_active_company)
+):
+    if not company_id:
+        return {"is_approver": False, "cargo": None}
+    is_app, cargo = service.check_is_approver(db, current_user.id, current_user.tenant_id, company_id)
+    return {"is_approver": is_app, "cargo": cargo}
+
+
 @router.get("/aprovacoes-pendentes")
 def list_aprovacoes_pendentes(
     db: Session = Depends(get_db),

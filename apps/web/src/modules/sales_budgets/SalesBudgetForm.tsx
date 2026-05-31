@@ -628,8 +628,8 @@ export function SalesBudgetForm() {
     const checkApproverStatus = async () => {
       if (!activeCompanyId) return;
       try {
-        await api.get('/sales-budgets/aprovacoes-pendentes');
-        setIsApprover(true);
+        const response = await api.get('/sales-budgets/check-approver');
+        setIsApprover(response.data.is_approver);
       } catch (err) {
         setIsApprover(false);
       }
