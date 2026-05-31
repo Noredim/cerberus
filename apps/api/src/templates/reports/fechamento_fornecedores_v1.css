@@ -1,0 +1,218 @@
+@page {
+    size: A4 landscape;
+    margin-top: 5.5cm;
+    margin-bottom: 1.5cm;
+    margin-left: 1cm;
+    margin-right: 1cm;
+    @bottom-right {
+        content: "Página " counter(page) " de " counter(pages);
+        font-family: 'Outfit', 'Inter', sans-serif;
+        font-size: 8pt;
+        color: #64748b;
+    }
+    @bottom-left {
+        content: "Cerberus - Relatório Executivo de Fechamento de Fornecedores v1.0";
+        font-family: 'Outfit', 'Inter', sans-serif;
+        font-size: 8pt;
+        color: #64748b;
+    }
+}
+
+.header-kpis-container {
+    position: fixed;
+    top: -4.8cm;
+    left: 0;
+    right: 0;
+    height: 4.3cm;
+}
+
+body {
+    font-family: 'Outfit', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    color: #1e293b;
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+    font-size: 9pt;
+    line-height: 1.4;
+}
+
+
+h1, h2, h3, h4 {
+    color: #0f172a;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+}
+
+.report-header {
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.header-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.header-table td {
+    padding: 4px 8px;
+    vertical-align: top;
+}
+
+.header-label {
+    font-weight: bold;
+    color: #475569;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+}
+
+.header-value {
+    color: #0f172a;
+    font-size: 9.5pt;
+}
+
+.approval-box {
+    background-color: #f1f5f9;
+    border-left: 4px solid #64748b;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 8.5pt;
+}
+
+.approval-box.approved {
+    background-color: #f0fdf4;
+    border-left-color: #16a34a;
+    color: #14532d;
+}
+
+.approval-box.pending {
+    background-color: #fffbeb;
+    border-left-color: #d97706;
+    color: #78350f;
+}
+
+/* KPI Cards */
+.kpi-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.kpi-card {
+    flex: 1;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+}
+
+.kpi-title {
+    font-size: 8pt;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.kpi-value {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #0f172a;
+}
+
+/* Section Grouping */
+.section-title {
+    font-size: 11pt;
+    background-color: #1e293b;
+    color: #ffffff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    margin-top: 25px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.supplier-info {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 15px;
+    margin-bottom: 12px;
+}
+
+.supplier-info-grid {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+}
+
+/* Tables */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 15px;
+}
+
+.data-table th {
+    background-color: #f1f5f9;
+    color: #475569;
+    font-weight: bold;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 2px solid #cbd5e1;
+    font-size: 8pt;
+    text-transform: uppercase;
+}
+
+.data-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 8.5pt;
+    vertical-align: middle;
+}
+
+.data-table tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+.text-right {
+    text-align: right !important;
+}
+
+.text-center {
+    text-align: center !important;
+}
+
+.font-bold {
+    font-weight: bold;
+}
+
+.total-row td {
+    background-color: #f8fafc;
+    border-top: 2px solid #cbd5e1;
+    border-bottom: 2px solid #cbd5e1;
+    font-weight: bold;
+    font-size: 9pt;
+}
+
+/* Page Break helpers */
+.page-break {
+    page-break-before: always;
+}
+
+.avoid-break {
+    page-break-inside: avoid;
+}
+
+/* Audit Footer info */
+.audit-info {
+    margin-top: 30px;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 10px;
+    font-size: 7.5pt;
+    color: #94a3b8;
+    text-align: center;
+}

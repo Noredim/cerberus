@@ -404,6 +404,8 @@ export function SalesBudgetForm() {
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [showReportsDropdown, setShowReportsDropdown] = useState(false);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -1093,6 +1095,32 @@ export function SalesBudgetForm() {
       console.error("Failed to delete purchase budget", err);
       const detail = err.response?.data?.detail;
       alert("Erro ao excluir: " + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (opportunityPurchaseBudgets.length === 0) {
+      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
+      return;
+    }
+    setDownloadingReport(true);
+    try {
+      const response = await api.get(`/sales-budgets/${id}/reports/fechamento-fornecedores`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `relatorio-fechamento-fornecedores-${numeroOrcamento || id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error("Erro ao gerar relatório:", err);
+      alert("Falha ao gerar relatório executivo.");
+    } finally {
+      setDownloadingReport(false);
     }
   };
 
@@ -2109,6 +2137,36 @@ export function SalesBudgetForm() {
               </div>
             </Tooltip>
           )}
+
+          {isEditing && (
+            <div className="relative">
+              <Button
+                onClick={() => setShowReportsDropdown(prev => !prev)}
+                variant="outline"
+                className="flex items-center gap-1.5"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Relatórios
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+              {showReportsDropdown && (
+                <div className="absolute right-0 mt-1 w-56 rounded-md shadow-lg bg-bg-surface border border-border-subtle z-50 py-1">
+                  <button
+                    onClick={() => {
+                      setShowReportsDropdown(false);
+                      handleDownloadReport();
+                    }}
+                    disabled={downloadingReport}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    Fechamento de Fornecedores
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
 
           {!isReadonly && (
             <Button type="button" onClick={() => handleSave()} disabled={saving}>

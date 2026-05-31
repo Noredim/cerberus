@@ -39,6 +39,8 @@ class PurchaseBudgetItemBase(BaseModel):
     frete_percent: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=4)
     ipi_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
     icms_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
+    difal_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    st_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
 
 class PurchaseBudgetItemCreate(PurchaseBudgetItemBase):
     model_config = ConfigDict(extra='ignore')
@@ -53,6 +55,8 @@ class PurchaseBudgetItemOut(PurchaseBudgetItemBase):
     product_nome: Optional[str] = None
     product_codigo: Optional[str] = None
     quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
+    difal_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    st_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
 
     class Config:
         from_attributes = True

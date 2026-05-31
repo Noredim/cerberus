@@ -74,6 +74,8 @@ class PurchaseBudgetItem(Base):
     ipi_valor = Column(Numeric(15, 4), nullable=False, default=0)
     
     icms_percent = Column(Numeric(10, 4), nullable=False, default=0)
+    difal_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    st_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
     
     total_item = Column(Numeric(15, 4), nullable=False, default=0)
 

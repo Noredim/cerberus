@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Relatório Executivo de Fechamento de Fornecedores do sistema Cerberus.">
+    <meta property="og:title" content="Relatório Executivo de Fechamento de Fornecedores">
+    <meta property="og:description" content="Relatório detalhado contendo custos, impostos (DIFAL/ST), parcelamento e margens de fornecedores.">
+    <title>Relatório Executivo de Fechamento de Fornecedores</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO E KPIs FIXADOS (REPETIDOS EM TODAS AS PÁGINAS) -->
+    <div class="header-kpis-container">
+        <div class="report-header">
+            <table class="header-table">
+                <tr>
+                    <td style="width: 50%;">
+                        <div><span class="header-label">Número da Oportunidade:</span> <span class="header-value font-bold">#{{ opportunity.numero_orcamento or opportunity.id }}</span></div>
+                        <div style="margin-top: 4px;"><span class="header-label">Nome da Oportunidade:</span> <span class="header-value">{{ opportunity.titulo }}</span></div>
+                        <div style="margin-top: 4px;"><span class="header-label">Cliente:</span> <span class="header-value font-bold">{{ opportunity.customer_nome }}</span></div>
+                    </td>
+                    <td style="width: 25%;">
+                        <div><span class="header-label">Vendedor Responsável:</span> <span class="header-value">{{ opportunity.vendedor_nome }}</span></div>
+                        <div style="margin-top: 4px;"><span class="header-label">Status Atual:</span> <span class="header-value">{{ opportunity.status_label }}</span></div>
+                        <div style="margin-top: 4px;"><span class="header-label">Data de Emissão:</span> <span class="header-value">{{ emissao_data_hora }}</span></div>
+                    </td>
+                    <td style="width: 25%;">
+                        {% if approval %}
+                        <div class="approval-box approved">
+                            <div class="font-bold">✓ Aprovado Comercial</div>
+                            <div style="margin-top: 2px;">Por: {{ approval.aprovador_nome }}</div>
+                            <div>Data: {{ approval.data }} às {{ approval.hora }}</div>
+                        </div>
+                        {% else %}
+                        <div class="approval-box pending">
+                            <div class="font-bold">⚠️ Aguardando Aprovação</div>
+                            <div style="margin-top: 2px;">Status: Pendente de liberação das alçadas comerciais</div>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- KPIs PANEL -->
+        <div class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-title">Venda Total</div>
+                <div class="kpi-value" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Custo Total</div>
+                <div class="kpi-value" style="color: #475569;">R$ {{ kpis.custo_consolidado }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Lucro Bruto</div>
+                <div class="kpi-value" style="color: #16a34a;">R$ {{ kpis.lucro_bruto }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Margem</div>
+                <div class="kpi-value" style="color: #15803d;">{{ kpis.margem }}%</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">MKP</div>
+                <div class="kpi-value" style="color: #0f172a;">{{ kpis.markup }}x</div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- AGRUPAMENTO POR FORNECEDOR -->
+    {% for supplier in suppliers_data %}
+    <div class="avoid-break">
+        <div class="section-title">Fornecedor: {{ supplier.nome }}</div>
+        <div class="supplier-info">
+            <div class="supplier-info-grid">
+                <div><strong>CNPJ:</strong> {{ supplier.cnpj or "Não Informado" }}</div>
+                <div><strong>Contato/Vendedor:</strong> {{ supplier.contato or "Não Informado" }}</div>
+                <div><strong>Condição de Pagamento:</strong> {{ supplier.condicao_pagamento }}</div>
+                <div><strong>Prazo Médio:</strong> {{ supplier.prazo_medio }} dias</div>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 30%;">Produto</th>
+                    <th style="width: 12%;">Part Number</th>
+                    <th class="text-center" style="width: 6%;">Qtd</th>
+                    <th class="text-right" style="width: 10%;">Valor Unit.</th>
+                    <th class="text-right" style="width: 10%;">Valor Total</th>
+                    <th class="text-right" style="width: 8%;">DIFAL Unit.</th>
+                    <th class="text-right" style="width: 8%;">DIFAL Total</th>
+                    <th class="text-right" style="width: 8%;">ST Unit.</th>
+                    <th class="text-right" style="width: 8%;">ST Total</th>
+                    <th class="text-right" style="width: 10%;">Valor Final</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in supplier['items'] %}
+                <tr>
+                    <td>{{ item.descricao }}</td>
+                    <td>{{ item.part_number or "-" }}</td>
+                    <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-right">R$ {{ item.valor_unitario }}</td>
+                    <td class="text-right">R$ {{ item.valor_total }}</td>
+                    <td class="text-right">R$ {{ item.difal_unitario }}</td>
+                    <td class="text-right">R$ {{ item.difal_total }}</td>
+                    <td class="text-right">R$ {{ item.st_unitario }}</td>
+                    <td class="text-right">R$ {{ item.st_total }}</td>
+                    <td class="text-right font-bold">R$ {{ item.valor_final }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td colspan="2">TOTAL DO FORNECEDOR</td>
+                    <td class="text-center">-</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">R$ {{ supplier.totais.total_produtos }}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">R$ {{ supplier.totais.total_difal }}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">R$ {{ supplier.totais.total_st }}</td>
+                    <td class="text-right font-bold" style="color: #0f172a;">R$ {{ supplier.totais.total_geral }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PÁGINA ESPECÍFICA DE PLANEJAMENTO FINANCEIRO DO FORNECEDOR -->
+    <div class="page-break avoid-break">
+        <h2 style="margin-top: 10px; border-bottom: 2px solid #cbd5e1; padding-bottom: 6px; color: #1e293b; font-size: 14pt;">
+            Planejamento Financeiro - Fornecedor: {{ supplier.nome }}
+        </h2>
+
+        <h3 style="margin-top: 15px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;">Cronograma de Pagamentos Previstos</h3>
+        <table class="data-table" style="max-width: 600px; margin-top: 10px;">
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Parcela</th>
+                    <th class="text-center" style="width: 25%;">Percentual (%)</th>
+                    <th class="text-center" style="width: 30%;">Data Prevista</th>
+                    <th class="text-right" style="width: 25%;">Valor Previsto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in supplier.parcelas %}
+                <tr>
+                    <td>{{ p.numero_parcela }}ª Parcela</td>
+                    <td class="text-center">{{ p.percentual }}%</td>
+                    <td class="text-center">{{ p.data_prevista }}</td>
+                    <td class="text-right font-bold">R$ {{ p.valor }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td>TOTAL PREVISTO</td>
+                    <td class="text-center">100.00%</td>
+                    <td class="text-center">-</td>
+                    <td class="text-right" style="color: #0f172a;">R$ {{ supplier.totais.total_geral }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    <!-- SEÇÃO: DEMONSTRATIVO FISCAL (DIFAL E ST DETALHADOS) -->
+    <div class="page-break">
+        <h2 style="margin-top: 10px; border-bottom: 2px solid #cbd5e1; padding-bottom: 6px; color: #1e293b; font-size: 14pt;">
+            Demonstrativo Fiscal Consolidado
+        </h2>
+
+        <div style="display: flex; gap: 20px;">
+            <!-- TABELA DIFAL -->
+            <div style="flex: 1;" class="avoid-break">
+                <h3 style="color: #475569; border-bottom: 2px solid #cbd5e1; padding-bottom: 4px;">Diferencial de Alíquota (DIFAL)</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th class="text-center">Qtd</th>
+                            <th class="text-right">DIFAL Unit.</th>
+                            <th class="text-right">DIFAL Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in fiscal_difal_items %}
+                        <tr>
+                            <td>{{ item.descricao }}</td>
+                            <td class="text-center">{{ item.quantidade }}</td>
+                            <td class="text-right">R$ {{ item.difal_unitario }}</td>
+                            <td class="text-right font-bold">R$ {{ item.difal_total }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not fiscal_difal_items %}
+                        <tr>
+                            <td colspan="4" class="text-center" style="color: #94a3b8; padding: 15px;">Nenhum produto com DIFAL incidente.</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="total-row">
+                            <td colspan="2">TOTAL DIFAL ACUMULADO</td>
+                            <td class="text-right">-</td>
+                            <td class="text-right">R$ {{ consolidado_geral.total_difal }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- TABELA ST -->
+            <div style="flex: 1;" class="avoid-break">
+                <h3 style="color: #475569; border-bottom: 2px solid #cbd5e1; padding-bottom: 4px;">Substituição Tributária (ST)</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th class="text-center">Qtd</th>
+                            <th class="text-right">ST Unit.</th>
+                            <th class="text-right">ST Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in fiscal_st_items %}
+                        <tr>
+                            <td>{{ item.descricao }}</td>
+                            <td class="text-center">{{ item.quantidade }}</td>
+                            <td class="text-right">R$ {{ item.st_unitario }}</td>
+                            <td class="text-right font-bold">R$ {{ item.st_total }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not fiscal_st_items %}
+                        <tr>
+                            <td colspan="4" class="text-center" style="color: #94a3b8; padding: 15px;">Nenhum produto com Substituição Tributária (ST) incidente.</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="total-row">
+                            <td colspan="2">TOTAL ST ACUMULADO</td>
+                            <td class="text-right">-</td>
+                            <td class="text-right">R$ {{ consolidado_geral.total_st }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- PÁGINA FINAL: CONSOLIDADO GERAL DA OPORTUNIDADE -->
+    <div class="page-break avoid-break">
+        <h2 style="margin-top: 10px; border-bottom: 2px solid #cbd5e1; padding-bottom: 6px; color: #1e293b; font-size: 14pt;">
+            Consolidado Geral da Oportunidade
+        </h2>
+
+        <div style="width: 50%; margin: 20px 0;">
+            <h3 style="border-bottom: 2px solid #0f172a; padding-bottom: 6px; color: #0f172a;">Demonstrativo Resumido de Aquisição</h3>
+            <table class="data-table">
+                <tbody>
+                    <tr>
+                        <td><strong>Total de Produtos (Valor Base)</strong></td>
+                        <td class="text-right" style="font-size: 10pt;">R$ {{ consolidado_geral.total_produtos }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total DIFAL</strong></td>
+                        <td class="text-right" style="font-size: 10pt; color: #475569;">+ R$ {{ consolidado_geral.total_difal }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total ST</strong></td>
+                        <td class="text-right" style="font-size: 10pt; color: #475569;">+ R$ {{ consolidado_geral.total_st }}</td>
+                    </tr>
+                    <tr style="background-color: #f8fafc;">
+                        <td><strong>Total Geral de Impostos de Aquisição (DIFAL + ST)</strong></td>
+                        <td class="text-right" style="font-size: 10pt; font-weight: bold;">R$ {{ consolidado_geral.total_impostos }}</td>
+                    </tr>
+                    <tr class="total-row" style="font-size: 12pt;">
+                        <td style="padding: 10px 8px;">TOTAL GERAL DE AQUISIÇÃO (CUSTO TOTAL)</td>
+                        <td class="text-right" style="color: #0284c7; padding: 10px 8px; font-size: 12pt;">R$ {{ consolidado_geral.total_geral_aquisicao }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="audit-info">
+            Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ opportunity.id }} | Versão do Relatório: {{ auditoria.versao }}
+        </div>
+    </div>
+
+</body>
+</html>

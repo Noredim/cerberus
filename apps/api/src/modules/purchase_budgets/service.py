@@ -306,6 +306,8 @@ class PurchaseBudgetService:
                 ipi_percent=item_data.ipi_percent,
                 ipi_valor=totals["ipi_valor"],
                 icms_percent=item_data.icms_percent,
+                difal_unitario=item_data.difal_unitario,
+                st_unitario=item_data.st_unitario,
                 total_item=totals["total_item"]
             )
             db.add(db_item)
@@ -368,6 +370,8 @@ class PurchaseBudgetService:
                 ipi_percent=item_data.ipi_percent,
                 ipi_valor=totals["ipi_valor"],
                 icms_percent=item_data.icms_percent,
+                difal_unitario=item_data.difal_unitario,
+                st_unitario=item_data.st_unitario,
                 total_item=totals["total_item"]
             )
             db_budget.items.append(db_item)
@@ -479,6 +483,8 @@ class PurchaseBudgetService:
         col_frete = headers.get("frete_percent") if "frete_percent" in headers else headers.get("frete")
         col_ipi = headers.get("ipi_percent") if "ipi_percent" in headers else headers.get("ipi_percentual") if "ipi_percentual" in headers else headers.get("ipi")
         col_icms = headers.get("icms_percent") if "icms_percent" in headers else headers.get("icms_percentual") if "icms_percentual" in headers else headers.get("icms")
+        col_difal = headers.get("difal_unitario") if "difal_unitario" in headers else headers.get("difal")
+        col_st = headers.get("st_unitario") if "st_unitario" in headers else headers.get("st")
         
         if col_codigo is None or col_valor is None:
             raise HTTPException(status_code=400, detail="Planilha deve conter as colunas 'codigo' e 'valor'")
@@ -507,6 +513,8 @@ class PurchaseBudgetService:
             c_frete = int(col_frete) if isinstance(col_frete, int) else -1
             c_ipi = int(col_ipi) if isinstance(col_ipi, int) else -1
             c_icms = int(col_icms) if isinstance(col_icms, int) else -1
+            c_difal = int(col_difal) if isinstance(col_difal, int) else -1
+            c_st = int(col_st) if isinstance(col_st, int) else -1
             
             codigo_raw = row[c_cod] if c_cod >= 0 and len(row) > c_cod else None
             if codigo_raw is None:
@@ -524,6 +532,8 @@ class PurchaseBudgetService:
             frete = row[c_frete] if c_frete >= 0 and len(row) > c_frete else 0
             ipi = row[c_ipi] if c_ipi >= 0 and len(row) > c_ipi else 0
             icms = row[c_icms] if c_icms >= 0 and len(row) > c_icms else 0
+            difal = row[c_difal] if c_difal >= 0 and len(row) > c_difal else 0
+            st = row[c_st] if c_st >= 0 and len(row) > c_st else 0
             
             try: val = float(val) if val else 0
             except: val = 0
@@ -535,6 +545,10 @@ class PurchaseBudgetService:
             except: ipi = 0
             try: icms = float(icms) if icms else 0
             except: icms = 0
+            try: difal = float(difal) if difal else 0
+            except: difal = 0
+            try: st = float(st) if st else 0
+            except: st = 0
             
             item_data: dict = {
                 "codigo_fornecedor": codigo,
@@ -544,7 +558,9 @@ class PurchaseBudgetService:
                 "valor_unitario": val,
                 "frete_percent": frete,
                 "ipi_percent": ipi,
-                "icms_percent": icms
+                "icms_percent": icms,
+                "difal_unitario": difal,
+                "st_unitario": st
             }
             
             prod = map_codigo_produto.get(codigo)
