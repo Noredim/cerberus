@@ -12,72 +12,59 @@
 </head>
 <body>
 
-    <!-- CABEÇALHO E KPIs FIXADOS (REPETIDOS EM TODAS AS PÁGINAS) -->
+    <!-- CABEÇALHO COMPACTO EXECUTIVO (REPETIDO EM TODAS AS PÁGINAS) -->
     <div class="header-kpis-container">
-        <div class="report-header">
-            <table class="header-table">
+        <div class="compact-header-line1">
+            <table style="width: 100%; table-layout: fixed; border-collapse: collapse;">
                 <tr>
-                    <td style="width: 50%;">
-                        <div><span class="header-label">Número da Oportunidade:</span> <span class="header-value font-bold">#{{ opportunity.numero_orcamento or opportunity.id }}</span></div>
-                        <div style="margin-top: 4px;"><span class="header-label">Nome da Oportunidade:</span> <span class="header-value">{{ opportunity.titulo }}</span></div>
-                        <div style="margin-top: 4px;"><span class="header-label">Cliente:</span> <span class="header-value font-bold">{{ opportunity.customer_nome }}</span></div>
+                    <td style="width: 38%; padding: 0;">
+                        <strong>Oportunidade:</strong> #{{ opportunity.numero_orcamento }} - {{ opportunity.titulo }}
                     </td>
-                    <td style="width: 25%;">
-                        <div><span class="header-label">Vendedor Responsável:</span> <span class="header-value">{{ opportunity.vendedor_nome }}</span></div>
-                        <div style="margin-top: 4px;"><span class="header-label">Status Atual:</span> <span class="header-value">{{ opportunity.status_label }}</span></div>
-                        <div style="margin-top: 4px;"><span class="header-label">Data de Emissão:</span> <span class="header-value">{{ emissao_data_hora }}</span></div>
+                    <td style="width: 32%; padding: 0;">
+                        <strong>Cliente:</strong> {{ opportunity.customer_nome }}
                     </td>
-                    <td style="width: 25%;">
-                        {% if approval %}
-                        <div class="approval-box approved">
-                            <div class="font-bold">✓ Aprovado Comercial</div>
-                            <div style="margin-top: 2px;">Por: {{ approval.aprovador_nome }}</div>
-                            <div>Data: {{ approval.data }} às {{ approval.hora }}</div>
-                        </div>
-                        {% else %}
-                        <div class="approval-box pending">
-                            <div class="font-bold">⚠️ Aguardando Aprovação</div>
-                            <div style="margin-top: 2px;">Status: Pendente de liberação das alçadas comerciais</div>
-                        </div>
-                        {% endif %}
+                    <td style="width: 20%; padding: 0;">
+                        <strong>Vendedor:</strong> {{ opportunity.vendedor_nome }}
+                    </td>
+                    <td style="width: 10%; padding: 0; text-align: right;">
+                        <span class="status-badge {% if opportunity.status_label == 'APROVADA' or opportunity.status_label == 'GANHA' %}approved{% elif opportunity.status_label == 'EM APROVAÇÃO' %}pending{% elif opportunity.status_label == 'REPROVADA' or opportunity.status_label == 'CANCELADA' %}rejected{% else %}default{% endif %}">
+                            {{ opportunity.status_label }}
+                        </span>
                     </td>
                 </tr>
             </table>
         </div>
-
-        <!-- KPIs PANEL -->
-        <div class="kpi-container">
-            <div class="kpi-card">
-                <div class="kpi-title">Venda Total</div>
-                <div class="kpi-value" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</div>
+        <div class="compact-kpi-row">
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Venda Total</span>
+                <span class="kpi-val">R$ {{ kpis.venda_consolidada }}</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Custo Total</div>
-                <div class="kpi-value" style="color: #475569;">R$ {{ kpis.custo_consolidado }}</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Custo Total</span>
+                <span class="kpi-val">R$ {{ kpis.custo_consolidado }}</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Lucro Bruto</div>
-                <div class="kpi-value" style="color: #16a34a;">R$ {{ kpis.lucro_bruto }}</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Lucro Bruto</span>
+                <span class="kpi-val">R$ {{ kpis.lucro_bruto }}</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Custo de Impostos</div>
-                <div class="kpi-value" style="color: #ea580c;">R$ {{ kpis.custo_impostos }}</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Custo Impostos</span>
+                <span class="kpi-val">R$ {{ kpis.custo_impostos }}</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">MKP</div>
-                <div class="kpi-value" style="color: #0f172a;">{{ kpis.markup }}x</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">MKP</span>
+                <span class="kpi-val">{{ kpis.markup }}x</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Qtd. Fornecedores</div>
-                <div class="kpi-value" style="color: #64748b;">{{ kpis.qtd_fornecedores }}</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Fornecedores</span>
+                <span class="kpi-val">{{ kpis.qtd_fornecedores }}</span>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Qtd. Produtos</div>
-                <div class="kpi-value" style="color: #64748b;">{{ kpis.qtd_produtos }}</div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Produtos</span>
+                <span class="kpi-val">{{ kpis.qtd_produtos }}</span>
             </div>
         </div>
     </div>
-
 
     <!-- AGRUPAMENTO POR FORNECEDOR -->
     {% for supplier in suppliers_data %}
@@ -115,10 +102,30 @@
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.valor_unitario }}</td>
                     <td class="text-right">R$ {{ item.valor_total }}</td>
-                    <td class="text-right">R$ {{ item.difal_unitario }}</td>
-                    <td class="text-right">R$ {{ item.difal_total }}</td>
-                    <td class="text-right">R$ {{ item.st_unitario }}</td>
-                    <td class="text-right">R$ {{ item.st_total }}</td>
+                    <td class="text-right">
+                        R$ {{ item.difal_unitario }}
+                        {% if item.difal_unitario != '0,00' and item.origem_imposto != 'fallback_zero' %}
+                            <span style="font-size: 6pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ item.difal_total }}
+                        {% if item.difal_total != '0,00' and item.origem_imposto != 'fallback_zero' %}
+                            <span style="font-size: 6pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ item.st_unitario }}
+                        {% if item.st_unitario != '0,00' and item.origem_imposto != 'fallback_zero' %}
+                            <span style="font-size: 6pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ item.st_total }}
+                        {% if item.st_total != '0,00' and item.origem_imposto != 'fallback_zero' %}
+                            <span style="font-size: 6pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
+                        {% endif %}
+                    </td>
                     <td class="text-right font-bold">R$ {{ item.valor_final }}</td>
                 </tr>
                 {% endfor %}
@@ -265,7 +272,7 @@
         <div style="margin-top: 20px; border-top: 2px solid #cbd5e1; padding-top: 10px; text-align: right; font-size: 10pt; font-weight: bold; color: #1e293b;">
             <span style="margin-right: 25px;">Total DIFAL: R$ {{ consolidado_geral.total_difal }}</span>
             <span style="margin-right: 25px;">Total ST: R$ {{ consolidado_geral.total_st }}</span>
-            <span style="color: #ea580c;">Total Geral Impostos (DIFAL + ST): R$ {{ consolidado_geral.total_impostos }}</span>
+            <span style="color: #ea580c;">Total Geral Impostos: R$ {{ consolidado_geral.total_impostos }}</span>
         </div>
     </div>
 

@@ -20,6 +20,8 @@ import src.modules.products.models
 import src.modules.sales_budgets.models
 import src.modules.purchase_budgets.models
 import src.modules.opportunity_kits.models
+import src.modules.sales_proposals.models
+import src.modules.own_services.models
 
 from src.modules.sales_budgets.models import SalesBudget
 from src.modules.purchase_budgets.models import PurchaseBudget
@@ -28,125 +30,257 @@ from src.modules.sales_budgets.reports import OpportunitiesReportService
 
 
 def run_test():
+    import logging
+    logging.basicConfig(level=logging.INFO)
     db = SessionLocal()
     try:
-        # 1. Fetch any sales budget (opportunity)
-        opp = db.query(SalesBudget).first()
-        if not opp:
-            print("No opportunity found in database to test report. Creating a mock one...")
-            from src.modules.companies.models import Company
-            from src.modules.customers.models import Customer
-            
-            company = db.query(Company).first()
-            customer = db.query(Customer).first()
-            if not company or not customer:
-                print("Missing Company or Customer records in database. Cannot test.")
-                return
-            
-            opp = SalesBudget(
-                tenant_id=company.tenant_id,
-                company_id=company.id,
-                customer_id=customer.id,
-                titulo="Oportunidade Teste PDF",
-                status="EM_LANCAMENTO",
-                valor_total=1000.0
-            )
-            db.add(opp)
-            db.flush()
-        
-        print(f"Testing report generation for Opportunity: {opp.titulo} ({opp.id})")
+        print("Building Homologation Opportunity...")
+        from src.modules.companies.models import Company
+        from src.modules.customers.models import Customer
+        from src.modules.suppliers.models import Supplier
+        from src.modules.products.models import Product
+        from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem
+        from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+        from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
 
-        # 2. Fetch or create a mock user
+        # 1. Fetch or create base company and customer
+        company = db.query(Company).first()
+        if not company:
+            company = Company(
+                razao_social="Cerberus Tech Ltda",
+                nome_fantasia="Cerberus Tech",
+                cnpj="12345678000199",
+                tenant_id="tenant-homologacao"
+            )
+            db.add(company)
+            db.flush()
+
+        customer = db.query(Customer).first()
+        if not customer:
+            customer = Customer(
+                tenant_id=company.tenant_id,
+                razao_social="Cliente Homologacao S.A.",
+                nome_fantasia="Cliente Homologacao",
+                cnpj="98765432000188"
+            )
+            db.add(customer)
+            db.flush()
+
+        # 2. Create the Sales Budget / Opportunity
+        opp = SalesBudget(
+            tenant_id=company.tenant_id,
+            company_id=company.id,
+            customer_id=customer.id,
+            titulo="Oportunidade Homologacao Real",
+            status="APROVADO",
+            valor_total=18500.0,
+            data_orcamento=datetime.date.today(),
+            data_vencimento_inicial=datetime.date.today()
+        )
+        db.add(opp)
+        db.flush()
+
+        # 3. Create a mock user
         user = db.query(User).filter(User.tenant_id == opp.tenant_id).first()
         if not user:
             user = User(
-                tenant_id=opp.tenant_id, 
-                name="Test User", 
-                email=f"test-{uuid.uuid4()}@cerberus.com", 
-                password_hash="hash"
+                tenant_id=opp.tenant_id,
+                name="Diretor Homologador",
+                email="homologador@cerberus.com",
+                password_hash="pbkdf2:sha256:1000"
             )
             db.add(user)
             db.flush()
 
-        # 3. Check if there are associated purchase budgets. If not, link one.
-        pb = db.query(PurchaseBudget).filter(PurchaseBudget.sales_budget_id == opp.id).first()
-        if not pb:
-            print("No purchase budgets linked. Creating a mock purchase budget for testing...")
-            from src.modules.suppliers.models import Supplier
-            from src.modules.companies.models import Company
-            
-            supplier = db.query(Supplier).first()
-            company = db.query(Company).filter(Company.id == opp.company_id).first()
-            
-            if not supplier:
-                print("No Supplier found in database. Creating a mock supplier...")
-                supplier = Supplier(
-                    id=str(uuid.uuid4()),
-                    tenant_id=opp.tenant_id,
-                    cnpj="12345678000199",
-                    razao_social="Supplier Test S.A.",
-                    nome_fantasia="Supplier Test"
-                )
-                db.add(supplier)
-                db.flush()
-                
-            pb = PurchaseBudget(
-                tenant_id=opp.tenant_id,
-                company_id=opp.company_id,
-                sales_budget_id=opp.id,
-                supplier_id=supplier.id,
-                tipo_orcamento='REVENDA',
-                frete_tipo='CIF',
-                data_orcamento=opp.data_orcamento,
-                ipi_calculado=False
-            )
-            db.add(pb)
-            db.flush()
-            
-            # Add items to opportunity and purchase budget to test mapping
-            from src.modules.products.models import Product
-            product = db.query(Product).first()
-            if not product:
-                print("No Product found in database. Creating a mock product...")
-                product = Product(
-                    id=uuid.uuid4(),
-                    tenant_id=opp.tenant_id,
-                    codigo="PROD-TEST-PDF",
-                    nome="Câmera Bullet IP Teste",
-                    tipo="EQUIPAMENTO",
-                    vlr_referencia_revenda=100.0,
-                    ativo=True
-                )
-                db.add(product)
-                db.flush()
+        # 4. Create products
+        product_difal = Product(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            codigo="PROD-DIFAL",
+            nome="Câmera Bullet IP (DIFAL)",
+            tipo="EQUIPAMENTO",
+            finalidade="REVENDA",
+            vlr_referencia_revenda=120.0,
+            ativo=True
+        )
+        product_st = Product(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            codigo="PROD-ST",
+            nome="Switch 24p POE (ST)",
+            tipo="EQUIPAMENTO",
+            finalidade="REVENDA",
+            vlr_referencia_revenda=250.0,
+            ativo=True
+        )
+        product_no_tax = Product(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            codigo="PROD-NO-TAX",
+            nome="Cabo UTP Cat6 (Isento)",
+            tipo="EQUIPAMENTO",
+            finalidade="REVENDA",
+            vlr_referencia_revenda=80.0,
+            ativo=True
+        )
+        db.add_all([product_difal, product_st, product_no_tax])
+        db.flush()
 
-            # Add sales budget item
-            from src.modules.sales_budgets.models import SalesBudgetItem
-            opp_item = SalesBudgetItem(
-                budget_id=opp.id,
-                product_id=product.id,
-                tipo_item="MERCADORIA",
-                quantidade=5,
-                custo_unit_base=100.0,
-                total_venda=750.0
-            )
-            db.add(opp_item)
-            db.flush()
+        # 5. Create suppliers
+        supplier_a = Supplier(
+            tenant_id=opp.tenant_id,
+            cnpj="11111111000111",
+            razao_social="TD SYNNEX Distribuidora S.A.",
+            nome_fantasia="TD SYNNEX"
+        )
+        supplier_b = Supplier(
+            tenant_id=opp.tenant_id,
+            cnpj="22222222000122",
+            razao_social="Ingram Micro S.A.",
+            nome_fantasia="INGRAM MICRO"
+        )
+        db.add_all([supplier_a, supplier_b])
+        db.flush()
 
-            # Add purchase budget item with custom DIFAL/ST
-            from src.modules.purchase_budgets.models import PurchaseBudgetItem
-            pb_item = PurchaseBudgetItem(
-                budget_id=pb.id,
-                product_id=product.id,
-                quantidade=5,
-                valor_unitario=100.0,
-                total_item=500.0,
-                difal_unitario=12.50,
-                st_unitario=18.90
-            )
-            db.add(pb_item)
-            db.flush()
-            db.commit()
+        # 6. Create Opportunity Kit
+        kit = OpportunityKit(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            sales_budget_id=opp.id,
+            nome_kit="Kit CFTV Homologacao",
+            tipo_contrato="LOCACAO",
+            prazo_contrato_meses=36,
+            considerar_st_ou_difal="DIFAL",
+            fator_margem_locacao=1.2
+        )
+        db.add(kit)
+        db.flush()
+
+        # Add kit items
+        kit_item_difal = OpportunityKitItem(
+            kit_id=kit.id,
+            tipo_item="PRODUTO",
+            product_id=product_difal.id,
+            descricao_item="Câmera Bullet IP (DIFAL) no Kit",
+            quantidade_no_kit=10.0
+        )
+        kit_item_st = OpportunityKitItem(
+            kit_id=kit.id,
+            tipo_item="PRODUTO",
+            product_id=product_st.id,
+            descricao_item="Switch 24p POE (ST) no Kit",
+            quantidade_no_kit=2.0
+        )
+        kit_item_no_tax = OpportunityKitItem(
+            kit_id=kit.id,
+            tipo_item="PRODUTO",
+            product_id=product_no_tax.id,
+            descricao_item="Cabo UTP Cat6 (Isento) no Kit",
+            quantidade_no_kit=5.0
+        )
+        db.add_all([kit_item_difal, kit_item_st, kit_item_no_tax])
+        db.flush()
+
+        # Link kit to sales budget
+        opp_item = SalesBudgetItem(
+            budget_id=opp.id,
+            opportunity_kit_id=kit.id,
+            tipo_item="MERCADORIA",
+            quantidade=1.0,
+            custo_unit_base=3000.0,
+            total_venda=4500.0
+        )
+        db.add(opp_item)
+        db.flush()
+
+        # 7. Create Supplier Budgets (Purchase Budgets)
+        # Supplier A (TD SYNNEX) - with 30/60/90
+        pb_a = PurchaseBudget(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            sales_budget_id=opp.id,
+            supplier_id=supplier_a.id,
+            tipo_orcamento='REVENDA',
+            frete_tipo='CIF',
+            data_orcamento=opp.data_orcamento,
+            ipi_calculado=False,
+            forma_pagamento_snapshot={"descricao": "30/60/90"}
+        )
+        db.add(pb_a)
+        db.flush()
+
+        pb_item_a1 = PurchaseBudgetItem(
+            budget_id=pb_a.id,
+            product_id=product_difal.id,
+            quantidade=10.0,
+            valor_unitario=85.00,
+            total_item=850.00,
+            difal_unitario=0.00,  # will be overridden by kit financials
+            st_unitario=0.00
+        )
+        pb_item_a2 = PurchaseBudgetItem(
+            budget_id=pb_a.id,
+            product_id=product_no_tax.id,
+            quantidade=5.0,
+            valor_unitario=60.00,
+            total_item=300.00,
+            difal_unitario=0.00,
+            st_unitario=0.00
+        )
+        db.add_all([pb_item_a1, pb_item_a2])
+        db.flush()
+
+        # Supplier B (INGRAM MICRO) - with À Vista
+        pb_b = PurchaseBudget(
+            tenant_id=opp.tenant_id,
+            company_id=opp.company_id,
+            sales_budget_id=opp.id,
+            supplier_id=supplier_b.id,
+            tipo_orcamento='REVENDA',
+            frete_tipo='CIF',
+            data_orcamento=opp.data_orcamento,
+            ipi_calculado=False,
+            forma_pagamento_snapshot={"descricao": "À Vista"}
+        )
+        db.add(pb_b)
+        db.flush()
+
+        pb_item_b1 = PurchaseBudgetItem(
+            budget_id=pb_b.id,
+            product_id=product_st.id,
+            quantidade=2.0,
+            valor_unitario=220.00,
+            total_item=440.00,
+            difal_unitario=0.00,
+            st_unitario=0.00  # will be overridden by kit financials
+        )
+        db.add_all([pb_item_b1])
+        db.flush()
+
+        # Monkeypatch kit financials calculations to isolate tests
+        from src.modules.opportunity_kits.service import OpportunityKitService
+        original_calc = OpportunityKitService.calculate_financials
+        OpportunityKitService.calculate_financials = lambda self, kit, tenant_id: {
+            "item_summaries": [
+                {
+                    "product_id": str(product_difal.id),
+                    "difal_unitario": 12.35,
+                    "icms_st_unitario": 0.00
+                },
+                {
+                    "product_id": str(product_st.id),
+                    "difal_unitario": 0.00,
+                    "icms_st_unitario": 34.60
+                },
+                {
+                    "product_id": str(product_no_tax.id),
+                    "difal_unitario": 0.00,
+                    "icms_st_unitario": 0.00
+                }
+            ]
+        }
+
+        print(f"Testing report generation for Opportunity: {opp.titulo} ({opp.id})")
 
         # 3.5. Test the payment condition parser directly
         print("Testing parse_payment_condition parser...")
@@ -220,6 +354,12 @@ def run_test():
         traceback.print_exc()
         sys.exit(1)
     finally:
+        # Restore monkeypatched kit financials calculation method
+        try:
+            OpportunityKitService.calculate_financials = original_calc
+        except Exception:
+            pass
+        db.rollback()
         db.close()
 
 if __name__ == "__main__":

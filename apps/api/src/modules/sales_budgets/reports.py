@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, RentalBudgetItem, SalesBudgetApproval
 from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
 from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
+from src.modules.opportunity_kits.service import OpportunityKitService
 from src.modules.payment_methods.models import PlanejamentoFinanceiro
 from src.modules.users.models import User
 
@@ -31,7 +32,8 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
                 "label_parcela": "Parcela Única",
                 "percentual": "100.00",
                 "data_prevista": "Não Calculada",
-                "valor": format_currency(total_value)
+                "valor": format_currency(total_value),
+                "_valor_numerico": float(total_value)
             }
         ], "Forma de pagamento não estruturada."
         
@@ -45,7 +47,8 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
                 "label_parcela": "Parcela Única",
                 "percentual": "100.00",
                 "data_prevista": base_date.strftime("%d/%m/%Y"),
-                "valor": format_currency(val)
+                "valor": format_currency(val),
+                "_valor_numerico": float(val)
             }
         ], None
         
@@ -80,7 +83,8 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
                 "label_parcela": f"{idx + 1}ª Parcela",
                 "percentual": f"{pct:.2f}",
                 "data_prevista": dt.strftime("%d/%m/%Y"),
-                "valor": format_currency(val)
+                "valor": format_currency(val),
+                "_valor_numerico": float(val)
             })
         return installments, None
         
@@ -115,7 +119,8 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
                     "label_parcela": f"{idx + 1}ª Parcela",
                     "percentual": f"{pct:.2f}",
                     "data_prevista": dt.strftime("%d/%m/%Y"),
-                    "valor": format_currency(val)
+                    "valor": format_currency(val),
+                    "_valor_numerico": float(val)
                 })
             return installments, None
             
@@ -132,19 +137,22 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
                 "label_parcela": "Parcela Única",
                 "percentual": "100.00",
                 "data_prevista": dt.strftime("%d/%m/%Y"),
-                "valor": format_currency(total_value)
+                "valor": format_currency(total_value),
+                "_valor_numerico": float(total_value)
             }
         ], None
         
-    # 5. Fallback for uninterpreted strings (e.g. "Conforme negociação comercial")
+    # 5. Fallback for uninterpreted strings
     return [
         {
             "label_parcela": "Parcela Única",
             "percentual": "100.00",
             "data_prevista": "Não Calculada",
-            "valor": format_currency(total_value)
+            "valor": format_currency(total_value),
+            "_valor_numerico": float(total_value)
         }
     ], "Forma de pagamento não estruturada."
+
 
 class OpportunitiesReportService:
     @staticmethod
@@ -198,7 +206,7 @@ class OpportunitiesReportService:
         # 4. Consolidate Items and group by Supplier
         unpacked_items = []
 
-        # Process standard items
+        # Process standard items (including unpacking standard kits)
         for item in opportunity.items:
             if not item.opportunity_kit_id and item.product_id:
                 unpacked_items.append({
@@ -207,6 +215,19 @@ class OpportunitiesReportService:
                     "part_number": item.product.part_number if item.product else None,
                     "quantidade": float(item.quantidade)
                 })
+            elif item.opportunity_kit_id:
+                # Kit found: unpack items
+                kit = db.query(OpportunityKit).filter(OpportunityKit.id == item.opportunity_kit_id).first()
+                if kit:
+                    for kit_item in kit.items:
+                        if kit_item.product_id:
+                            qty = float(item.quantidade) * float(kit_item.quantidade_no_kit)
+                            unpacked_items.append({
+                                "product_id": kit_item.product_id,
+                                "descricao": kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente do Kit"),
+                                "part_number": kit_item.product.part_number if kit_item.product else None,
+                                "quantidade": qty
+                            })
 
         # Process rental items
         for item in opportunity.rental_items:
@@ -230,6 +251,51 @@ class OpportunitiesReportService:
                                 "part_number": kit_item.product.part_number if kit_item.product else None,
                                 "quantidade": qty
                             })
+
+        # Build tax lookup map: product_id -> {difal, st, source}
+        opp_product_taxes = {}
+        
+        # A. Direct items in opportunity.rental_items
+        for item in opportunity.rental_items:
+            if not item.opportunity_kit_id and item.product_id:
+                difal = float(item.difal_unit) if item.difal_unit is not None else 0.0
+                st = float(item.icms_st_unit) if item.icms_st_unit is not None else 0.0
+                opp_product_taxes[item.product_id] = {
+                    "difal": difal,
+                    "st": st,
+                    "source": "opportunity_item"
+                }
+
+        # B. Kit items (both in opportunity.items and opportunity.rental_items)
+        from src.modules.opportunity_kits.service import OpportunityKitService
+        kit_service = OpportunityKitService(db)
+        
+        kit_ids = set()
+        for item in opportunity.items:
+            if item.opportunity_kit_id:
+                kit_ids.add(item.opportunity_kit_id)
+        for item in opportunity.rental_items:
+            if item.opportunity_kit_id:
+                kit_ids.add(item.opportunity_kit_id)
+                
+        for kit_id in kit_ids:
+            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit:
+                try:
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    for item_sum in kit_financials.get("item_summaries", []):
+                        p_id = item_sum.get("product_id")
+                        if p_id:
+                            p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                            difal_val = float(item_sum.get("difal_unitario") or 0.0)
+                            st_val = float(item_sum.get("icms_st_unitario") or 0.0)
+                            opp_product_taxes[p_uuid] = {
+                                "difal": difal_val,
+                                "st": st_val,
+                                "source": "opportunity_kit"
+                            }
+                except Exception as e:
+                    print(f"[Warning] Failed to calculate financials for kit {kit_id}: {e}")
 
         # Map unpacked items to purchase budget items
         mapped_by_supplier = {}
@@ -274,17 +340,27 @@ class OpportunitiesReportService:
                 if opp_qty <= 0:
                     opp_qty = float(pb_item.quantidade)
 
-                # Prioritized Tax Lookup:
-                # 1. RentalBudgetItem of the opportunity
-                opp_rental_item = next((item for item in opportunity.rental_items if item.product_id == pb_item.product_id), None)
-                
-                difal_unit = float(opp_rental_item.difal_unit) if (opp_rental_item and opp_rental_item.difal_unit is not None) else None
-                if difal_unit is None or difal_unit == 0.0:
-                    difal_unit = float(pb_item.difal_unitario or 0.0)
+                # Prioritized Tax Lookup
+                tax_info = opp_product_taxes.get(pb_item.product_id)
+                if tax_info:
+                    difal_unit = tax_info["difal"]
+                    st_unit = tax_info["st"]
+                    origem_imposto = tax_info["source"]
+                else:
+                    difal_unit = 0.0
+                    st_unit = 0.0
+                    origem_imposto = None
+
+                # Fallback to PurchaseBudgetItem values if they are zero/missing from opportunity/kits
+                if difal_unit == 0.0 and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
+                    difal_unit = float(pb_item.difal_unitario)
+                    origem_imposto = "purchase_budget"
+                if st_unit == 0.0 and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
+                    st_unit = float(pb_item.st_unitario)
+                    origem_imposto = "purchase_budget"
                     
-                st_unit = float(opp_rental_item.icms_st_unit) if (opp_rental_item and opp_rental_item.icms_st_unit is not None) else None
-                if st_unit is None or st_unit == 0.0:
-                    st_unit = float(pb_item.st_unitario or 0.0)
+                if origem_imposto is None:
+                    origem_imposto = "fallback_zero"
 
                 val_unit = float(pb_item.valor_unitario)
 
@@ -306,6 +382,7 @@ class OpportunitiesReportService:
                     "st_unitario": format_currency(st_unit),
                     "st_total": format_currency(st_total),
                     "valor_final": format_currency(val_final),
+                    "origem_imposto": origem_imposto,
                     # Numeric versions for backend summation
                     "_val_total": val_total,
                     "_difal_total": difal_total,
@@ -356,7 +433,7 @@ class OpportunitiesReportService:
         if not mapped_by_supplier:
             raise HTTPException(status_code=400, detail="Nenhum item válido com fornecedor pôde ser extraído da oportunidade.")
 
-        # 5. Build Fiscal Summary Lists
+        # 5. Build Fiscal Summary Lists (Filtered: only DIFAL > 0 or ST > 0)
         fiscal_difal_items = []
         fiscal_st_items = []
         for supplier_id, data in mapped_by_supplier.items():
@@ -444,14 +521,53 @@ class OpportunitiesReportService:
             "total_geral_aquisicao": format_currency(total_geral_all)
         }
 
+        # 8.5. Validate Mathematical Consistency
+        import logging
+        logger = logging.getLogger("cerberus.reports")
+
+        for supplier_id, data in mapped_by_supplier.items():
+            s_nome = data["nome"]
+            s_total_prod = data["totais"]["_total_produtos"]
+            s_total_imp = data["totais"]["_total_impostos"]
+            s_total_geral = data["totais"]["_total_geral"]
+
+            # Validação 1: Σ Equipamentos + Σ Impostos = Custo Total
+            diff1 = abs((s_total_prod + s_total_imp) - s_total_geral)
+            if diff1 > 0.005:
+                logger.warning(
+                    f"SupplierClosingReportWarning\n\n"
+                    f"Fornecedor:\n{s_nome}\n\n"
+                    f"Diferença:\nR$ {diff1:.2f}"
+                )
+
+            # Validação 3: Σ Parcelas = Total do Fornecedor
+            sum_parcelas = sum(p["_valor_numerico"] for p in data["parcelas"])
+            diff3 = abs(sum_parcelas - s_total_geral)
+            if diff3 > 0.005:
+                logger.warning(
+                    f"SupplierClosingReportWarning\n\n"
+                    f"Fornecedor:\n{s_nome}\n\n"
+                    f"Diferença:\nR$ {diff3:.2f}"
+                )
+
+        # Validação 2: Σ Fornecedores = Total Geral Aquisição
+        sum_suppliers_totals = sum(data["totais"]["_total_geral"] for data in mapped_by_supplier.values())
+        diff2 = abs(sum_suppliers_totals - total_geral_all)
+        if diff2 > 0.005:
+            logger.warning(
+                f"SupplierClosingReportWarning\n\n"
+                f"Fornecedor:\nCONSOLIDADO (Validação 2)\n\n"
+                f"Diferença:\nR$ {diff2:.2f}"
+            )
+
         # Status translation
         status_labels = {
-            "EM_LANCAMENTO": "Rascunho",
-            "ENVIADO_APROVACAO": "Em Aprovação",
-            "RETORNADO_VENDEDOR": "Ajuste Requerido",
-            "APROVADO": "Aprovado",
-            "CANCELADO": "Cancelado",
-            "GANHO": "Ganho"
+            "EM_LANCAMENTO": "RASCUNHO",
+            "ENVIADO_APROVACAO": "EM APROVAÇÃO",
+            "RETORNADO_VENDEDOR": "REPROVADA",
+            "APROVADO": "APROVADA",
+            "CANCELADO": "CANCELADA",
+            "GANHO": "GANHA"
         }
 
         opportunity_dict = {
