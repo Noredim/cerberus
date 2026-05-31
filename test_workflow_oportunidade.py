@@ -140,6 +140,17 @@ def run_tests():
         db.add(peon_user)
         db.flush()
 
+        other_peon_user = User(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            name="Other Peon",
+            email=f"other_peon_{run_id}@test.com",
+            password_hash="pw",
+            is_active=True
+        )
+        db.add(other_peon_user)
+        db.flush()
+
         # Commit setup
         db.commit()
 
@@ -177,6 +188,7 @@ def run_tests():
             titulo="Oportunidade Teste Workflow",
             observacoes="Obs de teste",
             data_orcamento="2026-05-31T12:00:00",
+            responsavel_ids=[peon_user.id],
             items=[
                 SalesBudgetItemCreate(
                     tipo_item="MERCADORIA",
@@ -261,6 +273,7 @@ def run_tests():
             titulo="Oportunidade Teste Workflow (Edição Aprovada)",
             observacoes="Obs de teste alterada",
             data_orcamento="2026-05-31T12:00:00",
+            responsavel_ids=[peon_user.id],
             items=[
                 SalesBudgetItemCreate(
                     tipo_item="MERCADORIA",
@@ -308,6 +321,42 @@ def run_tests():
         budget = ganhar_oportunidade(db, tenant_id, str(budget.id), peon_user.id, "Contrato fechado com sucesso!")
         print(f"Won. Status: {budget.status} (Expected: GANHO)")
         assert budget.status == "GANHO"
+
+        # ── Test 7: User-Based Access Control ──
+        print("\n--- Test 7: User-Based Access Control ---")
+        from src.modules.sales_budgets.service import get_budget, list_budgets, delete_budget
+        
+        # 1. Other peon (no access) trying to get budget
+        budget_other = get_budget(db, tenant_id, str(budget.id), user_id=other_peon_user.id)
+        print(f"Get budget for other peon: {budget_other} (Expected: None)")
+        assert budget_other is None
+        
+        # 2. Peon (responsible) trying to get budget
+        budget_peon = get_budget(db, tenant_id, str(budget.id), user_id=peon_user.id)
+        print(f"Get budget for responsible peon: {budget_peon.titulo if budget_peon else None} (Expected: Oportunidade Teste Workflow (Edição Aprovada))")
+        assert budget_peon is not None
+        
+        # 3. List budgets for other peon
+        other_items, other_total = list_budgets(db, tenant_id, company.id, user_id=other_peon_user.id)
+        print(f"List budgets for other peon: count={len(other_items)}, total={other_total} (Expected: 0)")
+        assert other_total == 0
+        
+        # 4. List budgets for responsible peon
+        peon_items, peon_total = list_budgets(db, tenant_id, company.id, user_id=peon_user.id)
+        print(f"List budgets for responsible peon: count={len(peon_items)}, total={peon_total} (Expected: 1)")
+        assert peon_total >= 1
+        
+        # 5. Admin user (approver) trying to get budget
+        budget_admin = get_budget(db, tenant_id, str(budget.id), user_id=admin_user.id)
+        print(f"Get budget for admin (non-responsible but approver): {budget_admin.titulo if budget_admin else None} (Expected: Oportunidade Teste Workflow (Edição Aprovada))")
+        assert budget_admin is not None
+
+        # 6. Try to delete budget with other peon
+        try:
+            delete_budget(db, tenant_id, str(budget.id), user_id=other_peon_user.id)
+            assert False, "Should have blocked deletion by non-responsible peon"
+        except PermissionError as e:
+            print(f"Successfully blocked deletion by non-responsible user: {e}")
 
         print("\nALL WORKFLOW WORK PATTERNS COMPLETED SUCCESSFULLY!")
 

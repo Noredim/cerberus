@@ -28,7 +28,7 @@ def list_budgets(
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
 ):
-    budgets, total = service.list_budgets(db, current_user.tenant_id, company_id, skip, limit, q, status)
+    budgets, total = service.list_budgets(db, current_user.tenant_id, company_id, skip, limit, q, status, user_id=current_user.id)
     result = []
     for b in budgets:
         lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items)
@@ -223,7 +223,7 @@ def get_budget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.get_budget(db, current_user.tenant_id, str(budget_id))
+    budget = service.get_budget(db, current_user.tenant_id, str(budget_id), user_id=current_user.id)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget, db)
@@ -240,6 +240,8 @@ def update_budget(
         budget = service.update_budget(db, current_user.tenant_id, str(budget_id), data, user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget, db)
@@ -252,7 +254,12 @@ def update_header(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.update_header(db, current_user.tenant_id, str(budget_id), data, user_id=current_user.id)
+    try:
+        budget = service.update_header(db, current_user.tenant_id, str(budget_id), data, user_id=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget, db)
@@ -265,9 +272,10 @@ def update_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.update_status(db, current_user.tenant_id, str(budget_id), data.status.value)
+    budget = service.get_budget(db, current_user.tenant_id, str(budget_id), user_id=current_user.id)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    budget = service.update_status(db, current_user.tenant_id, str(budget_id), data.status.value)
     return {"status": budget.status}
 
 
@@ -277,7 +285,10 @@ def duplicate_budget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.duplicate_budget(db, current_user.tenant_id, str(budget_id))
+    try:
+        budget = service.duplicate_budget(db, current_user.tenant_id, str(budget_id), user_id=current_user.id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return _budget_to_dict(budget, db)
@@ -289,7 +300,10 @@ def delete_budget(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    success = service.delete_budget(db, current_user.tenant_id, str(budget_id))
+    try:
+        success = service.delete_budget(db, current_user.tenant_id, str(budget_id), user_id=current_user.id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not success:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return {"message": "Orçamento excluído com sucesso"}
@@ -498,6 +512,8 @@ def enviar_para_aprovacao(
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/{budget_id}/aprovar")
@@ -544,6 +560,8 @@ def cancelar_oportunidade(
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/{budget_id}/ganhar")
@@ -558,6 +576,8 @@ def ganhar_oportunidade(
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.get("/{budget_id}/historico")
@@ -566,7 +586,7 @@ def get_historico(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    budget = service.get_budget(db, current_user.tenant_id, str(budget_id))
+    budget = service.get_budget(db, current_user.tenant_id, str(budget_id), user_id=current_user.id)
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return [{

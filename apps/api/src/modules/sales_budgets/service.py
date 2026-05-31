@@ -464,6 +464,22 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
 # CRUD
 # ═══════════════════════════════════════════════════════════════════
 
+def check_user_has_budget_access(db: Session, user_id: str, tenant_id: str, budget: SalesBudget) -> bool:
+    # 1. Approvers/admins always have access
+    is_approver, _ = check_is_approver(db, user_id, tenant_id, budget.company_id)
+    if is_approver:
+        return True
+    
+    # 2. Check if user is in responsaveis
+    from src.modules.sales_budgets.models import SalesBudgetResponsavel
+    is_responsible = db.query(SalesBudgetResponsavel).filter(
+        SalesBudgetResponsavel.budget_id == budget.id,
+        SalesBudgetResponsavel.user_id == user_id
+    ).first() is not None
+    
+    return is_responsible
+
+
 def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudgetCreate) -> SalesBudget:
     company = db.query(Company).filter(Company.id == company_id).first()
     cp = company.sales_parameters if company else None
@@ -573,6 +589,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     ).first()
     if not budget:
         return None
+    if user_id:
+        if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+            raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
     if budget.status in ("ENVIADO_APROVACAO", "CANCELADO", "GANHO"):
         raise ValueError(f"Orçamento no status {budget.status} não pode ser editado.")
 
@@ -704,7 +723,9 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     ).first()
     if not budget:
         return None
-        
+    if user_id:
+        if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+            raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
     if budget.status in ("ENVIADO_APROVACAO", "CANCELADO", "GANHO"):
         raise ValueError(f"Orçamento no status {budget.status} não pode ser editado.")
         
@@ -765,13 +786,16 @@ def update_status(db: Session, tenant_id: str, budget_id: str, new_status: str) 
     return budget
 
 
-def duplicate_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[SalesBudget]:
+def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optional[str] = None) -> Optional[SalesBudget]:
     original = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
     ).first()
     if not original:
         return None
+    if user_id:
+        if not check_user_has_budget_access(db, user_id, tenant_id, original):
+            raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
 
     new_budget = SalesBudget(
         tenant_id=original.tenant_id,
@@ -907,14 +931,21 @@ def list_budgets(
     skip: int = 0,
     limit: int = 25,
     q: Optional[str] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    user_id: Optional[str] = None
 ) -> Tuple[List[SalesBudget], int]:
     from sqlalchemy import or_
+    from src.modules.sales_budgets.models import SalesBudgetResponsavel
     
     query = db.query(SalesBudget).outerjoin(Customer, SalesBudget.customer_id == Customer.id).filter(SalesBudget.tenant_id == tenant_id)
     if company_id:
         query = query.filter(SalesBudget.company_id == company_id)
         
+    if user_id:
+        is_approver, _ = check_is_approver(db, user_id, tenant_id, company_id)
+        if not is_approver:
+            query = query.filter(SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == user_id))
+            
     if status:
         query = query.filter(SalesBudget.status == status)
         
@@ -934,20 +965,27 @@ def list_budgets(
     
     return items, total
 
-def get_budget(db: Session, tenant_id: str, budget_id: str) -> Optional[SalesBudget]:
-    return db.query(SalesBudget).filter(
+def get_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optional[str] = None) -> Optional[SalesBudget]:
+    budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
     ).first()
+    if budget and user_id:
+        if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+            return None
+    return budget
 
 
-def delete_budget(db: Session, tenant_id: str, budget_id: str) -> bool:
+def delete_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optional[str] = None) -> bool:
     budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
         SalesBudget.tenant_id == tenant_id
     ).first()
     if not budget:
         return False
+    if user_id:
+        if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+            raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
     db.delete(budget)
     db.commit()
     return True
@@ -1240,6 +1278,8 @@ def enviar_para_aprovacao(db: Session, tenant_id: str, budget_id: str, user_id: 
     ).first()
     if not budget:
         raise ValueError("Oportunidade não encontrada.")
+    if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+        raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
     
     if budget.status not in ("EM_LANCAMENTO", "RETORNADO_VENDEDOR"):
         raise ValueError(f"Não é possível enviar para aprovação a partir do status {budget.status}.")
@@ -1361,6 +1401,8 @@ def cancelar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: 
     ).first()
     if not budget:
         raise ValueError("Oportunidade não encontrada.")
+    if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+        raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
         
     if budget.status in ("CANCELADO", "GANHO"):
         raise ValueError(f"Não é possível cancelar uma oportunidade já no status {budget.status}.")
@@ -1393,6 +1435,8 @@ def ganhar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: st
     ).first()
     if not budget:
         raise ValueError("Oportunidade não encontrada.")
+    if not check_user_has_budget_access(db, user_id, tenant_id, budget):
+        raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
         
     if budget.status != "APROVADO":
         raise ValueError("Apenas oportunidades com status APROVADO podem ser ganhas.")
