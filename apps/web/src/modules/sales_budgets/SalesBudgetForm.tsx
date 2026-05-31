@@ -4175,8 +4175,8 @@ export function SalesBudgetForm() {
                         onChange={e => setPurchaseFreteTipo(e.target.value as any)}
                         disabled={isReadonly}
                       >
-                        <option value="FOB font-sans">FOB (Comprador paga)</option>
-                        <option value="CIF font-sans">CIF (Fornecedor paga)</option>
+                        <option value="FOB">FOB (Comprador paga)</option>
+                        <option value="CIF">CIF (Fornecedor paga)</option>
                       </select>
                       <p className="text-xs text-text-muted mt-1 font-sans">
                         {purchaseFreteTipo === 'FOB' ? 'O frete será somado ao custo.' : 'O frete já está incluso no preço do produto.'}
