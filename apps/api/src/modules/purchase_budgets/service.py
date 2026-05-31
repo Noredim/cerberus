@@ -348,8 +348,8 @@ class PurchaseBudgetService:
         db_budget.ipi_calculado = data.ipi_calculado
         db_budget.sales_budget_id = data.sales_budget_id
         
-        # Delete old items
-        db.query(PurchaseBudgetItem).filter(PurchaseBudgetItem.budget_id == budget_id).delete()
+        # Delete old items cleanly via ORM relationship cascade (avoiding session desynchronization)
+        db_budget.items.clear()
         db.flush()
 
         for item_data in data.items:
@@ -370,7 +370,7 @@ class PurchaseBudgetService:
                 icms_percent=item_data.icms_percent,
                 total_item=totals["total_item"]
             )
-            db.add(db_item)
+            db_budget.items.append(db_item)
 
         from src.modules.payment_methods.service import PaymentMethodsService
         PaymentMethodsService.sync_purchase_budget_planning(db, db_budget)
