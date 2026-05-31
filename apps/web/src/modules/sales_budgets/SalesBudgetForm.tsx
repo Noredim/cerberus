@@ -3047,7 +3047,7 @@ export function SalesBudgetForm() {
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => removeVendaKit(idx)}
+                                onClick={() => handleRemoveKitVenda(idx)}
                                 className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                                 title="Remover kit"
                               >

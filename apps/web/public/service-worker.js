@@ -100,7 +100,6 @@ self.addEventListener('fetch', (event) => {
 
     // Static Assets (JS, CSS, Images, Fonts): Cache-First
     const isStaticAsset = 
-      requestUrl.pathname.startsWith('/src/') ||
       requestUrl.pathname.startsWith('/assets/') ||
       requestUrl.pathname.startsWith('/icons/') ||
       requestUrl.pathname.startsWith('/splash/') ||

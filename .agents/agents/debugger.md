@@ -222,4 +222,87 @@ After finding the bug:
 
 ---
 
+## Relatório Executivo de Fechamento de Fornecedores - Fluxo de Depuração
+
+### 1. Componentes e Arquivos Relacionados
+
+- **Frontend (UI/Menu):**
+  - **Componente:** [SalesBudgetForm.tsx](file:///c:/cerberus/apps/web/src/modules/sales_budgets/SalesBudgetForm.tsx) (Linhas ~2141-2168 para o menu Dropdown e download)
+- **Backend (API):**
+  - **Endpoint:** `GET /sales-budgets/{opportunity_id}/reports/fechamento-fornecedores`
+  - **Router:** [router.py](file:///c:/cerberus/apps/api/src/modules/sales_budgets/router.py) (Linha ~615)
+- **Serviço de Relatório:**
+  - **Service:** `OpportunitiesReportService`
+  - **Implementação:** [reports.py](file:///c:/cerberus/apps/api/src/modules/sales_budgets/reports.py)
+- **Templates (HTML/CSS):**
+  - **HTML:** [fechamento_fornecedores_v1.html](file:///c:/cerberus/apps/api/src/templates/reports/fechamento_fornecedores_v1.html)
+  - **CSS:** [fechamento_fornecedores_v1.css](file:///c:/cerberus/apps/api/src/templates/reports/fechamento_fornecedores_v1.css)
+
+### 2. Fluxo Completo de Execução
+
+```
+Usuário
+   │
+   ▼
+Tela da Oportunidade (CRM -> Oportunidades -> Detalhes)
+   │
+   ▼
+Menu Relatórios (Dropdown no canto superior direito)
+   │
+   ▼
+Clique em "Fechamento de Fornecedores"
+   │
+   ▼
+Chamada API (GET /sales-budgets/{opportunity_id}/reports/fechamento-fornecedores)
+   │
+   ▼
+OpportunitiesReportService (Lógica de consolidação e priorização de impostos/condições)
+   │
+   ▼
+Renderização de Template HTML/CSS (WeasyPrint / ReportLab como fallback)
+   │
+   ▼
+Retorno do PDF em formato Blob/Anexo
+   │
+   ▼
+Download do Arquivo PDF no navegador
+```
+
+### 3. Pontos de Debug e Validação
+
+Quando houver divergências ou erros no PDF emitido, verifique os seguintes aspectos na lógica de consolidação:
+
+#### A. Impostos (DIFAL/ST)
+- **Regra de Prioridade:** Os impostos devem ser recuperados prioritariamente do nível de oportunidade (`RentalBudgetItem` ou item do Kit). Se ausente, verificar no item correspondente de `PurchaseBudgetItem`.
+- **Valores no PDF:** Certificar que o DIFAL e ST unitários multiplicados pela quantidade fechem matematicamente com os totais exibidos nas tabelas de fornecedores e resumo geral.
+
+#### B. Custo Total e MKP (Markup)
+- **Custo de Aquisição:** Comparar o custo do produto/kit na oportunidade com o exibido no PDF. O custo total do PDF deve incluir `Base + IPI + Frete + ST + DIFAL`.
+- **Margem/MKP:** Garantir que o Markup e as margens de venda/locação correspondam aos parâmetros comerciais configurados na tela da oportunidade.
+
+#### C. Planejamento Financeiro e Parcelamento
+- **Condições de Pagamento:** Verificar o parser de condições de pagamento em `reports.py` (`parse_payment_condition`). Ele deve converter expressões como:
+  - `"À Vista"` -> 1 parcela, 100% no dia
+  - `"28 Dias"` -> 1 parcela, 100% em 28 dias
+  - `"30/60/90"` -> 3 parcelas iguais de 33.33% nos dias 30, 60 e 90
+  - `"50% Entrada + 50% 30 Dias"` -> 2 parcelas de 50% cada (dias 0 e 30)
+- **Data Base de Vencimento:** A hierarquia para o vencimento inicial das parcelas de compras deve ser:
+  1. `data_fechamento` (Close Date) da oportunidade
+  2. `data_aprovacao` (Approval Date) da oportunidade
+  3. `data_atual` (Data atual) como fallback
+
+#### D. Fechamento por Fornecedor e Consolidado Geral
+- **Agrupamento:** Garantir que as tabelas do PDF agrupem corretamente os itens de compra por Fornecedor.
+- **Linhas Totalizadoras:** Validar se os rodapés das tabelas de cada fornecedor e do demonstrativo fiscal geral contêm a soma exata dos valores detalhados nas linhas.
+
+### 4. Procedimento de Teste de Regressão
+
+Sempre execute o script de testes de relatórios após modificações no backend para evitar quebras:
+```bash
+python apps/api/test_report_pdf.py
+```
+Esse teste valida a decodificação de parcelas, preenchimento de impostos, agrupamentos e integridade da compilação do HTML/CSS para o WeasyPrint.
+
+---
+
 > **Remember:** Debugging is detective work. Follow the evidence, not your assumptions.

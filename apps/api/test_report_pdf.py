@@ -148,6 +148,46 @@ def run_test():
             db.flush()
             db.commit()
 
+        # 3.5. Test the payment condition parser directly
+        print("Testing parse_payment_condition parser...")
+        from src.modules.sales_budgets.reports import parse_payment_condition
+        
+        # Test À Vista
+        insts, obs = parse_payment_condition("À Vista", 1000.0, datetime.date(2026, 5, 31))
+        assert len(insts) == 1
+        assert insts[0]["percentual"] == "100.00"
+        assert insts[0]["data_prevista"] == "31/05/2026"
+        assert obs is None
+        
+        # Test 30/60/90
+        insts, obs = parse_payment_condition("30/60/90", 1000.0, datetime.date(2026, 5, 31))
+        assert len(insts) == 3
+        assert insts[0]["percentual"] == "33.33"
+        assert insts[1]["percentual"] == "33.33"
+        assert insts[2]["percentual"] == "33.34"
+        assert insts[0]["data_prevista"] == "30/06/2026"
+        assert insts[1]["data_prevista"] == "30/07/2026"
+        assert insts[2]["data_prevista"] == "29/08/2026"
+        assert obs is None
+
+        # Test 50% Entrada + 50% 30 Dias
+        insts, obs = parse_payment_condition("50% Entrada + 50% 30 Dias", 1000.0, datetime.date(2026, 5, 31))
+        assert len(insts) == 2
+        assert insts[0]["percentual"] == "50.00"
+        assert insts[0]["data_prevista"] == "31/05/2026"
+        assert insts[1]["percentual"] == "50.00"
+        assert insts[1]["data_prevista"] == "30/06/2026"
+        assert obs is None
+        
+        # Test Fallback "Conforme negociação comercial"
+        insts, obs = parse_payment_condition("Conforme negociação comercial", 1000.0, datetime.date(2026, 5, 31))
+        assert len(insts) == 1
+        assert insts[0]["percentual"] == "100.00"
+        assert insts[0]["data_prevista"] == "Não Calculada"
+        assert obs == "Forma de pagamento não estruturada."
+        
+        print("All parser unit tests PASSED!")
+
         # 4. Generate PDF Report via service
         print("Invoking OpportunitiesReportService...")
         response = OpportunitiesReportService.generate_fechamento_fornecedores_pdf(db, opp.id, user)

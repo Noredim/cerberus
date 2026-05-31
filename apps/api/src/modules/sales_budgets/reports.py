@@ -21,6 +21,131 @@ def format_currency(val) -> str:
         return "0,00"
     return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def parse_payment_condition(condition_str: str, total_value: float, base_date: datetime.date) -> tuple[List[dict], Optional[str]]:
+    import re
+    from datetime import timedelta
+    
+    if not condition_str:
+        return [
+            {
+                "label_parcela": "Parcela Única",
+                "percentual": "100.00",
+                "data_prevista": "Não Calculada",
+                "valor": format_currency(total_value)
+            }
+        ], "Forma de pagamento não estruturada."
+        
+    condition_clean = condition_str.strip().lower()
+    
+    # 1. Check for "à vista" or "a vista" or "vista"
+    if "vista" in condition_clean or "imediato" in condition_clean:
+        val = round(total_value, 2)
+        return [
+            {
+                "label_parcela": "Parcela Única",
+                "percentual": "100.00",
+                "data_prevista": base_date.strftime("%d/%m/%Y"),
+                "valor": format_currency(val)
+            }
+        ], None
+        
+    # 2. Check for percentages match like "50% entrada + 50% 30 dias"
+    match_percent_days = re.findall(r'(\d+(?:\.\d+)?)\s*%\s*(?:de\s+)?(entrada|[\w\s\-]+)?', condition_clean)
+    if match_percent_days and len(match_percent_days) >= 2:
+        parsed_insts = []
+        for idx, (pct_str, desc) in enumerate(match_percent_days):
+            pct = float(pct_str)
+            days = 0
+            if desc and "entrada" in desc:
+                days = 0
+            elif desc:
+                days_match = re.search(r'(\d+)', desc)
+                if days_match:
+                    days = int(days_match.group(1))
+            parsed_insts.append((pct, days))
+        
+        installments = []
+        cumulative_val = 0.0
+        for idx, (pct, days) in enumerate(parsed_insts):
+            is_last = (idx == len(parsed_insts) - 1)
+            if is_last:
+                val = total_value - cumulative_val
+                pct = (val / total_value * 100.0) if total_value > 0 else pct
+            else:
+                val = round(total_value * (pct / 100.0), 2)
+                cumulative_val += val
+            
+            dt = base_date + timedelta(days=days)
+            installments.append({
+                "label_parcela": f"{idx + 1}ª Parcela",
+                "percentual": f"{pct:.2f}",
+                "data_prevista": dt.strftime("%d/%m/%Y"),
+                "valor": format_currency(val)
+            })
+        return installments, None
+        
+    # 3. Check for slashes like "30/60/90"
+    if "/" in condition_clean:
+        parts = condition_clean.split("/")
+        days_list = []
+        for p in parts:
+            p_clean = re.sub(r'[^\d]', '', p)
+            if p_clean:
+                days_list.append(int(p_clean))
+        
+        if days_list:
+            num_parts = len(days_list)
+            base_pct = round(100.0 / num_parts, 2)
+            pcts = [base_pct] * num_parts
+            pcts[-1] = round(100.0 - sum(pcts[:-1]), 2)
+            
+            installments = []
+            cumulative_val = 0.0
+            for idx, days in enumerate(days_list):
+                is_last = (idx == num_parts - 1)
+                pct = pcts[idx]
+                if is_last:
+                    val = total_value - cumulative_val
+                else:
+                    val = round(total_value * (pct / 100.0), 2)
+                    cumulative_val += val
+                    
+                dt = base_date + timedelta(days=days)
+                installments.append({
+                    "label_parcela": f"{idx + 1}ª Parcela",
+                    "percentual": f"{pct:.2f}",
+                    "data_prevista": dt.strftime("%d/%m/%Y"),
+                    "valor": format_currency(val)
+                })
+            return installments, None
+            
+    # 4. Check for single days like "28 dias" or "30 dias"
+    single_days_match = re.search(r'^(\d+)\s*(?:dias|dia)?$', condition_clean)
+    if not single_days_match:
+        single_days_match = re.search(r'(?:em|prazo\s+de)?\s*(\d+)\s*(?:dias|dia)', condition_clean)
+        
+    if single_days_match:
+        days = int(single_days_match.group(1))
+        dt = base_date + timedelta(days=days)
+        return [
+            {
+                "label_parcela": "Parcela Única",
+                "percentual": "100.00",
+                "data_prevista": dt.strftime("%d/%m/%Y"),
+                "valor": format_currency(total_value)
+            }
+        ], None
+        
+    # 5. Fallback for uninterpreted strings (e.g. "Conforme negociação comercial")
+    return [
+        {
+            "label_parcela": "Parcela Única",
+            "percentual": "100.00",
+            "data_prevista": "Não Calculada",
+            "valor": format_currency(total_value)
+        }
+    ], "Forma de pagamento não estruturada."
+
 class OpportunitiesReportService:
     @staticmethod
     def generate_fechamento_fornecedores_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
@@ -58,9 +183,19 @@ class OpportunitiesReportService:
                 "hora": approval_rec.data_aprovacao.strftime("%H:%M")
             }
 
+        # Determine Base Date for financial planning
+        base_date = None
+        if opportunity.data_vencimento_inicial:
+            base_date = opportunity.data_vencimento_inicial
+        elif approval_rec and approval_rec.data_aprovacao:
+            base_date = approval_rec.data_aprovacao
+        else:
+            base_date = datetime.datetime.now()
+            
+        if isinstance(base_date, datetime.datetime):
+            base_date = base_date.date()
+
         # 4. Consolidate Items and group by Supplier
-        # We need to map products to their respective supplier budget items.
-        # RN004: Unpack products from Kits and list individually.
         unpacked_items = []
 
         # Process standard items
@@ -104,14 +239,12 @@ class OpportunitiesReportService:
             supplier_cnpj = pb.supplier_cnpj
 
             if supplier_id not in mapped_by_supplier:
-                # Resolve payment terms
                 payment_desc = "Não informado"
                 if pb.forma_pagamento:
                     payment_desc = pb.forma_pagamento.descricao
                 elif pb.forma_pagamento_snapshot:
                     payment_desc = pb.forma_pagamento_snapshot.get("descricao", "Não informado")
 
-                # Get average term
                 prazo_medio = 0
                 if pb.forma_pagamento and pb.forma_pagamento.parcelas:
                     intervals = [p.intervalo_dias for p in pb.forma_pagamento.parcelas if p.intervalo_dias is not None]
@@ -137,15 +270,23 @@ class OpportunitiesReportService:
 
             # Map items for this supplier budget
             for pb_item in pb.items:
-                # Find matching opportunity item quantity
                 opp_qty = sum(item["quantidade"] for item in unpacked_items if item["product_id"] == pb_item.product_id)
                 if opp_qty <= 0:
-                    # Fallback to the supplier budget's own quantity if not in opportunity (or if not mapped)
                     opp_qty = float(pb_item.quantidade)
 
+                # Prioritized Tax Lookup:
+                # 1. RentalBudgetItem of the opportunity
+                opp_rental_item = next((item for item in opportunity.rental_items if item.product_id == pb_item.product_id), None)
+                
+                difal_unit = float(opp_rental_item.difal_unit) if (opp_rental_item and opp_rental_item.difal_unit is not None) else None
+                if difal_unit is None or difal_unit == 0.0:
+                    difal_unit = float(pb_item.difal_unitario or 0.0)
+                    
+                st_unit = float(opp_rental_item.icms_st_unit) if (opp_rental_item and opp_rental_item.icms_st_unit is not None) else None
+                if st_unit is None or st_unit == 0.0:
+                    st_unit = float(pb_item.st_unitario or 0.0)
+
                 val_unit = float(pb_item.valor_unitario)
-                difal_unit = float(pb_item.difal_unitario or 0)
-                st_unit = float(pb_item.st_unitario or 0)
 
                 val_total = val_unit * opp_qty
                 difal_total = difal_unit * opp_qty
@@ -176,7 +317,6 @@ class OpportunitiesReportService:
 
         # Calculate supplier totals and fetch financial planning installments
         for supplier_id, data in list(mapped_by_supplier.items()):
-            # Skip suppliers with no items composing the opportunity
             if not data["items"]:
                 mapped_by_supplier.pop(supplier_id)
                 continue
@@ -194,41 +334,25 @@ class OpportunitiesReportService:
                 "total_impostos": format_currency(total_imp),
                 "total_geral": format_currency(total_geral),
                 # Numeric
+                "_total_produtos": total_prod,
+                "_total_difal": total_difal,
+                "_total_st": total_st,
+                "_total_impostos": total_imp,
                 "_total_geral": total_geral
             }
 
-            # Fetch payment planning from db for this supplier budget
+            # Parse payment condition dynamically
             pb = next(pb for pb in purchase_budgets if pb.supplier_id == supplier_id)
-            planning_rows = db.query(PlanejamentoFinanceiro).filter(
-                PlanejamentoFinanceiro.origem_id == pb.id,
-                PlanejamentoFinanceiro.origem_type == 'PURCHASE_BUDGET' if hasattr(PlanejamentoFinanceiro, 'origem_type') else PlanejamentoFinanceiro.origem_tipo == 'PURCHASE_BUDGET',
-                PlanejamentoFinanceiro.tenant_id == current_user.tenant_id
-            ).order_by(PlanejamentoFinanceiro.numero_parcela.asc()).all()
+            cond_desc = "Não informado"
+            if pb.forma_pagamento:
+                cond_desc = pb.forma_pagamento.descricao
+            elif pb.forma_pagamento_snapshot:
+                cond_desc = pb.forma_pagamento_snapshot.get("descricao", "Não informado")
+                
+            parcelas, obs_pag = parse_payment_condition(cond_desc, total_geral, base_date)
+            data["parcelas"] = parcelas
+            data["observacao_pagamento"] = obs_pag
 
-            if planning_rows:
-                total_percent = Decimal('0')
-                for p in planning_rows:
-                    # Calculate percentage based on total
-                    val_p = Decimal(str(p.valor_previsto))
-                    tot_p = Decimal(str(total_geral))
-                    pct = round((val_p / tot_p) * 100, 2) if tot_p > 0 else Decimal('0')
-                    total_percent += pct
-                    data["parcelas"].append({
-                        "numero_parcela": p.numero_parcela,
-                        "percentual": f"{pct:.2f}",
-                        "data_prevista": p.data_prevista.strftime("%d/%m/%Y") if p.data_prevista else "-",
-                        "valor": format_currency(p.valor_previsto)
-                    })
-            else:
-                # If no planning rows, mock a single 100% parcel
-                data["parcelas"].append({
-                    "numero_parcela": 1,
-                    "percentual": "100.00",
-                    "data_prevista": (opportunity.data_vencimento_inicial or datetime.datetime.now()).strftime("%d/%m/%Y"),
-                    "valor": format_currency(total_geral)
-                })
-
-        # Check if we have any valid supplier data left
         if not mapped_by_supplier:
             raise HTTPException(status_code=400, detail="Nenhum item válido com fornecedor pôde ser extraído da oportunidade.")
 
@@ -256,18 +380,56 @@ class OpportunitiesReportService:
         venda_consolidada = float(opportunity.valor_total or 0.0)
         custo_consolidado = sum(data["totais"]["_total_geral"] for data in mapped_by_supplier.values())
         lucro_bruto = venda_consolidada - custo_consolidado
-        margem = (lucro_bruto / venda_consolidada * 100) if venda_consolidada > 0 else 0.0
+        custo_impostos = sum(data["totais"]["_total_impostos"] for data in mapped_by_supplier.values())
         markup = (venda_consolidada / custo_consolidado) if custo_consolidado > 0 else 1.0
+        
+        qtd_fornecedores = len(mapped_by_supplier)
+        qtd_produtos = sum(float(item["quantidade"]) for supplier in mapped_by_supplier.values() for item in supplier["items"])
+        
+        if qtd_produtos.is_integer():
+            qtd_produtos_str = str(int(qtd_produtos))
+        else:
+            qtd_produtos_str = f"{qtd_produtos:.2f}"
 
         kpis = {
             "venda_consolidada": format_currency(venda_consolidada),
             "custo_consolidado": format_currency(custo_consolidado),
             "lucro_bruto": format_currency(lucro_bruto),
-            "margem": f"{margem:.2f}",
-            "markup": f"{markup:.2f}"
+            "custo_impostos": format_currency(custo_impostos),
+            "markup": f"{markup:.2f}",
+            "qtd_fornecedores": str(qtd_fornecedores),
+            "qtd_produtos": qtd_produtos_str
         }
 
-        # 7. Build Consolidated General Section
+        # 7. Build Fechamento por Fornecedor Section
+        fechamento_fornecedores = []
+        total_equipamentos_f = 0.0
+        total_impostos_f = 0.0
+        
+        for data in mapped_by_supplier.values():
+            e_val = data["totais"]["_total_produtos"]
+            i_val = data["totais"]["_total_impostos"]
+            t_val = data["totais"]["_total_geral"]
+            
+            total_equipamentos_f += e_val
+            total_impostos_f += i_val
+            
+            fechamento_fornecedores.append({
+                "nome": data["nome"],
+                "equipamentos": format_currency(e_val),
+                "impostos": format_currency(i_val),
+                "total": format_currency(t_val)
+            })
+            
+        total_geral_f = total_equipamentos_f + total_impostos_f
+        
+        fechamento_totals = {
+            "total_equipamentos": format_currency(total_equipamentos_f),
+            "total_impostos": format_currency(total_impostos_f),
+            "total_geral": format_currency(total_geral_f)
+        }
+
+        # 8. Build Consolidated General Section
         total_prod_all = sum(float(item["_val_total"]) for data in mapped_by_supplier.values() for item in data["items"])
         total_difal_all = sum(float(item["_difal_total"]) for data in mapped_by_supplier.values() for item in data["items"])
         total_st_all = sum(float(item["_st_total"]) for data in mapped_by_supplier.values() for item in data["items"])
@@ -276,7 +438,6 @@ class OpportunitiesReportService:
 
         consolidado_geral = {
             "total_produtos": format_currency(total_prod_all),
-            "total_compras": format_currency(total_prod_all),
             "total_difal": format_currency(total_difal_all),
             "total_st": format_currency(total_st_all),
             "total_impostos": format_currency(total_imp_all),
@@ -313,7 +474,6 @@ class OpportunitiesReportService:
         }
 
         # 8. Render Template
-        # Locate files in versioned directory
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         templates_dir = os.path.join(base_dir, "templates", "reports")
         
@@ -347,7 +507,9 @@ class OpportunitiesReportService:
             fiscal_difal_items=fiscal_difal_items,
             fiscal_st_items=fiscal_st_items,
             consolidado_geral=consolidado_geral,
-            auditoria=auditoria
+            auditoria=auditoria,
+            fechamento_fornecedores=fechamento_fornecedores,
+            fechamento_totals=fechamento_totals
         )
 
         # 9. PDF Generation with WeasyPrint & Fallback to ReportLab
@@ -410,18 +572,18 @@ class OpportunitiesReportService:
             story.append(Paragraph(f"Relatório Executivo de Fechamento de Fornecedores - #{opportunity_dict['numero_orcamento']}", title_style))
             story.append(Paragraph(f"Cliente: {opportunity_dict['customer_nome']} | Vendedor: {opportunity_dict['vendedor_nome']} | Emissão: {emissao_data_hora}", sub_style))
 
-            # Render summary table
+            # Render summary table (updated to match KPIs)
             kpi_data = [
-                ["Venda Consolidada", "Custo Consolidado", "Lucro Bruto", "Margem", "Markup"],
-                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['lucro_bruto']}", f"{kpis['margem']}%", f"{kpis['markup']}x"]
+                ["Venda Consolidada", "Custo Consolidado", "Lucro Bruto", "Custo Impostos", "MKP", "Qtd. Fornecedores", "Qtd. Produtos"],
+                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['lucro_bruto']}", f"R$ {kpis['custo_impostos']}", f"{kpis['markup']}x", kpis['qtd_fornecedores'], kpis['qtd_produtos']]
             ]
-            kpi_table = Table(kpi_data, colWidths=[140]*5)
+            kpi_table = Table(kpi_data, colWidths=[100]*7)
             kpi_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.white),
                 ('ALIGN', (0,0), (-1,-1), 'CENTER'),
                 ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,-1), 10),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 8),
                 ('TOPPADDING', (0,0), (-1,-1), 8),
                 ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#e2e8f0')),
@@ -433,6 +595,8 @@ class OpportunitiesReportService:
             for supplier in list(mapped_by_supplier.values()):
                 story.append(Paragraph(f"Fornecedor: {supplier['nome']} (CNPJ: {supplier['cnpj'] or '-'})", styles['Heading2']))
                 story.append(Paragraph(f"Condição: {supplier['condicao_pagamento']} | Prazo Médio: {supplier['prazo_medio']} dias", styles['Normal']))
+                if supplier.get("observacao_pagamento"):
+                    story.append(Paragraph(f"Observação: {supplier['observacao_pagamento']}", styles['Normal']))
                 story.append(Spacer(1, 6))
 
                 table_data = [[
@@ -457,7 +621,6 @@ class OpportunitiesReportService:
                         Paragraph(f"R$ {item['valor_final']}", table_cell_style)
                     ])
 
-                # Add total row
                 table_data.append([
                     Paragraph("TOTAL FORNECEDOR", table_cell_style),
                     Paragraph("-", table_cell_style),
@@ -479,7 +642,63 @@ class OpportunitiesReportService:
                     ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
                 ]))
                 story.append(supplier_table)
+                story.append(Spacer(1, 10))
+
+                # Render payment planning table inside ReportLab fallback
+                story.append(Paragraph("Cronograma de Pagamentos Previstos", styles['Heading3']))
+                pay_data = [["Parcela", "Percentual (%)", "Data Prevista", "Valor Previsto"]]
+                for p in supplier["parcelas"]:
+                    pay_data.append([
+                        Paragraph(p["label_parcela"], table_cell_style),
+                        Paragraph(p["percentual"] + "%", table_cell_style),
+                        Paragraph(p["data_prevista"], table_cell_style),
+                        Paragraph(f"R$ {p['valor']}", table_cell_style)
+                    ])
+                pay_table = Table(pay_data, colWidths=[100, 100, 100, 100])
+                pay_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('TOPPADDING', (0,0), (-1,-1), 4),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ]))
+                story.append(pay_table)
                 story.append(Spacer(1, 15))
+
+            # Fechamento por Fornecedor table in ReportLab
+            story.append(Paragraph("Fechamento por Fornecedor", styles['Heading2']))
+            story.append(Spacer(1, 6))
+            
+            fech_data = [[
+                Paragraph("Fornecedor", table_header_style),
+                Paragraph("Equipamentos", table_header_style),
+                Paragraph("Impostos", table_header_style),
+                Paragraph("Total", table_header_style)
+            ]]
+            for f in fechamento_fornecedores:
+                fech_data.append([
+                    Paragraph(f["nome"], table_cell_style),
+                    Paragraph(f"R$ {f['equipamentos']}", table_cell_style),
+                    Paragraph(f"R$ {f['impostos']}", table_cell_style),
+                    Paragraph(f"R$ {f['total']}", table_cell_style)
+                ])
+            fech_data.append([
+                Paragraph("TOTAL GERAL", table_cell_style),
+                Paragraph(f"R$ {fechamento_totals['total_equipamentos']}", table_cell_style),
+                Paragraph(f"R$ {fechamento_totals['total_impostos']}", table_cell_style),
+                Paragraph(f"R$ {fechamento_totals['total_geral']}", table_cell_style)
+            ])
+            fech_table = Table(fech_data, colWidths=[200, 100, 100, 100])
+            fech_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(fech_table)
+            story.append(Spacer(1, 15))
 
             # Build document
             doc.build(story)
