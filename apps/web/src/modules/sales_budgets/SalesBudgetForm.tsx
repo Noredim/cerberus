@@ -386,6 +386,7 @@ const statusLabels: Record<string, string> = {
   APROVADO: 'Aprovado',
   CANCELADO: 'Cancelado',
   GANHO: 'Orçamento Ganho',
+  PERDIDO: 'Perdido',
 };
 
 export function SalesBudgetForm() {
@@ -566,7 +567,7 @@ export function SalesBudgetForm() {
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
 
-  const isReadonly = status === 'ENVIADO_APROVACAO' || status === 'CANCELADO' || status === 'GANHO';
+  const isReadonly = status === 'ENVIADO_APROVACAO' || status === 'CANCELADO' || status === 'GANHO' || status === 'PERDIDO';
   const isFactorDisabled = isReadonly && !(status === 'ENVIADO_APROVACAO' && isApprover);
 
   // Unused defaults useMemo removed
@@ -1976,7 +1977,7 @@ export function SalesBudgetForm() {
                     status === 'ENVIADO_APROVACAO' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
                     status === 'RETORNADO_VENDEDOR' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
                     status === 'APROVADO' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                    status === 'CANCELADO' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                    status === 'CANCELADO' || status === 'PERDIDO' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
                     status === 'GANHO' ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-gray-100 text-gray-800'
                   }`}>
                     {statusLabels[status] || status}
@@ -2049,7 +2050,22 @@ export function SalesBudgetForm() {
             </Button>
           )}
 
-          {isEditing && status !== 'CANCELADO' && status !== 'GANHO' && (
+          {isEditing && status !== 'CANCELADO' && status !== 'GANHO' && status !== 'PERDIDO' && (
+            <Button
+              onClick={() => setWorkflowModal({
+                isOpen: true,
+                action: 'perder',
+                title: 'Marcar Oportunidade como Perdida',
+                placeholder: 'Descreva os motivos pelos quais perdemos esta oportunidade (concorrência, preço, prazo, etc.)...'
+              })}
+              variant="outline"
+              className="text-rose-600 border-rose-300 hover:bg-rose-50"
+            >
+              Perder Oportunidade
+            </Button>
+          )}
+
+          {isEditing && status !== 'CANCELADO' && status !== 'GANHO' && status !== 'PERDIDO' && (
             <Button
               onClick={() => setWorkflowModal({
                 isOpen: true,
@@ -2064,12 +2080,26 @@ export function SalesBudgetForm() {
             </Button>
           )}
 
+          {isEditing && status === 'GANHO' && isApprover && (
+            <Button
+              onClick={() => setWorkflowModal({
+                isOpen: true,
+                action: 'reabrir',
+                title: 'Reabrir Oportunidade',
+                placeholder: 'Justifique a reabertura desta oportunidade (ex: cliente solicitou revisão, etc.)...'
+              })}
+              className="bg-amber-600 hover:bg-amber-700 text-white border-0"
+            >
+              Reabrir Oportunidade
+            </Button>
+          )}
+
           {isEditing && (
-            <Tooltip content={status !== 'APROVADO' ? "A proposta só pode ser emitida após aprovação gerencial." : ""}>
+            <Tooltip content={(status !== 'APROVADO' && status !== 'GANHO' && status !== 'PERDIDO') ? "A proposta só pode ser emitida após aprovação gerencial." : ""}>
               <div>
                 <Button
                   onClick={handlePrintProposal}
-                  disabled={status !== 'APROVADO'}
+                  disabled={status !== 'APROVADO' && status !== 'GANHO' && status !== 'PERDIDO'}
                   variant="outline"
                   className="flex items-center gap-1.5"
                 >
@@ -2094,7 +2124,7 @@ export function SalesBudgetForm() {
         let currentStep = 1;
         if (status === 'ENVIADO_APROVACAO') currentStep = 2;
         else if (status === 'APROVADO') currentStep = 3;
-        else if (status === 'GANHO' || status === 'CANCELADO') currentStep = 4;
+        else if (status === 'GANHO' || status === 'CANCELADO' || status === 'PERDIDO') currentStep = 4;
 
         const steps = [
           {
@@ -2117,9 +2147,9 @@ export function SalesBudgetForm() {
           },
           {
             index: 4,
-            label: status === 'CANCELADO' ? 'Cancelado' : 'Ganho',
-            desc: status === 'CANCELADO' ? 'Oportunidade perdida' : 'Negócio fechado',
-            activeClass: status === 'CANCELADO' ? 'bg-rose-600 text-white' : 'bg-teal-600 text-white'
+            label: status === 'CANCELADO' ? 'Cancelado' : status === 'PERDIDO' ? 'Perdido' : 'Ganho',
+            desc: status === 'CANCELADO' ? 'Oportunidade cancelada' : status === 'PERDIDO' ? 'Oportunidade perdida' : 'Negócio fechado',
+            activeClass: status === 'CANCELADO' || status === 'PERDIDO' ? 'bg-rose-600 text-white' : 'bg-teal-600 text-white'
           }
         ];
 
@@ -3623,7 +3653,12 @@ export function SalesBudgetForm() {
                           <div className="max-w-[150px] font-medium text-text-primary flex items-center gap-2">
                             <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>
                             {ri.opportunity_kit_id && (
-                              <button onClick={() => setViewingKitId(ri.opportunity_kit_id!)} className="flex-shrink-0 p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer" title="Ver Itens do Kit">
+                              <button
+                                onClick={() => !isReadonly && setViewingKitId(ri.opportunity_kit_id!)}
+                                disabled={isReadonly}
+                                className="flex-shrink-0 p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                title={isReadonly ? "Edição do kit bloqueada para oportunidade finalizada" : "Ver Itens do Kit"}
+                              >
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -4519,8 +4554,9 @@ export function SalesBudgetForm() {
                 className={
                   workflowModal.action === 'aprovar' ? 'bg-emerald-600 hover:bg-emerald-700 border-0' :
                   workflowModal.action === 'retornar' ? 'bg-amber-600 hover:bg-amber-700 border-0' :
-                  workflowModal.action === 'cancelar' ? 'bg-rose-600 hover:bg-rose-700 border-0' :
-                  workflowModal.action === 'ganhar' ? 'bg-teal-600 hover:bg-teal-700 border-0' : ''
+                  workflowModal.action === 'cancelar' || workflowModal.action === 'perder' ? 'bg-rose-600 hover:bg-rose-700 border-0' :
+                  workflowModal.action === 'ganhar' ? 'bg-teal-600 hover:bg-teal-700 border-0' :
+                  workflowModal.action === 'reabrir' ? 'bg-amber-600 hover:bg-amber-700 border-0' : ''
                 }
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}

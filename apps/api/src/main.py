@@ -34,6 +34,7 @@ from src.modules.man_hours.router import router as man_hours_router
 from src.modules.own_services.router import router as own_services_router
 from src.modules.sales_proposals.router import router as sales_proposals_router
 from src.modules.payment_methods.router import router as payment_methods_router
+from src.modules.document_templates.router import router as document_templates_router
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -157,3 +158,4 @@ app.include_router(man_hours_router)
 app.include_router(own_services_router)
 app.include_router(sales_proposals_router)
 app.include_router(payment_methods_router)
+app.include_router(document_templates_router)

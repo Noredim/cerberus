@@ -41,6 +41,9 @@ import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
 import KitAnalyticReport from './modules/reports/KitAnalyticReport';
 import FormasPagamentoList from './modules/payment_methods/FormasPagamentoList';
 import FormasPagamentoForm from './modules/payment_methods/FormasPagamentoForm';
+import DocumentTemplateList from './modules/document_templates/DocumentTemplateList';
+import DocumentTemplateForm from './modules/document_templates/DocumentTemplateForm';
+import PWAManager from './components/pwa/PWAManager';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -91,6 +94,7 @@ const ProtectedRoute = () => {
 function App() {
   return (
     <AuthProvider>
+      <PWAManager />
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -150,6 +154,11 @@ function App() {
             <Route path="/cadastros/formas-pagamento" element={<FormasPagamentoList />} />
             <Route path="/cadastros/formas-pagamento/novo" element={<FormasPagamentoForm />} />
             <Route path="/cadastros/formas-pagamento/editar/:id" element={<FormasPagamentoForm />} />
+
+            {/* Modelos de Documentos */}
+            <Route path="/cadastros/modelos-documentos" element={<DocumentTemplateList />} />
+            <Route path="/cadastros/modelos-documentos/novo" element={<DocumentTemplateForm />} />
+            <Route path="/cadastros/modelos-documentos/:id" element={<DocumentTemplateForm />} />
 
             {/* Purchase Budgets */}
             <Route path="/orcamentos-compras" element={<BudgetsList />} />

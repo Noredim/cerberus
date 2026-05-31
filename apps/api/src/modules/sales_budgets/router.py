@@ -580,6 +580,38 @@ def ganhar_oportunidade(
         raise HTTPException(status_code=403, detail=str(e))
 
 
+@router.post("/{budget_id}/perder")
+def perder_oportunidade(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.perder_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/{budget_id}/reabrir")
+def reabrir_oportunidade(
+    budget_id: UUID,
+    data: WorkflowTransitionSchema,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        budget = service.reabrir_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        return _budget_to_dict(budget, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
 @router.get("/{budget_id}/historico")
 def get_historico(
     budget_id: UUID,

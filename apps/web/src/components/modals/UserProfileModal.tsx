@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Camera, Key, LogOut, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { versionInfo } from '../../version';
 
 interface UserProfileModalProps {
     isOpen: boolean;
@@ -12,6 +13,16 @@ interface UserProfileModalProps {
 export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     const { user, login, logout } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    const [isPwa, setIsPwa] = useState(false);
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setIsPwa(
+                window.matchMedia('(display-mode: standalone)').matches ||
+                (window.navigator as any).standalone === true
+            );
+        }
+    }, []);
     
     const [isUploading, setIsUploading] = useState(false);
     const [pendingAvatarBase64, setPendingAvatarBase64] = useState<string | null>(null);
@@ -197,7 +208,16 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     </AnimatePresence>
 
                     <h2 className="text-lg font-bold text-text-primary text-center leading-tight mb-1">{user.name}</h2>
-                    <p className="text-sm text-text-muted text-center mb-6">{user.email}</p>
+                    <p className="text-sm text-text-muted text-center mb-4">{user.email}</p>
+
+                    {/* Version & PWA Mode Label (P3 & P6) */}
+                    <div className="w-full bg-bg-deep rounded-lg p-3 text-center border border-border-subtle mb-4">
+                        <p className="text-xs font-bold text-text-primary">Cerberusu</p>
+                        <p className="text-[11px] text-text-muted mt-0.5">Versão: {versionInfo.version} (Build: {versionInfo.buildDate})</p>
+                        <p className="text-[11px] font-semibold text-brand-primary mt-1">
+                            {isPwa ? 'PWA Instalado' : 'Executando via Navegador'}
+                        </p>
+                    </div>
 
                     <div className="w-full space-y-3">
                         {!showPasswordForm ? (

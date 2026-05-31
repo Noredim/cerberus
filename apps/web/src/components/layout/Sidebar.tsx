@@ -59,6 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Produtos', path: '/cadastro/produtos' },
                 { label: 'Benefícios fiscais', path: '/beneficios' },
                 { label: 'Formas de Pagamento', path: '/cadastros/formas-pagamento' },
+                { label: 'Modelos de Documentos', path: '/cadastros/modelos-documentos' },
             ]
         },
         {

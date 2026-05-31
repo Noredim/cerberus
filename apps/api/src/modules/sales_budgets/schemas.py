@@ -19,6 +19,7 @@ class BudgetStatusEnum(str, Enum):
     APROVADO = "APROVADO"
     CANCELADO = "CANCELADO"
     GANHO = "GANHO"
+    PERDIDO = "PERDIDO"
 
 
 # ─── Rental (Locação) Items ───

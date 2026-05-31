@@ -32,6 +32,7 @@ const statusColors: Record<string, string> = {
   APROVADO: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
   CANCELADO: 'bg-rose-100 text-rose-800 border border-rose-200',
   GANHO: 'bg-teal-100 text-teal-800 border border-teal-200',
+  PERDIDO: 'bg-rose-100 text-rose-800 border border-rose-200',
 };
 
 const statusLabels: Record<string, string> = {
@@ -41,6 +42,7 @@ const statusLabels: Record<string, string> = {
   APROVADO: 'Aprovado',
   CANCELADO: 'Cancelado',
   GANHO: 'Orçamento Ganho',
+  PERDIDO: 'Perdido',
 };
 
 function MarginBadge({ margin }: { margin: number }) {
@@ -176,6 +178,7 @@ export function SalesBudgetList() {
           <option value="APROVADO">Aprovado</option>
           <option value="CANCELADO">Cancelado</option>
           <option value="GANHO">Ganho</option>
+          <option value="PERDIDO">Perdido</option>
         </select>
       </div>
 

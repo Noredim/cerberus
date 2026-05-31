@@ -25,6 +25,7 @@ from src.modules.sales_budgets.service import (
     retornar_ao_vendedor,
     cancelar_oportunidade,
     ganhar_oportunidade,
+    perder_oportunidade,
     check_is_approver
 )
 
@@ -321,6 +322,41 @@ def run_tests():
         budget = ganhar_oportunidade(db, tenant_id, str(budget.id), peon_user.id, "Contrato fechado com sucesso!")
         print(f"Won. Status: {budget.status} (Expected: GANHO)")
         assert budget.status == "GANHO"
+
+        # Create a new budget to test the lost opportunity flow
+        lost_budget_payload = SalesBudgetCreate(
+            customer_id=str(customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo="Oportunidade Teste Workflow (Perda)",
+            observacoes="Obs de teste",
+            data_orcamento="2026-05-31T12:00:00",
+            responsavel_ids=[peon_user.id],
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"),
+                    markup=Decimal("1.5"),
+                    quantidade=Decimal("5"),
+                )
+            ]
+        )
+        lost_budget = create_budget(db, tenant_id, str(company.id), lost_budget_payload)
+        
+        # We should be able to lose it from EM_LANCAMENTO state directly as per "durante todo o fluxo"
+        lost_budget = perder_oportunidade(db, tenant_id, str(lost_budget.id), peon_user.id, "Perdemos no preço.")
+        print(f"Lost. Status: {lost_budget.status} (Expected: PERDIDO)")
+        assert lost_budget.status == "PERDIDO"
+        
+        # Try to edit the lost budget, should fail
+        try:
+            update_payload = SalesBudgetUpdate(**lost_budget_payload.model_dump())
+            update_budget(db, tenant_id, str(lost_budget.id), update_payload, peon_user.id)
+            assert False, "Should have failed to edit a lost budget"
+        except ValueError as e:
+            print(f"Successfully blocked editing a lost opportunity: {e}")
+
 
         # ── Test 7: User-Based Access Control ──
         print("\n--- Test 7: User-Based Access Control ---")
