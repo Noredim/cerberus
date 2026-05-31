@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Camera, Key, LogOut, Check, Loader2 } from 'lucide-react';
+import { X, Camera, Key, LogOut, Check, Loader2, Download } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { versionInfo } from '../../version';
+
+interface BeforeInstallPromptEvent extends Event {
+    prompt: () => Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface CustomWindow extends Window {
+    deferredPrompt?: BeforeInstallPromptEvent | null;
+}
 
 interface UserProfileModalProps {
     isOpen: boolean;
@@ -15,14 +24,65 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [isPwa, setIsPwa] = useState(false);
+    const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
             setIsPwa(
                 window.matchMedia('(display-mode: standalone)').matches ||
-                (window.navigator as any).standalone === true
+                (window.navigator as Navigator & { standalone?: boolean }).standalone === true
             );
+
+            const win = window as unknown as CustomWindow;
+            if (win.deferredPrompt) {
+                setDeferredPrompt(win.deferredPrompt);
+            }
+
+            const handlePromptAvailable = (e: Event) => {
+                const customEvent = e as CustomEvent<BeforeInstallPromptEvent>;
+                setDeferredPrompt(customEvent.detail || win.deferredPrompt);
+            };
+
+            const handleAppInstalled = () => {
+                setIsPwa(true);
+                setDeferredPrompt(null);
+            };
+
+            window.addEventListener('pwa-prompt-available', handlePromptAvailable);
+            window.addEventListener('pwa-installed-success', handleAppInstalled);
+            window.addEventListener('appinstalled', handleAppInstalled);
+
+            return () => {
+                window.removeEventListener('pwa-prompt-available', handlePromptAvailable);
+                window.removeEventListener('pwa-installed-success', handleAppInstalled);
+                window.removeEventListener('appinstalled', handleAppInstalled);
+            };
         }
     }, []);
+
+    const handleInstallPwa = async () => {
+        const win = window as unknown as CustomWindow;
+        const promptEvent = deferredPrompt || win.deferredPrompt;
+        if (!promptEvent) return;
+
+        promptEvent.prompt();
+        try {
+            const choiceResult = await promptEvent.userChoice;
+            if (choiceResult.outcome === 'accepted') {
+                console.log('[PWA] User accepted the installation from Profile Modal');
+                setIsPwa(true);
+                window.dispatchEvent(new CustomEvent('pwa-installed-success'));
+            } else {
+                console.log('[PWA] User dismissed the installation from Profile Modal');
+            }
+        } catch (err) {
+            console.error('[PWA] Install prompt error:', err);
+        } finally {
+            setDeferredPrompt(null);
+            win.deferredPrompt = null;
+            window.dispatchEvent(new CustomEvent('pwa-prompt-resolved'));
+        }
+    };
     
     const [isUploading, setIsUploading] = useState(false);
     const [pendingAvatarBase64, setPendingAvatarBase64] = useState<string | null>(null);
@@ -53,8 +113,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
+                const width = img.width;
+                const height = img.height;
 
                 // Calcula a nova dimensão mantendo aspecto cortado
                 const size = Math.min(width, height);
@@ -124,8 +184,9 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 setShowPasswordForm(false);
                 setPasswordSuccess(false);
             }, 2000);
-        } catch (error: any) {
-            setPasswordError(error.response?.data?.detail || 'Erro ao alterar a senha. Verifique sua senha atual.');
+        } catch (error) {
+            const err = error as { response?: { data?: { detail?: string } } };
+            setPasswordError(err.response?.data?.detail || 'Erro ao alterar a senha. Verifique sua senha atual.');
         } finally {
             setIsSavingPassword(false);
         }
@@ -214,9 +275,20 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     <div className="w-full bg-bg-deep rounded-lg p-3 text-center border border-border-subtle mb-4">
                         <p className="text-xs font-bold text-text-primary">Cerberus</p>
                         <p className="text-[11px] text-text-muted mt-0.5">Versão: {versionInfo.version} (Build: {versionInfo.buildDate})</p>
-                        <p className="text-[11px] font-semibold text-brand-primary mt-1">
+                        <p className={`text-[11px] font-semibold mt-1 transition-colors ${isPwa ? 'text-brand-success' : 'text-brand-primary'}`}>
                             {isPwa ? 'PWA Instalado' : 'Executando via Navegador'}
                         </p>
+
+                        {!isPwa && deferredPrompt && (
+                            <motion.button
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                onClick={handleInstallPwa}
+                                className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-bold rounded-lg shadow-sm hover:shadow hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                            >
+                                <Download className="w-3.5 h-3.5" /> Instalar Aplicativo (PWA)
+                            </motion.button>
+                        )}
                     </div>
 
                     <div className="w-full space-y-3">

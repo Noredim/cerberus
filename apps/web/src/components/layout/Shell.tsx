@@ -1,46 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import { Bell, Search, User, Sun, Moon, Building2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import CompanySelectionModal from '../modals/CompanySelectionModal';
+import NotificationsModal, { NotificationItem } from '../modals/NotificationsModal';
+import { api } from '../../services/api';
 
 interface ShellProps {
     children: React.ReactNode;
 }
 
+interface CompanyItem {
+    company_id: string;
+    company_name: string;
+    company_cnpj: string;
+}
+
 const Shell: React.FC<ShellProps> = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [isDark, setIsDark] = useState(true);
+    
+    // Initialize isDark directly from localStorage to prevent synchronous setState inside useEffect
+    const [isDark, setIsDark] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return !('theme' in localStorage) || localStorage.theme === 'dark';
+        }
+        return true;
+    });
+    
     const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
     
     const { user, userCompanies, activeCompanyId, setActiveCompany } = useAuth();
 
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+    const fetchNotifications = useCallback(async () => {
+        if (!user) return;
+        try {
+            const response = await api.get('/notifications');
+            setNotifications(response.data || []);
+        } catch (error) {
+            console.error('Erro ao buscar notificações:', error);
+        }
+    }, [user]);
+
     useEffect(() => {
-        // Inicializar com o dark mode por default
-        if (!('theme' in localStorage) || localStorage.theme === 'dark') {
+        // Defer initial fetch to prevent synchronous state updates during rendering
+        const timer = setTimeout(() => {
+            fetchNotifications();
+        }, 0);
+        const interval = setInterval(fetchNotifications, 30000);
+        return () => {
+            clearTimeout(timer);
+            clearInterval(interval);
+        };
+    }, [fetchNotifications]);
+
+    const unreadCount = notifications.filter(n => !n.is_read).length;
+
+    useEffect(() => {
+        if (isDark) {
             document.documentElement.classList.add('dark');
-            setIsDark(true);
             localStorage.setItem('theme', 'dark');
         } else {
-            document.documentElement.classList.remove('dark');
-            setIsDark(false);
-        }
-    }, []);
-
-    const toggleTheme = () => {
-        if (isDark) {
             document.documentElement.classList.remove('dark');
             localStorage.setItem('theme', 'light');
-            setIsDark(false);
-        } else {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-            setIsDark(true);
         }
+    }, [isDark]);
+
+    const toggleTheme = () => {
+        setIsDark(prev => !prev);
     };
     
-    // c and comp are of type any to satisfy strict tsconfig without full interface import
-    const activeCompany = userCompanies.find((c: any) => c.company_id === activeCompanyId);
+    const activeCompany = userCompanies.find((c: CompanyItem) => c.company_id === activeCompanyId);
 
     return (
         <div className="flex h-screen overflow-hidden bg-bg-deep text-text-primary print:h-auto print:overflow-visible print:bg-white">
@@ -74,11 +106,14 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                         </button>
 
                         <button
-                            className="relative cursor-pointer text-text-muted hover:text-brand-primary transition-colors p-2"
+                            onClick={() => setNotificationsOpen(true)}
+                            className="relative cursor-pointer text-text-muted hover:text-brand-primary transition-colors p-2 hover:scale-105 active:scale-95 transition-all"
                             aria-label="Notificações"
                         >
                             <Bell className="w-5 h-5" />
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full"></span>
+                            {unreadCount > 0 && (
+                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full animate-pulse"></span>
+                            )}
                         </button>
 
                         <div className="flex items-center gap-3 pl-6 border-l border-border-subtle cursor-pointer group relative">
@@ -110,7 +145,7 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                                         Empresas Vinculadas
                                     </div>
                                     <div className="max-h-60 overflow-y-auto">
-                                        {userCompanies.map((comp: any) => (
+                                        {userCompanies.map((comp: CompanyItem) => (
                                             <button
                                                 key={comp.company_id}
                                                 onClick={() => {
@@ -150,6 +185,13 @@ const Shell: React.FC<ShellProps> = ({ children }) => {
                         onSelect={setActiveCompany} 
                     />
                 )}
+
+                <NotificationsModal
+                    isOpen={notificationsOpen}
+                    onClose={() => setNotificationsOpen(false)}
+                    notifications={notifications}
+                    onRefresh={fetchNotifications}
+                />
             </div>
         </div>
     );

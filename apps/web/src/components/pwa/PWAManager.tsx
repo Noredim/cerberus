@@ -3,12 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { WifiOff, Wifi, RefreshCw, X, Download } from 'lucide-react';
 import { versionInfo } from '../../version';
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface CustomWindow extends Window {
+  deferredPrompt?: BeforeInstallPromptEvent | null;
+}
+
 export default function PWAManager() {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [showRestoredToast, setShowRestoredToast] = useState<boolean>(false);
   const [swRegistration, setSwRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [showUpdateToast, setShowUpdateToast] = useState<boolean>(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState<boolean>(false);
 
   // 1. Listen for connection changes
@@ -91,7 +100,10 @@ export default function PWAManager() {
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      const promptEvent = e as BeforeInstallPromptEvent;
+      setDeferredPrompt(promptEvent);
+      (window as unknown as CustomWindow).deferredPrompt = promptEvent;
+      window.dispatchEvent(new CustomEvent('pwa-prompt-available', { detail: promptEvent }));
 
       // Check major version difference to clear ignore flag
       const currentMajor = parseInt(versionInfo.version.split('.')[0], 10);
@@ -113,10 +125,28 @@ export default function PWAManager() {
       }
     };
 
+    const handleAppInstalled = () => {
+      console.log('[PWA] Application installed successfully');
+      setDeferredPrompt(null);
+      (window as unknown as CustomWindow).deferredPrompt = null;
+      window.dispatchEvent(new CustomEvent('pwa-installed-success'));
+    };
+
+    const handlePromptResolvedExternal = () => {
+      setDeferredPrompt(null);
+      setShowInstallBanner(false);
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('pwa-prompt-resolved', handlePromptResolvedExternal);
+    window.addEventListener('pwa-installed-success', handlePromptResolvedExternal);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('pwa-prompt-resolved', handlePromptResolvedExternal);
+      window.removeEventListener('pwa-installed-success', handlePromptResolvedExternal);
     };
   }, []);
 
@@ -140,6 +170,7 @@ export default function PWAManager() {
       deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
         if (choiceResult.outcome === 'accepted') {
           console.log('[PWA] User accepted the installation');
+          window.dispatchEvent(new CustomEvent('pwa-installed-success'));
         } else {
           console.log('[PWA] User dismissed the installation');
           // Ignored for 30 days
@@ -147,6 +178,7 @@ export default function PWAManager() {
           localStorage.setItem('pwa-install-ignored-until', (Date.now() + thirtyDays).toString());
         }
         setDeferredPrompt(null);
+        (window as unknown as CustomWindow).deferredPrompt = null;
         setShowInstallBanner(false);
       });
     }

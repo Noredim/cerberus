@@ -31,7 +31,7 @@ def list_budgets(
     budgets, total = service.list_budgets(db, current_user.tenant_id, company_id, skip, limit, q, status, user_id=current_user.id)
     result = []
     for b in budgets:
-        lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items)
+        lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items, db)
         lucro_rental, fat_rental = _calc_margem_rental(b.rental_items, getattr(b, "prazo_instalacao_meses", 0))
         
         mv = float(round(lucro_venda / fat_venda * 100, 2)) if fat_venda > 0 else 0.0
@@ -53,9 +53,6 @@ def list_budgets(
         valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
         prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
         
-        total_venda_items = sum(float(i.total_venda or 0) for i in b.items if not getattr(i, "opportunity_kit_id", None))
-        total_venda_kits = sum(float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1) for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) == 'VENDA_EQUIPAMENTOS')
-        
         result.append({
             "id": b.id,
             "numero_orcamento": b.numero_orcamento,
@@ -63,7 +60,7 @@ def list_budgets(
             "status": b.status,
             "data_orcamento": b.data_orcamento,
             "customer_nome": b.customer.nome_fantasia or b.customer.razao_social if b.customer else None,
-            "total_venda": float(total_venda_items + total_venda_kits),
+            "total_venda": fat_venda,
             "margem_venda": mv,
             "total_faturamento_rental": total_faturamento_rental,
             "valor_mensal_total_rental": valor_mensal_total_rental,
@@ -75,17 +72,184 @@ def list_budgets(
     return {"total": total, "items": result}
 
 
-def _calc_margem_venda(items, rental_items) -> tuple[float, float]:
-    total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items if not getattr(i, "opportunity_kit_id", None))
-    total_venda = sum(float(i.total_venda or 0) for i in items if not getattr(i, "opportunity_kit_id", None))
-    
+def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, float]:
+    if not db or not items:
+        total_lucro = sum(float(i.lucro_unit or 0) * float(i.quantidade or 1) for i in items)
+        total_venda = sum(float(i.total_venda or 0) for i in items)
+        
+        if rental_items:
+            for ri in rental_items:
+                if ri.tipo_contrato_kit == 'VENDA_EQUIPAMENTOS':
+                    total_lucro += float(ri.kit_lucro_mensal or 0) * float(ri.quantidade or 1)
+                    total_venda += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
+                    
+        return (total_lucro, total_venda)
+
+    budget = items[0].budget
+    from src.modules.purchase_budgets.models import PurchaseBudget
+    purchase_budgets = db.query(PurchaseBudget).filter(
+        PurchaseBudget.sales_budget_id == budget.id,
+        PurchaseBudget.tenant_id == budget.tenant_id
+    ).all()
+
+    opp_product_taxes = {}
+    for item in rental_items:
+        if not item.opportunity_kit_id and item.product_id:
+            opp_product_taxes[item.product_id] = {
+                "difal": float(item.difal_unit or 0.0),
+                "st": float(item.icms_st_unit or 0.0)
+            }
+
+    from src.modules.opportunity_kits.models import OpportunityKit
+    from src.modules.opportunity_kits.service import OpportunityKitService
+    kit_service = OpportunityKitService(db)
+
+    kit_ids = set(i.opportunity_kit_id for i in items if i.opportunity_kit_id)
+    kit_ids.update(ri.opportunity_kit_id for ri in rental_items if ri.opportunity_kit_id)
+
+    kits_by_id = {}
+    for kit_id in kit_ids:
+        kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+        if kit:
+            kits_by_id[kit.id] = kit
+            try:
+                kit_financials = kit_service.calculate_financials(kit, budget.tenant_id)
+                for item_sum in kit_financials.get("item_summaries", []):
+                    p_id = item_sum.get("product_id")
+                    if p_id:
+                        p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                        opp_product_taxes[p_uuid] = {
+                            "difal": float(item_sum.get("difal_unitario") or 0.0),
+                            "st": float(item_sum.get("icms_st_unitario") or 0.0)
+                        }
+            except Exception:
+                pass
+
+    product_suppliers = {}
+    for pb in purchase_budgets:
+        for pb_item in pb.items:
+            if pb_item.product_id:
+                product_suppliers[pb_item.product_id] = pb_item
+
+    venda_consolidada = 0.0
+    custo_consolidado = 0.0
+    custo_impostos = 0.0
+    impostos_venda = 0.0
+    despesas_totais = 0.0
+
+    for item in items:
+        qty = float(item.quantidade or 1.0)
+        if not item.opportunity_kit_id and item.product_id:
+            pb_item = product_suppliers.get(item.product_id)
+            custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
+            
+            difal_unit = 0.0
+            st_unit = 0.0
+            
+            tax_info = opp_product_taxes.get(item.product_id)
+            if tax_info:
+                difal_unit = tax_info["difal"]
+                st_unit = tax_info["st"]
+            
+            if difal_unit == 0.0 and pb_item and pb_item.difal_unitario is not None:
+                difal_unit = float(pb_item.difal_unitario)
+            if st_unit == 0.0 and pb_item and pb_item.st_unitario is not None:
+                st_unit = float(pb_item.st_unitario)
+                
+            purchase_tax_unit = difal_unit + st_unit
+            
+            pis_unit = float(item.pis_unit or 0.0)
+            cofins_unit = float(item.cofins_unit or 0.0)
+            csll_unit = float(item.csll_unit or 0.0)
+            irpj_unit = float(item.irpj_unit or 0.0)
+            icms_unit = float(item.icms_unit or 0.0)
+            iss_unit = float(item.iss_unit or 0.0)
+            sales_tax_unit = pis_unit + cofins_unit + csll_unit + irpj_unit + icms_unit + iss_unit
+            
+            venda_unit = float(item.venda_unit or 0.0)
+            venda_total = venda_unit * qty
+            custo_total = custo_unit * qty
+            purchase_tax_total = purchase_tax_unit * qty
+            sales_tax_total = sales_tax_unit * qty
+            
+            frete_venda_unit = float(item.frete_venda_unit or 0.0)
+            desp_adm_unit = float(item.despesa_adm_unit or 0.0)
+            comissao_unit = float(item.comissao_unit or 0.0)
+            
+            frete_total = frete_venda_unit * qty
+            desp_adm_total = desp_adm_unit * qty
+            comissao_total = comissao_unit * qty
+            despesas_adm_total = frete_total + desp_adm_total + comissao_total
+            
+            venda_consolidada += venda_total
+            custo_consolidado += custo_total
+            custo_impostos += purchase_tax_total
+            impostos_venda += sales_tax_total
+            despesas_totais += despesas_adm_total
+            
+        elif item.opportunity_kit_id:
+            kit = kits_by_id.get(item.opportunity_kit_id)
+            if kit:
+                try:
+                    kit_financials = kit_service.calculate_financials(kit, budget.tenant_id)
+                    for summary in kit_financials.get("item_summaries", []):
+                        p_id = summary.get("product_id")
+                        p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                        kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+                        qty_in_kit = float(kit_item.quantidade_no_kit) if kit_item else 1.0
+                        component_qty = qty * qty_in_kit
+                        
+                        pb_item = product_suppliers.get(p_uuid)
+                        
+                        difal_unit = 0.0
+                        st_unit = 0.0
+                        
+                        tax_info = opp_product_taxes.get(p_uuid)
+                        if tax_info:
+                            difal_unit = tax_info["difal"]
+                            st_unit = tax_info["st"]
+                            
+                        if difal_unit == 0.0 and pb_item and pb_item.difal_unitario is not None:
+                            difal_unit = float(pb_item.difal_unitario)
+                        if st_unit == 0.0 and pb_item and pb_item.st_unitario is not None:
+                            st_unit = float(pb_item.st_unitario)
+                            
+                        purchase_tax_unit = difal_unit + st_unit
+                        custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - purchase_tax_unit)
+                        
+                        sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                        
+                        venda_unit = float(summary.get("venda_unitario_item") or 0.0)
+                        venda_total = venda_unit * component_qty
+                        custo_total = custo_unit * component_qty
+                        purchase_tax_total = purchase_tax_unit * component_qty
+                        sales_tax_total = sales_tax_unit * component_qty
+                        
+                        frete_venda_unit = float(summary.get("frete_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                        desp_adm_unit = float(summary.get("desp_adm_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                        comissao_unit = float(summary.get("comissao_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                        
+                        frete_total = frete_venda_unit * component_qty
+                        desp_adm_total = desp_adm_unit * component_qty
+                        comissao_total = comissao_unit * component_qty
+                        despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                        
+                        venda_consolidada += venda_total
+                        custo_consolidado += custo_total
+                        custo_impostos += purchase_tax_total
+                        sales_tax_total = sales_tax_total
+                        impostos_venda += sales_tax_total
+                        despesas_totais += despesas_adm_total
+                except Exception:
+                    pass
+
     if rental_items:
         for ri in rental_items:
             if ri.tipo_contrato_kit == 'VENDA_EQUIPAMENTOS':
-                total_lucro += float(ri.kit_lucro_mensal or 0) * float(ri.quantidade or 1)
-                total_venda += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
-                
-    return (total_lucro, total_venda)
+                venda_consolidada += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
+
+    lucro_total = venda_consolidada - (custo_consolidado + custo_impostos + impostos_venda + despesas_totais)
+    return (lucro_total, venda_consolidada)
 
 
 def _calc_margem_rental(rental_items, prazo_instalacao: int = 0) -> tuple[float, float]:

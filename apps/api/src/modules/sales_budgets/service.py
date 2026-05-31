@@ -1312,6 +1312,56 @@ def enviar_para_aprovacao(db: Session, tenant_id: str, budget_id: str, user_id: 
         descricao=justificativa
     )
     db.add(history_entry)
+
+    # Generate notifications for approvers
+    from src.modules.users.models import User, UserRole, UserRoleEnum
+    from src.modules.professionals.models import Professional
+    from src.modules.roles.models import Role
+    from src.modules.notifications.models import Notification
+
+    # 1. Query System Approvers (ADMIN, DIRETORIA)
+    system_approvers = db.query(User).join(UserRole).filter(
+        User.tenant_id == tenant_id,
+        UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
+    ).all()
+
+    # 2. Query Company Approvers (GERENTE, DIRETOR in active company)
+    company_approvers = db.query(User).join(Professional, Professional.user_id == User.id).join(Role, Role.id == Professional.role_id).filter(
+        User.tenant_id == tenant_id,
+        Professional.company_id == budget.company_id,
+        Role.name.in_(["GERENTE", "DIRETOR"])
+    ).all()
+
+    # 3. Consolidate recipient IDs (no duplicates)
+    recipient_ids = set()
+    for u in system_approvers:
+        recipient_ids.add(u.id)
+    for u in company_approvers:
+        recipient_ids.add(u.id)
+
+    # Get vendor name
+    vendedor = db.query(User).filter(User.id == user_id).first()
+    vendedor_name = vendedor.name if vendedor else "Vendedor"
+
+    opportunity_number = budget.numero_orcamento or "Sem Número"
+
+    # 4. Create Notification objects
+    for r_id in recipient_ids:
+        # Avoid notifying oneself if they are an approver who sent it (though usually it's sellers who send)
+        if r_id == user_id:
+            continue
+        notification = Notification(
+            tenant_id=tenant_id,
+            company_id=budget.company_id,
+            user_id=r_id,
+            title="Nova proposta para aprovação",
+            message=f"A oportunidade {opportunity_number} foi enviada para aprovação por {vendedor_name}.",
+            opportunity_id=str(budget.id),
+            opportunity_number=opportunity_number,
+            vendedor_name=vendedor_name
+        )
+        db.add(notification)
+
     db.commit()
     db.refresh(budget)
     return budget

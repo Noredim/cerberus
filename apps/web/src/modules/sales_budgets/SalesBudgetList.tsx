@@ -26,13 +26,13 @@ interface SalesBudgetSummary {
 }
 
 const statusColors: Record<string, string> = {
-  EM_LANCAMENTO: 'bg-slate-100 text-slate-800 border border-slate-200',
-  ENVIADO_APROVACAO: 'bg-blue-100 text-blue-800 border border-blue-200',
-  RETORNADO_VENDEDOR: 'bg-amber-100 text-amber-800 border border-amber-200',
-  APROVADO: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-  CANCELADO: 'bg-rose-100 text-rose-800 border border-rose-200',
-  GANHO: 'bg-teal-100 text-teal-800 border border-teal-200',
-  PERDIDO: 'bg-rose-100 text-rose-800 border border-rose-200',
+  EM_LANCAMENTO: 'bg-slate-50/70 text-slate-600 border border-slate-200/80 dark:bg-slate-950/40 dark:text-slate-400 dark:border-slate-800/80',
+  ENVIADO_APROVACAO: 'bg-blue-50/70 text-blue-600 border border-blue-200/60 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30',
+  RETORNADO_VENDEDOR: 'bg-amber-50/70 text-amber-600 border border-amber-200/60 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30',
+  APROVADO: 'bg-emerald-50/70 text-emerald-600 border border-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30',
+  CANCELADO: 'bg-rose-50/70 text-rose-600 border border-rose-200/60 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30',
+  GANHO: 'bg-teal-50/70 text-teal-600 border border-teal-200/60 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-900/30',
+  PERDIDO: 'bg-rose-50/70 text-rose-600 border border-rose-200/60 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30',
 };
 
 const statusLabels: Record<string, string> = {
@@ -46,12 +46,12 @@ const statusLabels: Record<string, string> = {
 };
 
 function MarginBadge({ margin }: { margin: number }) {
-  let cls = 'text-rose-600 bg-rose-50';
+  let cls = 'text-rose-600 bg-rose-50 border border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
   let label = 'Crítico';
-  if (margin >= 15) { cls = 'text-emerald-600 bg-emerald-50'; label = 'Saudável'; }
-  else if (margin >= 5) { cls = 'text-amber-600 bg-amber-50'; label = 'Atenção'; }
+  if (margin >= 15) { cls = 'text-emerald-600 bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30'; label = 'Saudável'; }
+  else if (margin >= 5) { cls = 'text-amber-600 bg-amber-50 border border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30'; label = 'Atenção'; }
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold tracking-wide transition-all ${cls}`}>
       {margin.toFixed(1)}% — {label}
     </span>
   );
@@ -163,13 +163,13 @@ export function SalesBudgetList() {
             placeholder="Buscar por título, número ou cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+            className="w-full pl-10 pr-4 py-2 border border-border-subtle rounded-md bg-bg-deep text-text-primary text-sm focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-all duration-150"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+          className="px-3 py-2 border border-border-subtle rounded-md bg-bg-deep text-text-primary text-sm focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-all duration-150"
         >
           <option value="">Todos os status</option>
           <option value="EM_LANCAMENTO">Em Lançamento</option>
@@ -198,17 +198,17 @@ export function SalesBudgetList() {
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border-subtle">
-          <table className="w-full text-sm">
+        <div className="overflow-hidden rounded-lg border border-border-subtle/80 bg-bg-surface shadow-sm transition-all duration-300">
+          <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="bg-bg-deep text-text-muted border-b border-border-subtle">
-                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Oportunidade</th>
-                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Cliente</th>
-                <th className="text-left py-3 px-4 font-semibold uppercase tracking-wider">Status</th>
-                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider">Resumo Venda</th>
-                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider">Resumo Locação</th>
-                <th className="text-right py-3 px-4 font-semibold uppercase tracking-wider whitespace-nowrap">Margem Geral</th>
-                <th className="text-center py-3 px-4 font-semibold uppercase tracking-wider">Ações</th>
+              <tr className="bg-bg-deep/45 text-text-muted border-b border-border-subtle/80">
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Oportunidade</th>
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Cliente</th>
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Venda</th>
+                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Locação</th>
+                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Margem Geral</th>
+                <th className="text-center py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -216,31 +216,31 @@ export function SalesBudgetList() {
                 <tr
                   key={b.id}
                   onClick={() => navigate(`/orcamentos-vendas/${b.id}`)}
-                  className="border-b border-border-subtle hover:bg-bg-deep/50 cursor-pointer transition-colors"
+                  className="group border-b border-border-subtle/50 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 cursor-pointer transition-all duration-200"
                 >
-                  <td className="py-3 px-4 w-1/4 max-w-[250px]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-text-primary line-clamp-2" title={b.titulo}>
+                  <td className="py-4 px-5 w-1/4 max-w-[250px] align-middle">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-semibold text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2" title={b.titulo}>
                         {b.titulo}
                       </span>
-                      <span className="text-xs font-mono text-brand-primary font-medium">
+                      <span className="text-[10px] font-mono text-text-muted font-bold tracking-wider uppercase">
                         {b.numero_orcamento}
                       </span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 w-1/5 max-w-[200px]">
-                    <div className="text-sm text-text-muted line-clamp-2" title={b.customer_nome || '—'}>
+                  <td className="py-4 px-5 w-1/5 max-w-[200px] align-middle">
+                    <div className="text-sm text-text-muted line-clamp-2 leading-relaxed" title={b.customer_nome || '—'}>
                       {b.customer_nome || '—'}
                     </div>
                   </td>
-                  <td className="py-3 px-4 w-32">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide tracking-wider ${statusColors[b.status] || ''}`}>
+                  <td className="py-4 px-5 w-32 align-middle">
+                    <span className={`inline-flex px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statusColors[b.status] || ''}`}>
                       {statusLabels[b.status] || b.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex flex-col items-end gap-1.5">
-                      <span className="font-semibold text-text-primary text-sm whitespace-nowrap">
+                  <td className="py-4 px-5 text-right align-middle">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
                         {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </span>
                       {b.total_venda > 0 ? (
@@ -250,20 +250,20 @@ export function SalesBudgetList() {
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-4 px-5 text-right align-middle">
                     {b.total_faturamento_rental > 0 ? (
-                      <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex flex-col items-end gap-1">
                         <Tooltip content={
-                          <div className="text-left space-y-1">
-                            <p><span className="text-text-muted">Valor Mensal:</span> {b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                            <p><span className="text-text-muted">Prazo:</span> {b.prazo_max_rental} meses</p>
+                          <div className="text-left space-y-1 p-1">
+                            <p><span className="text-text-muted">Valor Mensal:</span> <span className="font-mono">{b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
+                            <p><span className="text-text-muted">Prazo:</span> <span className="font-semibold">{b.prazo_max_rental}</span> meses</p>
                           </div>
                         }>
-                          <div className="flex items-center gap-1 cursor-help">
-                            <span className="font-semibold text-brand-primary text-sm whitespace-nowrap">
+                          <div className="flex items-center gap-1 cursor-help justify-end">
+                            <span className="font-bold text-brand-primary text-sm whitespace-nowrap tabular-nums">
                               {b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </span>
-                            <Info className="w-3.5 h-3.5 text-text-muted opacity-70" />
+                            <Info className="w-3.5 h-3.5 text-text-muted opacity-60 group-hover:opacity-100 transition-opacity" />
                           </div>
                         </Tooltip>
                         <MarginBadge margin={b.margem_rental} />
@@ -272,27 +272,27 @@ export function SalesBudgetList() {
                       <span className="text-text-muted">—</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-4 px-5 text-right align-middle">
                     {b.margem_geral > 0 ? (
-                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-bg-deep border border-border-subtle font-bold text-brand-primary text-xs">
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded border border-border-subtle bg-bg-deep font-bold text-brand-primary text-xs tabular-nums shadow-sm">
                         {b.margem_geral.toFixed(1)}%
                       </span>
                     ) : (
                       <span className="text-text-muted">—</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                  <td className="py-4 px-5 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/orcamentos-vendas/${b.id}`); }}
-                        className="p-1.5 rounded hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary transition-colors"
+                        className="p-1.5 rounded hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary transition-all duration-150"
                         title="Visualizar"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={(e) => handleDeleteClick(b, e)}
-                        className="p-1.5 rounded hover:bg-rose-100 text-text-muted hover:text-rose-600 transition-colors"
+                        className="p-1.5 rounded hover:bg-rose-50 text-text-muted hover:text-rose-600 transition-all duration-150"
                         title="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
