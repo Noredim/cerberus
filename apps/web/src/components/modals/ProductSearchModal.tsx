@@ -60,7 +60,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-border-subtle bg-bg-subtle">

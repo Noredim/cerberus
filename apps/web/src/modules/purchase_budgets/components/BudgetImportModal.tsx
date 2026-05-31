@@ -72,7 +72,7 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-surface rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
         <div className="flex justify-between items-center p-4 border-b border-border-subtle bg-brand-primary text-white">
           <h3 className="font-semibold text-lg flex items-center gap-2">
