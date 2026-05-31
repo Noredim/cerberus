@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -2149,7 +2149,7 @@ export function SalesBudgetForm() {
                   const isActive = currentStep === s.index;
                   
                   return (
-                    <React.Fragment key={s.index}>
+                    <Fragment key={s.index}>
                       <div className="flex items-center gap-2.5 shrink-0">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
                           isActive 
@@ -2170,7 +2170,7 @@ export function SalesBudgetForm() {
                           currentStep > s.index ? 'bg-emerald-400' : 'bg-border-subtle'
                         }`} />
                       )}
-                    </React.Fragment>
+                    </Fragment>
                   );
                 })}
               </div>
