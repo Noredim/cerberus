@@ -1,31 +1,21 @@
 @page {
     size: A4 landscape;
-    margin-top: 3.2cm;
-    margin-bottom: 1.5cm;
-    margin-left: 1cm;
-    margin-right: 1cm;
+    margin-top: 0.8cm;
+    margin-bottom: 0.8cm;
+    margin-left: 0.8cm;
+    margin-right: 0.8cm;
     @bottom-right {
         content: "Página " counter(page) " de " counter(pages);
         font-family: 'Outfit', 'Inter', sans-serif;
-        font-size: 8pt;
+        font-size: 7.5pt;
         color: #64748b;
     }
     @bottom-left {
         content: "Cerberus - Relatório Executivo de Fechamento de Fornecedores v1.0";
         font-family: 'Outfit', 'Inter', sans-serif;
-        font-size: 8pt;
+        font-size: 7.5pt;
         color: #64748b;
     }
-}
-
-.header-kpis-container {
-    position: fixed;
-    top: -2.7cm;
-    left: 0;
-    right: 0;
-    height: 2.2cm;
-    border-bottom: 2px solid #cbd5e1;
-    padding-bottom: 4px;
 }
 
 body {
@@ -34,35 +24,27 @@ body {
     background-color: #ffffff;
     margin: 0;
     padding: 0;
-    font-size: 9pt;
-    line-height: 1.4;
+    font-size: 8pt;
+    line-height: 1.25;
 }
-
 
 h1, h2, h3, h4 {
     color: #0f172a;
-    margin: 0 0 10px 0;
+    margin: 0 0 4px 0;
     font-weight: 600;
 }
 
-.compact-header-line1 {
-    font-size: 7.5pt;
-    color: #475569;
-    margin-bottom: 6px;
-    border-bottom: 1px solid #e2e8f0;
-    padding-bottom: 4px;
-}
-
-.compact-header-line1 td {
-    padding: 2px 4px;
-    vertical-align: middle;
+.first-page-header {
+    border-bottom: 2px solid #cbd5e1;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 .status-badge {
     display: inline-block;
     padding: 2px 6px;
     border-radius: 4px;
-    font-size: 7.5pt;
+    font-size: 7pt;
     font-weight: bold;
     text-transform: uppercase;
 }
@@ -99,21 +81,21 @@ h1, h2, h3, h4 {
     background-color: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
-    padding: 4px 6px;
+    padding: 3px 5px;
     text-align: center;
 }
 
 .kpi-label {
-    font-size: 7pt;
+    font-size: 6.5pt;
     color: #64748b;
     text-transform: uppercase;
     font-weight: bold;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
     display: block;
 }
 
 .kpi-val {
-    font-size: 10pt;
+    font-size: 9pt;
     font-weight: bold;
     color: #0f172a;
     display: block;
@@ -121,13 +103,13 @@ h1, h2, h3, h4 {
 
 /* Section Grouping */
 .section-title {
-    font-size: 11pt;
+    font-size: 9pt;
     background-color: #1e293b;
     color: #ffffff;
-    padding: 6px 12px;
+    padding: 3px 8px;
     border-radius: 4px;
-    margin-top: 25px;
-    margin-bottom: 12px;
+    margin-top: 8px;
+    margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -135,22 +117,22 @@ h1, h2, h3, h4 {
 .supplier-info {
     background-color: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 15px;
-    margin-bottom: 12px;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin-bottom: 6px;
 }
 
 .supplier-info-grid {
     display: flex;
     justify-content: space-between;
-    font-size: 8.5pt;
+    font-size: 7.5pt;
 }
 
 /* Tables */
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 15px;
+    margin-bottom: 6px;
 }
 
 .data-table th {
@@ -158,16 +140,16 @@ h1, h2, h3, h4 {
     color: #475569;
     font-weight: bold;
     text-align: left;
-    padding: 6px 8px;
+    padding: 3px 5px;
     border-bottom: 2px solid #cbd5e1;
-    font-size: 8pt;
+    font-size: 7pt;
     text-transform: uppercase;
 }
 
 .data-table td {
-    padding: 6px 8px;
+    padding: 3px 5px;
     border-bottom: 1px solid #e2e8f0;
-    font-size: 8.5pt;
+    font-size: 7.5pt;
     vertical-align: middle;
 }
 
@@ -192,7 +174,7 @@ h1, h2, h3, h4 {
     border-top: 2px solid #cbd5e1;
     border-bottom: 2px solid #cbd5e1;
     font-weight: bold;
-    font-size: 9pt;
+    font-size: 8pt;
 }
 
 /* Page Break helpers */
@@ -206,10 +188,10 @@ h1, h2, h3, h4 {
 
 /* Audit Footer info */
 .audit-info {
-    margin-top: 30px;
+    margin-top: 10px;
     border-top: 1px dashed #cbd5e1;
-    padding-top: 10px;
-    font-size: 7.5pt;
+    padding-top: 6px;
+    font-size: 7pt;
     color: #94a3b8;
     text-align: center;
 }

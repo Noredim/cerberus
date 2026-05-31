@@ -344,6 +344,9 @@ def run_test():
         if pdf_bytes.startswith(b"%PDF"):
             print("SUCCESS: PDF generated successfully! Header starts with %PDF")
             print(f"PDF size: {len(pdf_bytes)} bytes")
+            with open("test_output.pdf", "wb") as f:
+                f.write(pdf_bytes)
+            print("Saved PDF to test_output.pdf")
         else:
             print("FAILED: PDF generated but header is invalid.")
             sys.exit(1)

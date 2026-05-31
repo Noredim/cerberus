@@ -576,7 +576,8 @@ class OpportunitiesReportService:
             "titulo": opportunity.titulo,
             "customer_nome": opportunity.customer.nome_fantasia or opportunity.customer.razao_social if opportunity.customer else "Cliente Não Informado",
             "vendedor_nome": opportunity.vendedor.name if opportunity.vendedor else "Não Informado",
-            "status_label": status_labels.get(opportunity.status, opportunity.status)
+            "status_label": status_labels.get(opportunity.status, opportunity.status),
+            "company_nome": opportunity.company.nome_fantasia or opportunity.company.razao_social if opportunity.company else "Empresa Não Informada"
         }
 
         now = datetime.datetime.now()
@@ -593,6 +594,16 @@ class OpportunitiesReportService:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         templates_dir = os.path.join(base_dir, "templates", "reports")
         
+        # Determine company logo path
+        company_logo = None
+        if opportunity.company and opportunity.company.logo_url:
+            root_dir = os.path.dirname(os.path.dirname(base_dir))
+            clean_path = opportunity.company.logo_url.lstrip("/")
+            abs_logo_path = os.path.join(root_dir, clean_path)
+            if os.path.exists(abs_logo_path):
+                normalized_path = abs_logo_path.replace("\\", "/")
+                company_logo = f"file:///{normalized_path}"
+
         css_path = os.path.join(templates_dir, "fechamento_fornecedores_v1.css")
         html_path = os.path.join(templates_dir, "fechamento_fornecedores_v1.html")
 
@@ -616,6 +627,7 @@ class OpportunitiesReportService:
         rendered_html = template.render(
             css_content=css_content,
             opportunity=opportunity_dict,
+            company_logo=company_logo,
             emissao_data_hora=emissao_data_hora,
             approval=approval_data,
             kpis=kpis,
@@ -690,10 +702,10 @@ class OpportunitiesReportService:
 
             # Render summary table (updated to match KPIs)
             kpi_data = [
-                ["Venda Consolidada", "Custo Consolidado", "Lucro Bruto", "Custo Impostos", "MKP", "Qtd. Fornecedores", "Qtd. Produtos"],
-                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['lucro_bruto']}", f"R$ {kpis['custo_impostos']}", f"{kpis['markup']}x", kpis['qtd_fornecedores'], kpis['qtd_produtos']]
+                ["Venda Consolidada", "Custo Consolidado", "Custo Impostos", "MKP", "Qtd. Fornecedores", "Qtd. Produtos"],
+                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['custo_impostos']}", f"{kpis['markup']}x", kpis['qtd_fornecedores'], kpis['qtd_produtos']]
             ]
-            kpi_table = Table(kpi_data, colWidths=[100]*7)
+            kpi_table = Table(kpi_data, colWidths=[115]*6)
             kpi_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.white),
