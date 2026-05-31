@@ -57,8 +57,8 @@
                 <span class="kpi-val" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</span>
             </div>
             <div class="compact-kpi-card">
-                <span class="kpi-label">Custo Total</span>
-                <span class="kpi-val">R$ {{ kpis.custo_consolidado }}</span>
+                <span class="kpi-label">Custo de Aquisição</span>
+                <span class="kpi-val">R$ {{ kpis.custo_total_com_impostos }}</span>
             </div>
             <div class="compact-kpi-card">
                 <span class="kpi-label">Impostos Compra</span>
@@ -85,16 +85,18 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 25%;">Produto / Serviço</th>
-                    <th style="width: 15%;">Fornecedor</th>
-                    <th class="text-center" style="width: 5%;">Qtd</th>
-                    <th class="text-right" style="width: 8%;">Custo Unit.</th>
-                    <th class="text-right" style="width: 9%;">Imp. Compra</th>
-                    <th class="text-center" style="width: 6%;">MKP</th>
-                    <th class="text-right" style="width: 9%;">Val. Venda</th>
-                    <th class="text-right" style="width: 9%;">Venda Total</th>
-                    <th class="text-right" style="width: 9%;">Imp. Venda</th>
-                    <th class="text-right" style="width: 9%;">Lucro</th>
+                    <th style="width: 18%;">Produto / Serviço</th>
+                    <th style="width: 12%;">Fornecedor</th>
+                    <th class="text-center" style="width: 4%;">Qtd</th>
+                    <th class="text-right" style="width: 7%;">Custo Unit.</th>
+                    <th class="text-right" style="width: 7%;">Custo Total</th>
+                    <th class="text-right" style="width: 8%;">Imp. Compra</th>
+                    <th class="text-center" style="width: 4%;">MKP</th>
+                    <th class="text-right" style="width: 8%;">Val. Venda</th>
+                    <th class="text-right" style="width: 8%;">Venda Total</th>
+                    <th class="text-right" style="width: 8%;">Imp. Venda</th>
+                    <th class="text-right" style="width: 8%;">Despesas adm.</th>
+                    <th class="text-right" style="width: 8%;">Lucro</th>
                 </tr>
             </thead>
             <tbody>
@@ -104,6 +106,7 @@
                     <td>{{ item.fornecedor }}</td>
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.custo_unitario }}</td>
+                    <td class="text-right">R$ {{ item.custo_total }}</td>
                     <td class="text-right">
                         R$ {{ item.imposto_compra_unit }}
                         {% if item.imposto_compra_unit != '0,00' and item.origem_imposto != 'fallback_zero' %}
@@ -114,34 +117,129 @@
                     <td class="text-right">R$ {{ item.valor_venda }}</td>
                     <td class="text-right font-bold">R$ {{ item.venda_total }}</td>
                     <td class="text-right">R$ {{ item.impostos_venda }}</td>
-                    <td class="text-right font-bold" style="color: #16a34a;">R$ {{ item.lucro_total }}</td>
+                    <td class="text-right">R$ {{ item.despesas_adm }}</td>
+                    <td class="text-right font-bold text-nowrap" style="color: #16a34a; white-space: nowrap;">R$ {{ item.lucro_total }}</td>
                 </tr>
                 {% endfor %}
                 <tr class="total-row">
-                    <td colspan="2">TOTAL CONSOLIDADO</td>
-                    <td class="text-center">-</td>
-                    <td class="text-right">-</td>
-                    <td class="text-right">-</td>
-                    <td class="text-center">{{ kpis.markup }}x</td>
-                    <td class="text-right">-</td>
-                    <td class="text-right" style="color: #0284c7;">R$ {{ kpis.venda_consolidada }}</td>
-                    <td class="text-right">R$ {{ kpis.impostos_venda }}</td>
-                    <td class="text-right" style="color: #16a34a;">R$ {{ kpis.lucro_total }}</td>
+                    <td class="text-nowrap" colspan="2" style="white-space: nowrap;">TOTAL CONSOLIDADO</td>
+                    <td class="text-center text-nowrap" style="white-space: nowrap;">-</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">-</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_consolidado }}</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_impostos }}</td>
+                    <td class="text-center text-nowrap" style="white-space: nowrap;">{{ kpis.markup }}x</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">-</td>
+                    <td class="text-right text-nowrap" style="color: #0284c7; white-space: nowrap;">R$ {{ kpis.venda_consolidada }}</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.impostos_venda }}</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.despesas_totais }}</td>
+                    <td class="text-right text-nowrap" style="color: #16a34a; white-space: nowrap;">R$ {{ kpis.lucro_total }}</td>
                 </tr>
             </tbody>
         </table>
     </div>
 
+    <!-- BLOCO 1.5: TABELAS DE IMPOSTOS E DESPESAS (LADO A LADO) -->
+    <div class="tables-row avoid-break">
+        <!-- TABELA DE IMPOSTOS DE VENDA -->
+        <div class="tables-col">
+            <div class="section-title">Tributação das Vendas (Saída)</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Imposto</th>
+                        <th class="text-right" style="width: 20%;">%</th>
+                        <th class="text-right" style="width: 25%;">Val. Unit.</th>
+                        <th class="text-right" style="width: 30%;">Val. Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in sales_taxes_summary %}
+                    <tr>
+                        <td>{{ t.name }}</td>
+                        <td class="text-right">{{ t.percent }}</td>
+                        <td class="text-right">R$ {{ t.unit }}</td>
+                        <td class="text-right font-bold">R$ {{ t.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td>TOTAL</td>
+                        <td class="text-right">{{ sales_taxes_totals.percent }}</td>
+                        <td class="text-right">R$ {{ sales_taxes_totals.unit }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ sales_taxes_totals.total }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TABELA DE IMPOSTOS DE COMPRA -->
+        <div class="tables-col">
+            <div class="section-title">Tributação de Compras (Entrada)</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Imposto</th>
+                        <th class="text-right" style="width: 35%;">Val. Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in purchase_taxes_summary %}
+                    <tr>
+                        <td>{{ t.name }}</td>
+                        <td class="text-right font-bold">R$ {{ t.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td>TOTAL</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ purchase_taxes_totals.total }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TABELA DE DESPESAS, FRETE E COMISSÃO -->
+        <div class="tables-col">
+            <div class="section-title">Despesas, Frete e Comissão</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Despesa</th>
+                        <th class="text-right" style="width: 20%;">% Fat.</th>
+                        <th class="text-right" style="width: 25%;">Val. Unit.</th>
+                        <th class="text-right" style="width: 25%;">Val. Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in expenses_summary %}
+                    <tr>
+                        <td>{{ e.name }}</td>
+                        <td class="text-right">{{ e.percent }}</td>
+                        <td class="text-right">R$ {{ e.unit }}</td>
+                        <td class="text-right font-bold">R$ {{ e.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td>TOTAL</td>
+                        <td class="text-right">{{ expenses_totals.percent }}</td>
+                        <td class="text-right">R$ {{ expenses_totals.unit }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ expenses_totals.total }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- BLOCO 2: FECHAMENTO E TOTALIZADOR POR FORNECEDOR -->
     <div class="avoid-break" style="margin-top: 12px;">
         <div class="section-title">Resumo Financeiro por Fornecedor (Custos de Aquisição)</div>
-        <table class="data-table" style="max-width: 800px; margin-top: 4px;">
+        <table class="data-table" style="margin-top: 4px;">
             <thead>
                 <tr>
-                    <th style="width: 25%;">Orçamento / Cotação</th>
-                    <th style="width: 30%;">Fornecedor</th>
-                    <th class="text-right" style="width: 20%;">Total Custo (c/ Impostos)</th>
-                    <th style="width: 25%;">Forma de Pagamento</th>
+                    <th style="width: 15%;">Orçamento / Cotação</th>
+                    <th style="width: 25%;">Fornecedor</th>
+                    <th class="text-right" style="width: 18%;">Valor Sem Imposto</th>
+                    <th class="text-right" style="width: 15%;">Total de Imposto</th>
+                    <th class="text-right" style="width: 17%;">Total com Impostos</th>
+                    <th style="width: 20%;">Forma de Pagamento</th>
                 </tr>
             </thead>
             <tbody>
@@ -149,6 +247,8 @@
                 <tr>
                     <td>{{ f.orcamento }}</td>
                     <td>{{ f.fornecedor }}</td>
+                    <td class="text-right">R$ {{ f.total_sem_imposto }}</td>
+                    <td class="text-right">R$ {{ f.total_imposto }}</td>
                     <td class="text-right font-bold">R$ {{ f.total_custo }}</td>
                     <td>{{ f.forma_pagamento }}</td>
                 </tr>
@@ -156,7 +256,9 @@
                 <tr class="total-row">
                     <td>TOTAL DE CUSTOS</td>
                     <td>-</td>
-                    <td class="text-right" style="color: #0f172a;">R$ {{ kpis.custo_total_com_impostos }}</td>
+                    <td class="text-right" style="color: #0f172a;">R$ {{ supplier_totals.total_sem_imposto }}</td>
+                    <td class="text-right" style="color: #0f172a;">R$ {{ supplier_totals.total_imposto }}</td>
+                    <td class="text-right" style="color: #0f172a;">R$ {{ supplier_totals.total_custo }}</td>
                     <td>-</td>
                 </tr>
             </tbody>

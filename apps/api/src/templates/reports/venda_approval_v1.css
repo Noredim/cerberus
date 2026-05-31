@@ -181,3 +181,21 @@ h1, h2, h3, h4 {
     color: #94a3b8;
     text-align: center;
 }
+
+/* Additional layout helper classes for new columns and side-by-side tables */
+.text-nowrap {
+    white-space: nowrap !important;
+}
+
+.tables-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.tables-col {
+    flex: 1;
+    min-width: 0;
+}
+

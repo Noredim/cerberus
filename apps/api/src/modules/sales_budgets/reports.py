@@ -338,7 +338,8 @@ class OpportunitiesReportService:
             for pb_item in pb.items:
                 opp_qty = sum(item["quantidade"] for item in unpacked_items if item["product_id"] == pb_item.product_id)
                 if opp_qty <= 0:
-                    opp_qty = float(pb_item.quantidade)
+                    continue # Skip items that are not in the opportunity
+
 
                 # Prioritized Tax Lookup
                 tax_info = opp_product_taxes.get(pb_item.product_id)
@@ -928,21 +929,24 @@ class OpportunitiesReportService:
 
         tipo_venda = ", ".join(sorted(list(sales_types))) if sales_types else "Venda"
         forma_compra = ", ".join(sorted(list(purchase_tax_types))) if purchase_tax_types else "DIFAL"
+        if "Venda" in tipo_venda or tipo_venda.upper() == "VENDA":
+            forma_compra = "ST"
 
         # Now consolidate items_details (Block 1)
         items_details = []
 
-        # Helper to retrieve purchase tax unit for a product
-        def get_purchase_tax_unit(prod_id, pb_item):
+        # Helper to retrieve purchase tax unit breakdown for a product
+        def get_purchase_tax_breakdown(prod_id, pb_item):
             tax_info = opp_product_taxes.get(prod_id)
             origem = None
+            difal = 0.0
+            st = 0.0
+            ipi = 0.0
+            
             if tax_info:
                 difal = tax_info["difal"]
                 st = tax_info["st"]
                 origem = tax_info["source"]
-            else:
-                difal = 0.0
-                st = 0.0
             
             # Fallback to purchase budget item if zero/missing
             if difal == 0.0 and pb_item and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
@@ -951,11 +955,15 @@ class OpportunitiesReportService:
             if st == 0.0 and pb_item and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
                 st = float(pb_item.st_unitario)
                 origem = "purchase_budget"
+                
+            if pb_item and pb_item.ipi_valor is not None and float(pb_item.ipi_valor) > 0.0:
+                pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
+                ipi = float(pb_item.ipi_valor) / pb_qty
             
             if origem is None:
                 origem = "fallback_zero"
                 
-            return difal + st, origem
+            return difal, st, ipi, origem
 
         # A. Loop standard items
         for item in opportunity.items:
@@ -967,37 +975,53 @@ class OpportunitiesReportService:
                 pb_item = pb_info["pb_item"] if pb_info else None
                 
                 custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
-                purchase_tax_unit, origem_imposto = get_purchase_tax_unit(item.product_id, pb_item)
+                difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
+                purchase_tax_unit = difal_unit + st_unit
                 
                 # Sales tax unit
-                sales_tax_unit = float(
-                    (item.pis_unit or 0.0) +
-                    (item.cofins_unit or 0.0) +
-                    (item.csll_unit or 0.0) +
-                    (item.irpj_unit or 0.0) +
-                    (item.icms_unit or 0.0) +
-                    (item.iss_unit or 0.0)
-                )
+                pis_unit = float(item.pis_unit or 0.0)
+                cofins_unit = float(item.cofins_unit or 0.0)
+                csll_unit = float(item.csll_unit or 0.0)
+                irpj_unit = float(item.irpj_unit or 0.0)
+                icms_unit = float(item.icms_unit or 0.0)
+                iss_unit = float(item.iss_unit or 0.0)
+                sales_tax_unit = pis_unit + cofins_unit + csll_unit + irpj_unit + icms_unit + iss_unit
                 
                 venda_unit = float(item.venda_unit or 0.0)
                 venda_total = venda_unit * qty
                 custo_total = custo_unit * qty
                 purchase_tax_total = purchase_tax_unit * qty
+                difal_total = difal_unit * qty
+                st_total = st_unit * qty
+                ipi_total = ipi_unit * qty
                 sales_tax_total = sales_tax_unit * qty
                 
-                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
-                mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                # Expenses
+                frete_venda_unit = float(item.frete_venda_unit or 0.0)
+                desp_adm_unit = float(item.despesa_adm_unit or 0.0)
+                comissao_unit = float(item.comissao_unit or 0.0)
+                
+                frete_total = frete_venda_unit * qty
+                desp_adm_total = desp_adm_unit * qty
+                comissao_total = comissao_unit * qty
+                despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                
+                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
+                mkp_venda = float(item.markup or 1.0)
                 
                 items_details.append({
+                    "product_id": item.product_id,
                     "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento"),
                     "fornecedor": supplier_name,
                     "quantidade": qty,
                     "custo_unitario": format_currency(custo_unit),
+                    "custo_total": format_currency(custo_total),
                     "imposto_compra_unit": format_currency(purchase_tax_unit),
                     "markup": f"{mkp_venda:.2f}",
                     "valor_venda": format_currency(venda_unit),
                     "venda_total": format_currency(venda_total),
                     "impostos_venda": format_currency(sales_tax_total),
+                    "despesas_adm": format_currency(despesas_adm_total),
                     "lucro_total": format_currency(lucro_total),
                     "origem_imposto": origem_imposto,
                     # Numeric for summaries
@@ -1005,7 +1029,29 @@ class OpportunitiesReportService:
                     "_custo_total": custo_total,
                     "_purchase_tax_total": purchase_tax_total,
                     "_sales_tax_total": sales_tax_total,
-                    "_lucro_total": lucro_total
+                    "_despesas_adm_total": despesas_adm_total,
+                    "_lucro_total": lucro_total,
+                    "_difal_total": difal_total,
+                    "_st_total": st_total,
+                    "_ipi_total": ipi_total,
+                    "_pis_unit": pis_unit,
+                    "_pis_total": pis_unit * qty,
+                    "_cofins_unit": cofins_unit,
+                    "_cofins_total": cofins_unit * qty,
+                    "_csll_unit": csll_unit,
+                    "_csll_total": csll_unit * qty,
+                    "_irpj_unit": irpj_unit,
+                    "_irpj_total": irpj_unit * qty,
+                    "_icms_unit": icms_unit,
+                    "_icms_total": icms_unit * qty,
+                    "_iss_unit": iss_unit,
+                    "_iss_total": iss_unit * qty,
+                    "_frete_unit": frete_venda_unit,
+                    "_frete_total": frete_total,
+                    "_desp_adm_unit": desp_adm_unit,
+                    "_desp_adm_total": desp_adm_total,
+                    "_comissao_unit": comissao_unit,
+                    "_comissao_total": comissao_total,
                 })
             elif item.opportunity_kit_id:
                 # Kit item (unpack components)
@@ -1026,35 +1072,60 @@ class OpportunitiesReportService:
                             supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
                             pb_item = pb_info["pb_item"] if pb_info else None
                             
-                            custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
-                            purchase_tax_unit, origem_imposto = get_purchase_tax_unit(p_uuid, pb_item)
+                            difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(p_uuid, pb_item)
+                            purchase_tax_unit = difal_unit + st_unit
+                            
+                            # Custo unitário deve ser o custo sem impostos de compra
+                            custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - purchase_tax_unit)
                             
                             # Sales tax from kit summary
                             sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            pis_unit = float(summary.get("pis_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            cofins_unit = float(summary.get("cofins_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            csll_unit = float(summary.get("csll_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            irpj_unit = float(summary.get("irpj_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            icms_unit = float(summary.get("icms_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            iss_unit = float(summary.get("iss_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                             
                             venda_unit = float(summary.get("venda_unitario_item") or 0.0)
                             venda_total = venda_unit * component_qty
                             custo_total = custo_unit * component_qty
                             purchase_tax_total = purchase_tax_unit * component_qty
+                            difal_total = difal_unit * component_qty
+                            st_total = st_unit * component_qty
+                            ipi_total = ipi_unit * component_qty
                             sales_tax_total = sales_tax_unit * component_qty
                             
-                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
-                            mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                            # Expenses
+                            frete_venda_unit = float(summary.get("frete_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            desp_adm_unit = float(summary.get("desp_adm_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            comissao_unit = float(summary.get("comissao_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            
+                            frete_total = frete_venda_unit * component_qty
+                            desp_adm_total = desp_adm_unit * component_qty
+                            comissao_total = comissao_unit * component_qty
+                            despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                            
+                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
+                            mkp_venda = float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
                                 product_desc = kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente")
                                 
                             items_details.append({
+                                "product_id": p_uuid,
                                 "descricao": product_desc or "Componente do Kit",
                                 "fornecedor": supplier_name,
                                 "quantidade": component_qty,
                                 "custo_unitario": format_currency(custo_unit),
+                                "custo_total": format_currency(custo_total),
                                 "imposto_compra_unit": format_currency(purchase_tax_unit),
                                 "markup": f"{mkp_venda:.2f}",
                                 "valor_venda": format_currency(venda_unit),
                                 "venda_total": format_currency(venda_total),
                                 "impostos_venda": format_currency(sales_tax_total),
+                                "despesas_adm": format_currency(despesas_adm_total),
                                 "lucro_total": format_currency(lucro_total),
                                 "origem_imposto": origem_imposto,
                                 # Numeric for summaries
@@ -1062,7 +1133,29 @@ class OpportunitiesReportService:
                                 "_custo_total": custo_total,
                                 "_purchase_tax_total": purchase_tax_total,
                                 "_sales_tax_total": sales_tax_total,
-                                "_lucro_total": lucro_total
+                                "_despesas_adm_total": despesas_adm_total,
+                                "_lucro_total": lucro_total,
+                                "_difal_total": difal_total,
+                                "_st_total": st_total,
+                                "_ipi_total": ipi_total,
+                                "_pis_unit": pis_unit,
+                                "_pis_total": pis_unit * component_qty,
+                                "_cofins_unit": cofins_unit,
+                                "_cofins_total": cofins_unit * component_qty,
+                                "_csll_unit": csll_unit,
+                                "_csll_total": csll_unit * component_qty,
+                                "_irpj_unit": irpj_unit,
+                                "_irpj_total": irpj_unit * component_qty,
+                                "_icms_unit": icms_unit,
+                                "_icms_total": icms_unit * component_qty,
+                                "_iss_unit": iss_unit,
+                                "_iss_total": iss_unit * component_qty,
+                                "_frete_unit": frete_venda_unit,
+                                "_frete_total": frete_total,
+                                "_desp_adm_unit": desp_adm_unit,
+                                "_desp_adm_total": desp_adm_total,
+                                "_comissao_unit": comissao_unit,
+                                "_comissao_total": comissao_total,
                             })
                     except Exception as e:
                         print(f"[Warning] Failed to unpack kit standard item {item.id}: {e}")
@@ -1077,36 +1170,60 @@ class OpportunitiesReportService:
                 pb_item = pb_info["pb_item"] if pb_info else None
                 
                 custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
-                purchase_tax_unit, origem_imposto = get_purchase_tax_unit(item.product_id, pb_item)
+                difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
+                purchase_tax_unit = difal_unit + st_unit
                 
-                sales_tax_unit = float(
-                    (item.pis_unit or 0.0) +
-                    (item.cofins_unit or 0.0) +
-                    (item.csll_unit or 0.0) +
-                    (item.irpj_unit or 0.0) +
-                    (item.icms_unit or 0.0) +
-                    (item.iss_unit or 0.0)
-                )
+                # Fetch rental tax rates
+                pis_rate = float(opportunity.perc_pis_rental or 0.0)
+                cofins_rate = float(opportunity.perc_cofins_rental or 0.0)
+                csll_rate = float(opportunity.perc_csll_rental or 0.0)
+                irpj_rate = float(opportunity.perc_irpj_rental or 0.0)
+                iss_rate = float(opportunity.perc_iss_rental or 0.0)
                 
                 venda_unit = float(item.venda_unit or 0.0)
+                
+                pis_unit = venda_unit * (pis_rate / 100.0)
+                cofins_unit = venda_unit * (cofins_rate / 100.0)
+                csll_unit = venda_unit * (csll_rate / 100.0)
+                irpj_unit = venda_unit * (irpj_rate / 100.0)
+                iss_unit = venda_unit * (iss_rate / 100.0)
+                icms_unit = 0.0
+                sales_tax_unit = pis_unit + cofins_unit + csll_unit + irpj_unit + icms_unit + iss_unit
+                
                 venda_total = venda_unit * qty
                 custo_total = custo_unit * qty
                 purchase_tax_total = purchase_tax_unit * qty
+                difal_total = difal_unit * qty
+                st_total = st_unit * qty
+                ipi_total = ipi_unit * qty
                 sales_tax_total = sales_tax_unit * qty
                 
-                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
-                mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                # Expenses
+                comissao_unit = venda_unit * (float(item.perc_comissao or 0.0) / 100.0)
+                frete_venda_unit = 0.0
+                desp_adm_unit = 0.0
+                
+                frete_total = frete_venda_unit * qty
+                desp_adm_total = desp_adm_unit * qty
+                comissao_total = comissao_unit * qty
+                despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                
+                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
+                mkp_venda = float(item.fator_margem or 1.0)
                 
                 items_details.append({
+                    "product_id": item.product_id,
                     "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento Locado"),
                     "fornecedor": supplier_name,
                     "quantidade": qty,
                     "custo_unitario": format_currency(custo_unit),
+                    "custo_total": format_currency(custo_total),
                     "imposto_compra_unit": format_currency(purchase_tax_unit),
                     "markup": f"{mkp_venda:.2f}",
                     "valor_venda": format_currency(venda_unit),
                     "venda_total": format_currency(venda_total),
                     "impostos_venda": format_currency(sales_tax_total),
+                    "despesas_adm": format_currency(despesas_adm_total),
                     "lucro_total": format_currency(lucro_total),
                     "origem_imposto": origem_imposto,
                     # Numeric for summaries
@@ -1114,7 +1231,29 @@ class OpportunitiesReportService:
                     "_custo_total": custo_total,
                     "_purchase_tax_total": purchase_tax_total,
                     "_sales_tax_total": sales_tax_total,
-                    "_lucro_total": lucro_total
+                    "_despesas_adm_total": despesas_adm_total,
+                    "_lucro_total": lucro_total,
+                    "_difal_total": difal_total,
+                    "_st_total": st_total,
+                    "_ipi_total": ipi_total,
+                    "_pis_unit": pis_unit,
+                    "_pis_total": pis_unit * qty,
+                    "_cofins_unit": cofins_unit,
+                    "_cofins_total": cofins_unit * qty,
+                    "_csll_unit": csll_unit,
+                    "_csll_total": csll_unit * qty,
+                    "_irpj_unit": irpj_unit,
+                    "_irpj_total": irpj_unit * qty,
+                    "_icms_unit": icms_unit,
+                    "_icms_total": icms_unit * qty,
+                    "_iss_unit": iss_unit,
+                    "_iss_total": iss_unit * qty,
+                    "_frete_unit": frete_venda_unit,
+                    "_frete_total": frete_total,
+                    "_desp_adm_unit": desp_adm_unit,
+                    "_desp_adm_total": desp_adm_total,
+                    "_comissao_unit": comissao_unit,
+                    "_comissao_total": comissao_total,
                 })
             elif item.opportunity_kit_id:
                 # Rental kit item
@@ -1132,36 +1271,62 @@ class OpportunitiesReportService:
                             
                             pb_info = product_suppliers.get(p_uuid)
                             supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
-                            pb_item = pb_info["pb_item"] if pb_info else None
+                            pb_item = pb_info["pb_item"] if pb_item else None
                             
-                            custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
-                            purchase_tax_unit, origem_imposto = get_purchase_tax_unit(p_uuid, pb_item)
+                            difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(p_uuid, pb_item)
+                            purchase_tax_unit = difal_unit + st_unit
                             
+                            # Custo unitário deve ser o custo sem impostos de compra
+                            custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - purchase_tax_unit)
+                            
+                            # Sales tax from kit summary
                             sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            pis_unit = float(summary.get("pis_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            cofins_unit = float(summary.get("cofins_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            csll_unit = float(summary.get("csll_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            irpj_unit = float(summary.get("irpj_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            icms_unit = float(summary.get("icms_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            iss_unit = float(summary.get("iss_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                             
                             venda_unit = float(summary.get("venda_unitario_item") or 0.0)
                             venda_total = venda_unit * component_qty
                             custo_total = custo_unit * component_qty
                             purchase_tax_total = purchase_tax_unit * component_qty
+                            difal_total = difal_unit * component_qty
+                            st_total = st_unit * component_qty
+                            ipi_total = ipi_unit * component_qty
                             sales_tax_total = sales_tax_unit * component_qty
                             
-                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total
-                            mkp_venda = (venda_unit / (custo_unit + purchase_tax_unit)) if (custo_unit + purchase_tax_unit) > 0 else 1.0
+                            # Expenses from kit summary
+                            frete_venda_unit = float(summary.get("frete_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            desp_adm_unit = float(summary.get("desp_adm_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            comissao_unit = float(summary.get("comissao_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            
+                            frete_total = frete_venda_unit * component_qty
+                            desp_adm_total = desp_adm_unit * component_qty
+                            comissao_total = comissao_unit * component_qty
+                            despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                            
+                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
+                            mkp_venda = float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
                                 product_desc = kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente")
                                 
                             items_details.append({
+                                "product_id": p_uuid,
                                 "descricao": product_desc or "Componente do Kit",
                                 "fornecedor": supplier_name,
                                 "quantidade": component_qty,
                                 "custo_unitario": format_currency(custo_unit),
+                                "custo_total": format_currency(custo_total),
                                 "imposto_compra_unit": format_currency(purchase_tax_unit),
                                 "markup": f"{mkp_venda:.2f}",
                                 "valor_venda": format_currency(venda_unit),
                                 "venda_total": format_currency(venda_total),
                                 "impostos_venda": format_currency(sales_tax_total),
+                                "despesas_adm": format_currency(despesas_adm_total),
                                 "lucro_total": format_currency(lucro_total),
                                 "origem_imposto": origem_imposto,
                                 # Numeric for summaries
@@ -1169,7 +1334,29 @@ class OpportunitiesReportService:
                                 "_custo_total": custo_total,
                                 "_purchase_tax_total": purchase_tax_total,
                                 "_sales_tax_total": sales_tax_total,
-                                "_lucro_total": lucro_total
+                                "_despesas_adm_total": despesas_adm_total,
+                                "_lucro_total": lucro_total,
+                                "_difal_total": difal_total,
+                                "_st_total": st_total,
+                                "_ipi_total": ipi_total,
+                                "_pis_unit": pis_unit,
+                                "_pis_total": pis_unit * component_qty,
+                                "_cofins_unit": cofins_unit,
+                                "_cofins_total": cofins_unit * component_qty,
+                                "_csll_unit": csll_unit,
+                                "_csll_total": csll_unit * component_qty,
+                                "_irpj_unit": irpj_unit,
+                                "_irpj_total": irpj_unit * component_qty,
+                                "_icms_unit": icms_unit,
+                                "_icms_total": icms_unit * component_qty,
+                                "_iss_unit": iss_unit,
+                                "_iss_total": iss_unit * component_qty,
+                                "_frete_unit": frete_venda_unit,
+                                "_frete_total": frete_total,
+                                "_desp_adm_unit": desp_adm_unit,
+                                "_desp_adm_total": desp_adm_total,
+                                "_comissao_unit": comissao_unit,
+                                "_comissao_total": comissao_total,
                             })
                     except Exception as e:
                         print(f"[Warning] Failed to unpack rental kit item {item.id}: {e}")
@@ -1179,8 +1366,9 @@ class OpportunitiesReportService:
         custo_consolidado = sum(x["_custo_total"] for x in items_details)
         custo_impostos = sum(x["_purchase_tax_total"] for x in items_details)
         impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
+        despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
         
-        lucro_total = venda_consolidada - custo_consolidado - custo_impostos - impostos_venda
+        lucro_total = venda_consolidada - (custo_consolidado + custo_impostos + impostos_venda + despesas_totais)
         margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
         
         # Markup geral
@@ -1191,6 +1379,7 @@ class OpportunitiesReportService:
             "custo_consolidado": format_currency(custo_consolidado),
             "custo_impostos": format_currency(custo_impostos),
             "impostos_venda": format_currency(impostos_venda),
+            "despesas_totais": format_currency(despesas_totais),
             "lucro_total": format_currency(lucro_total),
             "margem_percentual": f"{margem_percentual:.2f}",
             "markup": f"{markup:.2f}",
@@ -1202,18 +1391,26 @@ class OpportunitiesReportService:
         for pb in purchase_budgets:
             s_name = pb.supplier_nome_fantasia
             
-            s_items_cost = 0.0
+            s_items_base_cost = 0.0
+            s_items_tax = 0.0
             for pb_item in pb.items:
-                match_items = [x for x in items_details if x["fornecedor"] == s_name and x["descricao"] == pb_item.product_nome]
+                # Match items by product_id for 100% robust matching
+                match_items = [x for x in items_details if x.get("product_id") == pb_item.product_id]
                 qty_used = sum(float(x["quantidade"]) for x in match_items)
+                
+                # Only include items that are part of the opportunity
                 if qty_used <= 0:
-                    qty_used = float(pb_item.quantidade)
+                    qty_used = 0.0
                 
                 val_unit = float(pb_item.valor_unitario)
-                purchase_tax_unit, _ = get_purchase_tax_unit(pb_item.product_id, pb_item)
+                difal_unit, st_unit, _, _ = get_purchase_tax_breakdown(pb_item.product_id, pb_item)
+                purchase_tax_unit = difal_unit + st_unit
                 
-                s_items_cost += (val_unit + purchase_tax_unit) * qty_used
+                s_items_base_cost += val_unit * qty_used
+                s_items_tax += purchase_tax_unit * qty_used
                 
+            s_items_total_cost = s_items_base_cost + s_items_tax
+            
             payment_desc = "Não informado"
             if pb.forma_pagamento:
                 payment_desc = pb.forma_pagamento.descricao
@@ -1223,9 +1420,107 @@ class OpportunitiesReportService:
             supplier_summaries.append({
                 "orcamento": pb.numero_orcamento or str(pb.id)[:8],
                 "fornecedor": s_name,
-                "total_custo": format_currency(s_items_cost),
-                "forma_pagamento": payment_desc
+                "total_sem_imposto": format_currency(s_items_base_cost),
+                "total_imposto": format_currency(s_items_tax),
+                "total_custo": format_currency(s_items_total_cost),
+                "forma_pagamento": payment_desc,
+                # Numeric for totalizers
+                "_total_sem_imposto": s_items_base_cost,
+                "_total_imposto": s_items_tax,
+                "_total_custo": s_items_total_cost
             })
+
+        # Calculate supplier summary totals
+        supplier_totals = {
+            "total_sem_imposto": format_currency(sum(x["_total_sem_imposto"] for x in supplier_summaries)),
+            "total_imposto": format_currency(sum(x["_total_imposto"] for x in supplier_summaries)),
+            "total_custo": format_currency(sum(x["_total_custo"] for x in supplier_summaries))
+        }
+
+        # 4.5. Calculate Totalized Sales and Purchase Taxes and Expenses
+        pis_total = sum(x["_pis_total"] for x in items_details)
+        cofins_total = sum(x["_cofins_total"] for x in items_details)
+        csll_total = sum(x["_csll_total"] for x in items_details)
+        irpj_total = sum(x["_irpj_total"] for x in items_details)
+        icms_total = sum(x["_icms_total"] for x in items_details)
+        iss_total = sum(x["_iss_total"] for x in items_details)
+        
+        total_qty = sum(float(x["quantidade"]) for x in items_details)
+        
+        # Unit values calculated based on total divided by total quantity (Point 4)
+        pis_unit = (pis_total / total_qty) if total_qty > 0 else 0.0
+        cofins_unit = (cofins_total / total_qty) if total_qty > 0 else 0.0
+        csll_unit = (csll_total / total_qty) if total_qty > 0 else 0.0
+        irpj_unit = (irpj_total / total_qty) if total_qty > 0 else 0.0
+        icms_unit = (icms_total / total_qty) if total_qty > 0 else 0.0
+        iss_unit = (iss_total / total_qty) if total_qty > 0 else 0.0
+        
+        # Nominal tax rates directly from opportunity defaults if active, otherwise 0.0% (Point 3)
+        pis_rate = float(opportunity.perc_pis or 0.0) if pis_total > 0 else 0.0
+        cofins_rate = float(opportunity.perc_cofins or 0.0) if cofins_total > 0 else 0.0
+        csll_rate = float(opportunity.perc_csll or 0.0) if csll_total > 0 else 0.0
+        irpj_rate = float(opportunity.perc_irpj or 0.0) if irpj_total > 0 else 0.0
+        icms_rate = float(opportunity.perc_icms_interno or 0.0) if icms_total > 0 else 0.0
+        iss_rate = float(opportunity.perc_iss or 0.0) if iss_total > 0 else 0.0
+        total_sales_tax_rate = pis_rate + cofins_rate + csll_rate + irpj_rate + icms_rate + iss_rate
+        
+        sales_taxes_summary = [
+            {"name": "PIS", "percent": f"{pis_rate:.2f}%", "unit": format_currency(pis_unit), "total": format_currency(pis_total)},
+            {"name": "COFINS", "percent": f"{cofins_rate:.2f}%", "unit": format_currency(cofins_unit), "total": format_currency(cofins_total)},
+            {"name": "CSLL", "percent": f"{csll_rate:.2f}%", "unit": format_currency(csll_unit), "total": format_currency(csll_total)},
+            {"name": "IRPJ", "percent": f"{irpj_rate:.2f}%", "unit": format_currency(irpj_unit), "total": format_currency(irpj_total)},
+            {"name": "ICMS", "percent": f"{icms_rate:.2f}%", "unit": format_currency(icms_unit), "total": format_currency(icms_total)},
+            {"name": "ISS", "percent": f"{iss_rate:.2f}%", "unit": format_currency(iss_unit), "total": format_currency(iss_total)},
+        ]
+        sales_taxes_totals = {
+            "percent": f"{total_sales_tax_rate:.2f}%",
+            "unit": format_currency(pis_unit + cofins_unit + csll_unit + irpj_unit + icms_unit + iss_unit),
+            "total": format_currency(pis_total + cofins_total + csll_total + irpj_total + icms_total + iss_total)
+        }
+
+        total_difal_all = sum(x["_difal_total"] for x in items_details)
+        total_st_all = sum(x["_st_total"] for x in items_details)
+        total_ipi_all = sum(x["_ipi_total"] for x in items_details)
+        
+        # Calculate percentages relative to the total cost without tax (custo_consolidado)
+        difal_pct = (total_difal_all / custo_consolidado * 100.0) if custo_consolidado > 0 else 0.0
+        st_pct = (total_st_all / custo_consolidado * 100.0) if custo_consolidado > 0 else 0.0
+        ipi_pct = (total_ipi_all / custo_consolidado * 100.0) if custo_consolidado > 0 else 0.0
+        
+        purchase_taxes_summary = [
+            {"name": "DIFAL", "percent": f"{difal_pct:.2f}%", "total": format_currency(total_difal_all)},
+            {"name": "Substituição Tributária (ST)", "percent": f"{st_pct:.2f}%", "total": format_currency(total_st_all)},
+            {"name": "IPI", "percent": f"{ipi_pct:.2f}%", "total": format_currency(total_ipi_all)},
+        ]
+        purchase_taxes_totals = {
+            "percent": f"{(difal_pct + st_pct + ipi_pct):.2f}%",
+            "total": format_currency(total_difal_all + total_st_all + total_ipi_all)
+        }
+
+        frete_total = sum(x["_frete_total"] for x in items_details)
+        desp_adm_total = sum(x["_desp_adm_total"] for x in items_details)
+        comissao_total = sum(x["_comissao_total"] for x in items_details)
+        
+        # Unit values calculated based on total divided by total quantity (Point 4)
+        frete_unit = (frete_total / total_qty) if total_qty > 0 else 0.0
+        desp_adm_unit = (desp_adm_total / total_qty) if total_qty > 0 else 0.0
+        comissao_unit = (comissao_total / total_qty) if total_qty > 0 else 0.0
+        
+        # Percentages relative to total revenue (venda_consolidada)
+        frete_pct = (frete_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+        desp_adm_pct = (desp_adm_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+        comissao_pct = (comissao_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+        
+        expenses_summary = [
+            {"name": "Despesas Administrativas", "percent": f"{desp_adm_pct:.2f}%", "unit": format_currency(desp_adm_unit), "total": format_currency(desp_adm_total)},
+            {"name": "Frete de Venda", "percent": f"{frete_pct:.2f}%", "unit": format_currency(frete_unit), "total": format_currency(frete_total)},
+            {"name": "Comissão de Venda", "percent": f"{comissao_pct:.2f}%", "unit": format_currency(comissao_unit), "total": format_currency(comissao_total)},
+        ]
+        expenses_totals = {
+            "percent": f"{(desp_adm_pct + frete_pct + comissao_pct):.2f}%",
+            "unit": format_currency(desp_adm_unit + frete_unit + comissao_unit),
+            "total": format_currency(desp_adm_total + frete_total + comissao_total)
+        }
 
         # 5. Opportunity dict
         status_labels = {
@@ -1299,6 +1594,13 @@ class OpportunitiesReportService:
             forma_compra=forma_compra,
             items_details=items_details,
             supplier_summaries=supplier_summaries,
+            supplier_totals=supplier_totals,
+            sales_taxes_summary=sales_taxes_summary,
+            sales_taxes_totals=sales_taxes_totals,
+            purchase_taxes_summary=purchase_taxes_summary,
+            purchase_taxes_totals=purchase_taxes_totals,
+            expenses_summary=expenses_summary,
+            expenses_totals=expenses_totals,
             auditoria=auditoria
         )
 
@@ -1363,10 +1665,10 @@ class OpportunitiesReportService:
             story.append(Paragraph(f"Cliente: {opportunity_dict['customer_nome']} | Vendedor: {opportunity_dict['vendedor_nome']} | Tipo: {tipo_venda} | Forma Compra: {forma_compra}", sub_style))
 
             kpi_data = [
-                ["Venda Consolidada", "Custo Consolidado", "Custo Impostos", "Imp. Venda", "Lucro Total", "Margem"],
-                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_consolidado']}", f"R$ {kpis['custo_impostos']}", f"R$ {kpis['impostos_venda']}", f"R$ {kpis['lucro_total']}", f"{kpis['margem_percentual']}%"]
+                ["Venda Consolidada", "Custo de Aquisição", "Custo Impostos", "Imp. Venda", "Despesas Adm.", "Lucro Total", "Margem"],
+                [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_total_com_impostos']}", f"R$ {kpis['custo_impostos']}", f"R$ {kpis['impostos_venda']}", f"R$ {kpis['despesas_totais']}", f"R$ {kpis['lucro_total']}", f"{kpis['margem_percentual']}%"]
             ]
-            kpi_table = Table(kpi_data, colWidths=[115]*6)
+            kpi_table = Table(kpi_data, colWidths=[100]*7)
             kpi_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -1385,11 +1687,13 @@ class OpportunitiesReportService:
                 Paragraph("Fornecedor", table_header_style), 
                 Paragraph("Qtd", table_header_style), 
                 Paragraph("Custo Unit", table_header_style), 
+                Paragraph("Custo Total", table_header_style), 
                 Paragraph("Imp Compra", table_header_style), 
                 Paragraph("MKP", table_header_style), 
                 Paragraph("Val Venda", table_header_style), 
                 Paragraph("Venda Total", table_header_style), 
                 Paragraph("Imp Venda", table_header_style), 
+                Paragraph("Despesas adm", table_header_style),
                 Paragraph("Lucro", table_header_style)
             ]]
             for item in items_details:
@@ -1398,11 +1702,13 @@ class OpportunitiesReportService:
                     Paragraph(item["fornecedor"], table_cell_style),
                     Paragraph(str(item["quantidade"]), table_cell_style),
                     Paragraph(f"R$ {item['custo_unitario']}", table_cell_style),
+                    Paragraph(f"R$ {item['custo_total']}", table_cell_style),
                     Paragraph(f"R$ {item['imposto_compra_unit']}", table_cell_style),
                     Paragraph(item["markup"], table_cell_style),
                     Paragraph(f"R$ {item['valor_venda']}", table_cell_style),
                     Paragraph(f"R$ {item['venda_total']}", table_cell_style),
                     Paragraph(f"R$ {item['impostos_venda']}", table_cell_style),
+                    Paragraph(f"R$ {item['despesas_adm']}", table_cell_style),
                     Paragraph(f"R$ {item['lucro_total']}", table_cell_style)
                 ])
 
@@ -1411,15 +1717,17 @@ class OpportunitiesReportService:
                 Paragraph("-", table_cell_style),
                 Paragraph("-", table_cell_style),
                 Paragraph("-", table_cell_style),
-                Paragraph("-", table_cell_style),
+                Paragraph(f"R$ {kpis['custo_consolidado']}", table_cell_style),
+                Paragraph(f"R$ {kpis['custo_impostos']}", table_cell_style),
                 Paragraph(f"{kpis['markup']}x", table_cell_style),
                 Paragraph("-", table_cell_style),
                 Paragraph(f"R$ {kpis['venda_consolidada']}", table_cell_style),
                 Paragraph(f"R$ {kpis['impostos_venda']}", table_cell_style),
+                Paragraph(f"R$ {kpis['despesas_totais']}", table_cell_style),
                 Paragraph(f"R$ {kpis['lucro_total']}", table_cell_style)
             ])
 
-            items_table = Table(table_data, colWidths=[150, 110, 30, 60, 60, 40, 60, 65, 65, 70])
+            items_table = Table(table_data, colWidths=[120, 85, 25, 50, 50, 50, 30, 50, 50, 50, 50, 60])
             items_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 3),
@@ -1430,27 +1738,120 @@ class OpportunitiesReportService:
             story.append(items_table)
             story.append(Spacer(1, 15))
 
+            story.append(Paragraph("Tributação das Vendas (Impostos de Venda)", styles['Heading3']))
+            sales_tax_data = [[
+                Paragraph("Imposto", table_header_style),
+                Paragraph("%", table_header_style),
+                Paragraph("Valor Unitário", table_header_style),
+                Paragraph("Valor Total", table_header_style)
+            ]]
+            for t in sales_taxes_summary:
+                sales_tax_data.append([
+                    Paragraph(t["name"], table_cell_style),
+                    Paragraph(t["percent"], table_cell_style),
+                    Paragraph(f"R$ {t['unit']}", table_cell_style),
+                    Paragraph(f"R$ {t['total']}", table_cell_style)
+                ])
+            sales_tax_data.append([
+                Paragraph("TOTAL IMPOSTOS VENDA", table_cell_style),
+                Paragraph(sales_taxes_totals['percent'], table_cell_style),
+                Paragraph(f"R$ {sales_taxes_totals['unit']}", table_cell_style),
+                Paragraph(f"R$ {sales_taxes_totals['total']}", table_cell_style)
+            ])
+            sales_tax_table = Table(sales_tax_data, colWidths=[150, 80, 130, 140])
+            sales_tax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(sales_tax_table)
+            story.append(Spacer(1, 10))
+
+            story.append(Paragraph("Tributação das Aquisições (Impostos de Compra)", styles['Heading3']))
+            purchase_tax_data = [[
+                Paragraph("Imposto", table_header_style),
+                Paragraph("Valor Total", table_header_style)
+            ]]
+            for t in purchase_taxes_summary:
+                purchase_tax_data.append([
+                    Paragraph(t["name"], table_cell_style),
+                    Paragraph(f"R$ {t['total']}", table_cell_style)
+                ])
+            purchase_tax_data.append([
+                Paragraph("TOTAL IMPOSTOS COMPRA", table_cell_style),
+                Paragraph(f"R$ {purchase_taxes_totals['total']}", table_cell_style)
+            ])
+            purchase_tax_table = Table(purchase_tax_data, colWidths=[250, 250])
+            purchase_tax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(purchase_tax_table)
+            story.append(Spacer(1, 10))
+
+            story.append(Paragraph("Detalhamento de Despesas, Frete e Comissão", styles['Heading3']))
+            expenses_data_table = [[
+                Paragraph("Despesa", table_header_style),
+                Paragraph("% do Faturamento", table_header_style),
+                Paragraph("Valor Unitário", table_header_style),
+                Paragraph("Valor Total", table_header_style)
+            ]]
+            for e in expenses_summary:
+                expenses_data_table.append([
+                    Paragraph(e["name"], table_cell_style),
+                    Paragraph(e["percent"], table_cell_style),
+                    Paragraph(f"R$ {e['unit']}", table_cell_style),
+                    Paragraph(f"R$ {e['total']}", table_cell_style)
+                ])
+            expenses_data_table.append([
+                Paragraph("TOTAL DESPESAS", table_cell_style),
+                Paragraph(expenses_totals['percent'], table_cell_style),
+                Paragraph(f"R$ {expenses_totals['unit']}", table_cell_style),
+                Paragraph(f"R$ {expenses_totals['total']}", table_cell_style)
+            ])
+            expenses_table = Table(expenses_data_table, colWidths=[180, 120, 100, 100])
+            expenses_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
+            ]))
+            story.append(expenses_table)
+            story.append(Spacer(1, 15))
+
             story.append(Paragraph("Resumo Financeiro por Fornecedor (Custos de Aquisição)", styles['Heading2']))
             sup_data = [[
                 Paragraph("Orçamento", table_header_style),
                 Paragraph("Fornecedor", table_header_style),
-                Paragraph("Total Custo (c/ Impostos)", table_header_style),
+                Paragraph("Valor Total Sem Imposto", table_header_style),
+                Paragraph("Total de Imposto", table_header_style),
+                Paragraph("Total com Impostos", table_header_style),
                 Paragraph("Forma de Pagamento", table_header_style)
             ]]
             for f in supplier_summaries:
                 sup_data.append([
                     Paragraph(f["orcamento"], table_cell_style),
                     Paragraph(f["fornecedor"], table_cell_style),
+                    Paragraph(f"R$ {f['total_sem_imposto']}", table_cell_style),
+                    Paragraph(f"R$ {f['total_imposto']}", table_cell_style),
                     Paragraph(f"R$ {f['total_custo']}", table_cell_style),
                     Paragraph(f["forma_pagamento"], table_cell_style)
                 ])
             sup_data.append([
                 Paragraph("TOTAL DE CUSTOS", table_cell_style),
                 Paragraph("-", table_cell_style),
-                Paragraph(f"R$ {kpis['custo_consolidado']}", table_cell_style),
+                Paragraph(f"R$ {supplier_totals['total_sem_imposto']}", table_cell_style),
+                Paragraph(f"R$ {supplier_totals['total_imposto']}", table_cell_style),
+                Paragraph(f"R$ {supplier_totals['total_custo']}", table_cell_style),
                 Paragraph("-", table_cell_style)
             ])
-            sup_table = Table(sup_data, colWidths=[150, 200, 150, 200])
+            sup_table = Table(sup_data, colWidths=[90, 140, 110, 100, 110, 130])
             sup_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#475569')),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 3),
