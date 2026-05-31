@@ -2107,16 +2107,16 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       Detalhamento de Impostos
                                     </div>
                                     <div className="space-y-1.5 font-mono text-text-muted text-sm">
-                                      <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC((summary?.pis_unit || 0) * item.quantidade_no_kit)}</span></div>
-                                      <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC((summary?.cofins_unit || 0) * item.quantidade_no_kit)}</span></div>
-                                      <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC((summary?.csll_unit || 0) * item.quantidade_no_kit)}</span></div>
-                                      <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC((summary?.irpj_unit || 0) * item.quantidade_no_kit)}</span></div>
+                                      <div className="flex justify-between"><span>PIS ({(summary?.perc_pis || 0).toFixed(2)}%)</span><span>{fmtC(summary?.pis_unit || 0)}</span></div>
+                                      <div className="flex justify-between"><span>COFINS ({(summary?.perc_cofins || 0).toFixed(2)}%)</span><span>{fmtC(summary?.cofins_unit || 0)}</span></div>
+                                      <div className="flex justify-between"><span>CSLL ({(summary?.perc_csll || 0).toFixed(2)}%)</span><span>{fmtC(summary?.csll_unit || 0)}</span></div>
+                                      <div className="flex justify-between"><span>IRPJ ({(summary?.perc_irpj || 0).toFixed(2)}%)</span><span>{fmtC(summary?.irpj_unit || 0)}</span></div>
                                       {['SERVICO', 'LICENCA'].includes(summary?.tipo_item) ? (
-                                        <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC((summary?.iss_unit || 0) * item.quantidade_no_kit)}</span></div>
+                                        <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC(summary?.iss_unit || 0)}</span></div>
                                       ) : (
                                         <div className="flex justify-between">
                                           <span>ICMS ({(summary?.perc_icms || 0).toFixed(2)}%){summary?.tem_st ? ' — ST isento' : ''}</span>
-                                          <span>{fmtC((summary?.icms_unit || 0) * item.quantidade_no_kit)}</span>
+                                          <span>{fmtC(summary?.icms_unit || 0)}</span>
                                         </div>
                                       )}
                                       {((summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)) || 0) > 0 && (
