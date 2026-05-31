@@ -212,7 +212,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
                     {/* Version & PWA Mode Label (P3 & P6) */}
                     <div className="w-full bg-bg-deep rounded-lg p-3 text-center border border-border-subtle mb-4">
-                        <p className="text-xs font-bold text-text-primary">Cerberusu</p>
+                        <p className="text-xs font-bold text-text-primary">Cerberus</p>
                         <p className="text-[11px] text-text-muted mt-0.5">Versão: {versionInfo.version} (Build: {versionInfo.buildDate})</p>
                         <p className="text-[11px] font-semibold text-brand-primary mt-1">
                             {isPwa ? 'PWA Instalado' : 'Executando via Navegador'}

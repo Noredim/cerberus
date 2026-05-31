@@ -239,7 +239,7 @@ export default function PWAManager() {
                   className="w-9 h-9 object-contain rounded bg-white p-0.5 border border-border-subtle shrink-0" 
                 />
                 <div>
-                  <h4 className="text-sm font-bold text-text-primary">Instalar o Cerberusu?</h4>
+                  <h4 className="text-sm font-bold text-text-primary">Instalar o Cerberus?</h4>
                   <p className="text-xs text-text-muted mt-1 leading-relaxed">
                     Acesse o motor de vendas e inteligência tributária diretamente da sua área de trabalho ou tela inicial.
                   </p>

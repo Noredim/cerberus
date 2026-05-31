@@ -1,9 +1,10 @@
-# Plano de Implementação — PWA Cerberusu (Atualizado com Restrições de Cache de API)
+# Plano de Implementação — PWA Cerberus (Atualizado com Restrições de Cache de API)
 
-Este documento detalha o plano técnico para transformar o Cerberusu em Progressive Web App (PWA) de acordo com o PRD, as decisões aprovadas e o complemento arquitetural (incluindo as restrições finais de cache).
+Este documento detalha o plano técnico para transformar o Cerberus em Progressive Web App (PWA) de acordo com o PRD, as decisões aprovadas e o complemento arquitetural (incluindo as restrições finais de cache).
 
 ## Visão Geral
-O Cerberusu passará a rodar como PWA sem a utilização de frameworks de geração automática (como `vite-plugin-pwa`), optando por um **Service Worker Vanilla JS** direto. A identidade visual será preservada redimensionando o logo oficial existente. O sistema exibirá a versão em produção, identificará o modo de execução (PWA standalone vs Navegador) no menu do usuário e controlará rigorosamente a segurança de cache (sem caching de dados confidenciais ou endpoints autenticados).
+O Cerberus passará a rodar como PWA sem a utilização de frameworks de geração automática (como `vite-plugin-pwa`), optando por um **Service Worker Vanilla JS** direto. A identidade visual será preservada redimensionando o logo oficial existente. O sistema exibirá a versão em produção, identificará o modo de execução (PWA standalone vs Navegador) no menu do usuário e controlará rigorosamente a segurança de cache (sem caching de dados confidenciais ou endpoints autenticados).
+
 
 ---
 
