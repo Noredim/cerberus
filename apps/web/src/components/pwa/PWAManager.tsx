@@ -36,6 +36,17 @@ export default function PWAManager() {
   // 2. Service Worker registration and update detection (P0, P4)
   useEffect(() => {
     if ('serviceWorker' in navigator) {
+      if (import.meta.env.DEV) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister().then(() => {
+              console.log('[PWA] Unregistered active Service Worker in development mode to avoid HMR caching issues.');
+            });
+          }
+        });
+        return;
+      }
+
       navigator.serviceWorker.register('/service-worker.js')
         .then((registration) => {
           setSwRegistration(registration);
