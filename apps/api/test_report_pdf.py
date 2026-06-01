@@ -2,6 +2,7 @@ import sys
 import os
 import uuid
 import datetime
+from decimal import Decimal
 
 # Setup path so it finds modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -333,7 +334,7 @@ def run_test():
 
         # 4. Generate PDF Report via service (Fechamento Fornecedores)
         print("Invoking OpportunitiesReportService (Fechamento Fornecedores)...")
-        response = OpportunitiesReportService.generate_fechamento_fornecedores_pdf(db, opp.id, user)
+        response = OpportunitiesReportService.generate_fechamento_fornecedores_pdf(db, opp.id, user)  # type: ignore
         
         # Read the streaming body response asynchronously
         import asyncio
@@ -361,7 +362,7 @@ def run_test():
 
         # 6. Generate PDF Report via service (Venda Approval)
         print("Invoking OpportunitiesReportService (Venda Approval)...")
-        response_venda = OpportunitiesReportService.generate_venda_approval_pdf(db, opp.id, user)
+        response_venda = OpportunitiesReportService.generate_venda_approval_pdf(db, opp.id, user)  # type: ignore
         pdf_bytes_venda = asyncio.run(read_stream(response_venda.body_iterator))
 
         if pdf_bytes_venda.startswith(b"%PDF"):
@@ -376,13 +377,13 @@ def run_test():
 
         # 7. Configure and Generate PDF Report via service (Locacao Approval)
         print("Configuring Rental/Comodato opportunity fields...")
-        opp.tipo_receita_rental = "LOCACAO_SERVICO"
-        opp.prazo_contrato_meses = 36
-        opp.perc_pis_rental = 1.65
-        opp.perc_cofins_rental = 7.60
-        opp.perc_csll_rental = 1.00
-        opp.perc_irpj_rental = 2.00
-        opp.perc_iss_rental = 5.00
+        opp.tipo_receita_rental = "LOCACAO_SERVICO"  # type: ignore
+        opp.prazo_contrato_meses = 36  # type: ignore
+        opp.perc_pis_rental = Decimal("1.65")  # type: ignore
+        opp.perc_cofins_rental = Decimal("7.60")  # type: ignore
+        opp.perc_csll_rental = Decimal("1.00")  # type: ignore
+        opp.perc_irpj_rental = Decimal("2.00")  # type: ignore
+        opp.perc_iss_rental = Decimal("5.00")  # type: ignore
         db.flush()
 
         print("Adding rental items...")
@@ -428,7 +429,7 @@ def run_test():
         db.flush()
 
         print("Invoking OpportunitiesReportService (Locacao Approval)...")
-        response_locacao = OpportunitiesReportService.generate_locacao_approval_pdf(db, opp.id, user)
+        response_locacao = OpportunitiesReportService.generate_locacao_approval_pdf(db, opp.id, user)  # type: ignore
         pdf_bytes_locacao = asyncio.run(read_stream(response_locacao.body_iterator))
 
         if pdf_bytes_locacao.startswith(b"%PDF"):
