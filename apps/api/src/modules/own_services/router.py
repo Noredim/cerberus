@@ -20,8 +20,7 @@ from src.modules.users.models import User
 
 router = APIRouter(
     prefix="/own-services", 
-    tags=["Own Services"],
-    dependencies=[Depends(check_not_engenharia_preco)]
+    tags=["Own Services"]
 )
 
 
@@ -143,7 +142,7 @@ def get_own_service(
     return _to_response(svc)
 
 
-@router.post("", response_model=OwnServiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=OwnServiceResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
 def create_own_service(
     payload: OwnServiceCreate,
     db: Session = Depends(get_db),
@@ -183,7 +182,7 @@ def create_own_service(
     return _to_response(saved)
 
 
-@router.put("/{service_id}", response_model=OwnServiceResponse)
+@router.put("/{service_id}", response_model=OwnServiceResponse, dependencies=[Depends(check_not_engenharia_preco)])
 def update_own_service(
     service_id: str,
     payload: OwnServiceUpdate,
@@ -223,7 +222,7 @@ def update_own_service(
     return _to_response(refreshed)
 
 
-@router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(check_not_engenharia_preco)])
 def deactivate_own_service(
     service_id: str,
     db: Session = Depends(get_db),

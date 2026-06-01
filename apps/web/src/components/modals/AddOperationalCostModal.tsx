@@ -61,6 +61,7 @@ export function AddOperationalCostModal({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [manHours, setManHours] = useState<any[]>([]);
+  const [ownServices, setOwnServices] = useState<any[]>([]);
 
   // Form states
   const [quantidade, setQuantidade] = useState(1);
@@ -69,7 +70,7 @@ export function AddOperationalCostModal({
   const [formaExecucao, setFormaExecucao] = useState('H. NORMAL');
   const [calcError, setCalcError] = useState('');
 
-  // Fetch ManHours only once per modal open
+  // Fetch ManHours and OwnServices only once per modal open
   useEffect(() => {
     if (isOpen) {
       setTipoItem('PRODUTO');
@@ -88,28 +89,23 @@ export function AddOperationalCostModal({
       setTimeout(() => inputRef.current?.focus(), 100);
 
       api.get('/man-hours').then(res => setManHours(res.data)).catch(console.error);
+      api.get('/own-services').then(res => setOwnServices(res.data)).catch(console.error);
     }
   }, [isOpen, defaultType]);
 
   // Handle Search Input Change
   useEffect(() => {
     if (!isOpen || selectedProduct) return;
-    const delayDebounceFn = setTimeout(() => {
-      async function fetchData() {
-        if (tipoItem === 'PRODUTO') {
+
+    if (tipoItem === 'PRODUTO') {
+      const delayDebounceFn = setTimeout(() => {
+        async function fetchData() {
           if (!salesBudgetId && (!searchTerm || searchTerm.trim().length < 2)) {
             setResults([]);
             return;
           }
-        } else {
-          if (!searchTerm || searchTerm.trim().length < 2) {
-            setResults([]);
-            return;
-          }
-        }
-        setIsSearching(true);
-        try {
-          if (tipoItem === 'PRODUTO') {
+          setIsSearching(true);
+          try {
             const params: any = { limit: 100 };
             if (searchTerm && searchTerm.trim().length >= 2) {
               params.q = searchTerm;
@@ -120,24 +116,24 @@ export function AddOperationalCostModal({
             const res = await api.get('/cadastro/produtos', { params });
             const filtered = res.data.filter((p: any) => p.tipo === 'SERVICO' || p.tipo === 'LICENCA').slice(0, 20);
             setResults(filtered);
-          } else {
-            const res = await api.get('/own-services');
-            const filtered = res.data.filter((s: any) => 
-              s.nome_servico.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            setResults(filtered);
+          } catch (err) {
+            console.error('Erro ao buscar', err);
+          } finally {
+            setIsSearching(false);
           }
-        } catch (err) {
-          console.error('Erro ao buscar', err);
-        } finally {
-          setIsSearching(false);
         }
-      }
-      fetchData();
-    }, 500);
+        fetchData();
+      }, 500);
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, selectedProduct, tipoItem, salesBudgetId, isOpen]);
+      return () => clearTimeout(delayDebounceFn);
+    } else {
+      // In SERVICO_PROPRIO mode, filter local ownServices instantly without API queries
+      const filtered = ownServices.filter((s: any) => 
+        s.nome_servico.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setResults(filtered);
+    }
+  }, [searchTerm, selectedProduct, tipoItem, ownServices, salesBudgetId, isOpen]);
 
   const handleSelectItem = async (item: any) => {
     if (tipoItem === 'PRODUTO') {

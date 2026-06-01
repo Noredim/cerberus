@@ -97,8 +97,12 @@ def run_tests():
     assert_forbidden("GET", "/dashboards/kpis")
     assert_forbidden("GET", "/document-templates")
     assert_forbidden("GET", "/sales-proposals")
-    assert_forbidden("GET", "/man-hours")
-    assert_forbidden("GET", "/own-services")
+    assert_forbidden("POST", "/man-hours", json_payload={})
+    assert_forbidden("PUT", "/man-hours/00000000-0000-0000-0000-000000000000", json_payload={})
+    assert_forbidden("DELETE", "/man-hours/00000000-0000-0000-0000-000000000000")
+    assert_forbidden("POST", "/own-services", json_payload={})
+    assert_forbidden("PUT", "/own-services/00000000-0000-0000-0000-000000000000", json_payload={})
+    assert_forbidden("DELETE", "/own-services/00000000-0000-0000-0000-000000000000")
     assert_forbidden("GET", "/roles")
     assert_forbidden("GET", "/profiles")
     assert_forbidden("GET", "/tenants")
@@ -120,6 +124,8 @@ def run_tests():
     assert_allowed("GET", "/sales-budgets")
     assert_allowed("GET", "/purchase-budgets")
     assert_allowed("GET", "/opportunity-kits")
+    assert_allowed("GET", "/man-hours")
+    assert_allowed("GET", "/own-services")
 
     logger.info("\nALL ACCESS PROFILE RESTRICTION TESTS PASSED SUCCESSFULLY! ✅")
 

@@ -14,8 +14,7 @@ from src.modules.users.models import User
 
 router = APIRouter(
     prefix="/man-hours", 
-    tags=["Man Hours"],
-    dependencies=[Depends(check_not_engenharia_preco)]
+    tags=["Man Hours"]
 )
 
 
@@ -90,7 +89,7 @@ def get_man_hour(
     return _to_response(mh)
 
 
-@router.post("", response_model=ManHourResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ManHourResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
 def create_man_hour(
     payload: ManHourCreate,
     db: Session = Depends(get_db),
@@ -132,7 +131,7 @@ def create_man_hour(
     return _to_response(saved)
 
 
-@router.put("/{item_id}", response_model=ManHourResponse)
+@router.put("/{item_id}", response_model=ManHourResponse, dependencies=[Depends(check_not_engenharia_preco)])
 def update_man_hour(
     item_id: str,
     payload: ManHourUpdate,
@@ -166,7 +165,7 @@ def update_man_hour(
     return _to_response(refreshed)
 
 
-@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(check_not_engenharia_preco)])
 def deactivate_man_hour(
     item_id: str,
     db: Session = Depends(get_db),
