@@ -6,16 +6,19 @@ def run():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         try:
+            # Add current path to python path to import settings
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            sys.path.append(os.path.join(current_dir, 'apps', 'api'))
+            if current_dir not in sys.path:
+                sys.path.append(current_dir)
             from src.core.config import settings
             database_url = settings.DATABASE_URL
         except Exception as e:
-            # Fallback to local default connection string
-            database_url = "postgresql://cerberus_user:cerberus_password@localhost:5432/cerberus"
+            print(f"Error loading database settings: {e}")
+            sys.exit(1)
 
     print("Connecting to database to run SQL migrations...")
     try:
+        # Convert connection string if it contains sqlalchemy dialect parts
         conn_str = database_url
         if conn_str.startswith("postgresql+psycopg2://"):
             conn_str = conn_str.replace("postgresql+psycopg2://", "postgresql://", 1)
@@ -26,7 +29,7 @@ def run():
         
         # 1. Run V001
         print("Running SQL migration V001__cnpj_schemas.sql...")
-        v001_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V001__cnpj_schemas.sql')
+        v001_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V001__cnpj_schemas.sql')
         with open(v001_path, 'r', encoding='utf-8') as f:
             sql1 = f.read()
         cur.execute(sql1)
@@ -34,7 +37,7 @@ def run():
 
         # 2. Run V002
         print("Running SQL migration V002__companies_tax_profiles.sql...")
-        v002_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V002__companies_tax_profiles.sql')
+        v002_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V002__companies_tax_profiles.sql')
         with open(v002_path, 'r', encoding='utf-8') as f:
             sql2 = f.read()
         cur.execute(sql2)
