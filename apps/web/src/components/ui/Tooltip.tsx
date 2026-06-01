@@ -4,9 +4,10 @@ import { createPortal } from 'react-dom';
 interface TooltipProps {
   children: React.ReactNode;
   content: React.ReactNode;
+  variant?: 'dark' | 'light';
 }
 
-export function Tooltip({ children, content }: TooltipProps) {
+export function Tooltip({ children, content, variant = 'dark' }: TooltipProps) {
   const [show, setShow] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
   const [offset, setOffset] = useState(0);
@@ -84,12 +85,18 @@ export function Tooltip({ children, content }: TooltipProps) {
           >
             <div 
               ref={tooltipRef}
-              className="bg-slate-900 text-slate-100 text-xs rounded-lg shadow-xl p-3 min-w-[200px] border border-slate-800"
+              className={`text-xs rounded-lg shadow-xl p-3 min-w-[200px] border ${
+                variant === 'light'
+                  ? 'bg-white text-slate-800 border-slate-200/80 shadow-slate-200/50'
+                  : 'bg-slate-900 text-slate-100 border-slate-800'
+              }`}
               style={{ transform: `translateX(${offset}px)` }}
             >
               {content}
             </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
+            <div className={`absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent ${
+              variant === 'light' ? 'border-t-white' : 'border-t-slate-900'
+            }`} />
           </div>,
           document.body
         )}

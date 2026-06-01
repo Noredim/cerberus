@@ -91,28 +91,28 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
             </div>
             <div className="flex justify-between">
               <span>IPI ({ipiPercent}%):</span>
-              <span className="text-brand-warning">+ {fmtC(summary?.ipi_unit)}</span>
+              <span className="text-amber-600">+ {fmtC(summary?.ipi_unit)}</span>
             </div>
             <div className="flex justify-between">
               <span>Frete CIF:</span>
-              <span className="text-brand-warning">+ {fmtC(summary?.frete_cif_unit)}</span>
+              <span className="text-amber-600">+ {fmtC(summary?.frete_cif_unit)}</span>
             </div>
             
             <div className="border-t border-border-subtle/50 my-1"></div>
             
             {summary?.is_bit ? (
-              <div className="flex justify-between text-brand-warning">
+              <div className="flex justify-between text-amber-600">
                 <span>ICMS-ST (BIT) unit.:</span>
                 <span>+ {fmtC(summary?.icms_st_normal)}</span>
               </div>
             ) : (
               <>
-                <div className="flex justify-between text-brand-warning">
+                <div className="flex justify-between text-amber-600">
                   <span>ICMS-ST unit.:</span>
                   <span>+ {fmtC(summary?.icms_st_normal)}</span>
                 </div>
                 {(summary?.cred_outorgado_valor || 0) > 0 && (
-                  <div className="flex justify-between text-brand-success">
+                  <div className="flex justify-between text-emerald-600">
                     <span>Cred. Outorgado ({(summary?.cred_outorgado_percent || 0).toFixed(0)}%):</span>
                     <span>- {fmtC(summary?.cred_outorgado_valor)}</span>
                   </div>
@@ -120,7 +120,7 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
               </>
             )}
             
-            <div className="flex justify-between font-bold text-brand-warning">
+            <div className="flex justify-between font-bold text-amber-600">
               <span>ICMS-ST Final unit.:</span>
               <span>+ {fmtC(summary?.icms_st_unitario)}</span>
             </div>
@@ -141,7 +141,7 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
               <span>Total Cotação:</span>
               <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
             </div>
-            <div className="flex justify-between text-brand-warning">
+            <div className="flex justify-between text-amber-600">
               <span>Total Impostos:</span>
               <span>+ {fmtC((summary?.icms_st_unitario || 0) * qty)}</span>
             </div>
@@ -175,16 +175,16 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
             </div>
             <div className="flex justify-between">
               <span>IPI ({ipiPercent}%):</span>
-              <span className="text-brand-warning">+ {fmtC(summary?.ipi_unit)}</span>
+              <span className="text-amber-600">+ {fmtC(summary?.ipi_unit)}</span>
             </div>
             <div className="flex justify-between">
               <span>Frete CIF:</span>
-              <span className="text-brand-warning">+ {fmtC(summary?.frete_cif_unit)}</span>
+              <span className="text-amber-600">+ {fmtC(summary?.frete_cif_unit)}</span>
             </div>
             
             <div className="border-t border-border-subtle/50 my-1"></div>
             
-            <div className="flex justify-between font-bold text-brand-warning">
+            <div className="flex justify-between font-bold text-amber-600">
               <span>DIFAL Unit:</span>
               <span>+ {fmtC(summary?.difal_unitario)}</span>
             </div>
@@ -205,12 +205,12 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
               <span>Total da Cotação:</span>
               <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
             </div>
-            <div className="flex justify-between text-brand-warning">
+            <div className="flex justify-between text-amber-600">
               <span>Frete CIF:</span>
               <span>+ {fmtC((summary?.frete_cif_unit || 0) * qty)}</span>
             </div>
-            <div className="text-brand-warning font-bold mt-1">Total Impostos:</div>
-            <div className="flex justify-between text-[11px] text-brand-warning pl-2">
+            <div className="text-amber-600 font-bold mt-1">Total Impostos:</div>
+            <div className="flex justify-between text-[11px] text-amber-600 pl-2">
               <span>– DIFAL:</span>
               <span>+ {fmtC((summary?.difal_unitario || 0) * qty)}</span>
             </div>
@@ -1203,20 +1203,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         {vendaB5 > 0 && <div className="flex justify-between" title="Instalação (B5)"><span>Inst.:</span><span>{fmtC(vendaB5)}</span></div>}
                       </div>
                       {impostosB45 > 0 && (
-                        <Tooltip content={
-                          <div className="w-72 space-y-2 text-gray-200 p-1">
-                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
+                        <Tooltip variant="light" content={
+                          <div className="w-72 space-y-2 text-text-secondary p-1">
+                            <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
                             {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
                               <div key={t.label} className="flex justify-between text-xs">
-                                <span>{t.label}</span><span className="text-rose-300">{fmtC(t.total)}</span>
+                                <span>{t.label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
                               </div>
                             ))}
-                            <div className="border-t border-gray-600 pt-1 flex justify-between font-bold text-xs">
-                              <span>Total Impostos</span><span className="text-rose-400">{fmtC(impostosB45)}</span>
+                            <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-xs">
+                              <span>Total Impostos</span><span className="text-rose-700">{fmtC(impostosB45)}</span>
                             </div>
                           </div>
                         }>
-                          <span className="text-[9px] text-rose-400 font-semibold cursor-help border-b border-dashed border-rose-400/40 mt-1 inline-block">
+                          <span className="text-[9px] text-rose-600 font-semibold cursor-help border-b border-dashed border-rose-600/40 mt-1 inline-block">
                             Imp: {fmtC(impostosB45)}
                           </span>
                         </Tooltip>
@@ -1231,23 +1231,23 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         {fmtC(vendaMensalB6)}/m × {qtdMeses || '—'} meses
                       </div>
                       {impostosMensalB6 > 0 && (
-                        <Tooltip content={
-                          <div className="w-80 space-y-2 text-gray-200 p-1">
-                            <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1 text-xs">Impostos — Manutenção (B6)</div>
-                            <div className="grid grid-cols-3 text-[10px] font-bold text-gray-400 mb-1">
+                        <Tooltip variant="light" content={
+                          <div className="w-80 space-y-2 text-text-secondary p-1">
+                            <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos — Manutenção (B6)</div>
+                            <div className="grid grid-cols-3 text-[10px] font-bold text-text-muted mb-1">
                               <span>Imposto</span><span className="text-right">Mensal</span><span className="text-right">Total ({qtdMeses}m)</span>
                             </div>
                             {Object.values(taxLabelB6).filter(t => t.mensal > 0).map(t => (
                               <div key={t.label} className="grid grid-cols-3 text-xs">
                                 <span>{t.label}</span>
-                                <span className="text-right text-rose-300">{fmtC(t.mensal)}</span>
-                                <span className="text-right text-rose-400">{fmtC(t.total)}</span>
+                                <span className="text-right text-rose-600 font-medium">{fmtC(t.mensal)}</span>
+                                <span className="text-right text-rose-700 font-semibold">{fmtC(t.total)}</span>
                               </div>
                             ))}
-                            <div className="border-t border-gray-600 pt-1 grid grid-cols-3 font-bold text-xs">
+                            <div className="border-t border-border-subtle/70 pt-1 grid grid-cols-3 font-bold text-xs">
                               <span>Total</span>
-                              <span className="text-right text-rose-300">{fmtC(impostosMensalB6)}</span>
-                              <span className="text-right text-rose-400">{fmtC(impostosMensalB6 * qtdMeses)}</span>
+                              <span className="text-right text-rose-600">{fmtC(impostosMensalB6)}</span>
+                              <span className="text-right text-rose-700">{fmtC(impostosMensalB6 * qtdMeses)}</span>
                             </div>
                           </div>
                         }>
@@ -2066,7 +2066,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 />
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                <Tooltip content={
+                                <Tooltip variant="light" content={
                                   <div className="w-64">
                                     <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                       <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2074,7 +2074,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                     </div>
                                     <div className="space-y-1.5 font-mono text-text-muted">
                                       <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || 0)}</span></div>
-                                      {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                      {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-rose-600 font-semibold"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
                                       {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                       {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
                                       {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
@@ -2100,7 +2100,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 {fmtC(summary?.frete_venda_item)}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                <Tooltip content={
+                                <Tooltip variant="light" content={
                                   <div className="w-72 text-left">
                                     <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                       <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2120,7 +2120,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                         </div>
                                       )}
                                       {((summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)) || 0) > 0 && (
-                                        <div className="flex justify-between text-brand-success">
+                                        <div className="flex justify-between text-emerald-600 font-semibold">
                                           <span>Créd. ICMS (Compra)</span>
                                           <span>- {fmtC(summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit))}</span>
                                         </div>
@@ -2167,7 +2167,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 {(() => {
                                   const custoBase = (summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0);
                                   return (
-                                    <Tooltip content={
+                                    <Tooltip variant="light" content={
                                       <div className="w-64">
                                         <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                           <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2190,11 +2190,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
                                 {form.considerar_st_ou_difal === 'ST' ? (
-                                  <Tooltip content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={true} />}>
+                                  <Tooltip variant="light" content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={true} />}>
                                     <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.icms_st_unitario || 0)}</span>
                                   </Tooltip>
                                 ) : (
-                                  <Tooltip content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={false} />}>
+                                  <Tooltip variant="light" content={<CostCompositionTooltip summary={summary} qty={item.quantidade_no_kit} isST={false} />}>
                                     <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(summary?.difal_unitario || 0)}</span>
                                   </Tooltip>
                                 )}
@@ -2349,7 +2349,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                               <>
                                 <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
-                                  <Tooltip content={
+                                  <Tooltip variant="light" content={
                                     <div className="w-64 text-left">
                                       <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                         <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2357,11 +2357,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       </div>
                                       <div className="space-y-1.5 font-mono text-text-muted">
                                         <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
-                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-rose-600 font-semibold"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
                                         {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                         {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
                                         {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
-                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                        <div className="border-t border-gray-300 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
                                           <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
                                         </div>
                                       </div>
@@ -2536,7 +2536,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                               <>
                                 <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                  <Tooltip content={
+                                  <Tooltip variant="light" content={
                                     <div className="w-64 text-left">
                                       <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                         <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2544,11 +2544,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                       </div>
                                       <div className="space-y-1.5 font-mono text-text-muted">
                                         <div className="flex justify-between"><span>Base:</span><span>{fmtC(summary?.base_fornecedor || c.valor_unitario)}</span></div>
-                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-brand-error"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
+                                        {(summary?.icms_abatido || 0) > 0 && <div className="flex justify-between text-rose-600 font-semibold"><span>ICMS Abatido:</span><span>- {fmtC(summary?.icms_abatido)}</span></div>}
                                         {(summary?.ipi_unit || 0) > 0 && <div className="flex justify-between"><span>IPI:</span><span>+ {fmtC(summary?.ipi_unit)}</span></div>}
                                         {(summary?.frete_cif_unit || 0) > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span>+ {fmtC(summary?.frete_cif_unit)}</span></div>}
                                         {(summary?.icms_st_unitario || 0) > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span>+ {fmtC(summary?.icms_st_unitario)}</span></div>}
-                                        <div className="border-t border-white/20 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
+                                        <div className="border-t border-gray-300 mt-1.5 pt-1.5 flex justify-between font-bold text-text-primary">
                                           <span>Custo Unit. Final:</span><span>{fmtC(summary?.custo_base_unitario_item || c.valor_unitario)}</span>
                                         </div>
                                       </div>
@@ -2571,7 +2571,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">{fmtC(summary?.venda_unitario_item || vendaUnit)}</td>
                                 <td className="px-1.5 py-3 text-right tabular-nums text-brand-primary font-medium">{fmtC((summary?.venda_unitario_item || vendaUnit) * c.quantidade)}</td>
                                 <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
-                                  <Tooltip content={
+                                  <Tooltip variant="light" content={
                                     <div className="w-72 text-left">
                                       <div className="font-bold text-text-primary text-sm mb-2 flex items-center gap-1.5">
                                         <Info className="w-3.5 h-3.5 text-brand-primary" />
@@ -2591,12 +2591,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                           </div>
                                         )}
                                         {(summary?.icms_abatido || 0) > 0 && (
-                                          <div className="flex justify-between text-brand-success">
+                                          <div className="flex justify-between text-emerald-600 font-semibold">
                                             <span>Créd. ICMS (Compra)</span>
                                             <span>- {fmtC((summary?.icms_abatido || 0) * c.quantidade)}</span>
                                           </div>
                                         )}
-                                        <div className="border-t border-white/20 mt-2 pt-2 flex justify-between font-bold text-text-primary">
+                                        <div className="border-t border-gray-300 mt-2 pt-2 flex justify-between font-bold text-text-primary">
                                           <span>Total Impostos (Líquido)</span><span>{fmtC((summary?.imposto_venda_item || 0) - ((summary?.icms_abatido || 0) * c.quantidade))}</span>
                                         </div>
                                       </div>
