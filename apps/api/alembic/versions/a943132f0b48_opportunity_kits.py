@@ -64,8 +64,8 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_opportunity_kit_items_kit_id'), 'opportunity_kit_items', ['kit_id'], unique=False)
     op.create_index(op.f('ix_opportunity_kit_items_product_id'), 'opportunity_kit_items', ['product_id'], unique=False)
-    op.drop_index(op.f('idx_rental_budget_items_budget'), table_name='rental_budget_items')
-    op.drop_index(op.f('idx_rental_budget_items_product'), table_name='rental_budget_items')
+    op.execute("DROP INDEX IF EXISTS idx_rental_budget_items_budget")
+    op.execute("DROP INDEX IF EXISTS idx_rental_budget_items_product")
     op.create_index(op.f('ix_rental_budget_items_budget_id'), 'rental_budget_items', ['budget_id'], unique=False)
     op.create_index(op.f('ix_rental_budget_items_product_id'), 'rental_budget_items', ['product_id'], unique=False)
     # ### end Alembic commands ###
