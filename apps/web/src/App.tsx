@@ -48,7 +48,7 @@ import PWAManager from './components/pwa/PWAManager';
 import { Loader2, ServerOff } from 'lucide-react';
 
 const ProtectedRoute = () => {
-  const { isAuthenticated, isLoading, userCompanies, activeCompanyId } = useAuth();
+  const { isAuthenticated, isLoading, user, userCompanies, activeCompanyId } = useAuth();
 
   if (isLoading) {
     return (
@@ -62,13 +62,14 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  // Se o usuÃ¡rio jÃ¡ autenticou, mas nÃ£o tem empresa selecionada ainda (e.g. primeiro login)
+  // Se o usuário já autenticou, mas não tem empresa selecionada ainda (e.g. primeiro login)
   if (userCompanies.length > 0 && !activeCompanyId) {
       return <SelectCompany />;
   }
 
-  // Se o usuÃ¡rio nÃ£o tem nenhuma empresa vinculada
-  if (userCompanies.length === 0) {
+  // Se o usuário não tem nenhuma empresa vinculada
+  const isAdmin = user?.roles?.includes('ADMIN');
+  if (userCompanies.length === 0 && !isAdmin) {
       return (
          <div className="min-h-screen bg-bg-deep flex items-center justify-center p-4 text-center">
              <div className="bg-bg-surface p-8 rounded-lg border border-border-subtle max-w-md">
@@ -77,7 +78,7 @@ const ProtectedRoute = () => {
                  </div>
                  <h2 className="text-xl font-bold text-text-primary mb-2">Sem Acesso</h2>
                  <p className="text-sm text-text-muted">
-                     VocÃª nÃ£o possui nenhuma empresa vinculada ao seu usuÃ¡rio. Solicite acesso ao administrador do sistema para continuar.
+                     Você não possui nenhuma empresa vinculada ao seu usuário. Solicite acesso ao administrador do sistema para continuar.
                  </p>
              </div>
          </div>

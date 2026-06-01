@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from src.core.database import get_db
 
-router = APIRouter(prefix="/dashboards", tags=["Dashboards"])
+from src.modules.auth.dependencies import check_not_engenharia_preco
+
+router = APIRouter(
+    prefix="/dashboards", 
+    tags=["Dashboards"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("/kpis")
 def get_dashboard_kpis(db: Session = Depends(get_db)):

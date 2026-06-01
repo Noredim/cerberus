@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from src.core.database import get_db
-from src.modules.auth.dependencies import verify_tenant
+from src.modules.auth.dependencies import verify_tenant, check_not_engenharia_preco
 
-router = APIRouter(prefix="/tenants", tags=["Tenants"])
+router = APIRouter(
+    prefix="/tenants", 
+    tags=["Tenants"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.post("/cnpj-lookup")
 def cnpj_lookup(cnpj: str, db: Session = Depends(get_db)):

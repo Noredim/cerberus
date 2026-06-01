@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from .schemas import NcmOut, NcmCreate, NcmUpdate, NcmImportSchema, NcmImportResult, NcmPaginatedResponse
 from .services.ncm_service import NcmService
@@ -43,7 +43,7 @@ def get_ncm(
 def create_ncm(
     payload: NcmCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     service = NcmService(db)
     return service.create(payload)
@@ -53,7 +53,7 @@ def update_ncm(
     ncm_id: UUID,
     payload: NcmUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     service = NcmService(db)
     return service.update(ncm_id, payload)
@@ -62,7 +62,7 @@ def update_ncm(
 def delete_ncm(
     ncm_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     service = NcmService(db)
     service.delete(ncm_id)
@@ -72,7 +72,7 @@ def delete_ncm(
 def import_ncm_json(
     payload: NcmImportSchema,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     service = NcmService(db)
     return service.import_json(payload)

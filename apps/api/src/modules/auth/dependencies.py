@@ -62,7 +62,27 @@ def get_active_company(
     ).first()
     
     if not has_access:
-        raise HTTPException(status_code=403, detail="Você não tem acesso a esta empresa ou ela não existe.")
+        # If user is ADMIN, check if the company exists within the user's tenant
+        is_admin = any(r.role.value == "ADMIN" for r in current_user.roles)
+        if is_admin:
+            from src.modules.companies.models import Company
+            company_exists = db.query(Company).filter(
+                Company.id == x_company_id,
+                Company.tenant_id == current_user.tenant_id
+            ).first()
+            if not company_exists:
+                raise HTTPException(status_code=403, detail="Você não tem acesso a esta empresa ou ela não existe.")
+        else:
+            raise HTTPException(status_code=403, detail="Você não tem acesso a esta empresa ou ela não existe.")
         
     return x_company_id
+
+def check_not_engenharia_preco(current_user: User = Depends(get_current_user)):
+    roles = [r.role.value for r in current_user.roles]
+    if "ENGENHARIA_PRECO" in roles and "ADMIN" not in roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Perfil de Engenharia de Preço não possui acesso a esta funcionalidade"
+        )
+    return current_user
 

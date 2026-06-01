@@ -4,12 +4,16 @@ from typing import List
 import uuid
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.roles.models import Role
 from src.modules.roles.schemas import RoleCreate, RoleUpdate, RoleResponse
 
-router = APIRouter(prefix="/roles", tags=["Roles"])
+router = APIRouter(
+    prefix="/roles", 
+    tags=["Roles"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("", response_model=List[RoleResponse])
 def get_roles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

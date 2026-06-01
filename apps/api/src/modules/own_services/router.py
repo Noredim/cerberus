@@ -7,7 +7,7 @@ from sqlalchemy import exc
 from sqlalchemy.orm import Session, joinedload
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_active_company, get_current_user
+from src.modules.auth.dependencies import get_active_company, get_current_user, check_not_engenharia_preco
 from src.modules.own_services.models import OwnService, OwnServiceItem
 from src.modules.own_services.schemas import (
     OwnServiceCreate,
@@ -18,7 +18,11 @@ from src.modules.own_services.schemas import (
 )
 from src.modules.users.models import User
 
-router = APIRouter(prefix="/own-services", tags=["Own Services"])
+router = APIRouter(
+    prefix="/own-services", 
+    tags=["Own Services"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

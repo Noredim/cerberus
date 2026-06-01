@@ -5,12 +5,16 @@ from typing import List
 import uuid
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user, get_active_company
+from src.modules.auth.dependencies import get_current_user, get_active_company, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.professionals.models import Professional
 from src.modules.professionals.schemas import ProfessionalCreate, ProfessionalUpdate, ProfessionalResponse, AvailableUserResponse
 
-router = APIRouter(prefix="/professionals", tags=["Professionals"])
+router = APIRouter(
+    prefix="/professionals", 
+    tags=["Professionals"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("", response_model=List[ProfessionalResponse])
 def get_professionals(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), company_id: str = Depends(get_active_company)):

@@ -3,12 +3,16 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.profiles.models import FunctionalProfile
 from src.modules.profiles.schemas import FunctionalProfileCreate, FunctionalProfileUpdate, FunctionalProfileResponse
 
-router = APIRouter(prefix="/profiles", tags=["Functional Profiles"])
+router = APIRouter(
+    prefix="/profiles", 
+    tags=["Functional Profiles"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("", response_model=List[FunctionalProfileResponse])
 def list_profiles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

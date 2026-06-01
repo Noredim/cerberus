@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.modules.tenants.models import Tenant
 from src.modules.users.models import User, UserRole, UserRoleEnum
+from src.modules.companies.models import Company
 from src.core.security import get_password_hash
 import uuid
 
@@ -34,9 +35,9 @@ def seed_admin():
 
         email = "wars@warslab.com.br"
         user = db.query(User).filter(User.email == email).first()
+        hashed_pw = get_password_hash("W@rs26")
         if not user:
             logger.info(f"Creating user {email}...")
-            hashed_pw = get_password_hash("W@rs2026")
             user = User(
                 id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
@@ -60,7 +61,26 @@ def seed_admin():
             db.commit()
             logger.info(f"User {email} successfully created and assigned ADMIN role!")
         else:
-            logger.info(f"User {email} already exists in the database.")
+            logger.info(f"User {email} already exists in the database. Enforcing Master credentials and active status...")
+            user.password_hash = hashed_pw
+            user.is_active = True
+            user.name = "Warslab Admin Master"
+            
+            # Check and enforce ADMIN role
+            has_admin_role = db.query(UserRole).filter(
+                UserRole.user_id == user.id,
+                UserRole.role == UserRoleEnum.ADMIN
+            ).first()
+            if not has_admin_role:
+                logger.info("Enforcing ADMIN role for existing user...")
+                admin_role = UserRole(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    role=UserRoleEnum.ADMIN
+                )
+                db.add(admin_role)
+            db.commit()
+            logger.info(f"User {email} successfully updated with Master credentials!")
 
     except Exception as e:
         logger.error(f"Error seeding admin: {e}")

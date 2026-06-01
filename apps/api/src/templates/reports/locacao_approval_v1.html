@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="description" content="Relatório Executivo de Approval de Locação/Comodato do sistema Cerberus.">
+    <meta property="og:title" content="Relatório Executivo de Approval de Locação">
+    <meta property="og:description" content="Relatório Executivo de Approval de Locação/Comodato do sistema Cerberus.">
     <title>Relatório Executivo de Approval de Locação</title>
     <style>
         {{ css_content }}
@@ -82,20 +84,22 @@
     <!-- BLOCO 1: COMPOSIÇÃO DE PRODUTOS / KITS -->
     <div class="avoid-break" style="margin-top: 10px;">
         <div class="section-title">Composição de Itens e Margem Aplicada</div>
-        <table class="data-table">
+        <table class="data-table dense-table">
             <thead>
                 <tr>
-                    <th style="width: 25%;">Produto / Kit</th>
-                    <th style="width: 15%;">Destinação</th>
-                    <th class="text-center" style="width: 5%;">Qtd</th>
-                    <th class="text-right" style="width: 8%;">Custo Aquis.</th>
-                    <th class="text-right" style="width: 8%;">ST/DIFAL Unit</th>
-                    <th class="text-right" style="width: 8%;">Custo Total</th>
-                    <th class="text-center" style="width: 5%;">Fator</th>
-                    <th class="text-right" style="width: 9%;">Locação Mensal</th>
-                    <th class="text-right" style="width: 8%;">Custo Op. Mês</th>
-                    <th class="text-right" style="width: 8%;">Imposto Mês</th>
-                    <th class="text-right" style="width: 11%;">Lucro Mês</th>
+                    <th style="width: 18%;">NOME DO KIT</th>
+                    <th class="text-center" style="width: 4%;">QTD</th>
+                    <th class="text-right" style="width: 8%;">CUSTO AQUISIÇÃO</th>
+                    <th class="text-right" style="width: 7%;">COMISSÃO</th>
+                    <th class="text-right" style="width: 7%;">INSTALAÇÃO</th>
+                    <th class="text-right" style="width: 9%;">LOCAÇÃO MENSAL</th>
+                    <th class="text-right" style="width: 9%;">MANUTENÇÃO (MÊS)</th>
+                    <th class="text-right" style="width: 8%;">MONITORAMENTO</th>
+                    <th class="text-right" style="width: 8%;">FAT. MENSAL</th>
+                    <th class="text-right" style="width: 8%;">FAT. MENSAL TOTAL</th>
+                    <th class="text-center" style="width: 4%;">PRAZO</th>
+                    <th class="text-right" style="width: 9%;">VLR TOTAL</th>
+                    <th class="text-right" style="width: 9%;">IMPOSTOS MENSAL</th>
                 </tr>
             </thead>
             <tbody>
@@ -104,34 +108,37 @@
                     <td>
                         <div style="font-weight: 600;">{{ item.descricao }}</div>
                         {% if item.part_number %}
-                            <div style="font-size: 6pt; color: #94a3b8; font-family: monospace;">SKU: {{ item.part_number }}</div>
+                            <div style="font-size: 5pt; color: #94a3b8; font-family: monospace;">{{ item.part_number }}</div>
                         {% endif %}
                     </td>
-                    <td>
-                        {{ 'Instalação / Startup' if item.is_kit_instalacao else ('Comodato' if item.tipo_contrato_kit == 'COMODATO' else 'Locação') }}
-                    </td>
                     <td class="text-center">{{ item.quantidade }}</td>
-                    <td class="text-right">R$ {{ item.custo_aquisicao_unit }}</td>
-                    <td class="text-right">R$ {{ item.st_difal_unit }}</td>
-                    <td class="text-right font-bold">R$ {{ item.custo_total }}</td>
-                    <td class="text-center">{{ item.fator_margem }}x</td>
-                    <td class="text-right font-bold">R$ {{ item.valor_mensal }}</td>
-                    <td class="text-right">R$ {{ item.custo_op_mensal }}</td>
-                    <td class="text-right">R$ {{ item.impostos_mensal }}</td>
-                    <td class="text-right font-bold" style="color: #16a34a; white-space: nowrap;">R$ {{ item.lucro_mensal }}</td>
+                    <td class="text-right">R$ {{ item.custo_aquisicao }}</td>
+                    <td class="text-right">R$ {{ item.comissao }}</td>
+                    <td class="text-right">R$ {{ item.instalacao }}</td>
+                    <td class="text-right font-bold">R$ {{ item.locacao_mensal }}</td>
+                    <td class="text-right">R$ {{ item.manutencao_mes }}</td>
+                    <td class="text-right">R$ {{ item.monitoramento }}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ item.fat_mensal }}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ item.fat_mensal_total }}</td>
+                    <td class="text-center">{{ item.prazo }}</td>
+                    <td class="text-right font-bold">R$ {{ item.vlr_total }}</td>
+                    <td class="text-right font-bold" style="color: #ea580c;">R$ {{ item.impostos_mensal }}</td>
                 </tr>
                 {% endfor %}
                 <tr class="total-row">
-                    <td colspan="2">TOTAL CONSOLIDADO</td>
+                    <td>Total:</td>
                     <td class="text-center">-</td>
-                    <td class="text-right">-</td>
-                    <td class="text-right">R$ {{ kpis.total_st_difal }}</td>
-                    <td class="text-right">R$ {{ kpis.total_aquisicao_sem_comissao }}</td>
+                    <td class="text-right">R$ {{ total_row.custo_aquisicao }}</td>
+                    <td class="text-right">R$ {{ total_row.comissao }}</td>
+                    <td class="text-right">R$ {{ total_row.instalacao }}</td>
+                    <td class="text-right font-bold">R$ {{ total_row.locacao_mensal }}</td>
+                    <td class="text-right">R$ {{ total_row.manutencao_mes }}</td>
+                    <td class="text-right">R$ {{ total_row.monitoramento }}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ total_row.fat_mensal }}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ total_row.fat_mensal_total }}</td>
                     <td class="text-center">-</td>
-                    <td class="text-right" style="color: #0284c7;">R$ {{ kpis.locacao_mensal }}</td>
-                    <td class="text-right">R$ {{ kpis.custo_op_mensal_total }}</td>
-                    <td class="text-right">R$ {{ kpis.impostos_mensal_total }}</td>
-                    <td class="text-right" style="color: #16a34a;">R$ {{ kpis.lucro_mensal_total }}</td>
+                    <td class="text-right font-bold">R$ {{ total_row.vlr_total }}</td>
+                    <td class="text-right font-bold" style="color: #ea580c;">R$ {{ total_row.impostos_mensal }}</td>
                 </tr>
             </tbody>
         </table>
@@ -183,7 +190,7 @@
                         <td>INVESTIMENTO TOTAL (Capex)</td>
                         <td class="text-right">R$ {{ kpis.total_fornecedores_produtos }}</td>
                         <td class="text-right">R$ {{ kpis.total_fornecedores_impostos }}</td>
-                        <td class="text-right" style="color: #b91c1c;">R$ {{ kpis.investimento_total }}</td>
+                        <td class="text-right" style="color: #b91c1c;">R$ {{ kpis.investimento_capex }}</td>
                         <td>-</td>
                     </tr>
                 </tbody>

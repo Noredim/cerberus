@@ -1872,98 +1872,208 @@ class OpportunitiesReportService:
             )
 
     @staticmethod
-    def generate_svg_cashflow_chart(investimento: float, lucro_mensal: float, prazo_contrato: int) -> str:
-        """Generate a raw vector SVG cumulative cashflow chart for rendering in WeasyPrint."""
-        w, h = 520, 180
-        pad_l, pad_r, pad_t, pad_b = 60, 20, 20, 30
-        plot_w = w - pad_l - pad_r
-        plot_h = h - pad_t - pad_b
+    def generate_svg_cashflow_chart(
+        investimento: float,
+        faturamento_mensal: float,
+        impostos_mensal: float,
+        custo_op_mensal: float,
+        comissao_mensal: float,
+        prazo_contrato: int,
+        prazo_instalacao: int,
+        total_instalacao: float,
+        impostos_instalacao: float,
+        custo_op_instalacao: float,
+        comissao_instalacao: float
+    ) -> str:
+        """Generate a raw vector SVG stacked bar chart for rendering in WeasyPrint."""
+        # Calculate monthly projection
+        chart_data = []
+        saldo_investimento = investimento
+        payback_mes = None
+        lucro_acumulado_geral = 0.0
 
-        # Math boundaries
-        ymin = -investimento
-        ymax = lucro_mensal * prazo_contrato - investimento
-        if ymax == ymin:
-            ymax = ymin + 100.0
+        pCtr = prazo_contrato
+        pInst = prazo_instalacao
+        
+        for m in range(1, pCtr + 1):
+            if m <= pInst:
+                fat_mes = total_instalacao / (pInst if pInst > 0 else 1)
+                imp_mes = impostos_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else impostos_mensal
+                op_mes = custo_op_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else custo_op_mensal
+                com_mes = comissao_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else comissao_mensal
+            else:
+                fat_mes = faturamento_mensal
+                imp_mes = impostos_mensal
+                op_mes = custo_op_mensal
+                com_mes = comissao_mensal
+                
+            gastos_mes = imp_mes + op_mes + com_mes
+            receita_livre = fat_mes - gastos_mes
             
-        if ymin > 0:
-            ymin = 0.0
-        if ymax < 0:
-            ymax = 0.0
+            quitar_mes = 0.0
+            if saldo_investimento > 0.0 and receita_livre > 0.0:
+                quitar_mes = min(receita_livre, saldo_investimento)
+                saldo_investimento -= quitar_mes
+                
+            lucro_livre_mes = max(0.0, receita_livre - quitar_mes)
+            lucro_acumulado_geral += lucro_livre_mes
+            
+            if saldo_investimento <= 0.0 and payback_mes is None:
+                payback_mes = m
+                
+            chart_data.append({
+                "mes": m,
+                "mes_label": f"M{m}",
+                "GastosOperacionais": gastos_mes,
+                "QuitarInvestimento": quitar_mes,
+                "LucroLivre": lucro_livre_mes,
+                "Faturamento": fat_mes,
+                "SaldoAcumulado": -saldo_investimento if saldo_investimento > 0 else lucro_acumulado_geral
+            })
 
-        yrange = ymax - ymin
-        if yrange == 0:
-            yrange = 1.0
+        # Chart configuration
+        width, height = 540, 225
+        pad_l, pad_r, pad_t, pad_b = 50, 20, 25, 50
+        plot_w = width - pad_l - pad_r
+        plot_h = height - pad_t - pad_b
 
-        def get_x(m):
-            return pad_l + (m / prazo_contrato) * plot_w
+        # Max faturamento to scale Y axis
+        ymax = max(max(row["Faturamento"], row["GastosOperacionais"] + row["QuitarInvestimento"] + row["LucroLivre"]) for row in chart_data)
+        if ymax <= 0:
+            ymax = 100.0
+        ymax *= 1.15  # Add 15% top padding for visual comfort
+        
         def get_y(val):
-            return pad_t + plot_h - ((val - ymin) / yrange) * plot_h
+            return pad_t + plot_h - (val / ymax) * plot_h
+        
+        def get_x(m):
+            return pad_l + ((m - 0.5) / pCtr) * plot_w
 
-        # Payback calculation
-        payback = investimento / lucro_mensal if lucro_mensal > 0 else None
-        if payback is not None and payback > 0:
-            pct = (payback / prazo_contrato) * 100
-            pct = min(100.0, max(0.0, pct))
-        else:
-            pct = 100.0
+        # Draw grid lines and Y-axis labels
+        grid_lines = []
+        step = 4000.0
+        if ymax < 4000.0:
+            step = 1000.0
+        if ymax < 1000.0:
+            step = 100.0
+        
+        val = 0.0
+        while val <= ymax:
+            grid_lines.append(val)
+            val += step
 
-        gradient_html = f"""
-        <defs>
-            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#ea580c" />
-                <stop offset="{pct:.1f}%" stop-color="#ea580c" />
-                <stop offset="{pct:.1f}%" stop-color="#16a34a" />
-                <stop offset="100%" stop-color="#16a34a" />
-            </linearGradient>
-        </defs>
-        """
-
-        points = []
-        for m in range(prazo_contrato + 1):
-            points.append(f"{get_x(m)},{get_y(lucro_mensal * m - investimento)}")
-        points_str = " ".join(points)
-
-        y_zero = get_y(0.0)
-        y_min_val = get_y(ymin)
-        y_max_val = get_y(ymax)
-
-        def fmt_val(val):
-            if abs(val) >= 1000000:
-                return f"R$ {val/1000000:.1f}M"
-            if abs(val) >= 1000:
-                return f"R$ {val/1000:.1f}k"
-            return f"R$ {val:.0f}"
-
-        svg = f"""<svg width="520" height="180" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg">
-            {gradient_html}
+        svg_content = f"""<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">
             <!-- Grid lines -->
-            <line x1="{pad_l}" y1="{y_zero}" x2="{w - pad_r}" y2="{y_zero}" stroke="#cbd5e1" stroke-dasharray="3 3" stroke-width="1" />
-            <line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{h - pad_b}" stroke="#cbd5e1" stroke-width="1.5" />
-            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" stroke="#cbd5e1" stroke-width="1.5" />
-
-            <!-- Labels Y -->
-            <text x="{pad_l - 8}" y="{y_max_val + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">{fmt_val(ymax)}</text>
-            <text x="{pad_l - 8}" y="{y_zero + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">R$ 0</text>
-            <text x="{pad_l - 8}" y="{y_min_val + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">{fmt_val(ymin)}</text>
-
-            <!-- Labels X (Months) -->
-            <text x="{get_x(0)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês 0</text>
-            <text x="{get_x(prazo_contrato/2)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês {prazo_contrato//2}</text>
-            <text x="{get_x(prazo_contrato)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês {prazo_contrato}</text>
-
-            <!-- Main Cash Flow Line -->
-            <polyline fill="none" stroke="url(#lineGrad)" stroke-width="3" points="{points_str}" />
         """
-        if payback is not None and 0 < payback <= prazo_contrato:
-            px = get_x(payback)
-            py = get_y(0.0)
-            svg += f"""
-            <circle cx="{px}" cy="{py}" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5" />
-            <line x1="{px}" y1="{py}" x2="{px}" y2="{h - pad_b}" stroke="#f59e0b" stroke-dasharray="2 2" stroke-width="1" />
-            <text x="{px}" y="{py - 8}" font-family="sans-serif" font-weight="bold" font-size="7.5pt" fill="#d97706" text-anchor="middle">Payback: {payback:.1f} meses</text>
+        for g_val in grid_lines:
+            gy = get_y(g_val)
+            label_str = f"R$ {int(g_val/1000)}k" if g_val >= 1000 else f"R$ {int(g_val)}"
+            if g_val == 0.0:
+                label_str = "R$ 0"
+            svg_content += f"""
+            <line x1="{pad_l}" y1="{gy}" x2="{width - pad_r}" y2="{gy}" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="2 2" />
+            <text x="{pad_l - 8}" y="{gy + 3}" font-family="sans-serif" font-size="7pt" fill="#64748b" text-anchor="end">{label_str}</text>
             """
-        svg += "</svg>"
-        return svg
+
+        # Draw shaded region and line for Payback
+        if payback_mes is not None:
+            px = get_x(payback_mes)
+            bar_w_half = (plot_w / pCtr) / 2
+            x1 = px - bar_w_half
+            x2 = px + bar_w_half
+            svg_content += f"""
+            <!-- Payback Shaded Area -->
+            <rect x="{x1}" y="{pad_t}" width="{x2 - x1}" height="{plot_h}" fill="#f0fdf4" opacity="0.7" />
+            <line x1="{px}" y1="{pad_t - 5}" x2="{px}" y2="{pad_t + plot_h}" stroke="#22c55e" stroke-dasharray="3 3" stroke-width="1.2" />
+            <text x="{px}" y="{pad_t - 9}" font-family="sans-serif" font-size="7.5pt" font-weight="bold" fill="#22c55e" text-anchor="middle">Payback</text>
+            """
+
+        # Draw stacked bars
+        bar_width = min(28.0, (plot_w / pCtr) * 0.7)
+        for row in chart_data:
+            m = row["mes"]
+            cx = get_x(m)
+            x_left = cx - bar_width / 2
+            
+            # 1. Gastos Operacionais
+            go = row["GastosOperacionais"]
+            y_go_bottom = get_y(0.0)
+            y_go_top = get_y(go)
+            h_go = y_go_bottom - y_go_top
+            if h_go > 0.0:
+                svg_content += f'<rect x="{x_left}" y="{y_go_top}" width="{bar_width}" height="{h_go}" fill="#94a3b8" rx="1.5" />\n'
+                
+            # 2. Quitar Investimento
+            qi = row["QuitarInvestimento"]
+            y_qi_bottom = y_go_top
+            y_qi_top = get_y(go + qi)
+            h_qi = y_qi_bottom - y_qi_top
+            if h_qi > 0.0:
+                svg_content += f'<rect x="{x_left}" y="{y_qi_top}" width="{bar_width}" height="{h_qi}" fill="#f97316" rx="1.5" />\n'
+                
+            # 3. Lucro Livre
+            ll = row["LucroLivre"]
+            y_ll_bottom = y_qi_top
+            y_ll_top = get_y(go + qi + ll)
+            h_ll = y_ll_bottom - y_ll_top
+            if h_ll > 0.0:
+                svg_content += f'<rect x="{x_left}" y="{y_ll_top}" width="{bar_width}" height="{h_ll}" fill="#22c55e" rx="1.5" />\n'
+
+        # Draw Faturamento line (dashed blue step line)
+        poly_points = []
+        for i, row in enumerate(chart_data):
+            m = row["mes"]
+            cx = get_x(m)
+            fat = row["Faturamento"]
+            y_fat = get_y(fat)
+            
+            bar_w_half = (plot_w / pCtr) / 2
+            x_start = cx - bar_w_half
+            x_end = cx + bar_w_half
+            
+            poly_points.append(f"{x_start:.1f},{y_fat:.1f}")
+            poly_points.append(f"{x_end:.1f},{y_fat:.1f}")
+            
+        points_str = " ".join(poly_points)
+        svg_content += f"""
+        <!-- Faturamento Step Line -->
+        <polyline fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="3 3" points="{points_str}" />
+        """
+
+        # Draw X-axis labels
+        for row in chart_data:
+            m = row["mes"]
+            cx = get_x(m)
+            svg_content += f"""
+            <text x="{cx}" y="{height - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#64748b" text-anchor="middle">M{m}</text>
+            """
+
+        # Draw axis base lines
+        svg_content += f"""
+        <line x1="{pad_l}" y1="{pad_t + plot_h}" x2="{width - pad_r}" y2="{pad_t + plot_h}" stroke="#cbd5e1" stroke-width="1" />
+        <line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t + plot_h}" stroke="#cbd5e1" stroke-width="1" />
+        """
+
+        # Draw Legend
+        svg_content += f"""
+        <!-- Legend -->
+        <g transform="translate(0, 0)">
+            <rect x="50" y="205" width="8" height="8" fill="#94a3b8" rx="1" />
+            <text x="63" y="212" font-family="sans-serif" font-size="7pt" fill="#475569">Gastos Operacionais</text>
+            
+            <rect x="165" y="205" width="8" height="8" fill="#f97316" rx="1" />
+            <text x="178" y="212" font-family="sans-serif" font-size="7pt" fill="#475569">Quitar Investimento</text>
+            
+            <rect x="280" y="205" width="8" height="8" fill="#22c55e" rx="1" />
+            <text x="293" y="212" font-family="sans-serif" font-size="7pt" fill="#475569">Lucro Livre</text>
+            
+            <line x1="365" y1="209" x2="380" y2="209" stroke="#3b82f6" stroke-dasharray="3 3" stroke-width="1.8" />
+            <text x="385" y="212" font-family="sans-serif" font-size="7pt" fill="#475569">Faturamento</text>
+        </g>
+        """
+
+        svg_content += "\n</svg>"
+        return svg_content
 
     @staticmethod
     def generate_locacao_approval_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
@@ -2084,15 +2194,32 @@ class OpportunitiesReportService:
         locacao_mensal = 0.0
         custo_op_mensal_total = 0.0
         impostos_mensal_total = 0.0
-        lucro_mensal_total = 0.0
         comissao_total_aquisicao = 0.0
         impostos_instalacao_total = 0.0
         total_instalacao = 0.0
+        investimento_instalacao = 0.0
+        custo_op_instalacao_total = 0.0
+        investimento_rental = 0.0
+
+        # Detailed item metrics for totals row
+        total_aquisicao_calc = 0.0
+        total_comissao_calc = 0.0
+        total_instalacao_calc = 0.0
+        total_locacao_mensal_calc = 0.0
+        total_manutencao_mes_calc = 0.0
+        total_monitoramento_calc = 0.0
+        total_fat_mensal_calc = 0.0
+        total_fat_mensal_total_calc = 0.0
+        total_vlr_total_calc = 0.0
+        total_impostos_mensal_calc = 0.0
+
+        prazo_contrato = opportunity.prazo_contrato_meses or 36
+        prazo_instalacao = opportunity.prazo_instalacao_meses if opportunity.prazo_instalacao_meses is not None else 1
+        prazo_fat = max(1, prazo_contrato - prazo_instalacao)
 
         for item in opportunity.rental_items:
             qty = float(item.quantidade)
             pb_info = product_suppliers.get(item.product_id) if item.product_id else None
-            supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
             pb_item = pb_info["pb_item"] if pb_info else None
             
             custo_unit = float(item.custo_aquisicao_unit or 0.0)
@@ -2102,47 +2229,95 @@ class OpportunitiesReportService:
             difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
             purchase_tax_unit = difal_unit + st_unit + ipi_unit
             
-            custo_total = custo_unit * qty
-            purchase_tax_total = purchase_tax_unit * qty
-            
-            total_aquisicao_sem_comissao += custo_total + purchase_tax_total
-            total_st_difal += purchase_tax_total
-            
-            venda_mensal = float(item.valor_mensal or 0.0) * qty
+            custo_total = (custo_unit + purchase_tax_unit) * qty
+            total_aquisicao_calc += custo_total
+            total_st_difal += purchase_tax_unit * qty
             
             # Commission
             comissao_item = float(item.kit_comissao or 0.0) * qty if item.opportunity_kit_id else float(item.comissao_mensal or 0.0) * qty
+            total_comissao_calc += comissao_item
             comissao_total_aquisicao += comissao_item
             
-            # Installation vs Rental separation
-            if item.is_kit_instalacao:
-                total_instalacao += venda_mensal
-                impostos_instalacao_total += float(item.impostos_mensal or 0.0) * qty
+            # Installation
+            instalacao_item = float(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0) * qty
+            total_instalacao_calc += instalacao_item
+            
+            # Locação Mensal
+            loc_mensal_item = float(item.kit_parcela_locacao or item.parcela_locacao or 0.0) * qty
+            total_locacao_mensal_calc += loc_mensal_item
+            
+            # Manutenção (Mês)
+            manut_mes_item = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * qty
+            total_manutencao_mes_calc += manut_mes_item
+            
+            # Monitoramento
+            monitoramento_item = float(item.kit_venda_unit_monitoramento or 0.0) * qty
+            total_monitoramento_calc += monitoramento_item
+            
+            # Fat. Mensal
+            fat_mensal_total_item = loc_mensal_item + manut_mes_item + monitoramento_item
+            fat_mensal_unit = fat_mensal_total_item / qty if qty > 0 else 0.0
+            total_fat_mensal_calc += fat_mensal_unit
+            total_fat_mensal_total_calc += fat_mensal_total_item
+            
+            # Prazo
+            prazo_item = int(item.prazo_contrato or prazo_contrato)
+            
+            # Vlr Total
+            vlr_total_item = fat_mensal_total_item * prazo_item
+            total_vlr_total_calc += vlr_total_item
+            
+            # Impostos Mensal
+            impostos_mensal_item = float(item.impostos_mensal or 0.0) * qty
+            total_impostos_mensal_calc += impostos_mensal_item
+
+            # Custo Operacional (Support & Monitoring)
+            if item.opportunity_kit_id:
+                custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + float(item.kit_venda_unit_monitoramento or 0.0)) * qty
             else:
-                locacao_mensal += venda_mensal
-                impostos_mensal_total += float(item.impostos_mensal or 0.0) * qty
+                custo_op_mensal = float(item.custo_manut_mensal or 0.0) * qty
+
+            # Installation vs Rental separation for Capex/Totals
+            if item.is_kit_instalacao:
+                total_instalacao += fat_mensal_total_item
+                impostos_instalacao_total += impostos_mensal_item
+                custo_op_instalacao_total += custo_op_mensal
+                investimento_instalacao += custo_total
+            else:
+                locacao_mensal += fat_mensal_total_item
+                impostos_mensal_total += impostos_mensal_item
+                custo_op_mensal_total += custo_op_mensal
+                investimento_rental += custo_total
                 
-            custo_op_mensal = float(item.custo_total_mensal or 0.0) * qty
-            custo_op_mensal_total += custo_op_mensal
-            
-            lucro_mensal = float(item.lucro_mensal or 0.0) * qty
-            lucro_mensal_total += lucro_mensal
-            
             items_details.append({
                 "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento de Locação"),
                 "part_number": item.product_codigo or (item.product.codigo if item.product else None),
-                "is_kit_instalacao": item.is_kit_instalacao,
-                "tipo_contrato_kit": item.tipo_contrato_kit,
-                "quantidade": qty,
-                "custo_aquisicao_unit": format_currency(custo_unit),
-                "st_difal_unit": format_currency(purchase_tax_unit),
-                "custo_total": format_currency(custo_total + purchase_tax_total),
-                "fator_margem": f"{float(item.fator_margem or 1.0):.2f}",
-                "valor_mensal": format_currency(venda_mensal),
-                "custo_op_mensal": format_currency(custo_op_mensal),
-                "impostos_mensal": format_currency(float(item.impostos_mensal or 0.0) * qty),
-                "lucro_mensal": format_currency(lucro_mensal)
+                "quantidade": int(qty) if qty.is_integer() else qty,
+                "custo_aquisicao": format_currency(custo_total),
+                "comissao": format_currency(comissao_item),
+                "instalacao": format_currency(instalacao_item),
+                "locacao_mensal": format_currency(loc_mensal_item),
+                "manutencao_mes": format_currency(manut_mes_item),
+                "monitoramento": format_currency(monitoramento_item),
+                "fat_mensal": format_currency(fat_mensal_unit),
+                "fat_mensal_total": format_currency(fat_mensal_total_item),
+                "prazo": prazo_item,
+                "vlr_total": format_currency(vlr_total_item),
+                "impostos_mensal": format_currency(impostos_mensal_item),
             })
+
+        total_row = {
+            "custo_aquisicao": format_currency(total_aquisicao_calc),
+            "comissao": format_currency(total_comissao_calc),
+            "instalacao": format_currency(total_instalacao_calc),
+            "locacao_mensal": format_currency(total_locacao_mensal_calc),
+            "manutencao_mes": format_currency(total_manutencao_mes_calc),
+            "monitoramento": format_currency(total_monitoramento_calc),
+            "fat_mensal": format_currency(total_fat_mensal_total_calc),
+            "fat_mensal_total": format_currency(total_fat_mensal_total_calc),
+            "vlr_total": format_currency(total_vlr_total_calc),
+            "impostos_mensal": format_currency(total_impostos_mensal_calc)
+        }
 
         # Supplier summaries
         mapped_by_supplier = {}
@@ -2193,20 +2368,47 @@ class OpportunitiesReportService:
                     "forma_pagamento": s["forma_pagamento"]
                 })
 
-        # Capex & Payback
-        prazo_contrato = opportunity.prazo_contrato_meses or 36
-        receita_contratada = (locacao_mensal * prazo_contrato) + total_instalacao
-        investimento_total = total_aquisicao_sem_comissao + comissao_total_aquisicao + impostos_instalacao_total
+        # Net revenue comissao (Director commission)
+        perc_comissao_diretoria = float(opportunity.perc_comissao_diretoria or 0.0)
         
-        impostos_totais = (impostos_mensal_total * prazo_contrato) + impostos_instalacao_total
-        custo_op_total = custo_op_mensal_total * prazo_contrato
+        faturamento_total_rental = locacao_mensal * prazo_fat + total_instalacao
+        investimento_rental = total_aquisicao_calc + comissao_total_aquisicao
+        impostos_total_rental = impostos_mensal_total * prazo_fat + impostos_instalacao_total
+        custo_op_total_rental = custo_op_mensal_total * prazo_fat + custo_op_instalacao_total
+        
+        diretor_rec_liq = faturamento_total_rental - investimento_rental - impostos_total_rental - custo_op_total_rental
+        
+        rec_liq_inst_calc = total_instalacao - investimento_instalacao - impostos_instalacao_total - custo_op_instalacao_total
+        rec_liq_mensal_calc = diretor_rec_liq - rec_liq_inst_calc
+        
+        comissao_inst_calc = max(0.0, rec_liq_inst_calc * (perc_comissao_diretoria / 100.0))
+        comissao_mensal_calc = max(0.0, (rec_liq_mensal_calc * (perc_comissao_diretoria / 100.0)) / prazo_fat)
+        
+        diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat)
+
+        # Capex & Payback
+        receita_contratada = faturamento_total_rental
+        
+        # Capex (investimento total de aquisição + comissão + impostos de instalação)
+        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total
+        
+        # Totais
+        impostos_totais = (impostos_mensal_total * prazo_fat) + impostos_instalacao_total
+        custo_op_total = (custo_op_mensal_total * prazo_fat) + custo_op_instalacao_total
+        
+        # Project Total Cost (Capex + Impostos + Custos Operacionais)
+        custo_total_projeto = investimento_total + impostos_totais + custo_op_total
+        
+        # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal
+        retorno_mensal_liquido = total_fat_mensal_total_calc - total_impostos_mensal_calc - custo_op_mensal_total
         
         # Payback in months
-        payback = investimento_total / lucro_mensal_total if lucro_mensal_total > 0 else 0.0
-        payback_meses_str = f"{payback:.1f} meses" if payback > 0 else "N/A (Retorno Inexistente)"
+        payback = investimento_total / retorno_mensal_liquido if retorno_mensal_liquido > 0 else 0.0
+        payback_meses_str = f"{payback:.1f} meses" if payback > 0 else "N/A"
         
-        # Margem líquida
-        margem_liquida_val = (lucro_mensal_total / locacao_mensal * 100) if locacao_mensal > 0 else 0.0
+        # Margem líquida = Lucro do Contrato / Faturamento Total
+        lucro_contrato = receita_contratada - custo_total_projeto
+        margem_liquida_val = (lucro_contrato / receita_contratada * 100) if receita_contratada > 0 else 0.0
 
         # Detailed taxes lists
         aliq_pis = float(opportunity.perc_pis_rental or 0.0)
@@ -2274,11 +2476,11 @@ class OpportunitiesReportService:
             iss_total_mensal += c_iss * ratio
 
         taxes_summary = [
-            {"name": "PIS", "percent": f"{aliq_pis:.2f}", "mensal": format_currency(pis_total_mensal), "total": format_currency(pis_total_mensal * prazo_contrato)},
-            {"name": "COFINS", "percent": f"{aliq_cofins:.2f}", "mensal": format_currency(cofins_total_mensal), "total": format_currency(cofins_total_mensal * prazo_contrato)},
-            {"name": "CSLL", "percent": f"{aliq_csll:.2f}", "mensal": format_currency(csll_total_mensal), "total": format_currency(csll_total_mensal * prazo_contrato)},
-            {"name": "IRPJ", "percent": f"{aliq_irpj:.2f}", "mensal": format_currency(irpj_total_mensal), "total": format_currency(irpj_total_mensal * prazo_contrato)},
-            {"name": "ISS", "percent": f"{aliq_iss:.2f}", "mensal": format_currency(iss_total_mensal), "total": format_currency(iss_total_mensal * prazo_contrato)},
+            {"name": "PIS", "percent": f"{aliq_pis:.2f}", "mensal": format_currency(pis_total_mensal), "total": format_currency(pis_total_mensal * prazo_fat)},
+            {"name": "COFINS", "percent": f"{aliq_cofins:.2f}", "mensal": format_currency(cofins_total_mensal), "total": format_currency(cofins_total_mensal * prazo_fat)},
+            {"name": "CSLL", "percent": f"{aliq_csll:.2f}", "mensal": format_currency(csll_total_mensal), "total": format_currency(csll_total_mensal * prazo_fat)},
+            {"name": "IRPJ", "percent": f"{aliq_irpj:.2f}", "mensal": format_currency(irpj_total_mensal), "total": format_currency(irpj_total_mensal * prazo_fat)},
+            {"name": "ISS", "percent": f"{aliq_iss:.2f}", "mensal": format_currency(iss_total_mensal), "total": format_currency(iss_total_mensal * prazo_fat)},
         ]
 
         # Audit emission information
@@ -2314,8 +2516,9 @@ class OpportunitiesReportService:
 
         kpis = {
             "receita_contratada": format_currency(receita_contratada),
-            "investimento_total": format_currency(investimento_total),
-            "locacao_mensal": format_currency(locacao_mensal),
+            "investimento_total": format_currency(custo_total_projeto),  # User requested card value to show total cost
+            "investimento_capex": format_currency(investimento_total),    # Capex purchase value (total_aquisicao + comissao)
+            "locacao_mensal": format_currency(total_fat_mensal_total_calc),
             "custo_op_total": format_currency(custo_op_total),
             "impostos_totais": format_currency(impostos_totais),
             "margem_liquida": f"{margem_liquida_val:.2f}",
@@ -2325,7 +2528,7 @@ class OpportunitiesReportService:
             "total_aquisicao_sem_comissao": format_currency(total_aquisicao_sem_comissao),
             "custo_op_mensal_total": format_currency(custo_op_mensal_total),
             "impostos_mensal_total": format_currency(impostos_mensal_total),
-            "lucro_mensal_total": format_currency(lucro_mensal_total),
+            "lucro_mensal_total": format_currency(retorno_mensal_liquido),
             
             "comissao_total_str": format_currency(comissao_total_aquisicao),
             "impostos_instalacao_str": format_currency(impostos_instalacao_total),
@@ -2350,7 +2553,6 @@ class OpportunitiesReportService:
                 if kit and kit.considerar_st_ou_difal:
                     purchase_tax_types.add(kit.considerar_st_ou_difal)
             else:
-                # Add default st/difal if any has value
                 if (item.difal_unit or 0.0) > 0:
                     purchase_tax_types.add("DIFAL")
                 if (item.icms_st_unit or 0.0) > 0:
@@ -2358,11 +2560,19 @@ class OpportunitiesReportService:
 
         forma_compra = ", ".join(sorted(list(purchase_tax_types))) if purchase_tax_types else "DIFAL"
 
-        # Generate SVG cash flow chart
+        # Generate SVG stacked bar cash flow chart
         cashflow_chart_svg = OpportunitiesReportService.generate_svg_cashflow_chart(
             investimento=investimento_total,
-            lucro_mensal=lucro_mensal_total,
-            prazo_contrato=prazo_contrato
+            faturamento_mensal=total_fat_mensal_total_calc,
+            impostos_mensal=total_impostos_mensal_calc,
+            custo_op_mensal=custo_op_mensal_total,
+            comissao_mensal=comissao_mensal_calc,
+            prazo_contrato=prazo_contrato,
+            prazo_instalacao=prazo_instalacao,
+            total_instalacao=total_instalacao,
+            impostos_instalacao=impostos_instalacao_total,
+            custo_op_instalacao=custo_op_instalacao_total,
+            comissao_instalacao=comissao_inst_calc
         )
 
         # 8. Render HTML Template
@@ -2407,6 +2617,7 @@ class OpportunitiesReportService:
             forma_compra=forma_compra,
             kpis=kpis,
             items_details=items_details,
+            total_row=total_row,
             supplier_summaries=supplier_summaries_list,
             comissao_total_aquisicao=comissao_total_aquisicao,
             impostos_instalacao_total=impostos_instalacao_total,

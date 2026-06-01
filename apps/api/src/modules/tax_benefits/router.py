@@ -4,12 +4,16 @@ from typing import List
 import uuid
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.companies.models import TaxBenefit, CompanyBenefit, Company
 from .schemas import TaxBenefitBase, TaxBenefitOut, CompanyBenefitBase, CompanyBenefitOut
 
-router = APIRouter(prefix="/tax-benefits", tags=["Tax Benefits"])
+router = APIRouter(
+    prefix="/tax-benefits", 
+    tags=["Tax Benefits"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.post("", response_model=TaxBenefitOut, status_code=status.HTTP_201_CREATED)
 def create_benefit(

@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from src.core.database import get_db
 
-router = APIRouter(prefix="/fiscal", tags=["Fiscal (NCM/ST/BIT)"])
+from src.modules.auth.dependencies import check_not_engenharia_preco
+
+router = APIRouter(
+    prefix="/fiscal", 
+    tags=["Fiscal (NCM/ST/BIT)"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("/ncm/{ncm}")
 def get_ncm(ncm: str, db: Session = Depends(get_db)):

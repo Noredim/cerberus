@@ -3,14 +3,18 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import Optional, List
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user, get_active_company
+from src.modules.auth.dependencies import get_current_user, get_active_company, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.document_templates import service
 from src.modules.document_templates.schemas import (
     TemplateCreate, TemplateUpdate, TemplateOut, DocumentRenderRequest
 )
 
-router = APIRouter(prefix="/document-templates", tags=["Document Templates"])
+router = APIRouter(
+    prefix="/document-templates", 
+    tags=["Document Templates"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 
 @router.get("/variables-catalog")

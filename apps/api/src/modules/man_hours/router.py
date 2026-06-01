@@ -7,12 +7,16 @@ from sqlalchemy import exc
 from sqlalchemy.orm import Session, joinedload
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_active_company, get_current_user
+from src.modules.auth.dependencies import get_active_company, get_current_user, check_not_engenharia_preco
 from src.modules.man_hours.models import ManHour
 from src.modules.man_hours.schemas import ManHourCreate, ManHourResponse, ManHourUpdate
 from src.modules.users.models import User
 
-router = APIRouter(prefix="/man-hours", tags=["Man Hours"])
+router = APIRouter(
+    prefix="/man-hours", 
+    tags=["Man Hours"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 
 def _load_with_role(item_id: str, db: Session) -> ManHour | None:

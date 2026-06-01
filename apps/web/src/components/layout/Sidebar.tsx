@@ -31,7 +31,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         setExpandedMenus(prev => ({ ...prev, [label]: !prev[label] }));
     };
 
-    const menuItems = [
+    const isEngenhariaPreco = user?.roles.includes('ENGENHARIA_PRECO') && !user?.roles.includes('ADMIN');
+
+    const rawMenuItems = [
         { icon: LayoutDashboard, label: 'Painel Geral', path: '/' },
         {
             icon: ShieldCheck,
@@ -96,6 +98,40 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         },
         { icon: Settings, label: 'Configurações', path: '/settings' },
     ];
+
+    const menuItems = React.useMemo(() => {
+        if (isEngenhariaPreco) {
+            return rawMenuItems
+                .map(item => {
+                    if (item.label === 'Cadastro') {
+                        return {
+                            ...item,
+                            subItems: item.subItems?.filter(sub => 
+                                ['Formas de Pagamento', 'Produtos'].includes(sub.label)
+                            )
+                        };
+                    }
+                    if (item.label === 'Comercial') {
+                        return {
+                            ...item,
+                            subItems: item.subItems?.filter(sub => 
+                                [
+                                    'Clientes', 
+                                    'Fornecedores', 
+                                    'Kits (oportunidades)', 
+                                    'Orçamento de compra', 
+                                    'Oportunidades', 
+                                    'Comparativos de soluções'
+                                ].includes(sub.label)
+                            )
+                        };
+                    }
+                    return null;
+                })
+                .filter((item): item is NonNullable<typeof item> => item !== null && (!item.subItems || item.subItems.length > 0));
+        }
+        return rawMenuItems;
+    }, [isEngenhariaPreco]);
 
     return (
         <motion.aside

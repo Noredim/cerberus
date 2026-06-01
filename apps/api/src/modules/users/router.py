@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.core.security import get_password_hash, verify_password
 from src.modules.users.models import User, UserRole, UserRoleEnum
 from src.modules.users.schemas import UserResponse, UserCreate, UserUpdate, UserProfilePictureUpdate, UserPasswordUpdate
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 def list_users(
     search: str = Query("", description="Filtrar por nome ou email"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     query = db.query(User).filter(User.tenant_id == current_user.tenant_id).options(joinedload(User.roles))
 
@@ -46,12 +46,14 @@ def list_users(
 def toggle_user_active(
     user_id: str, 
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     # Only ADMIN should toggle, normally. Simplified here.
     user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
     user.is_active = not user.is_active
     db.commit()
     return {"id": user.id, "is_active": user.is_active}
@@ -60,7 +62,7 @@ def toggle_user_active(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     # Enforce ADMIN role later, trusting caller in MVP
     existing_user = db.query(User).filter(User.email == payload.email).first()
@@ -104,11 +106,13 @@ def update_user(
     user_id: str,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
 
     if payload.name is not None:
         user.name = payload.name
@@ -147,6 +151,8 @@ def update_my_profile_picture(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if current_user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
     current_user.profile_picture = payload.profile_picture
     db.commit()
     return format_user_response(current_user)
@@ -157,6 +163,8 @@ def reset_my_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if current_user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Senha atual incorreta")
     
@@ -168,7 +176,7 @@ def reset_my_password(
 def delete_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Não é possível excluir seu próprio usuário")
@@ -176,6 +184,8 @@ def delete_user(
     user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
         
     db.delete(user)
     db.commit()
@@ -206,6 +216,22 @@ def list_my_companies(
     """
     List active companies available to the logged-in user.
     """
+    is_admin = any(role.role.value == "ADMIN" for role in current_user.roles)
+    
+    if is_admin:
+        companies = db.query(Company).filter(Company.tenant_id == current_user.tenant_id).all()
+        return [
+            {
+                "id": str(company.id),
+                "company_id": str(company.id),
+                "is_default": index == 0,
+                "company_name": company.razao_social,
+                "company_cnpj": company.cnpj,
+                "company_logo_url": company.logo_url
+            }
+            for index, company in enumerate(companies)
+        ]
+        
     user_comps = db.query(UserCompany).options(joinedload(UserCompany.company)).filter(
         UserCompany.user_id == current_user.id
     ).all()
@@ -226,7 +252,7 @@ def list_my_companies(
 def list_user_companies(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     """
     Admin: list companies assigned to a specific user.
@@ -256,7 +282,7 @@ def assign_user_company(
     user_id: str,
     payload: UserCompanyAssign,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     """
     Admin: Assing a company to a user.
@@ -264,6 +290,8 @@ def assign_user_company(
     user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
         
     company = db.query(Company).filter(
         Company.id == payload.company_id, 
@@ -311,11 +339,17 @@ def unassign_user_company(
     user_id: str,
     company_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(check_not_engenharia_preco)
 ):
     """
     Admin: Remove a company access from a user.
     """
+    user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
+
     assignment = db.query(UserCompany).filter(
         UserCompany.user_id == user_id,
         UserCompany.company_id == company_id

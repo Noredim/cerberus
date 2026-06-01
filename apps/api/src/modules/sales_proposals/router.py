@@ -4,7 +4,7 @@ from typing import List, Any
 from uuid import UUID
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user, get_active_company
+from src.modules.auth.dependencies import get_current_user, get_active_company, check_not_engenharia_preco
 from src.modules.users.models import User
 from src.modules.sales_proposals.schemas import (
     SalesProposalResponse,
@@ -17,7 +17,11 @@ from src.modules.sales_proposals.schemas import (
 )
 from src.modules.sales_proposals.service import sales_proposal_service
 
-router = APIRouter(prefix="/sales-proposals", tags=["Sales Proposals"])
+router = APIRouter(
+    prefix="/sales-proposals", 
+    tags=["Sales Proposals"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("", response_model=List[SalesProposalResponse])
 def list_proposals(

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from .schemas import (
     NcmStHeaderResponse, NcmStHeaderCreate, NcmStHeaderUpdate,
@@ -10,7 +10,11 @@ from .schemas import (
 )
 from .service import NcmStService
 
-router = APIRouter(prefix="/cadastro/ncm-st", tags=["NCM ST"])
+router = APIRouter(
+    prefix="/cadastro/ncm-st", 
+    tags=["NCM ST"],
+    dependencies=[Depends(check_not_engenharia_preco)]
+)
 
 @router.get("/", response_model=List[NcmStHeaderResponse])
 def list_headers(
