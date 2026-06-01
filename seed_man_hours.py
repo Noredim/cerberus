@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, text
 
 import os
 DB_URL     = os.getenv("DATABASE_URL", "postgresql://cerberus_user:cerberus_password@db:5432/cerberus")
-COMPANY_ID = "147f0d08-e065-4fbf-8034-6ab4de731704"  # STELMAT TELEINFORMATICA LTDA
+COMPANY_ID = os.getenv("COMPANY_ID", "147f0d08-e065-4fbf-8034-6ab4de731704")  # STELMAT TELEINFORMATICA LTDA
 VIGENCIA   = 2025
 DRY_RUN    = False   # True = simula sem gravar
 
