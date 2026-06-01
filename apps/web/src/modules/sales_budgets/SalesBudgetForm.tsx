@@ -2301,19 +2301,17 @@ export function SalesBudgetForm() {
                     {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Fechamento de Fornecedores
                   </button>
-                  {items.length > 0 && (
-                    <button
-                      onClick={() => {
-                        setShowReportsDropdown(false);
-                        handleDownloadVendaApprovalReport();
-                      }}
-                      disabled={downloadingVendaReport}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                      Approval de Venda
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      setShowReportsDropdown(false);
+                      handleDownloadVendaApprovalReport();
+                    }}
+                    disabled={downloadingVendaReport}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    Approval de Venda
+                  </button>
                   {rentalItems.length > 0 && (
                     <button
                       onClick={() => {
