@@ -31,6 +31,38 @@ export function BudgetForm() {
   const [fretePercent, setFretePercent] = useState<number>(0);
   const [ipiCalculado, setIpiCalculado] = useState<boolean>(true);
   const [criarCenarioDifal, setCriarCenarioDifal] = useState<boolean>(false);
+  const [dolarOrcamento, setDolarOrcamento] = useState<boolean>(false);
+  const [valorConversao, setValorConversao] = useState<number | ''>('');
+
+  const handleDolarOrcamentoToggle = (checked: boolean) => {
+    setDolarOrcamento(checked);
+    if (!checked) {
+      setValorConversao('');
+      setItems(prevItems => prevItems.map(item => {
+        const { valor_unitario_dolar, ...rest } = item;
+        return rest;
+      }));
+    } else {
+      setItems(prevItems => prevItems.map(item => ({
+        ...item,
+        valor_unitario_dolar: item.valor_unitario_dolar ?? item.valor_unitario ?? 0
+      })));
+    }
+  };
+
+  const handleValorConversaoChange = (newRate: number | '') => {
+    setValorConversao(newRate);
+    if (dolarOrcamento && newRate !== '' && newRate > 0) {
+      setItems(prevItems => prevItems.map(item => {
+        const vDolar = item.valor_unitario_dolar !== undefined ? item.valor_unitario_dolar : (item.valor_unitario || 0);
+        return {
+          ...item,
+          valor_unitario_dolar: vDolar,
+          valor_unitario: vDolar * newRate
+        };
+      }));
+    }
+  };
 
   // Modals state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -86,6 +118,8 @@ export function BudgetForm() {
       setIpiCalculado(Boolean(b.ipi_calculado));
       setFormaPagamentoId(b.forma_pagamento_id || '');
       setDataVencimentoInicial(b.data_vencimento_inicial ? new Date(b.data_vencimento_inicial).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+      setDolarOrcamento(Boolean(b.dolar_orcamento));
+      setValorConversao(b.valor_conversao !== null && b.valor_conversao !== undefined ? Number(b.valor_conversao) : '');
 
       if (b.items && b.items.length > 0) {
         setItems(b.items.map((item: any) => ({
@@ -93,6 +127,7 @@ export function BudgetForm() {
           product_id: item.product_id,
           quantidade: Number(item.quantidade) || 1,
           valor_unitario: Number(item.valor_unitario),
+          valor_unitario_dolar: item.valor_unitario_dolar !== null && item.valor_unitario_dolar !== undefined ? Number(item.valor_unitario_dolar) : undefined,
           frete_percent: Number(item.frete_percent),
           ipi_percent: Number(item.ipi_percent),
           icms_percent: Number(item.icms_percent),
@@ -110,6 +145,13 @@ export function BudgetForm() {
   };
 
   const handleSave = async () => {
+    if (dolarOrcamento) {
+      if (valorConversao === '' || valorConversao <= 0) {
+        alert('Por favor, informe uma Taxa de Conversão válida (maior que zero) para orçamentos em dólar.');
+        return;
+      }
+    }
+
     setSaving(true);
     const round4 = (v: number) => Math.round(v * 10000) / 10000;
     const cleanItems = items.map(item => ({
@@ -118,6 +160,7 @@ export function BudgetForm() {
       ncm: item.ncm || '',
       quantidade: round4(item.quantidade || 1),
       valor_unitario: round4(item.valor_unitario || 0),
+      valor_unitario_dolar: item.valor_unitario_dolar !== undefined ? round4(item.valor_unitario_dolar) : null,
       frete_percent: round4(item.frete_percent || 0),
       ipi_percent: round4(item.ipi_percent || 0),
       icms_percent: round4(item.icms_percent || 0),
@@ -135,6 +178,8 @@ export function BudgetForm() {
       frete_tipo: freteTipo,
       frete_percent: round4(fretePercent),
       ipi_calculado: ipiCalculado,
+      dolar_orcamento: dolarOrcamento,
+      valor_conversao: dolarOrcamento && valorConversao !== '' ? round4(valorConversao) : null,
       items: cleanItems
     };
     console.log('Saving payload:', JSON.stringify(payload, null, 2));
@@ -172,6 +217,7 @@ export function BudgetForm() {
        ncm: item.ncm || item.product.ncm || '',
        quantidade: item.quantidade || 1,
        valor_unitario: item.valor_unitario || 0,
+       valor_unitario_dolar: item.valor_unitario_dolar !== null && item.valor_unitario_dolar !== undefined ? Number(item.valor_unitario_dolar) : undefined,
        frete_percent: item.frete_percent || 0,
        ipi_percent: item.ipi_percent || 0,
        icms_percent: item.icms_percent || 0
@@ -194,6 +240,7 @@ export function BudgetForm() {
        ncm: resolvedItem.product.ncm_codigo || '',
        quantidade: resolvedItem.quantidade || 1,
        valor_unitario: resolvedItem.valor_unitario || 0,
+       valor_unitario_dolar: resolvedItem.valor_unitario_dolar !== null && resolvedItem.valor_unitario_dolar !== undefined ? Number(resolvedItem.valor_unitario_dolar) : undefined,
        frete_percent: resolvedItem.frete_percent || 0,
        ipi_percent: resolvedItem.ipi_percent || 0,
        icms_percent: resolvedItem.icms_percent || 0
@@ -303,6 +350,43 @@ export function BudgetForm() {
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-text-primary mb-1.5">Data Inicial de Vencimento</label>
               <input type="date" className="input-primary w-full" value={dataVencimentoInicial} onChange={e => setDataVencimentoInicial(e.target.value)} />
+            </div>
+
+            <div className="lg:col-span-2 flex items-center h-full pt-6">
+              <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer hover:text-brand-primary transition-colors">
+                <div className="relative flex items-center">
+                  <input 
+                    type="checkbox" 
+                    className="peer sr-only" 
+                    checked={dolarOrcamento} 
+                    onChange={e => handleDolarOrcamentoToggle(e.target.checked)} 
+                  />
+                  <div className="w-5 h-5 border-2 border-text-muted rounded flex items-center justify-center peer-checked:bg-brand-primary peer-checked:border-brand-primary transition-colors">
+                    <svg className="w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" viewBox="0 0 12 10" fill="none">
+                      <path d="M1 5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+                Orçamento em Dólar
+              </label>
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-text-primary mb-1.5">
+                Taxa de Conversão {dolarOrcamento && <span className="text-brand-danger">*</span>}
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-text-muted">R$</span>
+                <input 
+                  type="number" 
+                  step="0.0001"
+                  disabled={!dolarOrcamento}
+                  placeholder="Ex: 5.5000"
+                  className="input-primary w-full pl-8 disabled:bg-bg-deep transition-colors"
+                  value={valorConversao} 
+                  onChange={e => handleValorConversaoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} 
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -427,6 +511,8 @@ export function BudgetForm() {
             freteTipoCabecalho={freteTipo}
             fretePercentCabecalho={fretePercent}
             ipiCalculado={ipiCalculado}
+            dolarOrcamento={dolarOrcamento}
+            valorConversao={valorConversao || 1}
           />
         </div>
       </div>
@@ -436,6 +522,8 @@ export function BudgetForm() {
         onClose={() => setIsImportModalOpen(false)}
         supplierId={supplierId}
         onImportSuccess={handleImportSuccess}
+        dolarOrcamento={dolarOrcamento}
+        valorConversao={valorConversao || 1}
       />
 
       <BudgetReconciliationModal

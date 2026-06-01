@@ -34,6 +34,7 @@ class PurchaseBudgetItemBase(BaseModel):
     ncm: Optional[str] = None
     quantidade: Decimal = Field(default=1, max_digits=15, decimal_places=4)
     valor_unitario: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    valor_unitario_dolar: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     
     # Se omitido no frontend, deverá herdar do cabeçalho
     frete_percent: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=4)
@@ -114,11 +115,22 @@ class PurchaseBudgetBase(BaseModel):
     frete_tipo: FreightTypeEnum
     frete_percent: Decimal = Field(default=0, max_digits=10, decimal_places=4)
     ipi_calculado: bool = False
+    dolar_orcamento: bool = False
+    valor_conversao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
 
     @model_validator(mode='before')
     @classmethod
     def uppercase_all(cls, data):
         return _uppercase_strings(data) if isinstance(data, dict) else data
+
+    @model_validator(mode='after')
+    def validate_dollar_budget(self) -> 'PurchaseBudgetBase':
+        if self.dolar_orcamento:
+            if self.valor_conversao is None:
+                raise ValueError("Valor de conversão é obrigatório para orçamentos em dólar.")
+            if self.valor_conversao <= 0:
+                raise ValueError("Valor de conversão deve ser maior que zero.")
+        return self
 
 class PurchaseBudgetCreate(PurchaseBudgetBase):
     items: List[PurchaseBudgetItemCreate]

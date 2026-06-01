@@ -77,6 +77,8 @@ def add_negotiation(
 async def import_budgets_excel(
     supplier_id: str,
     file: UploadFile = File(...),
+    dolar_orcamento: bool = Query(False),
+    valor_conversao: Optional[float] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -85,7 +87,9 @@ async def import_budgets_excel(
         db=db,
         tenant_id=current_user.tenant_id,
         supplier_id=supplier_id,
-        file_bytes=contents
+        file_bytes=contents,
+        dolar_orcamento=dolar_orcamento,
+        valor_conversao=valor_conversao
     )
     return result
 

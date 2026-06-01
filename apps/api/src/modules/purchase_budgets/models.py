@@ -30,6 +30,8 @@ class PurchaseBudget(Base):
     frete_tipo = Column(String(10), nullable=False) # 'CIF', 'FOB'
     frete_percent = Column(Numeric(10, 4), nullable=False, default=0)
     ipi_calculado = Column(Boolean, nullable=False, default=False)
+    dolar_orcamento = Column(Boolean, nullable=False, default=False)
+    valor_conversao = Column(Numeric(15, 4), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
@@ -66,6 +68,7 @@ class PurchaseBudgetItem(Base):
     ncm = Column(String(20), nullable=True)
     quantidade = Column(Numeric(15, 4), nullable=False, default=1)
     valor_unitario = Column(Numeric(15, 4), nullable=False, default=0)
+    valor_unitario_dolar = Column(Numeric(15, 4), nullable=True)
     
     frete_percent = Column(Numeric(10, 4), nullable=False, default=0)
     frete_valor = Column(Numeric(15, 4), nullable=False, default=0)

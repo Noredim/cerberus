@@ -8,9 +8,11 @@ interface BudgetImportModalProps {
   onClose: () => void;
   supplierId: string;
   onImportSuccess: (foundItems: any[], notFoundItems: any[]) => void;
+  dolarOrcamento: boolean;
+  valorConversao: number | '';
 }
 
-export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess }: BudgetImportModalProps) {
+export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess, dolarOrcamento, valorConversao }: BudgetImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,10 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
       formData.append('file', file);
 
       const response = await api.post(`/purchase-budgets/import/${supplierId}`, formData, {
+        params: {
+          dolar_orcamento: dolarOrcamento,
+          valor_conversao: dolarOrcamento && valorConversao !== '' ? valorConversao : undefined
+        },
         headers: {
           'Content-Type': 'multipart/form-data',
         },

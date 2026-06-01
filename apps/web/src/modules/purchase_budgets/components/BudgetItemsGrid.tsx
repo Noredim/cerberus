@@ -29,6 +29,8 @@ interface BudgetItemsGridProps {
   fretePercentCabecalho: number;
   ipiCalculado: boolean;
   disabled?: boolean;
+  dolarOrcamento?: boolean;
+  valorConversao?: number;
 }
 
 export function BudgetItemsGrid({
@@ -37,12 +39,20 @@ export function BudgetItemsGrid({
   freteTipoCabecalho,
   fretePercentCabecalho,
   ipiCalculado,
-  disabled
+  disabled,
+  dolarOrcamento = false,
+  valorConversao = 1
 }: BudgetItemsGridProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const calculateRow = useCallback((row: BudgetItem): BudgetItem => {
-    const vUnit = row.valor_unitario || 0;
+    let vUnit = row.valor_unitario || 0;
+    if (dolarOrcamento) {
+      const vDolar = row.valor_unitario_dolar !== undefined ? row.valor_unitario_dolar : (row.valor_unitario || 0);
+      vUnit = vDolar * valorConversao;
+      row.valor_unitario_dolar = vDolar;
+      row.valor_unitario = vUnit;
+    }
     
     let fretePerc = 0;
     if (freteTipoCabecalho === 'FOB') {
@@ -70,14 +80,16 @@ export function BudgetItemsGrid({
       ipi_valor: ipiValor * qtd,
       total_item: total
     };
-  }, [freteTipoCabecalho, fretePercentCabecalho, ipiCalculado]);
+  }, [freteTipoCabecalho, fretePercentCabecalho, ipiCalculado, dolarOrcamento, valorConversao]);
 
   useEffect(() => {
     if (!items || items.length === 0) return;
     const newItems = items.map(calculateRow);
     const hasChanges = newItems.some((ni, idx) => 
       ni.total_item !== items[idx].total_item || 
-      ni.frete_valor !== items[idx].frete_valor
+      ni.frete_valor !== items[idx].frete_valor ||
+      ni.valor_unitario !== items[idx].valor_unitario ||
+      ni.valor_unitario_dolar !== items[idx].valor_unitario_dolar
     );
     if (hasChanges) {
       onChange(newItems);
@@ -127,7 +139,8 @@ export function BudgetItemsGrid({
               <th className="px-4 py-3 w-[120px]">Cód. Fornecedor</th>
               <th className="px-4 py-3 w-[120px]">NCM</th>
               <th className="px-4 py-3 w-[90px]">Qtd.</th>
-              <th className="px-4 py-3 w-[140px]">Valor Un.</th>
+              {dolarOrcamento && <th className="px-4 py-3 w-[140px]">Valor Un. ($)</th>}
+              <th className="px-4 py-3 w-[140px]">Valor Un. (R$)</th>
               <th className="px-4 py-3 w-[90px]">Frete %</th>
               <th className="px-4 py-3 w-[90px]">IPI %</th>
               <th className="px-4 py-3 w-[90px]">ICMS %</th>
@@ -137,11 +150,11 @@ export function BudgetItemsGrid({
           </thead>
           <tbody className="divide-y divide-border-subtle bg-surface">
              {items.length === 0 ? (
-               <tr>
-                 <td colSpan={9} className="px-6 py-8 text-center text-text-muted text-sm border-b border-border-subtle">
-                    Nenhum item adicionado ao orçamento.
-                 </td>
-               </tr>
+                <tr>
+                  <td colSpan={dolarOrcamento ? 12 : 11} className="px-6 py-8 text-center text-text-muted text-sm border-b border-border-subtle">
+                     Nenhum item adicionado ao orçamento.
+                  </td>
+                </tr>
              ) : items.map((row, idx) => (
                 <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
                   <td className="px-4 py-2">
@@ -185,14 +198,32 @@ export function BudgetItemsGrid({
                       onChange={(e) => updateField(idx, 'quantidade', parseFloat(e.target.value) || 1)}
                     />
                   </td>
+                  {dolarOrcamento && (
+                    <td className="px-4 py-2">
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 z-10 text-xs font-medium text-text-muted">$</span>
+                        <input 
+                          disabled={disabled}
+                          type="number"
+                          step="0.0001"
+                          className="w-full text-sm border border-border-subtle rounded py-1.5 pl-8 pr-2 focus:border-brand-primary outline-none disabled:bg-bg-deep transition-colors font-semibold"
+                          value={row.valor_unitario_dolar !== undefined ? row.valor_unitario_dolar : (row.valor_unitario || 0)} 
+                          onChange={(e) => {
+                            const valUSD = parseFloat(e.target.value) || 0;
+                            updateField(idx, 'valor_unitario_dolar', valUSD);
+                          }}
+                        />
+                      </div>
+                    </td>
+                  )}
                   <td className="px-4 py-2">
                     <div className="relative flex items-center">
                       <span className="absolute left-2.5 z-10 text-xs font-medium text-text-muted">R$</span>
                       <input 
-                        disabled={disabled}
+                        disabled={disabled || dolarOrcamento}
                         type="number"
                         step="0.0001"
-                        className="w-full text-sm border border-border-subtle rounded py-1.5 pl-8 pr-2 focus:border-brand-primary outline-none disabled:bg-bg-deep transition-colors"
+                        className="w-full text-sm border border-border-subtle rounded py-1.5 pl-8 pr-2 focus:border-brand-primary outline-none disabled:bg-bg-deep disabled:text-text-muted transition-colors"
                         value={row.valor_unitario} 
                         onChange={(e) => updateField(idx, 'valor_unitario', parseFloat(e.target.value) || 0)}
                       />

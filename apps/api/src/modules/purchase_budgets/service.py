@@ -287,7 +287,9 @@ class PurchaseBudgetService:
             frete_tipo=data.frete_tipo,
             frete_percent=data.frete_percent,
             ipi_calculado=data.ipi_calculado,
-            sales_budget_id=data.sales_budget_id
+            sales_budget_id=data.sales_budget_id,
+            dolar_orcamento=data.dolar_orcamento,
+            valor_conversao=data.valor_conversao
         )
         db.add(db_budget)
         db.flush() # To get ID
@@ -301,6 +303,7 @@ class PurchaseBudgetService:
                 ncm=item_data.ncm,
                 quantidade=item_data.quantidade,
                 valor_unitario=item_data.valor_unitario,
+                valor_unitario_dolar=item_data.valor_unitario_dolar,
                 frete_percent=totals["frete_percent"],
                 frete_valor=totals["frete_valor"],
                 ipi_percent=item_data.ipi_percent,
@@ -349,6 +352,8 @@ class PurchaseBudgetService:
         db_budget.frete_percent = data.frete_percent
         db_budget.ipi_calculado = data.ipi_calculado
         db_budget.sales_budget_id = data.sales_budget_id
+        db_budget.dolar_orcamento = data.dolar_orcamento
+        db_budget.valor_conversao = data.valor_conversao
         
         # Delete old items cleanly via ORM relationship cascade (avoiding session desynchronization)
         db_budget.items.clear()
@@ -365,6 +370,7 @@ class PurchaseBudgetService:
                 ncm=item_data.ncm,
                 quantidade=item_data.quantidade,
                 valor_unitario=item_data.valor_unitario,
+                valor_unitario_dolar=item_data.valor_unitario_dolar,
                 frete_percent=totals["frete_percent"],
                 frete_valor=totals["frete_valor"],
                 ipi_percent=item_data.ipi_percent,
@@ -454,10 +460,7 @@ class PurchaseBudgetService:
         return negotiation
 
     @staticmethod
-
-
-    @staticmethod
-    def parse_excel_items(db: Session, tenant_id: str, supplier_id: str, file_bytes: bytes):
+    def parse_excel_items(db: Session, tenant_id: str, supplier_id: str, file_bytes: bytes, dolar_orcamento: bool = False, valor_conversao: Optional[float] = None):
         workbook = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
         sheet = workbook.active
         
@@ -550,12 +553,18 @@ class PurchaseBudgetService:
             try: st = float(st) if st else 0
             except: st = 0
             
+            valor_unitario_dolar = None
+            if dolar_orcamento and valor_conversao:
+                valor_unitario_dolar = val
+                val = val * valor_conversao
+
             item_data: dict = {
                 "codigo_fornecedor": codigo,
                 "descricao": str(descricao).strip() if descricao else "",
                 "ncm": str(ncm_raw).strip() if ncm_raw else None,
                 "quantidade": qtd,
                 "valor_unitario": val,
+                "valor_unitario_dolar": valor_unitario_dolar,
                 "frete_percent": frete,
                 "ipi_percent": ipi,
                 "icms_percent": icms,
