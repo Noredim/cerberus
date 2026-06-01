@@ -1466,7 +1466,6 @@ export function SalesBudgetForm() {
       t.custo += (Number(i.custo_unit_base) || 0) * q;
       t.venda += (Number(i.venda_unit) || 0) * q;
       t.frete += (Number(i.frete_venda_unit) || 0) * q;
-      const impostosBrutos = (Number(i.pis_unit || 0) + Number(i.cofins_unit || 0) + Number(i.csll_unit || 0) + Number(i.irpj_unit || 0) + Number(i.icms_unit || 0) + Number(i.iss_unit || 0)) * q;
       const creditoIcms = (Number(i.cost_composition?.icms_abatido ?? i.icms_abatido_unit ?? 0)) * q;
       t.total_credito_icms += creditoIcms;
       t.despAdm += (Number(i.despesa_adm_unit) || 0) * q;

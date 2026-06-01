@@ -88,7 +88,7 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
 
   const handleProductSelect = (p: any) => {
     setSelectedProduct(p);
-    setSearchTerm(`${p.codigo || p.codigo_interno} - ${p.nome}`);
+    setSearchTerm(`${p.codigo ?? p.codigo_interno ?? "-"} - ${p.nome}`);
     setProducts([]);
     setShowProductSearch(false);
   };
@@ -123,7 +123,7 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
 
     // We build the object that will be fed to AddRentalProduct function
     const newItem = {
-      product: { ...selectedProduct, codigo: selectedProduct.codigo || selectedProduct.codigo_interno },
+      product: { ...selectedProduct, codigo: selectedProduct.codigo ?? selectedProduct.codigo_interno ?? "-" },
       quantidade,
       perc_instalacao_item: percInstalacao === '' ? null : Number(percInstalacao),
       valor_instalacao_item: valorInstalacao === '' ? null : Number(valorInstalacao),
@@ -185,7 +185,7 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
                     className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-0"
                     onClick={() => handleProductSelect(p)}
                   >
-                    <div className="font-medium text-sm text-gray-900">{p.codigo || p.codigo_interno} - {p.nome}</div>
+                    <div className="font-medium text-sm text-gray-900">{p.codigo ?? p.codigo_interno ?? "-"} - {p.nome}</div>
                     <div className="text-xs text-gray-500">
                       Uso/Consumo: R$ {Number(p.vlr_referencia_uso_consumo || p.vlr_uso_consumo || 0).toFixed(2)}
                     </div>

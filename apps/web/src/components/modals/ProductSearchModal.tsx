@@ -127,9 +127,9 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                     <span className="font-semibold text-text-primary truncate">{product.nome}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
-                    {product.codigo_interno && (
+                    {product.codigo && (
                       <span className="flex items-center gap-1">
-                        <span className="font-medium">Cód:</span> {product.codigo_interno}
+                        <span className="font-medium">Cód:</span> {product.codigo}
                       </span>
                     )}
                     {product.ncm_codigo && (
@@ -137,9 +137,9 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                         <span className="font-medium">NCM:</span> {product.ncm_codigo}
                       </span>
                     )}
-                    {product.familia?.nome && (
+                    {product.categoria && (
                       <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
-                        <span className="font-medium">Família:</span> {product.familia.nome}
+                        <span className="font-medium">Categoria:</span> {product.categoria}
                       </span>
                     )}
                   </div>

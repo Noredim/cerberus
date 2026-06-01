@@ -204,7 +204,7 @@ export function BudgetReconciliationModal({
                    <p className="text-xs font-semibold text-brand-primary mb-2 uppercase tracking-wide">Produto Selecionado</p>
                    <p className="text-sm font-medium text-text-primary mb-1">{selectedProduct.nome}</p>
                    <div className="flex gap-4 text-xs text-text-muted">
-                      <span><strong className="font-medium">Cód:</strong> {selectedProduct.codigo_interno || '-'}</span>
+                      <span><strong className="font-medium">Cód:</strong> {selectedProduct.codigo ?? selectedProduct.codigo_interno ?? "-"}</span>
                       <span><strong className="font-medium">NCM:</strong> {selectedProduct.ncm_codigo || '-'}</span>
                    </div>
                 </div>

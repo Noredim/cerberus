@@ -307,9 +307,9 @@ export function AddOperationalCostModal({
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
-                        {tipoItem === 'PRODUTO' && item.codigo_interno && (
+                        {tipoItem === 'PRODUTO' && (item.codigo || item.codigo_interno) && (
                           <span className="flex items-center gap-1">
-                            <span className="font-medium">Cód:</span> {item.codigo_interno}
+                            <span className="font-medium">Cód:</span> {item.codigo ?? item.codigo_interno ?? "-"}
                           </span>
                         )}
                         {tipoItem === 'SERVICO_PROPRIO' && (
