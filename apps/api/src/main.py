@@ -36,11 +36,15 @@ from src.modules.sales_proposals.router import router as sales_proposals_router
 from src.modules.payment_methods.router import router as payment_methods_router
 from src.modules.document_templates.router import router as document_templates_router
 from src.modules.notifications.router import router as notifications_router
+
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8000",
 ]
+env_origins = os.getenv("ALLOWED_ORIGINS")
+if env_origins:
+    ALLOWED_ORIGINS.extend([origin.strip() for origin in env_origins.split(",") if origin.strip()])
 
 app = FastAPI(
     title="Cerberus - Sales Engine API",

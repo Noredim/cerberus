@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cerberus_db_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cerberus_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cerberus_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cerberus}
+    volumes:
+      - ${POSTGRES_DATA_DIR:-/opt/cerberus/data/postgres}:/var/lib/postgresql/data
+    networks:
+      - cerberus_prod_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-cerberus_user} -d $${POSTGRES_DB:-cerberus}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: cerberus_api_prod
+    restart: always
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cerberus_user}:${POSTGRES_PASSWORD:-cerberus_password}@db:5432/${POSTGRES_DB:-cerberus}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://localhost}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ${UPLOADS_DATA_DIR:-/opt/cerberus/data/uploads}:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cerberus_prod_network
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.prod
+    container_name: cerberus_web_prod
+    restart: always
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-/api}
+    networks:
+      - cerberus_prod_network
+
+  tax-engine:
+    build: ./engines/tax_engine
+    container_name: cerberus_tax_engine_prod
+    restart: always
+    networks:
+      - cerberus_prod_network
+
+  cost-engine:
+    build: ./engines/cost_engine
+    container_name: cerberus_cost_engine_prod
+    restart: always
+    networks:
+      - cerberus_prod_network
+
+  pricing-engine:
+    build: ./engines/pricing_engine
+    container_name: cerberus_pricing_engine_prod
+    restart: always
+    networks:
+      - cerberus_prod_network
+
+  contract-engine:
+    build: ./engines/contract_engine
+    container_name: cerberus_contract_engine_prod
+    restart: always
+    networks:
+      - cerberus_prod_network
+
+  gateway:
+    image: nginx:stable-alpine
+    container_name: cerberus_gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${SSL_CERTS_DIR:-/opt/cerberus/ssl}:/etc/nginx/ssl/live:ro
+    depends_on:
+      - web
+      - api
+    networks:
+      - cerberus_prod_network
+
+networks:
+  cerberus_prod_network:
+    driver: bridge
