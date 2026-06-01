@@ -265,6 +265,20 @@ def run_tests():
         assert budget.approvals[0].cargo_aprovador == "GERENTE"
         print("Approval details recorded successfully!")
 
+        # Verify notification generated for the responsible user upon approval
+        from src.modules.notifications.models import Notification
+        approval_notifs = db.query(Notification).filter(
+            Notification.opportunity_id == str(budget.id),
+            Notification.title == "Proposta aprovada"
+        ).all()
+        print(f"DEBUG: Found {len(approval_notifs)} approval notifications.")
+        assert len(approval_notifs) > 0
+        recipient_ids = [n.user_id for n in approval_notifs]
+        assert peon_user.id in recipient_ids
+        # Seller (salesman_user) was the approver, so they should be excluded
+        assert salesman_user.id not in recipient_ids
+        print("Approval notification verification passed!")
+
         # ── Test 5: Reopening and Auto-Versioning on Edit ──
         print("\n--- Test 5: Auto-Versioning on Edit ---")
         # Let's perform an edit

@@ -1412,6 +1412,35 @@ def aprovar_oportunidade(db: Session, tenant_id: str, budget_id: str, user_id: s
         descricao=desc
     )
     db.add(history_entry)
+
+    # Generate notifications for seller and responsibles
+    from src.modules.notifications.models import Notification
+    
+    vendedor_name = budget.vendedor.name if budget.vendedor else "Vendedor"
+    opportunity_number = budget.numero_orcamento or "Sem Número"
+    
+    recipients = set()
+    if budget.vendedor and budget.vendedor.user_id:
+        recipients.add(budget.vendedor.user_id)
+    for resp in budget.responsaveis:
+        if resp.user_id:
+            recipients.add(resp.user_id)
+            
+    # Exclude the approver themselves from receiving the notification
+    recipients.discard(user_id)
+    
+    for r_uid in recipients:
+        notification = Notification(
+            tenant_id=tenant_id,
+            company_id=budget.company_id,
+            user_id=r_uid,
+            title="Proposta aprovada",
+            message=f"A oportunidade {opportunity_number} foi aprovada.",
+            opportunity_id=str(budget.id),
+            opportunity_number=opportunity_number,
+            vendedor_name=vendedor_name
+        )
+        db.add(notification)
     
     db.commit()
     db.refresh(budget)
