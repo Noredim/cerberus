@@ -1870,3 +1870,667 @@ class OpportunitiesReportService:
                     "Content-Disposition": f"attachment; filename=approval-venda-{opportunity_dict['numero_orcamento']}.pdf"
                 }
             )
+
+    @staticmethod
+    def generate_svg_cashflow_chart(investimento: float, lucro_mensal: float, prazo_contrato: int) -> str:
+        """Generate a raw vector SVG cumulative cashflow chart for rendering in WeasyPrint."""
+        w, h = 520, 180
+        pad_l, pad_r, pad_t, pad_b = 60, 20, 20, 30
+        plot_w = w - pad_l - pad_r
+        plot_h = h - pad_t - pad_b
+
+        # Math boundaries
+        ymin = -investimento
+        ymax = lucro_mensal * prazo_contrato - investimento
+        if ymax == ymin:
+            ymax = ymin + 100.0
+            
+        if ymin > 0:
+            ymin = 0.0
+        if ymax < 0:
+            ymax = 0.0
+
+        yrange = ymax - ymin
+        if yrange == 0:
+            yrange = 1.0
+
+        def get_x(m):
+            return pad_l + (m / prazo_contrato) * plot_w
+        def get_y(val):
+            return pad_t + plot_h - ((val - ymin) / yrange) * plot_h
+
+        # Payback calculation
+        payback = investimento / lucro_mensal if lucro_mensal > 0 else None
+        if payback is not None and payback > 0:
+            pct = (payback / prazo_contrato) * 100
+            pct = min(100.0, max(0.0, pct))
+        else:
+            pct = 100.0
+
+        gradient_html = f"""
+        <defs>
+            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ea580c" />
+                <stop offset="{pct:.1f}%" stop-color="#ea580c" />
+                <stop offset="{pct:.1f}%" stop-color="#16a34a" />
+                <stop offset="100%" stop-color="#16a34a" />
+            </linearGradient>
+        </defs>
+        """
+
+        points = []
+        for m in range(prazo_contrato + 1):
+            points.append(f"{get_x(m)},{get_y(lucro_mensal * m - investimento)}")
+        points_str = " ".join(points)
+
+        y_zero = get_y(0.0)
+        y_min_val = get_y(ymin)
+        y_max_val = get_y(ymax)
+
+        def fmt_val(val):
+            if abs(val) >= 1000000:
+                return f"R$ {val/1000000:.1f}M"
+            if abs(val) >= 1000:
+                return f"R$ {val/1000:.1f}k"
+            return f"R$ {val:.0f}"
+
+        svg = f"""<svg width="520" height="180" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg">
+            {gradient_html}
+            <!-- Grid lines -->
+            <line x1="{pad_l}" y1="{y_zero}" x2="{w - pad_r}" y2="{y_zero}" stroke="#cbd5e1" stroke-dasharray="3 3" stroke-width="1" />
+            <line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{h - pad_b}" stroke="#cbd5e1" stroke-width="1.5" />
+            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" stroke="#cbd5e1" stroke-width="1.5" />
+
+            <!-- Labels Y -->
+            <text x="{pad_l - 8}" y="{y_max_val + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">{fmt_val(ymax)}</text>
+            <text x="{pad_l - 8}" y="{y_zero + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">R$ 0</text>
+            <text x="{pad_l - 8}" y="{y_min_val + 4}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="end">{fmt_val(ymin)}</text>
+
+            <!-- Labels X (Months) -->
+            <text x="{get_x(0)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês 0</text>
+            <text x="{get_x(prazo_contrato/2)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês {prazo_contrato//2}</text>
+            <text x="{get_x(prazo_contrato)}" y="{h - pad_b + 14}" font-family="sans-serif" font-size="7pt" fill="#475569" text-anchor="middle">Mês {prazo_contrato}</text>
+
+            <!-- Main Cash Flow Line -->
+            <polyline fill="none" stroke="url(#lineGrad)" stroke-width="3" points="{points_str}" />
+        """
+        if payback is not None and 0 < payback <= prazo_contrato:
+            px = get_x(payback)
+            py = get_y(0.0)
+            svg += f"""
+            <circle cx="{px}" cy="{py}" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5" />
+            <line x1="{px}" y1="{py}" x2="{px}" y2="{h - pad_b}" stroke="#f59e0b" stroke-dasharray="2 2" stroke-width="1" />
+            <text x="{px}" y="{py - 8}" font-family="sans-serif" font-weight="bold" font-size="7.5pt" fill="#d97706" text-anchor="middle">Payback: {payback:.1f} meses</text>
+            """
+        svg += "</svg>"
+        return svg
+
+    @staticmethod
+    def generate_locacao_approval_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
+        # 1. Fetch Opportunity
+        opportunity = db.query(SalesBudget).filter(
+            SalesBudget.id == opportunity_id,
+            SalesBudget.tenant_id == current_user.tenant_id
+        ).first()
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
+
+        if not opportunity.rental_items:
+            raise HTTPException(status_code=400, detail="Esta oportunidade não possui itens de locação/comodato para gerar o relatório.")
+
+        # 2. Fetch associated Purchase Budgets (Supplier Budgets)
+        purchase_budgets = db.query(PurchaseBudget).filter(
+            PurchaseBudget.sales_budget_id == opportunity_id,
+            PurchaseBudget.tenant_id == current_user.tenant_id
+        ).all()
+
+        # Build tax lookup map: product_id -> {difal, st, source}
+        opp_product_taxes = {}
+        for item in opportunity.rental_items:
+            if not item.opportunity_kit_id and item.product_id:
+                difal = float(item.difal_unit) if item.difal_unit is not None else 0.0
+                st = float(item.icms_st_unit) if item.icms_st_unit is not None else 0.0
+                opp_product_taxes[item.product_id] = {
+                    "difal": difal,
+                    "st": st,
+                    "source": "opportunity_item"
+                }
+
+        # Kit items
+        kit_service = OpportunityKitService(db)
+        kit_ids = set()
+        for item in opportunity.rental_items:
+            if item.opportunity_kit_id:
+                kit_ids.add(item.opportunity_kit_id)
+                
+        kits_by_id = {}
+        for kit_id in kit_ids:
+            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit:
+                kits_by_id[kit.id] = kit
+                try:
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    for item_sum in kit_financials.get("item_summaries", []):
+                        p_id = item_sum.get("product_id")
+                        if p_id:
+                            p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                            difal_val = float(item_sum.get("difal_unitario") or 0.0)
+                            st_val = float(item_sum.get("icms_st_unitario") or 0.0)
+                            opp_product_taxes[p_uuid] = {
+                                "difal": difal_val,
+                                "st": st_val,
+                                "source": "opportunity_kit"
+                            }
+                except Exception as e:
+                    print(f"[Warning] Failed to calculate financials for kit {kit_id}: {e}")
+
+        # Unpack helper for supplier matching
+        def get_unpacked_qty(prod_id):
+            qty = 0.0
+            for item in opportunity.rental_items:
+                if item.product_id == prod_id and not item.opportunity_kit_id:
+                    qty += float(item.quantidade)
+                elif item.opportunity_kit_id:
+                    kit = kits_by_id.get(item.opportunity_kit_id)
+                    if kit:
+                        for kit_item in kit.items:
+                            if kit_item.product_id == prod_id:
+                                qty += float(item.quantidade) * float(kit_item.quantidade_no_kit)
+            return qty
+
+        # Helper to retrieve purchase tax unit breakdown for a product
+        def get_purchase_tax_breakdown(prod_id, pb_item):
+            tax_info = opp_product_taxes.get(prod_id)
+            origem = None
+            difal = 0.0
+            st = 0.0
+            ipi = 0.0
+            
+            if tax_info:
+                difal = tax_info["difal"]
+                st = tax_info["st"]
+                origem = tax_info["source"]
+            
+            if difal == 0.0 and pb_item and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
+                difal = float(pb_item.difal_unitario)
+                origem = "purchase_budget"
+            if st == 0.0 and pb_item and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
+                st = float(pb_item.st_unitario)
+                origem = "purchase_budget"
+                
+            if pb_item and pb_item.ipi_valor is not None and float(pb_item.ipi_valor) > 0.0:
+                pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
+                ipi = float(pb_item.ipi_valor) / pb_qty
+            
+            if origem is None:
+                origem = "fallback_zero"
+                
+            return difal, st, ipi, origem
+
+        product_suppliers = {}
+        for pb in purchase_budgets:
+            for pb_item in pb.items:
+                if pb_item.product_id:
+                    product_suppliers[pb_item.product_id] = {
+                        "fornecedor": pb.supplier_nome_fantasia,
+                        "pb_item": pb_item,
+                        "pb": pb
+                    }
+
+        # Consolidate items details
+        items_details = []
+        total_aquisicao_sem_comissao = 0.0
+        total_st_difal = 0.0
+        locacao_mensal = 0.0
+        custo_op_mensal_total = 0.0
+        impostos_mensal_total = 0.0
+        lucro_mensal_total = 0.0
+        comissao_total_aquisicao = 0.0
+        impostos_instalacao_total = 0.0
+        total_instalacao = 0.0
+
+        for item in opportunity.rental_items:
+            qty = float(item.quantidade)
+            pb_info = product_suppliers.get(item.product_id) if item.product_id else None
+            supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+            pb_item = pb_info["pb_item"] if pb_info else None
+            
+            custo_unit = float(item.custo_aquisicao_unit or 0.0)
+            if custo_unit == 0.0 and pb_item:
+                custo_unit = float(pb_item.valor_unitario or 0.0)
+                
+            difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
+            purchase_tax_unit = difal_unit + st_unit + ipi_unit
+            
+            custo_total = custo_unit * qty
+            purchase_tax_total = purchase_tax_unit * qty
+            
+            total_aquisicao_sem_comissao += custo_total + purchase_tax_total
+            total_st_difal += purchase_tax_total
+            
+            venda_mensal = float(item.valor_mensal or 0.0) * qty
+            
+            # Commission
+            comissao_item = float(item.kit_comissao or 0.0) * qty if item.opportunity_kit_id else float(item.comissao_mensal or 0.0) * qty
+            comissao_total_aquisicao += comissao_item
+            
+            # Installation vs Rental separation
+            if item.is_kit_instalacao:
+                total_instalacao += venda_mensal
+                impostos_instalacao_total += float(item.impostos_mensal or 0.0) * qty
+            else:
+                locacao_mensal += venda_mensal
+                impostos_mensal_total += float(item.impostos_mensal or 0.0) * qty
+                
+            custo_op_mensal = float(item.custo_total_mensal or 0.0) * qty
+            custo_op_mensal_total += custo_op_mensal
+            
+            lucro_mensal = float(item.lucro_mensal or 0.0) * qty
+            lucro_mensal_total += lucro_mensal
+            
+            items_details.append({
+                "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento de Locação"),
+                "part_number": item.product_codigo or (item.product.codigo if item.product else None),
+                "is_kit_instalacao": item.is_kit_instalacao,
+                "tipo_contrato_kit": item.tipo_contrato_kit,
+                "quantidade": qty,
+                "custo_aquisicao_unit": format_currency(custo_unit),
+                "st_difal_unit": format_currency(purchase_tax_unit),
+                "custo_total": format_currency(custo_total + purchase_tax_total),
+                "fator_margem": f"{float(item.fator_margem or 1.0):.2f}",
+                "valor_mensal": format_currency(venda_mensal),
+                "custo_op_mensal": format_currency(custo_op_mensal),
+                "impostos_mensal": format_currency(float(item.impostos_mensal or 0.0) * qty),
+                "lucro_mensal": format_currency(lucro_mensal)
+            })
+
+        # Supplier summaries
+        mapped_by_supplier = {}
+        total_fornecedores_produtos = 0.0
+        total_fornecedores_impostos = 0.0
+
+        for pb in purchase_budgets:
+            supplier_id = pb.supplier_id
+            if supplier_id not in mapped_by_supplier:
+                mapped_by_supplier[supplier_id] = {
+                    "fornecedor": pb.supplier_nome_fantasia,
+                    "total_sem_imposto": 0.0,
+                    "total_imposto": 0.0,
+                    "total_custo": 0.0,
+                    "forma_pagamento": pb.forma_pagamento.descricao if pb.forma_pagamento else (pb.forma_pagamento_snapshot.get("descricao") if pb.forma_pagamento_snapshot else "Não informada")
+                }
+            
+            for pb_item in pb.items:
+                opp_qty = get_unpacked_qty(pb_item.product_id)
+                if opp_qty <= 0:
+                    continue
+                
+                difal_unit, st_unit, ipi_unit, _ = get_purchase_tax_breakdown(pb_item.product_id, pb_item)
+                tax_unit = difal_unit + st_unit + ipi_unit
+                val_unit = float(pb_item.valor_unitario)
+                
+                val_total = val_unit * opp_qty
+                tax_total = tax_unit * opp_qty
+                val_final = val_total + tax_total
+                
+                supplier_data = mapped_by_supplier[supplier_id]
+                supplier_data["total_sem_imposto"] += val_total
+                supplier_data["total_imposto"] += tax_total
+                supplier_data["total_custo"] += val_final
+                
+                total_fornecedores_produtos += val_total
+                total_fornecedores_impostos += tax_total
+
+        # Format supplier summaries to strings
+        supplier_summaries_list = []
+        for s in mapped_by_supplier.values():
+            if s["total_custo"] > 0:
+                supplier_summaries_list.append({
+                    "fornecedor": s["fornecedor"],
+                    "total_sem_imposto": format_currency(s["total_sem_imposto"]),
+                    "total_imposto": format_currency(s["total_imposto"]),
+                    "total_custo": format_currency(s["total_custo"]),
+                    "forma_pagamento": s["forma_pagamento"]
+                })
+
+        # Capex & Payback
+        prazo_contrato = opportunity.prazo_contrato_meses or 36
+        receita_contratada = (locacao_mensal * prazo_contrato) + total_instalacao
+        investimento_total = total_aquisicao_sem_comissao + comissao_total_aquisicao + impostos_instalacao_total
+        
+        impostos_totais = (impostos_mensal_total * prazo_contrato) + impostos_instalacao_total
+        custo_op_total = custo_op_mensal_total * prazo_contrato
+        
+        # Payback in months
+        payback = investimento_total / lucro_mensal_total if lucro_mensal_total > 0 else 0.0
+        payback_meses_str = f"{payback:.1f} meses" if payback > 0 else "N/A (Retorno Inexistente)"
+        
+        # Margem líquida
+        margem_liquida_val = (lucro_mensal_total / locacao_mensal * 100) if locacao_mensal > 0 else 0.0
+
+        # Detailed taxes lists
+        aliq_pis = float(opportunity.perc_pis_rental or 0.0)
+        aliq_cofins = float(opportunity.perc_cofins_rental or 0.0)
+        aliq_csll = float(opportunity.perc_csll_rental or 0.0)
+        aliq_irpj = float(opportunity.perc_irpj_rental or 0.0)
+        aliq_iss = float(opportunity.perc_iss_rental or 0.0)
+
+        # detailed taxes recalculation per item
+        pis_total_mensal = 0.0
+        cofins_total_mensal = 0.0
+        csll_total_mensal = 0.0
+        irpj_total_mensal = 0.0
+        iss_total_mensal = 0.0
+        
+        for item in opportunity.rental_items:
+            q = float(item.quantidade)
+            if item.is_kit_instalacao:
+                continue
+                
+            loc = float(item.kit_parcela_locacao or item.valor_mensal or 0.0) * q
+            if item.opportunity_kit_id:
+                mon = float(item.kit_venda_unit_monitoramento or 0.0) * q
+                faturamento = float(item.kit_valor_mensal or item.valor_mensal or 0.0) * q
+                man = max(0.0, faturamento - loc - mon)
+                rate_pis = float(item.kit_pis or 0.0)
+                rate_cofins = float(item.kit_cofins or 0.0)
+                rate_csll = float(item.kit_csll or 0.0)
+                rate_irpj = float(item.kit_irpj or 0.0)
+                rate_iss = float(item.kit_iss or 0.0)
+                is_sep = bool(item.kit_faturamento_separado)
+            else:
+                mon = 0.0
+                man = 0.0
+                rate_pis = aliq_pis
+                rate_cofins = aliq_cofins
+                rate_csll = aliq_csll
+                rate_irpj = aliq_irpj
+                rate_iss = aliq_iss
+                is_sep = False
+                
+            is_com = item.tipo_contrato_kit == 'COMODATO' or (not item.opportunity_kit_id and opportunity.tipo_receita_rental == 'COMODATO')
+            
+            def calc_tax(is_iss: bool, rate: float):
+                if rate <= 0: return 0.0
+                if is_iss and not is_com: return 0.0
+                if not is_sep: return (loc + man + mon) * (rate / 100.0)
+                if is_iss: return (man + mon) * (rate / 100.0)
+                return (loc + man + mon) * (rate / 100.0)
+                
+            c_pis = calc_tax(False, rate_pis)
+            c_cofins = calc_tax(False, rate_cofins)
+            c_csll = calc_tax(False, rate_csll)
+            c_irpj = calc_tax(False, rate_irpj)
+            c_iss = calc_tax(True, rate_iss)
+            
+            total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
+            impostos = float(item.impostos_mensal or 0.0) * q
+            ratio = impostos / total_calc if total_calc > 0 else 1.0
+            
+            pis_total_mensal += c_pis * ratio
+            cofins_total_mensal += c_cofins * ratio
+            csll_total_mensal += c_csll * ratio
+            irpj_total_mensal += c_irpj * ratio
+            iss_total_mensal += c_iss * ratio
+
+        taxes_summary = [
+            {"name": "PIS", "percent": f"{aliq_pis:.2f}", "mensal": format_currency(pis_total_mensal), "total": format_currency(pis_total_mensal * prazo_contrato)},
+            {"name": "COFINS", "percent": f"{aliq_cofins:.2f}", "mensal": format_currency(cofins_total_mensal), "total": format_currency(cofins_total_mensal * prazo_contrato)},
+            {"name": "CSLL", "percent": f"{aliq_csll:.2f}", "mensal": format_currency(csll_total_mensal), "total": format_currency(csll_total_mensal * prazo_contrato)},
+            {"name": "IRPJ", "percent": f"{aliq_irpj:.2f}", "mensal": format_currency(irpj_total_mensal), "total": format_currency(irpj_total_mensal * prazo_contrato)},
+            {"name": "ISS", "percent": f"{aliq_iss:.2f}", "mensal": format_currency(iss_total_mensal), "total": format_currency(iss_total_mensal * prazo_contrato)},
+        ]
+
+        # Audit emission information
+        now = datetime.datetime.now()
+        emissao_data_hora = now.strftime("%d/%m/%Y às %H:%M")
+        
+        status_labels = {
+            "EM_LANCAMENTO": "RASCUNHO",
+            "ENVIADO_APROVACAO": "EM APROVAÇÃO",
+            "RETORNADO_VENDEDOR": "REPROVADA",
+            "APROVADO": "APROVADA",
+            "CANCELADO": "CANCELADA",
+            "GANHO": "GANHA"
+        }
+
+        opportunity_dict = {
+            "id": str(opportunity.id),
+            "numero_orcamento": opportunity.numero_orcamento or str(opportunity.id)[:8],
+            "titulo": opportunity.titulo,
+            "customer_nome": opportunity.customer.nome_fantasia or opportunity.customer.razao_social if opportunity.customer else "Cliente Não Informado",
+            "vendedor_nome": opportunity.vendedor.name if opportunity.vendedor else "Não Informado",
+            "status_label": status_labels.get(opportunity.status, opportunity.status),
+            "company_nome": opportunity.company.nome_fantasia or opportunity.company.razao_social if opportunity.company else "Empresa Não Informada",
+            "prazo_contrato_meses": prazo_contrato
+        }
+
+        auditoria = {
+            "usuario_emissor": current_user.name or current_user.email,
+            "data": now.strftime("%d/%m/%Y"),
+            "hora": now.strftime("%H:%M"),
+            "versao": "1.0.0"
+        }
+
+        kpis = {
+            "receita_contratada": format_currency(receita_contratada),
+            "investimento_total": format_currency(investimento_total),
+            "locacao_mensal": format_currency(locacao_mensal),
+            "custo_op_total": format_currency(custo_op_total),
+            "impostos_totais": format_currency(impostos_totais),
+            "margem_liquida": f"{margem_liquida_val:.2f}",
+            "payback_meses": payback_meses_str,
+            
+            "total_st_difal": format_currency(total_st_difal),
+            "total_aquisicao_sem_comissao": format_currency(total_aquisicao_sem_comissao),
+            "custo_op_mensal_total": format_currency(custo_op_mensal_total),
+            "impostos_mensal_total": format_currency(impostos_mensal_total),
+            "lucro_mensal_total": format_currency(lucro_mensal_total),
+            
+            "comissao_total_str": format_currency(comissao_total_aquisicao),
+            "impostos_instalacao_str": format_currency(impostos_instalacao_total),
+            "total_fornecedores_produtos": format_currency(total_fornecedores_produtos),
+            "total_fornecedores_impostos": format_currency(total_fornecedores_impostos),
+            "custo_total_aquisicao_bruto": format_currency(total_aquisicao_sem_comissao - total_st_difal)
+        }
+
+        # Determine modalidade de receita
+        modalidade_label_map = {
+            "LOCACAO_PURA": "Locação Pura",
+            "COMODATO": "Comodato",
+            "LOCACAO_SERVICO": "Locação com Serviços"
+        }
+        modalidade_contrato = modalidade_label_map.get(opportunity.tipo_receita_rental, "Locação")
+
+        # Determine purchase modes
+        purchase_tax_types = set()
+        for item in opportunity.rental_items:
+            if item.opportunity_kit_id:
+                kit = kits_by_id.get(item.opportunity_kit_id)
+                if kit and kit.considerar_st_ou_difal:
+                    purchase_tax_types.add(kit.considerar_st_ou_difal)
+            else:
+                # Add default st/difal if any has value
+                if (item.difal_unit or 0.0) > 0:
+                    purchase_tax_types.add("DIFAL")
+                if (item.icms_st_unit or 0.0) > 0:
+                    purchase_tax_types.add("ST")
+
+        forma_compra = ", ".join(sorted(list(purchase_tax_types))) if purchase_tax_types else "DIFAL"
+
+        # Generate SVG cash flow chart
+        cashflow_chart_svg = OpportunitiesReportService.generate_svg_cashflow_chart(
+            investimento=investimento_total,
+            lucro_mensal=lucro_mensal_total,
+            prazo_contrato=prazo_contrato
+        )
+
+        # 8. Render HTML Template
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        templates_dir = os.path.join(base_dir, "templates", "reports")
+        
+        # Determine company logo path
+        company_logo = None
+        if opportunity.company and opportunity.company.logo_url:
+            root_dir = os.path.dirname(os.path.dirname(base_dir))
+            clean_path = opportunity.company.logo_url.lstrip("/")
+            abs_logo_path = os.path.join(root_dir, clean_path)
+            if os.path.exists(abs_logo_path):
+                normalized_path = abs_logo_path.replace("\\", "/")
+                company_logo = f"file:///{normalized_path}"
+
+        css_path = os.path.join(templates_dir, "locacao_approval_v1.css")
+        html_path = os.path.join(templates_dir, "locacao_approval_v1.html")
+
+        # Load styles and HTML
+        css_content = ""
+        if os.path.exists(css_path):
+            with open(css_path, "r", encoding="utf-8") as f:
+                css_content = f.read()
+
+        html_template = ""
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_template = f.read()
+        else:
+            raise HTTPException(status_code=500, detail="Report HTML template file not found.")
+
+        # Render template
+        from jinja2 import Template
+        template = Template(html_template)
+        rendered_html = template.render(
+            css_content=css_content,
+            opportunity=opportunity_dict,
+            company_logo=company_logo,
+            emissao_data_hora=emissao_data_hora,
+            modalidade_contrato=modalidade_contrato,
+            forma_compra=forma_compra,
+            kpis=kpis,
+            items_details=items_details,
+            supplier_summaries=supplier_summaries_list,
+            comissao_total_aquisicao=comissao_total_aquisicao,
+            impostos_instalacao_total=impostos_instalacao_total,
+            taxes_summary=taxes_summary,
+            cashflow_chart_svg=cashflow_chart_svg,
+            auditoria=auditoria
+        )
+
+        # 9. PDF Generation with WeasyPrint & Fallback
+        try:
+            from weasyprint import HTML
+            pdf_bytes = HTML(string=rendered_html).write_pdf()
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=approval-locacao-{opportunity_dict['numero_orcamento']}.pdf"
+                }
+            )
+        except Exception as weasy_err:
+            print(f"[Warning] WeasyPrint failed. Falling back to ReportLab. Error: {weasy_err}")
+            # REPORTLAB FALLBACK
+            from reportlab.lib.pagesizes import letter, landscape
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+            pdf_buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buffer, 
+                pagesize=landscape(letter),
+                rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+            )
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Define styles
+            title_style = ParagraphStyle(
+                'ReportTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                textColor=colors.HexColor('#0f766e'),
+                spaceAfter=15
+            )
+            sub_style = ParagraphStyle(
+                'SubStyle',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor('#475569'),
+                spaceAfter=15
+            )
+            table_header_style = ParagraphStyle(
+                'TableHeader',
+                parent=styles['Normal'],
+                fontSize=8,
+                fontName='Helvetica-Bold',
+                textColor=colors.white
+            )
+            table_cell_style = ParagraphStyle(
+                'TableCell',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#1e293b')
+            )
+
+            story.append(Paragraph(f"Relatório Executivo de Approval de Locação - #{opportunity_dict['numero_orcamento']}", title_style))
+            story.append(Paragraph(f"Cliente: {opportunity_dict['customer_nome']} | Vendedor: {opportunity_dict['vendedor_nome']} | Emissão: {emissao_data_hora}", sub_style))
+
+            # Render KPI table
+            kpi_data = [
+                ["Receita Contratada", "Investimento Inicial", "Locação Mensal", "Custos Op. Total", "Payback"],
+                [f"R$ {kpis['receita_contratada']}", f"R$ {kpis['investimento_total']}", f"R$ {kpis['locacao_mensal']}", f"R$ {kpis['custo_op_total']}", kpis['payback_meses']]
+            ]
+            kpi_table = Table(kpi_data, colWidths=[130]*5)
+            kpi_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f766e')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+                ('TOPPADDING', (0,0), (-1,-1), 8),
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#e2e8f0')),
+            ]))
+            story.append(kpi_table)
+            story.append(Spacer(1, 20))
+
+            # Render simple items table
+            story.append(Paragraph("Composição dos Itens", styles['Heading2']))
+            story.append(Spacer(1, 6))
+
+            item_data = [[
+                Paragraph("Item", table_header_style), 
+                Paragraph("Quantidade", table_header_style), 
+                Paragraph("Custo Total", table_header_style), 
+                Paragraph("Fator Margem", table_header_style), 
+                Paragraph("Locação Mensal", table_header_style),
+                Paragraph("Lucro Mensal", table_header_style)
+            ]]
+            for item in items_details:
+                item_data.append([
+                    Paragraph(item["descricao"], table_cell_style),
+                    Paragraph(str(item["quantidade"]), table_cell_style),
+                    Paragraph(f"R$ {item['custo_total']}", table_cell_style),
+                    Paragraph(item["fator_margem"] + "x", table_cell_style),
+                    Paragraph(f"R$ {item['valor_mensal']}", table_cell_style),
+                    Paragraph(f"R$ {item['lucro_mensal']}", table_cell_style)
+                ])
+
+            item_table = Table(item_data, colWidths=[180, 80, 100, 80, 100, 100])
+            item_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+            ]))
+            story.append(item_table)
+
+            doc.build(story)
+            pdf_buffer.seek(0)
+            return StreamingResponse(
+                pdf_buffer,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=approval-locacao-{opportunity_dict['numero_orcamento']}.pdf"
+                }
+            )

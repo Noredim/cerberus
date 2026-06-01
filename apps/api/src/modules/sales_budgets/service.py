@@ -587,6 +587,128 @@ def check_budget_locked(budget: SalesBudget):
         raise ValueError("Status não permite mais edição")
 
 
+def _only_comissao_diretoria_changed(budget: SalesBudget, data: SalesBudgetUpdate) -> bool:
+    def _float(v):
+        return float(v) if v is not None else 0.0
+
+    def _str(v):
+        return str(v) if v is not None else ""
+
+    if _str(budget.customer_id) != _str(data.customer_id): return False
+    if _str(budget.vendedor_id) != _str(data.vendedor_id): return False
+    if _str(budget.forma_pagamento_id) != _str(data.forma_pagamento_id): return False
+    
+    if budget.data_vencimento_inicial and data.data_vencimento_inicial:
+        if budget.data_vencimento_inicial.date() != data.data_vencimento_inicial.date():
+            return False
+    elif budget.data_vencimento_inicial or data.data_vencimento_inicial:
+        return False
+
+    if budget.data_orcamento.date() != data.data_orcamento.date():
+        return False
+
+    if (budget.titulo or "") != (data.titulo or ""): return False
+    if (budget.observacoes or "") != (data.observacoes or ""): return False
+
+    if _float(budget.markup_padrao) != _float(data.markup_padrao): return False
+    if _float(budget.perc_despesa_adm) != _float(data.perc_despesa_adm): return False
+    if _float(budget.perc_comissao) != _float(data.perc_comissao): return False
+    if _float(budget.perc_frete_venda) != _float(data.perc_frete_venda): return False
+    if _float(budget.perc_pis) != _float(data.perc_pis): return False
+    if _float(budget.perc_cofins) != _float(data.perc_cofins): return False
+    if _float(budget.perc_csll) != _float(data.perc_csll): return False
+    if _float(budget.perc_irpj) != _float(data.perc_irpj): return False
+    if _float(budget.perc_iss) != _float(data.perc_iss): return False
+    if _float(budget.perc_icms_interno) != _float(data.perc_icms_interno): return False
+    if _float(budget.perc_icms_externo) != _float(data.perc_icms_externo): return False
+
+    if _float(budget.venda_markup_produtos) != _float(data.venda_markup_produtos): return False
+    if _float(budget.venda_markup_servicos) != _float(data.venda_markup_servicos): return False
+    if _float(budget.venda_markup_instalacao) != _float(data.venda_markup_instalacao): return False
+    if _float(budget.venda_markup_manutencao) != _float(data.venda_markup_manutencao): return False
+    if bool(budget.venda_havera_manutencao) != bool(data.venda_havera_manutencao): return False
+    if int(budget.venda_qtd_meses_manutencao or 0) != int(data.venda_qtd_meses_manutencao or 0): return False
+
+    if int(budget.prazo_contrato_meses or 0) != int(data.prazo_contrato_meses or 0): return False
+    if int(budget.prazo_instalacao_meses or 0) != int(data.prazo_instalacao_meses or 0): return False
+    if _float(budget.taxa_juros_mensal) != _float(data.taxa_juros_mensal): return False
+    if _float(budget.taxa_manutencao_anual) != _float(data.taxa_manutencao_anual): return False
+    if (budget.tipo_receita_rental or "") != (data.tipo_receita_rental or ""): return False
+    if _float(budget.fator_margem_padrao) != _float(data.fator_margem_padrao): return False
+    if _float(budget.fator_manutencao_padrao) != _float(data.fator_manutencao_padrao): return False
+    if _float(budget.perc_instalacao_padrao) != _float(data.perc_instalacao_padrao): return False
+    if _float(budget.perc_comissao_rental) != _float(data.perc_comissao_rental): return False
+    if _float(budget.perc_pis_rental) != _float(data.perc_pis_rental): return False
+    if _float(budget.perc_cofins_rental) != _float(data.perc_cofins_rental): return False
+    if _float(budget.perc_csll_rental) != _float(data.perc_csll_rental): return False
+    if _float(budget.perc_irpj_rental) != _float(data.perc_irpj_rental): return False
+    if _float(budget.perc_iss_rental) != _float(data.perc_iss_rental): return False
+
+    db_resp = sorted([_str(r.user_id) for r in budget.responsaveis])
+    in_resp = sorted([_str(uid) for uid in data.responsavel_ids])
+    if db_resp != in_resp: return False
+
+    if len(budget.items) != len(data.items): return False
+    for i_db, i_in in zip(budget.items, data.items):
+        if _str(i_db.product_id) != _str(i_in.product_id): return False
+        if _str(i_db.opportunity_kit_id) != _str(i_in.opportunity_kit_id): return False
+        db_type = i_db.tipo_item.value if hasattr(i_db.tipo_item, 'value') else str(i_db.tipo_item)
+        in_type = i_in.tipo_item.value if hasattr(i_in.tipo_item, 'value') else str(i_in.tipo_item)
+        if db_type != in_type: return False
+        if (i_db.descricao_servico or "") != (i_in.descricao_servico or ""): return False
+        if bool(i_db.usa_parametros_padrao) != bool(i_in.usa_parametros_padrao): return False
+        if _float(i_db.custo_unit_base) != _float(i_in.custo_unit_base): return False
+        if _float(i_db.markup) != _float(i_in.markup): return False
+        if _float(i_db.quantidade) != _float(i_in.quantidade): return False
+        if _float(i_db.perc_frete_venda) != _float(i_in.perc_frete_venda): return False
+        if _float(i_db.perc_pis) != _float(i_in.perc_pis): return False
+        if _float(i_db.perc_cofins) != _float(i_in.perc_cofins): return False
+        if _float(i_db.perc_csll) != _float(i_in.perc_csll): return False
+        if _float(i_db.perc_irpj) != _float(i_in.perc_irpj): return False
+        if _float(i_db.perc_icms) != _float(i_in.perc_icms): return False
+        if _float(i_db.perc_iss) != _float(i_in.perc_iss): return False
+        if _float(i_db.perc_despesa_adm) != _float(i_in.perc_despesa_adm): return False
+        if _float(i_db.perc_comissao) != _float(i_in.perc_comissao): return False
+        if bool(i_db.tem_st) != bool(i_in.tem_st): return False
+
+    if len(budget.rental_items) != len(data.rental_items): return False
+    for r_db, r_in in zip(budget.rental_items, data.rental_items):
+        if _str(r_db.product_id) != _str(r_in.product_id): return False
+        if _str(r_db.opportunity_kit_id) != _str(r_in.opportunity_kit_id): return False
+        if _float(r_db.custo_op_mensal_kit) != _float(r_in.custo_op_mensal_kit): return False
+        if bool(r_db.is_kit_instalacao) != bool(r_in.is_kit_instalacao): return False
+        if _str(r_db.tipo_contrato_kit) != _str(r_in.tipo_contrato_kit): return False
+        if _float(r_db.kit_taxa_juros_mensal) != _float(r_in.kit_taxa_juros_mensal): return False
+        if _float(r_db.kit_custo_produtos) != _float(r_in.kit_custo_produtos): return False
+        if _float(r_db.kit_custo_servicos) != _float(r_in.kit_custo_servicos): return False
+        if _float(r_db.kit_pis) != _float(r_in.kit_pis): return False
+        if _float(r_db.kit_cofins) != _float(r_in.kit_cofins): return False
+        if _float(r_db.kit_csll) != _float(r_in.kit_csll): return False
+        if _float(r_db.kit_irpj) != _float(r_in.kit_irpj): return False
+        if _float(r_db.kit_iss) != _float(r_in.kit_iss): return False
+        if _float(r_db.kit_vlt_manut) != _float(r_in.kit_vlt_manut): return False
+        if _float(r_db.kit_valor_mensal) != _float(r_in.kit_valor_mensal): return False
+        if _float(r_db.kit_valor_impostos) != _float(r_in.kit_valor_impostos): return False
+        if _float(r_db.kit_receita_liquida) != _float(r_in.kit_receita_liquida): return False
+        if _float(r_db.kit_lucro_mensal) != _float(r_in.kit_lucro_mensal): return False
+        if _float(r_db.kit_margem) != _float(r_in.kit_margem): return False
+        if bool(getattr(r_db, 'kit_faturamento_separado', False)) != bool(getattr(r_in, 'kit_faturamento_separado', False)): return False
+        if _float(r_db.kit_investimento_total) != _float(r_in.kit_investimento_total): return False
+        if _float(r_db.kit_comissao) != _float(r_in.kit_comissao): return False
+        if _float(r_db.kit_perc_comissao) != _float(r_in.kit_perc_comissao): return False
+        if _float(r_db.kit_vlr_instal_calc) != _float(r_in.kit_vlr_instal_calc): return False
+        if _float(r_db.kit_parcela_locacao) != _float(r_in.kit_parcela_locacao): return False
+        if _float(r_db.kit_venda_unit_monitoramento) != _float(r_in.kit_venda_unit_monitoramento): return False
+        if int(r_db.prazo_contrato or 0) != int(r_in.prazo_contrato or 0): return False
+        if bool(r_db.usa_taxa_manut_padrao) != bool(r_in.usa_taxa_manut_padrao): return False
+        if _float(r_db.taxa_manutencao_anual_item) != _float(r_in.taxa_manutencao_anual_item): return False
+        if _float(r_db.perc_instalacao_item) != _float(r_in.perc_instalacao_item): return False
+        if _float(r_db.valor_instalacao_item) != _float(r_in.valor_instalacao_item): return False
+        if _float(r_db.fator_margem) != _float(r_in.fator_margem): return False
+
+    return True
+
+
 def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudgetUpdate, user_id: Optional[str] = None) -> Optional[SalesBudget]:
     budget = db.query(SalesBudget).filter(
         SalesBudget.id == budget_id,
@@ -597,6 +719,36 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     if user_id:
         if not check_user_has_budget_access(db, user_id, tenant_id, budget):
             raise PermissionError("Acesso negado: você não tem permissão para esta oportunidade.")
+
+    # Check for direct permission bypass for Consolidação Diretoria modifications by an approver
+    is_approver = False
+    if user_id:
+        is_approver, _ = check_is_approver(db, user_id, tenant_id, budget.company_id)
+
+    if budget.status in ("ENVIADO_APROVACAO", "APROVADO", "CANCELADO", "GANHO", "PERDIDO"):
+        if is_approver and _only_comissao_diretoria_changed(budget, data):
+            if budget.perc_comissao_diretoria != data.perc_comissao_diretoria:
+                old_val = float(budget.perc_comissao_diretoria)
+                new_val = float(data.perc_comissao_diretoria)
+                budget.perc_comissao_diretoria = data.perc_comissao_diretoria
+                
+                cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+                from src.modules.sales_budgets.models import SalesBudgetHistory
+                history_entry = SalesBudgetHistory(
+                    sales_budget_id=budget.id,
+                    tenant_id=tenant_id,
+                    versao=budget.versao,
+                    status_anterior=budget.status,
+                    status_novo=budget.status,
+                    usuario_id=user_id,
+                    cargo_usuario=cargo_usuario,
+                    descricao=f"Comissão da diretoria alterada de {old_val:.2f}% para {new_val:.2f}%."
+                )
+                db.add(history_entry)
+                db.commit()
+                db.refresh(budget)
+            return budget
+
     check_budget_locked(budget)
     if budget.status in ("ENVIADO_APROVACAO", "CANCELADO"):
         raise ValueError(f"Orçamento no status {budget.status} não pode ser editado.")

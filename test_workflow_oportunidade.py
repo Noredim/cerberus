@@ -408,6 +408,125 @@ def run_tests():
         except PermissionError as e:
             print(f"Successfully blocked deletion by non-responsible user: {e}")
 
+        # ── Test 8: Bypass Consolidação Diretoria update for Approver ──
+        print("\n--- Test 8: Bypass Consolidação Diretoria ---")
+        
+        # 1. Budget is currently GANHO (locked). Try to update only comissao_diretoria using admin (approver)
+        print("Testing comissao_diretoria update on locked status by admin...")
+        locked_payload = SalesBudgetUpdate(
+            customer_id=str(customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo=budget.titulo,
+            observacoes=budget.observacoes,
+            data_orcamento=budget.data_orcamento,
+            responsavel_ids=[peon_user.id],
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"),
+                    markup=Decimal("2.0"),
+                    quantidade=Decimal("5"),
+                )
+            ],
+            perc_comissao_diretoria=Decimal("12.50") # New commission value
+        )
+        
+        # This should succeed since it's only comissao_diretoria and user is admin
+        old_status = budget.status
+        old_version = budget.versao
+        updated_budget = update_budget(db, tenant_id, str(budget.id), locked_payload, admin_user.id)
+        
+        print(f"Bypass successful! Status: {updated_budget.status} (Expected: {old_status})")
+        print(f"Bypass successful! Version: {updated_budget.versao} (Expected: {old_version})")
+        print(f"Bypass successful! comissao_diretoria: {updated_budget.perc_comissao_diretoria} (Expected: 12.50)")
+        
+        assert updated_budget.status == old_status
+        assert updated_budget.versao == old_version
+        assert float(updated_budget.perc_comissao_diretoria) == 12.5
+        
+        # Verify history entry
+        last_hist = sorted(updated_budget.history, key=lambda h: h.data_movimentacao, reverse=True)[0]
+        print(f"History entry: {last_hist.descricao}")
+        assert "Comissão da diretoria alterada" in last_hist.descricao
+        
+        # 2. Try to update comissao_diretoria + another field (e.g. titulo) on locked status by admin
+        print("Testing comissao_diretoria + other field update on locked status by admin...")
+        locked_invalid_payload = SalesBudgetUpdate(**locked_payload.model_dump())
+        locked_invalid_payload.titulo = "Titulo alterado"
+        try:
+            update_budget(db, tenant_id, str(budget.id), locked_invalid_payload, admin_user.id)
+            assert False, "Should have failed to edit locked opportunity other fields"
+        except ValueError as e:
+            print(f"Successfully blocked locked edit of other fields: {e}")
+            
+        # 3. Try to update comissao_diretoria on locked status by non-approver (peon)
+        print("Testing comissao_diretoria update on locked status by peon...")
+        try:
+            update_budget(db, tenant_id, str(budget.id), locked_payload, peon_user.id)
+            assert False, "Should have blocked locked comissao_diretoria update by peon"
+        except ValueError as e:
+            print(f"Successfully blocked locked comissao_diretoria update by peon: {e}")
+
+        # --- Test 9: Product Creation & Duplication Validation ---
+        print("\n--- Test 9: Product Creation & Duplication Validation ---")
+        from src.modules.products.service import ProductService
+        from src.modules.products.schemas import ProductCreate, ProductType, ProductFinalidade
+        from src.modules.products.models import Product
+        from fastapi import HTTPException
+
+        # Clean up any leftover products from previous runs
+        db.query(Product).filter(Product.tenant_id == tenant_id, Product.codigo == "SKU-UNICO-123").delete()
+        db.query(Product).filter(Product.tenant_id == tenant_id, Product.nome == "PRODUTO TESTE UNICO").delete()
+        db.commit()
+
+        prod_service = ProductService(db)
+        prod_payload1 = ProductCreate(
+            company_id=uuid.UUID(str(company.id)),
+            nome="Produto Teste Unico",
+            tipo=ProductType.EQUIPAMENTO,
+            finalidade=ProductFinalidade.REVENDA,
+            codigo="SKU-UNICO-123"
+        )
+        # 1. Create product
+        p1 = prod_service.create_product(tenant_id, prod_payload1)
+        assert p1.nome == "PRODUTO TESTE UNICO"
+        assert p1.codigo == "SKU-UNICO-123"
+        print("Product created successfully!")
+
+        # 2. Try to create with duplicate name
+        prod_payload2 = ProductCreate(
+            company_id=uuid.UUID(str(company.id)),
+            nome="produto teste unico",
+            tipo=ProductType.EQUIPAMENTO,
+            finalidade=ProductFinalidade.REVENDA,
+            codigo="SKU-UNICO-999"
+        )
+        try:
+            prod_service.create_product(tenant_id, prod_payload2)
+            assert False, "Should have failed to create product with duplicate name"
+        except HTTPException as e:
+            print(f"Successfully blocked duplicate name: {e.detail}")
+            assert e.status_code == 400
+            assert "Já existe um produto cadastrado com o nome" in e.detail
+
+        # 3. Try to create with duplicate SKU
+        prod_payload3 = ProductCreate(
+            company_id=uuid.UUID(str(company.id)),
+            nome="Produto Outro Nome 123",
+            tipo=ProductType.EQUIPAMENTO,
+            finalidade=ProductFinalidade.REVENDA,
+            codigo="SKU-UNICO-123"
+        )
+        try:
+            prod_service.create_product(tenant_id, prod_payload3)
+            assert False, "Should have failed to create product with duplicate SKU"
+        except HTTPException as e:
+            print(f"Successfully blocked duplicate SKU: {e.detail}")
+            assert e.status_code == 400
+            assert "Já existe um produto cadastrado com o código/SKU" in e.detail
+
         print("\nALL WORKFLOW WORK PATTERNS COMPLETED SUCCESSFULLY!")
 
     finally:

@@ -373,6 +373,73 @@ def run_test():
         else:
             print("FAILED: Venda Approval PDF generated but header is invalid.")
             sys.exit(1)
+
+        # 7. Configure and Generate PDF Report via service (Locacao Approval)
+        print("Configuring Rental/Comodato opportunity fields...")
+        opp.tipo_receita_rental = "LOCACAO_SERVICO"
+        opp.prazo_contrato_meses = 36
+        opp.perc_pis_rental = 1.65
+        opp.perc_cofins_rental = 7.60
+        opp.perc_csll_rental = 1.00
+        opp.perc_irpj_rental = 2.00
+        opp.perc_iss_rental = 5.00
+        db.flush()
+
+        print("Adding rental items...")
+        from src.modules.sales_budgets.models import RentalBudgetItem
+        rental_item_1 = RentalBudgetItem(
+            budget_id=opp.id,
+            product_id=product_difal.id,
+            quantidade=10.0,
+            custo_aquisicao_unit=85.00,
+            difal_unit=12.35,
+            icms_st_unit=0.00,
+            custo_total_aquisicao=97.35 * 10,
+            prazo_contrato=36,
+            valor_mensal=150.00,
+            custo_total_mensal=10.00,
+            impostos_mensal=20.00,
+            lucro_mensal=120.00,
+            fator_margem=1.2,
+            comissao_mensal=5.00,
+            is_kit_instalacao=False
+        )
+        rental_item_2 = RentalBudgetItem(
+            budget_id=opp.id,
+            product_id=product_st.id,
+            opportunity_kit_id=kit.id,
+            quantidade=2.0,
+            custo_aquisicao_unit=220.00,
+            difal_unit=0.00,
+            icms_st_unit=34.60,
+            custo_total_aquisicao=254.60 * 2,
+            prazo_contrato=36,
+            valor_mensal=400.00,
+            custo_total_mensal=15.00,
+            impostos_mensal=48.00,
+            lucro_mensal=337.00,
+            fator_margem=1.5,
+            kit_comissao=10.00,
+            is_kit_instalacao=False
+        )
+        opp.rental_items.append(rental_item_1)
+        opp.rental_items.append(rental_item_2)
+        db.add_all([rental_item_1, rental_item_2])
+        db.flush()
+
+        print("Invoking OpportunitiesReportService (Locacao Approval)...")
+        response_locacao = OpportunitiesReportService.generate_locacao_approval_pdf(db, opp.id, user)
+        pdf_bytes_locacao = asyncio.run(read_stream(response_locacao.body_iterator))
+
+        if pdf_bytes_locacao.startswith(b"%PDF"):
+            print("SUCCESS: Locacao Approval PDF generated successfully! Header starts with %PDF")
+            print(f"PDF size: {len(pdf_bytes_locacao)} bytes")
+            with open("test_locacao_approval_output.pdf", "wb") as f:
+                f.write(pdf_bytes_locacao)
+            print("Saved PDF to test_locacao_approval_output.pdf")
+        else:
+            print("FAILED: Locacao Approval PDF generated but header is invalid.")
+            sys.exit(1)
             
     except Exception as e:
         print(f"FAILED: Exception raised during PDF generation: {e}")

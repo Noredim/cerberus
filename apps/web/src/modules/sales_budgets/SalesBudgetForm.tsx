@@ -406,6 +406,7 @@ export function SalesBudgetForm() {
   const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadingVendaReport, setDownloadingVendaReport] = useState(false);
+  const [downloadingLocacaoReport, setDownloadingLocacaoReport] = useState(false);
   const [showReportsDropdown, setShowReportsDropdown] = useState(false);
 
   useEffect(() => {
@@ -1154,6 +1155,32 @@ export function SalesBudgetForm() {
       alert("Falha ao gerar relatório de approval de venda.");
     } finally {
       setDownloadingVendaReport(false);
+    }
+  };
+
+  const handleDownloadLocacaoApprovalReport = async () => {
+    if (opportunityPurchaseBudgets.length === 0) {
+      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
+      return;
+    }
+    setDownloadingLocacaoReport(true);
+    try {
+      const response = await api.get(`/sales-budgets/${id}/reports/locacao-approval`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `approval-locacao-${numeroOrcamento || id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error("Erro ao gerar relatório de approval de locação:", err);
+      alert("Falha ao gerar relatório de approval de locação.");
+    } finally {
+      setDownloadingLocacaoReport(false);
     }
   };
 
@@ -2274,17 +2301,32 @@ export function SalesBudgetForm() {
                     {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Fechamento de Fornecedores
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowReportsDropdown(false);
-                      handleDownloadVendaApprovalReport();
-                    }}
-                    disabled={downloadingVendaReport}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    Approval de Venda
-                  </button>
+                  {items.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowReportsDropdown(false);
+                        handleDownloadVendaApprovalReport();
+                      }}
+                      disabled={downloadingVendaReport}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      Approval de Venda
+                    </button>
+                  )}
+                  {rentalItems.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowReportsDropdown(false);
+                        handleDownloadLocacaoApprovalReport();
+                      }}
+                      disabled={downloadingLocacaoReport}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {downloadingLocacaoReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      Approval de Locação
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2511,20 +2553,34 @@ export function SalesBudgetForm() {
                   <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
                     Comissão sobre receita líquida
                   </label>
-                  <div className="relative max-w-[180px]">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      disabled={isReadonly}
-                      value={percComissaoDiretoria}
-                      onChange={e => {
-                        setPercComissaoDiretoria(+e.target.value);
-                        setHasUnsavedChanges(true);
-                      }}
-                      className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
-                    />
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative max-w-[180px] w-full">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        disabled={isReadonly && !isApprover}
+                        value={percComissaoDiretoria}
+                        onChange={e => {
+                          setPercComissaoDiretoria(+e.target.value);
+                          setHasUnsavedChanges(true);
+                        }}
+                        className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                    </div>
+                    {isReadonly && isApprover && (
+                      <Button
+                        type="button"
+                        onClick={() => handleSave(true)}
+                        disabled={saving}
+                        size="sm"
+                        className="bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0 h-[38px] flex items-center gap-1"
+                      >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span className="text-xs">Salvar Comissão</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -3330,20 +3386,34 @@ export function SalesBudgetForm() {
                     <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
                       Comissão sobre receita líquida
                     </label>
-                    <div className="relative max-w-[180px]">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        disabled={isReadonly}
-                        value={percComissaoDiretoria}
-                        onChange={e => {
-                          setPercComissaoDiretoria(+e.target.value);
-                          setHasUnsavedChanges(true);
-                        }}
-                        className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
-                      />
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative max-w-[180px] w-full">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={isReadonly && !isApprover}
+                          value={percComissaoDiretoria}
+                          onChange={e => {
+                            setPercComissaoDiretoria(+e.target.value);
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="w-full pl-3 pr-8 py-2 border border-border-subtle rounded-lg bg-bg-deep text-sm font-bold focus:outline-none focus:border-brand-primary/50 focus:ring-1 focus:ring-brand-primary/30 disabled:opacity-60 transition-colors"
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-text-muted text-sm font-bold">%</div>
+                      </div>
+                      {isReadonly && isApprover && (
+                        <Button
+                          type="button"
+                          onClick={() => handleSave(true)}
+                          disabled={saving}
+                          size="sm"
+                          className="bg-brand-primary hover:bg-brand-primary/90 text-white shrink-0 h-[38px] flex items-center gap-1"
+                        >
+                          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          <span className="text-xs">Salvar Comissão</span>
+                        </Button>
+                      )}
                     </div>
                   </div>
 

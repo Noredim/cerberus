@@ -29,6 +29,30 @@ class ProductService:
         if not payload.codigo:
             payload.codigo = self._generate_sku(tenant_id)
             
+        # Validate SKU uniqueness
+        if payload.codigo:
+            existing_sku = self.db.query(Product).filter(
+                Product.tenant_id == tenant_id,
+                Product.codigo == payload.codigo
+            ).first()
+            if existing_sku:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Já existe um produto cadastrado com o código/SKU '{payload.codigo}'."
+                )
+
+        # Validate product name uniqueness (case-insensitive) in the same company
+        existing_name = self.db.query(Product).filter(
+            Product.tenant_id == tenant_id,
+            Product.company_id == payload.company_id,
+            func.lower(Product.nome) == func.lower(payload.nome)
+        ).first()
+        if existing_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Já existe um produto cadastrado com o nome '{payload.nome}' nesta empresa (Código: {existing_name.codigo})."
+            )
+
         product_data = payload.model_dump(exclude={'suppliers'})
         product = Product(
             tenant_id=tenant_id,

@@ -2,19 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, X, Loader2, PackageOpen, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../ui/Button';
+import { QuickProductCreateModal } from './QuickProductCreateModal';
+import type { Product } from '../../modules/products/types';
 
 interface ProductSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (product: any) => void;
+  onSelect: (product: Product) => void;
   title?: string;
   salesBudgetId?: string;
 }
 
 export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId }: ProductSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,7 +39,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
         }
         setIsSearching(true);
         try {
-          const params: any = { limit: 100 };
+          const params: { limit: number; q?: string; sales_budget_id?: string } = { limit: 100 };
           if (searchTerm && searchTerm.trim().length >= 2) {
             params.q = searchTerm;
           }
@@ -150,21 +153,55 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
               </div>
             ))}
 
+            {results.length > 0 && (
+              <div className="mt-4 pt-2 border-t border-border-subtle flex justify-center">
+                <button 
+                  type="button"
+                  onClick={() => setIsQuickCreateOpen(true)}
+                  className="text-xs font-semibold text-brand-primary hover:text-brand-primary/80 flex items-center gap-1 py-2 px-4 rounded-lg hover:bg-brand-primary/5 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Não encontrou o que procurava? Cadastrar Novo Produto
+                </button>
+              </div>
+            )}
+
             {searchTerm.length >= 2 && results.length === 0 && !isSearching && (
               <div className="flex flex-col items-center justify-center py-10 text-center bg-white border border-dashed border-border-subtle rounded-lg">
                 <p className="text-text-primary font-medium mb-1">Nenhum produto encontrado</p>
                 <p className="text-text-muted text-sm mb-4">Verifique a ortografia ou cadastre um novo produto.</p>
-                <Button 
-                  onClick={() => window.open('/cadastro/produtos/novo', '_blank')}
-                  variant="primary" 
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Cadastrar Produto
-                </Button>
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => setIsQuickCreateOpen(true)}
+                    variant="primary" 
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Cadastrar Rápido
+                  </Button>
+                  <Button 
+                    onClick={() => window.open('/cadastro/produtos/novo', '_blank')}
+                    variant="outline" 
+                  >
+                    Cadastro Completo (Nova Guia)
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </div>
+
+        <QuickProductCreateModal
+          isOpen={isQuickCreateOpen}
+          onClose={() => setIsQuickCreateOpen(false)}
+          onSuccess={(newProduct) => {
+            setIsQuickCreateOpen(false);
+            onSelect(newProduct);
+            onClose();
+          }}
+          initialData={{
+            nome: searchTerm
+          }}
+        />
       </div>
     </div>
   );

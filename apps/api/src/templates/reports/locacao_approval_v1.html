@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Relatório Executivo de Approval de Locação/Comodato do sistema Cerberus.">
+    <title>Relatório Executivo de Approval de Locação</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO EXECUTIVO -->
+    <div class="first-page-header">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+            <tr>
+                <td style="width: 30%; vertical-align: middle; padding: 0;">
+                    {% if company_logo %}
+                        <img src="{{ company_logo }}" alt="Logo Empresa" style="max-height: 40px; max-width: 200px; display: block;" />
+                    {% else %}
+                        <div style="font-size: 14pt; font-weight: bold; color: #0f172a; text-transform: uppercase; font-family: 'Outfit', 'Inter', sans-serif;">
+                            {{ opportunity.company_nome }}
+                        </div>
+                    {% endif %}
+                </td>
+                
+                <td style="width: 70%; text-align: right; vertical-align: middle; padding: 0; font-size: 7.5pt; color: #475569; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <div style="font-size: 11pt; font-weight: bold; color: #0f766e; margin-bottom: 2px;">
+                        Relatório Executivo de Approval de Locação / Comodato
+                    </div>
+                    <div>
+                        <strong>Oportunidade:</strong> #{{ opportunity.numero_orcamento }} - {{ opportunity.titulo }}
+                    </div>
+                    <div style="margin-top: 2px;">
+                        <strong>Cliente:</strong> {{ opportunity.customer_nome }} &nbsp;|&nbsp; 
+                        <strong>Vendedor:</strong> {{ opportunity.vendedor_nome }} &nbsp;|&nbsp; 
+                        <strong>Status:</strong> 
+                        <span class="status-badge {% if opportunity.status_label == 'APROVADA' or opportunity.status_label == 'GANHA' %}approved{% elif opportunity.status_label == 'EM APROVAÇÃO' %}pending{% elif opportunity.status_label == 'REPROVADA' or opportunity.status_label == 'CANCELADA' %}rejected{% else %}default{% endif %}">
+                            {{ opportunity.status_label }}
+                        </span>
+                    </div>
+                    <div style="margin-top: 2px; font-size: 8pt; color: #0f172a;">
+                        <strong>Modalidade de Contrato:</strong> {{ modalidade_contrato }} &nbsp;|&nbsp;
+                        <strong>Forma de Compra (Impostos):</strong> {{ forma_compra }}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <div class="compact-kpi-row">
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Receita Contratada</span>
+                <span class="kpi-val" style="color: #0284c7;">R$ {{ kpis.receita_contratada }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Investimento Total</span>
+                <span class="kpi-val" style="color: #b91c1c;">R$ {{ kpis.investimento_total }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Locação Mensal</span>
+                <span class="kpi-val" style="color: #0f766e;">R$ {{ kpis.locacao_mensal }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Custos Operacionais</span>
+                <span class="kpi-val">R$ {{ kpis.custo_op_total }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Impostos Totais</span>
+                <span class="kpi-val">R$ {{ kpis.impostos_totais }}</span>
+            </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Margem Líquida</span>
+                <span class="kpi-val" style="color: #16a34a;">{{ kpis.margem_liquida }}%</span>
+            </div>
+            <div class="compact-kpi-card" style="background-color: #f0fdf4; border-color: #bbf7d0;">
+                <span class="kpi-label" style="color: #15803d;">Payback</span>
+                <span class="kpi-val" style="color: #166534; font-size: 10.5pt;">{{ kpis.payback_meses }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- BLOCO 1: COMPOSIÇÃO DE PRODUTOS / KITS -->
+    <div class="avoid-break" style="margin-top: 10px;">
+        <div class="section-title">Composição de Itens e Margem Aplicada</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Produto / Kit</th>
+                    <th style="width: 15%;">Destinação</th>
+                    <th class="text-center" style="width: 5%;">Qtd</th>
+                    <th class="text-right" style="width: 8%;">Custo Aquis.</th>
+                    <th class="text-right" style="width: 8%;">ST/DIFAL Unit</th>
+                    <th class="text-right" style="width: 8%;">Custo Total</th>
+                    <th class="text-center" style="width: 5%;">Fator</th>
+                    <th class="text-right" style="width: 9%;">Locação Mensal</th>
+                    <th class="text-right" style="width: 8%;">Custo Op. Mês</th>
+                    <th class="text-right" style="width: 8%;">Imposto Mês</th>
+                    <th class="text-right" style="width: 11%;">Lucro Mês</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items_details %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 600;">{{ item.descricao }}</div>
+                        {% if item.part_number %}
+                            <div style="font-size: 6pt; color: #94a3b8; font-family: monospace;">SKU: {{ item.part_number }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ 'Instalação / Startup' if item.is_kit_instalacao else ('Comodato' if item.tipo_contrato_kit == 'COMODATO' else 'Locação') }}
+                    </td>
+                    <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-right">R$ {{ item.custo_aquisicao_unit }}</td>
+                    <td class="text-right">R$ {{ item.st_difal_unit }}</td>
+                    <td class="text-right font-bold">R$ {{ item.custo_total }}</td>
+                    <td class="text-center">{{ item.fator_margem }}x</td>
+                    <td class="text-right font-bold">R$ {{ item.valor_mensal }}</td>
+                    <td class="text-right">R$ {{ item.custo_op_mensal }}</td>
+                    <td class="text-right">R$ {{ item.impostos_mensal }}</td>
+                    <td class="text-right font-bold" style="color: #16a34a; white-space: nowrap;">R$ {{ item.lucro_mensal }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td colspan="2">TOTAL CONSOLIDADO</td>
+                    <td class="text-center">-</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">R$ {{ kpis.total_st_difal }}</td>
+                    <td class="text-right">R$ {{ kpis.total_aquisicao_sem_comissao }}</td>
+                    <td class="text-center">-</td>
+                    <td class="text-right" style="color: #0284c7;">R$ {{ kpis.locacao_mensal }}</td>
+                    <td class="text-right">R$ {{ kpis.custo_op_mensal_total }}</td>
+                    <td class="text-right">R$ {{ kpis.impostos_mensal_total }}</td>
+                    <td class="text-right" style="color: #16a34a;">R$ {{ kpis.lucro_mensal_total }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- BLOCO 2: TABELAS COMPLEMENTARES -->
+    <div class="tables-row avoid-break">
+        <!-- COMPOSIÇÃO DO INVESTIMENTO E FORNECEDORES -->
+        <div class="tables-col" style="flex: 1.2;">
+            <div class="section-title">Composição do Investimento Inicial (Custos)</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Fornecedor / Origem</th>
+                        <th class="text-right">Equipamentos</th>
+                        <th class="text-right">Impostos Compra</th>
+                        <th class="text-right">Total com Impostos</th>
+                        <th style="width: 25%;">Condição Pagamento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in supplier_summaries %}
+                    <tr>
+                        <td>{{ f.fornecedor }}</td>
+                        <td class="text-right">R$ {{ f.total_sem_imposto }}</td>
+                        <td class="text-right">R$ {{ f.total_imposto }}</td>
+                        <td class="text-right font-bold">R$ {{ f.total_custo }}</td>
+                        <td style="font-size: 7.5pt;">{{ f.forma_pagamento }}</td>
+                    </tr>
+                    {% endfor %}
+                    
+                    {% if comissao_total_aquisicao > 0 %}
+                    <tr>
+                        <td colspan="3">Comissão de Venda/Locação (Lançada como investimento)</td>
+                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.comissao_total_str }}</td>
+                        <td>À Vista / Faturamento</td>
+                    </tr>
+                    {% endif %}
+                    
+                    {% if impostos_instalacao_total > 0 %}
+                    <tr>
+                        <td colspan="3">Impostos s/ Receita de Instalação (Startup)</td>
+                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.impostos_instalacao_str }}</td>
+                        <td>Faturamento</td>
+                    </tr>
+                    {% endif %}
+                    
+                    <tr class="total-row">
+                        <td>INVESTIMENTO TOTAL (Capex)</td>
+                        <td class="text-right">R$ {{ kpis.total_fornecedores_produtos }}</td>
+                        <td class="text-right">R$ {{ kpis.total_fornecedores_impostos }}</td>
+                        <td class="text-right" style="color: #b91c1c;">R$ {{ kpis.investimento_total }}</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- DETALHAMENTO TRIBUTÁRIO -->
+        <div class="tables-col" style="flex: 0.9;">
+            <div class="section-title">Impostos s/ Receita (Locação e Serviços)</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Tributo</th>
+                        <th class="text-right">Alíquota</th>
+                        <th class="text-right">Valor Mensal</th>
+                        <th class="text-right">Valor Contrato ({{ opportunity.prazo_contrato_meses }}m)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in taxes_summary %}
+                    <tr>
+                        <td>{{ t.name }}</td>
+                        <td class="text-right">{{ t.percent }}%</td>
+                        <td class="text-right">R$ {{ t.mensal }}</td>
+                        <td class="text-right font-bold">R$ {{ t.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    
+                    {% if impostos_instalacao_total > 0 %}
+                    <tr>
+                        <td>Impostos s/ Instalação (Adicional)</td>
+                        <td class="text-right">-</td>
+                        <td class="text-right">-</td>
+                        <td class="text-right font-bold">R$ {{ kpis.impostos_instalacao_str }}</td>
+                    </tr>
+                    {% endif %}
+                    
+                    <tr class="total-row">
+                        <td>TOTAL TRIBUTÁRIO</td>
+                        <td class="text-right">-</td>
+                        <td class="text-right">R$ {{ kpis.impostos_mensal_total }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ kpis.impostos_totais }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- BLOCO 3: PROJEÇÃO E PAYBACK (VISÃO FINANCEIRA) -->
+    <div class="page-break"></div>
+    <div class="avoid-break" style="margin-top: 10px;">
+        <div class="section-title">Estudo de Rentabilidade de Capital (Payback & Fluxo de Caixa)</div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-top: 6px;">
+            <tr>
+                <!-- Gráfico Inline SVG -->
+                <td style="width: 60%; vertical-align: top; padding-right: 12px;">
+                    <div class="chart-container">
+                        <div class="chart-title">Curva de Fluxo de Caixa Acumulado (mês a mês)</div>
+                        <div style="padding: 4px; display: block; margin: 0 auto; text-align: center;">
+                            {{ cashflow_chart_svg | safe }}
+                        </div>
+                    </div>
+                </td>
+                
+                <!-- Memória de Cálculo e Detalhes do ROI -->
+                <td style="width: 40%; vertical-align: top;">
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 7.5pt; color: #334155; height: 215px;">
+                        <div style="font-weight: bold; font-family: sans-serif; font-size: 8pt; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase;">
+                            Memória de Cálculo Financeiro
+                        </div>
+                        
+                        <div style="margin-bottom: 6px;">
+                            <strong>Investimento Inicial (Capex):</strong><br>
+                            (+) Custos de Aquisição (Equipamentos): R$ {{ kpis.custo_total_aquisicao_bruto }}<br>
+                            (+) Comissão Comercial Locação: R$ {{ kpis.comissao_total_str }}<br>
+                            (+) Impostos de Instalação/Startup: R$ {{ kpis.impostos_instalacao_str }}<br>
+                            <strong>(=) Investimento Total: R$ {{ kpis.investimento_total }}</strong>
+                        </div>
+                        
+                        <div style="margin-bottom: 6px; border-top: 1px dashed #cbd5e1; padding-top: 4px;">
+                            <strong>Resultado Mensal Líquido:</strong><br>
+                            (+) Faturamento de Locação Mensal: R$ {{ kpis.locacao_mensal }}<br>
+                            (-) Custo Operacional Mensal: R$ {{ kpis.custo_op_mensal_total }}<br>
+                            (-) Imposto sobre Locação Mensal: R$ {{ kpis.impostos_mensal_total }}<br>
+                            <strong>(=) Retorno Mensal Líquido (Ebitda): R$ {{ kpis.lucro_mensal_total }}</strong>
+                        </div>
+                        
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 4px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif;">
+                            Fórmula do Payback:<br>
+                            Payback = Capex ÷ Retorno Mensal Líquido<br>
+                            Payback = {{ kpis.investimento_total }} ÷ {{ kpis.lucro_mensal_total }} = <span style="font-size: 9pt; color: #166534;">{{ kpis.payback_meses }}</span>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <div class="audit-info" style="margin-top: 20px;">
+            Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ opportunity.id }} | Versão do Relatório: {{ auditoria.versao }}
+        </div>
+    </div>
+
+</body>
+</html>
