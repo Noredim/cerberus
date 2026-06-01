@@ -16,7 +16,6 @@ export const RentalAnalyticReport: React.FC<RentalAnalyticReportProps> = ({
     formatCurrency,
     formatPercent
 }) => {
-    const isRental = kitData.tipo_contrato === 'LOCACAO' || kitData.tipo_contrato === 'COMODATO';
     const prazo = kitData.prazo_contrato_meses || 1;
     
     const faturamentoTotal = ((Number(kitData.summary?.valor_mensal_kit) || 0) * prazo) + (Number(kitData.summary?.vlr_instal_calc) || 0);

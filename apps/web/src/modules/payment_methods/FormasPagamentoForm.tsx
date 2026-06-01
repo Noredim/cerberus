@@ -4,7 +4,6 @@ import {
     Save,
     Loader2,
     Plus,
-    X,
     Trash2,
     AlertTriangle,
     CheckCircle2
@@ -141,8 +140,6 @@ const FormasPagamentoForm: React.FC = () => {
 
     // Calculate metrics
     const sumPercent = (formData.parcelas || []).reduce((acc, p) => acc + (p.percentual || 0), 0);
-    const sumFixed = (formData.parcelas || []).reduce((acc, p) => acc + (p.valor_fixo || 0), 0);
-    const hasNullFixed = (formData.parcelas || []).some(p => p.valor_fixo === null);
     const nullFixedCount = (formData.parcelas || []).filter(p => p.valor_fixo === null).length;
 
     const handleSubmit = async (e: React.FormEvent) => {

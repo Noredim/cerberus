@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { api } from '../../../services/api';
 
 export const ReportLogo = ({ url }: { url?: string | null }) => {

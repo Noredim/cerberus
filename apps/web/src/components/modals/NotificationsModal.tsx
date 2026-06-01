@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Bell, CheckCheck, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';

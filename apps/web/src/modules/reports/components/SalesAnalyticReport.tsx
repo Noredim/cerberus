@@ -107,9 +107,6 @@ export const SalesAnalyticReport: React.FC<SalesAnalyticReportProps> = ({
     // Impostos de Venda
     const totalAliqVenda = (Number(kitData.aliq_pis || 0) + Number(kitData.aliq_cofins || 0) + Number(kitData.aliq_csll || 0) + Number(kitData.aliq_irpj || 0) + Number(kitData.aliq_icms || 0) + Number(kitData.aliq_iss || 0)) / 100;
     const impostoVendaEquipamentos = Number(kitData.summary?.imposto_equip_venda) || (faturamentoProdutos * totalAliqVenda);
-    const impostoInstalacao = Number(kitData.summary?.imposto_instalacao) || 0;
-
-
     // Custos Operacionais
     const operacionaisRows = useMemo(() => {
         if (!kitData) return [];

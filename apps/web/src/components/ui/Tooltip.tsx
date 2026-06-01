@@ -84,12 +84,12 @@ export function Tooltip({ children, content }: TooltipProps) {
           >
             <div 
               ref={tooltipRef}
-              className="bg-gray-100 text-gray-900 text-xs rounded-lg shadow-xl p-3 min-w-[200px] border border-gray-200"
+              className="bg-slate-900 text-slate-100 text-xs rounded-lg shadow-xl p-3 min-w-[200px] border border-slate-800"
               style={{ transform: `translateX(${offset}px)` }}
             >
               {content}
             </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-gray-100" />
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
           </div>,
           document.body
         )}

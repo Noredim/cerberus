@@ -451,6 +451,12 @@ export function SalesBudgetForm() {
   const [history, setHistory] = useState<any[]>([]);
   const [approvals, setApprovals] = useState<any[]>([]);
   const [isApprover, setIsApprover] = useState(false);
+
+  useEffect(() => {
+    if (approvals.length > 0) {
+      console.log('Orçamento possui aprovações:', approvals.length);
+    }
+  }, [approvals]);
   const [justificativa, setJustificativa] = useState('');
   const [workflowModal, setWorkflowModal] = useState<{ isOpen: boolean; action: string; title: string; placeholder: string }>({
     isOpen: false,
@@ -1422,65 +1428,79 @@ export function SalesBudgetForm() {
       custo: 0, venda: 0, frete: 0, impostos: 0,
       despAdm: 0, comissao: 0, lucro: 0,
       // Cost composition breakdown
-      base_fornecedor: 0, total_ipi: 0, total_frete_compra: 0, total_icms_st: 0,
+      base_fornecedor: 0, total_ipi: 0, total_frete_compra: 0, total_icms_st: 0, total_difal: 0,
       // Tax breakdown (sales)
       total_pis: 0, total_cofins: 0, total_csll: 0,
       total_irpj: 0, total_icms: 0, total_iss: 0, total_credito_icms: 0,
     };
     items.forEach(i => {
-      const q = i.quantidade;
+      const q = Number(i.quantidade) || 0;
       const cc = i.cost_composition;
-      t.custo += i.custo_unit_base * q;
-      t.venda += i.venda_unit * q;
-      t.frete += i.frete_venda_unit * q;
-      const impostosBrutos = (i.pis_unit + i.cofins_unit + i.csll_unit + i.irpj_unit + i.icms_unit + i.iss_unit) * q;
-      const creditoIcms = (i.cost_composition?.icms_abatido ?? i.icms_abatido_unit ?? 0) * q;
-      t.impostos += Math.max(0, impostosBrutos - creditoIcms);
+      t.custo += (Number(i.custo_unit_base) || 0) * q;
+      t.venda += (Number(i.venda_unit) || 0) * q;
+      t.frete += (Number(i.frete_venda_unit) || 0) * q;
+      const impostosBrutos = (Number(i.pis_unit || 0) + Number(i.cofins_unit || 0) + Number(i.csll_unit || 0) + Number(i.irpj_unit || 0) + Number(i.icms_unit || 0) + Number(i.iss_unit || 0)) * q;
+      const creditoIcms = (Number(i.cost_composition?.icms_abatido ?? i.icms_abatido_unit ?? 0)) * q;
       t.total_credito_icms += creditoIcms;
-      t.despAdm += i.despesa_adm_unit * q;
-      t.comissao += i.comissao_unit * q;
-      t.lucro += i.lucro_unit * q;
+      t.despAdm += (Number(i.despesa_adm_unit) || 0) * q;
+      t.comissao += (Number(i.comissao_unit) || 0) * q;
+      t.lucro += (Number(i.lucro_unit) || 0) * q;
       // Cost breakdown from composition
-      t.base_fornecedor += (cc?.base_unitario ?? i.custo_unit_base) * q;
-      t.total_ipi += (cc?.ipi_unitario ?? 0) * q;
-      t.total_frete_compra += (cc?.frete_cif_unitario ?? 0) * q;
-      t.total_icms_st += (cc?.icms_st_final ?? 0) * q;
+      t.base_fornecedor += (Number(cc?.base_unitario ?? i.custo_unit_base) || 0) * q;
+      t.total_ipi += (Number(cc?.ipi_unitario) || 0) * q;
+      t.total_frete_compra += (Number(cc?.frete_cif_unitario) || 0) * q;
+      t.total_icms_st += (Number(cc?.icms_st_final) || 0) * q;
+      t.total_difal += (Number(cc?.difal_unitario) || 0) * q;
       // Tax breakdown
-      t.total_pis += i.pis_unit * q;
-      t.total_cofins += i.cofins_unit * q;
-      t.total_csll += i.csll_unit * q;
-      t.total_irpj += i.irpj_unit * q;
-      t.total_icms += i.icms_unit * q;
-      t.total_iss += i.iss_unit * q;
+      t.total_pis += (Number(i.pis_unit) || 0) * q;
+      t.total_cofins += (Number(i.cofins_unit) || 0) * q;
+      t.total_csll += (Number(i.csll_unit) || 0) * q;
+      t.total_irpj += (Number(i.irpj_unit) || 0) * q;
+      t.total_icms += (Number(i.icms_unit) || 0) * q;
+      t.total_iss += (Number(i.iss_unit) || 0) * q;
     });
 
     // Add Venda Kits to totals
     vendaKits.forEach(vk => {
-      const q = vk.quantidade;
+      const q = Number(vk.quantidade) || 0;
       const s = vk.summary;
       if (!s) {
         // Fallback to local properties if summary is missing (though it shouldn't be)
-        t.custo += (vk.custo_aquisicao_equip_unit + vk.custo_manutencao_unit) * q;
-        t.venda += vk.faturamento_total * q;
-        t.lucro += vk.lucro_final * q;
+        t.custo += (Number(vk.custo_aquisicao_equip_unit) || 0) * q;
+        t.venda += (Number(vk.faturamento_total) || 0) * q;
+        t.lucro += (Number(vk.lucro_final) || 0) * q;
         return;
       }
 
-      t.custo += (s.custo_equip_total_calc + s.custo_manut_total_calc) * q;
-      t.venda += (s.faturamento_total_venda ?? (s.venda_equipamentos_total + s.venda_manutencao_total)) * q;
-      t.frete += (s.vlt_frete_venda || 0) * q;
-      t.impostos += (s.vlt_pis + s.vlt_cofins + s.vlt_csll + s.vlt_irpj + s.vlt_icms + s.vlt_iss) * q;
-      t.despAdm += (s.vlt_despesas_adm || 0) * q;
-      t.comissao += (s.vlt_comissao || 0) * q;
-      t.lucro += s.lucro_mensal_kit * q;
+      t.custo += Number(s.custo_aquisicao_total ?? vk.custo_aquisicao_equip_unit ?? 0) * q;
+      t.venda += Number(s.faturamento_total_venda ?? vk.faturamento_total ?? 0) * q;
+      t.frete += Number(s.vlt_frete_venda ?? 0) * q;
+      t.despAdm += Number(s.vlt_despesas_adm ?? 0) * q;
+      t.comissao += Number(s.vlt_comissao ?? 0) * q;
+      t.lucro += Number(s.lucro_mensal_kit ?? vk.lucro_final ?? 0) * q;
 
-      t.total_pis += s.vlt_pis * q;
-      t.total_cofins += s.vlt_cofins * q;
-      t.total_csll += s.vlt_csll * q;
-      t.total_irpj += s.vlt_irpj * q;
-      t.total_icms += s.vlt_icms * q;
-      t.total_iss += (s.vlt_iss || 0) * q;
+      // Cost composition / purchase taxes for kits
+      t.base_fornecedor += Number(s.custo_aquisicao_produtos ?? 0) * q;
+      t.total_ipi += Number(s.total_ipi_kit ?? 0) * q;
+      t.total_frete_compra += Number(s.total_frete_kit ?? 0) * q;
+      t.total_icms_st += Number(s.total_st_kit ?? 0) * q;
+      t.total_difal += Number(s.total_difal_kit ?? 0) * q;
+
+      // Tax breakdown (sales)
+      t.total_pis += Number(s.vlt_pis ?? 0) * q;
+      t.total_cofins += Number(s.vlt_cofins ?? 0) * q;
+      t.total_csll += Number(s.vlt_csll ?? 0) * q;
+      t.total_irpj += Number(s.vlt_irpj ?? 0) * q;
+      t.total_icms += Number(s.vlt_icms ?? 0) * q;
+      t.total_iss += Number(s.vlt_iss ?? 0) * q;
+      t.total_credito_icms += Number(s.credito_icms_compra_total ?? 0) * q;
     });
+
+    // Consolidated taxes
+    const compraTaxes = t.total_ipi + t.total_icms_st + t.total_difal;
+    const compraTaxesNet = Math.max(0, compraTaxes - t.total_credito_icms);
+    const vendaTaxes = t.total_pis + t.total_cofins + t.total_csll + t.total_irpj + t.total_icms + t.total_iss;
+    t.impostos = compraTaxesNet + vendaTaxes;
 
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
   }, [items, vendaKits]);
@@ -1812,6 +1832,7 @@ export function SalesBudgetForm() {
         items: [
           ...items.map(i => ({
             product_id: i.product_id || null,
+            opportunity_kit_id: i.opportunity_kit_id || null,
             tipo_item: i.tipo_item,
             descricao_servico: i.descricao_servico || null,
             usa_parametros_padrao: i.usa_parametros_padrao,
@@ -1950,7 +1971,71 @@ export function SalesBudgetForm() {
       setVendaHaveraManutencao(!!d.venda_havera_manutencao);
       setVendaQtdMesesManutencao(d.venda_qtd_meses_manutencao || 0);
       
-      setItems(d.items || []);
+      // Load sale items and separate kits from regular items
+      const loadedItems: SalesBudgetItem[] = d.items || [];
+      const vKits: VendaKitItem[] = [];
+      const regularItems: SalesBudgetItem[] = [];
+
+      for (const item of loadedItems) {
+        if (item.opportunity_kit_id) {
+          try {
+            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true`);
+            const q = item.quantidade || kit.quantidade_kits || 1;
+            vKits.push({
+              opportunity_kit_id: item.opportunity_kit_id,
+              nome_kit: kit.nome_kit || 'Kit Venda',
+              quantidade: q,
+              fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+              fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+              fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+              fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+
+              custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+              custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+
+              venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+              venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+
+              faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+
+              lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+              margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+
+              lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+              margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+
+              lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
+              margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+
+              havera_manutencao: kit.havera_manutencao,
+              qtd_meses_manutencao: kit.qtd_meses_manutencao,
+              summary: kit.summary,
+              kit_raw: kit
+            });
+          } catch (err) {
+            console.error('Error loading kit in Venda:', err);
+          }
+        } else {
+          try {
+            if (item.product_id) {
+              const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?sales_budget_id=${id}`);
+              if (cc.perfil_st_ativo === false && item.tem_st) {
+                const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
+                regularItems.push({ ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit });
+              } else {
+                regularItems.push({ ...item, cost_composition: cc });
+              }
+            } else {
+              regularItems.push(item);
+            }
+          } catch {
+            regularItems.push(item);
+          }
+        }
+      }
+
+      setItems(regularItems);
+      setVendaKits(vKits);
       
       const enrichedRental = await Promise.all(
         (d.rental_items || []).map(async (item: any) => {
@@ -2396,12 +2481,12 @@ export function SalesBudgetForm() {
         </button>
       </div>
 
-      {/* â•┬Éâ•┬Éâ•┬É VENDA TAB â•┬Éâ•┬Éâ•┬É */}
+      {/* ─── VENDA TAB ─── */}
       {activeTab === 'venda' && (<>
         {/* Consolidação Diretoria — right after header */}
-        {items.length > 0 && (() => {
+        {isApprover && (items.length > 0 || vendaKits.length > 0) && (() => {
           const venda_fat = totals.venda;
-          const venda_custo_total = totals.custo + totals.impostos + totals.frete + totals.despAdm;
+          const venda_custo_total = totals.custo + (totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss) + totals.despAdm + totals.frete + totals.comissao;
           const venda_rec_liq = venda_fat - venda_custo_total;
           const venda_comissao_diretoria = Math.max(0, venda_rec_liq * (percComissaoDiretoria / 100));
           const venda_saldo = venda_rec_liq - venda_comissao_diretoria;
@@ -2423,7 +2508,7 @@ export function SalesBudgetForm() {
               {/* Top Controls & Totals */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-6 mb-6 border-b border-border-subtle">
                 <div className="lg:col-span-4">
-                  <label className="block text[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-2">
                     Comissão sobre receita líquida
                   </label>
                   <div className="relative max-w-[180px]">
@@ -2450,7 +2535,7 @@ export function SalesBudgetForm() {
                   </div>
                   <div className="hidden sm:block h-8 w-px bg-border-subtle mx-2"></div>
                   <div>
-                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp + Frete + Desp Adm)</span></span>
+                    <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp Venda + Frete + Desp Adm + Comis)</span></span>
                     <span className="text-xl font-bold text-rose-400">{fmt(venda_custo_total)}</span>
                   </div>
                 </div>
@@ -2462,7 +2547,7 @@ export function SalesBudgetForm() {
                   <div className="w-80 space-y-3 text-gray-200">
                     <div>
                       <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Receita Líquida Venda</div>
-                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Faturamento - (Custo Aq. + Impostos + Frete + Desp. Adm.)</div>
+                      <div className="text-[10px] text-brand-primary font-mono mb-1 leading-relaxed bg-black/40 p-2 rounded">Faturamento - (Custo Aq. + Impostos Venda + Frete + Desp. Adm. + Comissao)</div>
                       <div className="text-sm font-bold text-amber-400 mt-1">{fmt(venda_rec_liq)}</div>
                     </div>
                   </div>
@@ -2522,6 +2607,7 @@ export function SalesBudgetForm() {
                         {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
                         {totals.total_frete_compra > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span className="text-amber-300">+ {fmt(totals.total_frete_compra)}</span></div>}
                         {totals.total_icms_st > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(totals.total_icms_st)}</span></div>}
+                        {totals.total_difal > 0 && <div className="flex justify-between"><span>DIFAL:</span><span className="text-amber-300">+ {fmt(totals.total_difal)}</span></div>}
                         <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.custo)}</span></div>
                       </div>
                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
@@ -2530,17 +2616,40 @@ export function SalesBudgetForm() {
                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Impostos</span>
                     <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.impostos)}</p>
-                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
-                      <div className="font-semibold text-sky-300 mb-2">Detalhamento dos Impostos</div>
-                      <div className="space-y-1">
-                        {totals.total_pis > 0 && <div className="flex justify-between"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>}
-                        {totals.total_cofins > 0 && <div className="flex justify-between"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>}
-                        {totals.total_csll > 0 && <div className="flex justify-between"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>}
-                        {totals.total_irpj > 0 && <div className="flex justify-between"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>}
-                        {totals.total_icms > 0 && <div className="flex justify-between"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>}
-                        {totals.total_iss > 0 && <div className="flex justify-between"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>}
-                        {totals.total_credito_icms > 0 && <div className="flex justify-between text-brand-success"><span>Créd. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>}
-                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(totals.impostos)}</span></div>
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-4 w-64">
+                      <div className="font-bold text-sky-300 mb-2 border-b border-white/10 pb-1">Detalhamento dos Impostos</div>
+                      
+                      <div className="font-semibold text-amber-300 text-[11px] mb-1">Compra:</div>
+                      <div className="pl-2 space-y-1 mb-2">
+                        <div className="flex justify-between text-gray-300"><span>IPI:</span><span>{fmt(totals.total_ipi)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ICMS-ST:</span><span>{fmt(totals.total_icms_st)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>DIFAL:</span><span>{fmt(totals.total_difal)}</span></div>
+                        {totals.total_credito_icms > 0 && (
+                          <div className="flex justify-between text-brand-success"><span>Créd. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>
+                        )}
+                        <div className="flex justify-between font-semibold text-white border-t border-white/5 pt-0.5">
+                          <span>Subtotal Compra:</span>
+                          <span>{fmt(Math.max(0, totals.total_ipi + totals.total_icms_st + totals.total_difal - totals.total_credito_icms))}</span>
+                        </div>
+                      </div>
+
+                      <div className="font-semibold text-teal-300 text-[11px] mb-1">Venda:</div>
+                      <div className="pl-2 space-y-1 mb-2">
+                        <div className="flex justify-between text-gray-300"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>
+                        <div className="flex justify-between font-semibold text-white border-t border-white/5 pt-0.5">
+                          <span>Subtotal Venda:</span>
+                          <span>{fmt(totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss)}</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-white/20 pt-1.5 mt-2 flex justify-between font-bold text-white text-sm">
+                        <span>Total Consolidado:</span>
+                        <span>{fmt(totals.impostos)}</span>
                       </div>
                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
                     </div>
@@ -3193,7 +3302,9 @@ export function SalesBudgetForm() {
 
           return (
             <>
-              <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mt-4">
+              {isApprover && (
+                <>
+                  <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mt-4">
                 <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none transition-opacity group-hover:opacity-[0.06]">
                   <Calculator className="w-32 h-32" />
                 </div>
@@ -3365,6 +3476,8 @@ export function SalesBudgetForm() {
                   margem: diretor_margem
                 }}
               />
+                </>
+              )}
 
               {/* Rental Consolidation */}
               {/* Rental Consolidation */}
