@@ -20,6 +20,7 @@ export interface BudgetItem {
   total_item?: number;
   product_nome?: string;
   product_codigo?: string;
+  valor_unitario_dolar?: number;
 }
 
 interface BudgetItemsGridProps {
