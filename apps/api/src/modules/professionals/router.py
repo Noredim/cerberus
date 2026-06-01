@@ -12,8 +12,7 @@ from src.modules.professionals.schemas import ProfessionalCreate, ProfessionalUp
 
 router = APIRouter(
     prefix="/professionals", 
-    tags=["Professionals"],
-    dependencies=[Depends(check_not_engenharia_preco)]
+    tags=["Professionals"]
 )
 
 @router.get("", response_model=List[ProfessionalResponse])
@@ -50,7 +49,7 @@ def get_available_users(db: Session = Depends(get_db), current_user: User = Depe
     available_users = [u for u in tenant_users if str(u.id) not in bounded_user_ids_set]
     return available_users
 
-@router.post("", response_model=ProfessionalResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProfessionalResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
 def create_professional(prof_in: ProfessionalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), company_id: str = Depends(get_active_company)):
     target_company = str(prof_in.company_id) if prof_in.company_id else company_id
 
@@ -72,7 +71,7 @@ def create_professional(prof_in: ProfessionalCreate, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="Usuário já está vinculado a outro profissional ou dados inválidos.")
     return new_prof
 
-@router.put("/{prof_id}", response_model=ProfessionalResponse)
+@router.put("/{prof_id}", response_model=ProfessionalResponse, dependencies=[Depends(check_not_engenharia_preco)])
 def update_professional(prof_id: str, prof_in: ProfessionalUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), company_id: str = Depends(get_active_company)):
     query = db.query(Professional).filter(Professional.id == prof_id, Professional.tenant_id == current_user.tenant_id)
     if company_id:
@@ -94,7 +93,7 @@ def update_professional(prof_id: str, prof_in: ProfessionalUpdate, db: Session =
         raise HTTPException(status_code=400, detail="Usuário já está vinculado a outro profissional.")
     return prof
 
-@router.delete("/{prof_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{prof_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(check_not_engenharia_preco)])
 def delete_professional(prof_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), company_id: str = Depends(get_active_company)):
     query = db.query(Professional).filter(Professional.id == prof_id, Professional.tenant_id == current_user.tenant_id)
     if company_id:
