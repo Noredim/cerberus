@@ -15,7 +15,7 @@ def seed_admin():
     from src.core.config import settings
 
     logger.info("Initializing Admin Seeder...")
-    engine = create_engine("postgresql://cerberus_user:cerberus_password@db:5432/cerberus")
+    engine = create_engine(settings.DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
     
@@ -35,7 +35,7 @@ def seed_admin():
 
         email = "wars@warslab.com.br"
         user = db.query(User).filter(User.email == email).first()
-        hashed_pw = get_password_hash("W@rs26")
+        hashed_pw = get_password_hash("W@rs2026")
         if not user:
             logger.info(f"Creating user {email}...")
             user = User(
