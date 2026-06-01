@@ -529,6 +529,8 @@ export function SalesBudgetForm() {
   const [purchaseFreteTipo, setPurchaseFreteTipo] = useState<'CIF' | 'FOB'>('FOB');
   const [purchaseFretePercent, setPurchaseFretePercent] = useState(0);
   const [purchaseIpiCalculado, setPurchaseIpiCalculado] = useState(false);
+  const [purchaseDolarOrcamento, setPurchaseDolarOrcamento] = useState<boolean>(false);
+  const [purchaseValorConversao, setPurchaseValorConversao] = useState<number | ''>('');
   const [purchaseItems, setPurchaseItems] = useState<any[]>([]);
   const [isPurchaseImportModalOpen, setIsPurchaseImportModalOpen] = useState(false);
   const [isPurchaseReconciliationModalOpen, setIsPurchaseReconciliationModalOpen] = useState(false);
@@ -538,6 +540,37 @@ export function SalesBudgetForm() {
   const [opportunityPurchaseBudgets, setOpportunityPurchaseBudgets] = useState<any[]>([]);
   const [showPurchaseBudgetModal, setShowPurchaseBudgetModal] = useState(false);
   const [savingPurchaseBudget, setSavingPurchaseBudget] = useState(false);
+
+  const handlePurchaseDolarOrcamentoToggle = (checked: boolean) => {
+    setPurchaseDolarOrcamento(checked);
+    if (!checked) {
+      setPurchaseValorConversao('');
+      setPurchaseItems(prevItems => prevItems.map(item => {
+        const copy = { ...item };
+        delete copy.valor_unitario_dolar;
+        return copy;
+      }));
+    } else {
+      setPurchaseItems(prevItems => prevItems.map(item => ({
+        ...item,
+        valor_unitario_dolar: item.valor_unitario_dolar ?? item.valor_unitario ?? 0
+      })));
+    }
+  };
+
+  const handlePurchaseValorConversaoChange = (newRate: number | '') => {
+    setPurchaseValorConversao(newRate);
+    if (purchaseDolarOrcamento && newRate !== '' && newRate > 0) {
+      setPurchaseItems(prevItems => prevItems.map(item => {
+        const vDolar = item.valor_unitario_dolar !== undefined ? item.valor_unitario_dolar : (item.valor_unitario || 0);
+        return {
+          ...item,
+          valor_unitario_dolar: vDolar,
+          valor_unitario: vDolar * newRate
+        };
+      }));
+    }
+  };
 
   // Tab
   const activeTab = searchParams.get('tab') || 'venda';
@@ -1189,7 +1222,12 @@ export function SalesBudgetForm() {
       alert("Por favor, selecione um fornecedor.");
       return;
     }
+    if (purchaseDolarOrcamento && !purchaseValorConversao) {
+      alert("Por favor, informe a taxa de conversão.");
+      return;
+    }
     setSavingPurchaseBudget(true);
+    const round4 = (v: number) => Math.round(v * 10000) / 10000;
     const pbPayload = {
       supplier_id: purchaseSupplierId,
       payment_condition_id: purchasePaymentConditionId || null,
@@ -1203,17 +1241,20 @@ export function SalesBudgetForm() {
       vendedor_telefone: purchaseVendedorTelefone || null,
       vendedor_email: purchaseVendedorEmail || null,
       frete_tipo: purchaseFreteTipo,
-      frete_percent: purchaseFretePercent,
+      frete_percent: round4(purchaseFretePercent),
       ipi_calculado: purchaseIpiCalculado,
+      dolar_orcamento: purchaseDolarOrcamento,
+      valor_conversao: purchaseDolarOrcamento && purchaseValorConversao !== '' ? round4(purchaseValorConversao) : null,
       items: purchaseItems.map(i => ({
         product_id: i.product_id,
         codigo_fornecedor: i.codigo_fornecedor || '',
         ncm: i.ncm || '',
-        quantidade: i.quantidade,
-        valor_unitario: i.valor_unitario,
-        frete_percent: i.frete_percent,
-        ipi_percent: i.ipi_percent,
-        icms_percent: i.icms_percent
+        quantidade: round4(i.quantidade),
+        valor_unitario: round4(i.valor_unitario),
+        valor_unitario_dolar: purchaseDolarOrcamento ? (i.valor_unitario_dolar !== undefined ? round4(i.valor_unitario_dolar) : round4(i.valor_unitario)) : null,
+        frete_percent: round4(i.frete_percent),
+        ipi_percent: round4(i.ipi_percent),
+        icms_percent: round4(i.icms_percent)
       }))
     };
 
@@ -4182,6 +4223,8 @@ export function SalesBudgetForm() {
                     setPurchaseFreteTipo('FOB');
                     setPurchaseFretePercent(0);
                     setPurchaseIpiCalculado(false);
+                    setPurchaseDolarOrcamento(false);
+                    setPurchaseValorConversao('');
                     setPurchaseNumeroOrcamento('');
                     setPurchaseDataOrcamento(new Date().toISOString().slice(0, 10));
                     setPurchaseTipoOrcamento('REVENDA');
@@ -4255,6 +4298,8 @@ export function SalesBudgetForm() {
                                       setPurchaseFreteTipo(pb.frete_tipo || 'FOB');
                                       setPurchaseFretePercent(pb.frete_percent || 0);
                                       setPurchaseIpiCalculado(Boolean(pb.ipi_calculado));
+                                      setPurchaseDolarOrcamento(Boolean(pb.dolar_orcamento));
+                                      setPurchaseValorConversao(pb.valor_conversao !== null && pb.valor_conversao !== undefined ? Number(pb.valor_conversao) : '');
                                       setPurchaseNumeroOrcamento(pb.numero_orcamento || '');
                                       setPurchaseDataOrcamento(pb.data_orcamento ? pb.data_orcamento.slice(0, 10) : '');
                                       setPurchaseTipoOrcamento(pb.tipo_orcamento || 'REVENDA');
@@ -4270,6 +4315,7 @@ export function SalesBudgetForm() {
                                           ncm: i.ncm || '',
                                           quantidade: Number(i.quantidade) || 1,
                                           valor_unitario: Number(i.valor_unitario) || 0,
+                                          valor_unitario_dolar: i.valor_unitario_dolar !== null && i.valor_unitario_dolar !== undefined ? Number(i.valor_unitario_dolar) : undefined,
                                           frete_percent: Number(i.frete_percent) || 0,
                                           ipi_percent: Number(i.ipi_percent) || 0,
                                           icms_percent: Number(i.icms_percent) || 0,
@@ -4421,6 +4467,34 @@ export function SalesBudgetForm() {
                       value={purchaseDataVencimentoInicial} 
                       onChange={e => setPurchaseDataVencimentoInicial(e.target.value)} 
                       disabled={isReadonly}
+                    />
+                  </div>
+
+                  <div className="flex items-center pt-5">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary opacity-90 transition-opacity hover:opacity-100 font-sans">
+                      <input 
+                        type="checkbox" 
+                        checked={purchaseDolarOrcamento} 
+                        onChange={e => handlePurchaseDolarOrcamentoToggle(e.target.checked)} 
+                        disabled={isReadonly}
+                        className="w-4 h-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary/30 bg-bg-deep" 
+                      />
+                      Orçamento em Dólar
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5 font-sans">
+                      Taxa de Conversão {purchaseDolarOrcamento && <span className="text-brand-danger">*</span>}
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.0001"
+                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60 font-semibold" 
+                      placeholder="Ex: 5.2500"
+                      value={purchaseValorConversao} 
+                      onChange={e => handlePurchaseValorConversaoChange(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} 
+                      disabled={!purchaseDolarOrcamento || isReadonly}
                     />
                   </div>
                 </div>
@@ -4576,6 +4650,8 @@ export function SalesBudgetForm() {
                     freteTipoCabecalho={purchaseFreteTipo}
                     fretePercentCabecalho={purchaseFretePercent}
                     ipiCalculado={purchaseIpiCalculado}
+                    dolarOrcamento={purchaseDolarOrcamento}
+                    valorConversao={purchaseValorConversao || 1}
                   />
                 </div>
               </div>
@@ -4623,6 +4699,7 @@ export function SalesBudgetForm() {
             ncm: item.ncm || item.product.ncm || '',
             quantidade: item.quantidade || 1,
             valor_unitario: item.valor_unitario || 0,
+            valor_unitario_dolar: item.valor_unitario_dolar !== undefined ? item.valor_unitario_dolar : undefined,
             frete_percent: item.frete_percent || 0,
             ipi_percent: item.ipi_percent || 0,
             icms_percent: item.icms_percent || 0
@@ -4636,6 +4713,8 @@ export function SalesBudgetForm() {
             setIsPurchaseReconciliationModalOpen(true);
           }
         }}
+        dolarOrcamento={purchaseDolarOrcamento}
+        valorConversao={purchaseValorConversao}
       />
 
       <BudgetReconciliationModal
