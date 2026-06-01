@@ -114,7 +114,21 @@ const ProfessionalsForm: React.FC<ProfessionalsFormProps> = ({ professional, onS
             onSuccess();
         } catch (err: any) {
             console.error('Failed to save professional', err);
-            setError(err.response?.data?.detail || 'Erro ao salvar o profissional.');
+            let errorMsg = 'Erro ao salvar o profissional.';
+            const detail = err.response?.data?.detail;
+            if (detail) {
+                if (typeof detail === 'string') {
+                    errorMsg = detail;
+                } else if (Array.isArray(detail)) {
+                    errorMsg = detail.map((d: any) => {
+                        const field = d.loc ? d.loc[d.loc.length - 1] : '';
+                        return `${field ? field + ': ' : ''}${d.msg}`;
+                    }).join(', ');
+                } else if (typeof detail === 'object') {
+                    errorMsg = JSON.stringify(detail);
+                }
+            }
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }

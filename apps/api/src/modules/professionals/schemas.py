@@ -10,7 +10,7 @@ def clean_digits(v: Optional[str]) -> Optional[str]:
 
 class ProfessionalBase(BaseModel):
     name: str = Field(..., description="Name of the professional")
-    company_id: UUID = Field(..., description="ID of the company")
+    company_id: Optional[UUID] = Field(None, description="ID of the company")
     cpf: str = Field(..., description="CPF of the professional")
     role_id: str = Field(..., description="ID of the associated role")
     user_id: Optional[str] = Field(None, description="ID of the associated user account")
