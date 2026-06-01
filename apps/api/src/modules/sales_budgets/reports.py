@@ -2242,10 +2242,6 @@ class OpportunitiesReportService:
             instalacao_item = float(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0) * qty
             total_instalacao_calc += instalacao_item
             
-            # Locação Mensal
-            loc_mensal_item = float(item.kit_parcela_locacao or item.parcela_locacao or 0.0) * qty
-            total_locacao_mensal_calc += loc_mensal_item
-            
             # Manutenção (Mês)
             manut_mes_item = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * qty
             total_manutencao_mes_calc += manut_mes_item
@@ -2254,11 +2250,15 @@ class OpportunitiesReportService:
             monitoramento_item = float(item.kit_venda_unit_monitoramento or 0.0) * qty
             total_monitoramento_calc += monitoramento_item
             
-            # Fat. Mensal
-            fat_mensal_total_item = loc_mensal_item + manut_mes_item + monitoramento_item
+            # Fat. Mensal Total (Negotiated final monthly faturamento value)
+            fat_mensal_total_item = float(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0) * qty
             fat_mensal_unit = fat_mensal_total_item / qty if qty > 0 else 0.0
             total_fat_mensal_calc += fat_mensal_unit
             total_fat_mensal_total_calc += fat_mensal_total_item
+
+            # Locação Mensal (remaining faturamento after subtracting maintenance and monitoring)
+            loc_mensal_item = fat_mensal_total_item - manut_mes_item - monitoramento_item
+            total_locacao_mensal_calc += loc_mensal_item
             
             # Prazo
             prazo_item = int(item.prazo_contrato or prazo_contrato)
@@ -2304,6 +2304,11 @@ class OpportunitiesReportService:
                 "prazo": prazo_item,
                 "vlr_total": format_currency(vlr_total_item),
                 "impostos_mensal": format_currency(impostos_mensal_item),
+                # ReportLab fallback fields
+                "custo_total": format_currency(custo_total),
+                "fator_margem": f"{float(item.fator_margem):.2f}",
+                "valor_mensal": format_currency(loc_mensal_item),
+                "lucro_mensal": format_currency(float(item.kit_lucro_mensal if (item.opportunity_kit_id and item.kit_lucro_mensal is not None) else (item.lucro_mensal or 0.0)) * qty),
             })
 
         total_row = {
@@ -2318,6 +2323,7 @@ class OpportunitiesReportService:
             "vlr_total": format_currency(total_vlr_total_calc),
             "impostos_mensal": format_currency(total_impostos_mensal_calc)
         }
+        total_aquisicao_sem_comissao = total_aquisicao_calc
 
         # Supplier summaries
         mapped_by_supplier = {}
@@ -2410,12 +2416,20 @@ class OpportunitiesReportService:
         lucro_contrato = receita_contratada - custo_total_projeto
         margem_liquida_val = (lucro_contrato / receita_contratada * 100) if receita_contratada > 0 else 0.0
 
-        # Detailed taxes lists
-        aliq_pis = float(opportunity.perc_pis_rental or 0.0)
-        aliq_cofins = float(opportunity.perc_cofins_rental or 0.0)
-        aliq_csll = float(opportunity.perc_csll_rental or 0.0)
-        aliq_irpj = float(opportunity.perc_irpj_rental or 0.0)
-        aliq_iss = float(opportunity.perc_iss_rental or 0.0)
+        # Determine tax rates based on the first item (similar to frontend SalesBudgetForm.tsx)
+        first_item = opportunity.rental_items[0] if opportunity.rental_items else None
+        if first_item and first_item.opportunity_kit_id:
+            aliq_pis = float(first_item.kit_pis or 0.0)
+            aliq_cofins = float(first_item.kit_cofins or 0.0)
+            aliq_csll = float(first_item.kit_csll or 0.0)
+            aliq_irpj = float(first_item.kit_irpj or 0.0)
+            aliq_iss = float(first_item.kit_iss or 0.0)
+        else:
+            aliq_pis = float(opportunity.perc_pis_rental or 0.0)
+            aliq_cofins = float(opportunity.perc_cofins_rental or 0.0)
+            aliq_csll = float(opportunity.perc_csll_rental or 0.0)
+            aliq_irpj = float(opportunity.perc_irpj_rental or 0.0)
+            aliq_iss = float(opportunity.perc_iss_rental or 0.0)
 
         # detailed taxes recalculation per item
         pis_total_mensal = 0.0
@@ -2429,11 +2443,11 @@ class OpportunitiesReportService:
             if item.is_kit_instalacao:
                 continue
                 
-            loc = float(item.kit_parcela_locacao or item.valor_mensal or 0.0) * q
+            faturamento = float(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0) * q
             if item.opportunity_kit_id:
                 mon = float(item.kit_venda_unit_monitoramento or 0.0) * q
-                faturamento = float(item.kit_valor_mensal or item.valor_mensal or 0.0) * q
-                man = max(0.0, faturamento - loc - mon)
+                man = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * q
+                loc = faturamento - man - mon
                 rate_pis = float(item.kit_pis or 0.0)
                 rate_cofins = float(item.kit_cofins or 0.0)
                 rate_csll = float(item.kit_csll or 0.0)
@@ -2443,6 +2457,7 @@ class OpportunitiesReportService:
             else:
                 mon = 0.0
                 man = 0.0
+                loc = faturamento
                 rate_pis = aliq_pis
                 rate_cofins = aliq_cofins
                 rate_csll = aliq_csll
