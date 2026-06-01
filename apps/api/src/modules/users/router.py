@@ -15,8 +15,9 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get("", response_model=List[UserResponse])
 def list_users(
     search: str = Query("", description="Filtrar por nome ou email"),
+    can_perform_sale: bool = Query(None, description="Filtrar por usuários que tenham cargo com permissão de venda"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(check_not_engenharia_preco)
+    current_user: User = Depends(get_current_user)
 ):
     query = db.query(User).filter(User.tenant_id == current_user.tenant_id).options(joinedload(User.roles))
 
@@ -24,6 +25,13 @@ def list_users(
         query = query.filter(
             unaccent_ilike(User.name, search) | unaccent_ilike(User.email, search)
         )
+
+    if can_perform_sale is not None:
+        from src.modules.professionals.models import Professional
+        from src.modules.roles.models import Role
+        query = query.join(Professional, Professional.user_id == User.id)\
+                     .join(Role, Role.id == Professional.role_id)\
+                     .filter(Role.can_perform_sale == can_perform_sale)
 
     users = query.options(joinedload(User.companies)).order_by(User.name).all()
 
