@@ -70,7 +70,8 @@ def calculate_item(
     item_data: SalesBudgetItemCreate,
     budget_defaults: dict,
     product: Optional[Product],
-    has_st: bool
+    has_st: bool,
+    is_same_cnpj: bool = False
 ) -> dict:
     """Calculate all fields for a single sales budget item."""
     is_service = item_data.tipo_item in ("SERVICO_INSTALACAO", "SERVICO_MANUTENCAO")
@@ -81,22 +82,36 @@ def calculate_item(
             return _d(item_val)
         return _d(budget_defaults.get(default_key, 0))
 
-    perc_frete = resolve(item_data.perc_frete_venda, "perc_frete_venda")
-    perc_pis = resolve(item_data.perc_pis, "perc_pis")
-    perc_cofins = resolve(item_data.perc_cofins, "perc_cofins")
-    perc_csll = resolve(item_data.perc_csll, "perc_csll")
-    perc_irpj = resolve(item_data.perc_irpj, "perc_irpj")
-    perc_iss = resolve(item_data.perc_iss, "perc_iss")
-    perc_desp = resolve(item_data.perc_despesa_adm, "perc_despesa_adm")
-    perc_com = resolve(item_data.perc_comissao, "perc_comissao")
-    perc_icms = resolve(item_data.perc_icms, "perc_icms_interno")
-    markup = _d(item_data.markup) if item_data.markup else _d(budget_defaults.get("markup_padrao", 1))
+    if is_same_cnpj and not is_service:
+        perc_frete = Decimal("0")
+        perc_pis = Decimal("0")
+        perc_cofins = Decimal("0")
+        perc_csll = Decimal("0")
+        perc_irpj = Decimal("0")
+        perc_iss = Decimal("0")
+        perc_desp = Decimal("0")
+        perc_com = Decimal("0")
+        perc_icms = Decimal("0")
+        markup = _d(item_data.markup) if item_data.markup else Decimal("1.0")
+    else:
+        perc_frete = resolve(item_data.perc_frete_venda, "perc_frete_venda")
+        perc_pis = resolve(item_data.perc_pis, "perc_pis")
+        perc_cofins = resolve(item_data.perc_cofins, "perc_cofins")
+        perc_csll = resolve(item_data.perc_csll, "perc_csll")
+        perc_irpj = resolve(item_data.perc_irpj, "perc_irpj")
+        perc_iss = resolve(item_data.perc_iss, "perc_iss")
+        perc_desp = resolve(item_data.perc_despesa_adm, "perc_despesa_adm")
+        perc_com = resolve(item_data.perc_comissao, "perc_comissao")
+        perc_icms = resolve(item_data.perc_icms, "perc_icms_interno")
+        markup = _d(item_data.markup) if item_data.markup else _d(budget_defaults.get("markup_padrao", 1))
 
     custo = _d(item_data.custo_unit_base)
     if not is_service and product and custo == 0:
         custo = _d(product.vlr_referencia_revenda)
 
     venda = _round(custo * markup)
+    if is_same_cnpj and not is_service and getattr(item_data, "venda_unit", None) is not None:
+        venda = _d(item_data.venda_unit)
     frete_unit = _round(venda * perc_frete / 100) if not is_service else Decimal("0")
 
     if is_service:
@@ -391,7 +406,45 @@ def _build_rental_defaults(budget: SalesBudget) -> dict:
 
 def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo=True):
     """Process and save sale items for a budget."""
+    company = budget.company or db.query(Company).filter(Company.id == budget.company_id).first()
+    customer = budget.customer or db.query(Customer).filter(Customer.id == budget.customer_id).first()
+    
+    is_same_cnpj = False
+    if company and customer and company.cnpj and customer.cnpj:
+        def clean_cnpj(val):
+            return re.sub(r"\D", "", val)
+        is_same_cnpj = clean_cnpj(company.cnpj) == clean_cnpj(customer.cnpj)
+
     for item_data in data_items:
+        # If CNPJ is the same and it is equipment sale, override costs and sales value
+        if is_same_cnpj and item_data.tipo_item == "MERCADORIA" and item_data.product_id:
+            comp = calculate_product_cost_composition(
+                db,
+                product_id=str(item_data.product_id),
+                tenant_id=tenant_id,
+                tipo="REVENDA",
+                sales_budget_id=budget.id
+            )
+            if comp:
+                base_unitario = comp.get("base_unitario", 0.0)
+                ipi_unitario = comp.get("ipi_unitario", 0.0)
+                st_unitario = comp.get("icms_st_final", 0.0)
+                difal_unitario = comp.get("difal_unitario", 0.0)
+                frete_unitario = comp.get("frete_cif_unitario", 0.0)
+                
+                # Custo base is base_unitario
+                item_data.custo_unit_base = Decimal(str(base_unitario))
+                
+                # Venda unit is base + taxes + freight
+                venda_calculada = Decimal(str(base_unitario)) + Decimal(str(ipi_unitario)) + Decimal(str(st_unitario)) + Decimal(str(difal_unitario)) + Decimal(str(frete_unitario))
+                item_data.__dict__["venda_unit"] = venda_calculada
+                
+                # Markup is venda / custo
+                if base_unitario > 0:
+                    item_data.markup = venda_calculada / Decimal(str(base_unitario))
+                else:
+                    item_data.markup = Decimal("1.0")
+
         product = None
         if item_data.product_id:
             product = db.query(Product).filter(Product.id == item_data.product_id).first()
@@ -413,7 +466,7 @@ def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_
             else:
                 defaults["perc_icms_interno"] = budget.perc_icms_externo
 
-        calc = calculate_item(item_data, defaults, product, has_st)
+        calc = calculate_item(item_data, defaults, product, has_st, is_same_cnpj=is_same_cnpj)
 
         db_item = SalesBudgetItem(
             budget_id=budget.id,

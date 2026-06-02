@@ -469,11 +469,198 @@ def run_tests():
         except ValueError as e:
             print(f"Successfully blocked locked comissao_diretoria update by peon: {e}")
 
-        # --- Test 9: Product Creation & Duplication Validation ---
-        print("\n--- Test 9: Product Creation & Duplication Validation ---")
+        # ── Test 9: Intercompany Sales Budget (Same CNPJ) ──
+        print("\n--- Test 9: Intercompany Sales Budget (Same CNPJ) ---")
+        from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+        from src.modules.suppliers.models import Supplier
+        from src.modules.products.schemas import ProductType, ProductFinalidade
+        from src.modules.companies.models import State
+        from sqlalchemy.sql import func
+
+        # Resolve State SP ID
+        sp_state = db.query(State).filter(State.sigla == "SP").first()
+        sp_state_id = str(sp_state.id) if sp_state else None
+
+        # Dynamically format customer CNPJ to match company CNPJ but with punctuation
+        import re
+        raw_cnpj = re.sub(r"\D", "", company.cnpj)
+        if len(raw_cnpj) == 14:
+            formatted_cnpj = f"{raw_cnpj[0:2]}.{raw_cnpj[2:5]}.{raw_cnpj[5:8]}/{raw_cnpj[8:12]}-{raw_cnpj[12:14]}"
+        else:
+            formatted_cnpj = company.cnpj
+
+        # Clean up any leftover database entries
+        db.query(Customer).filter(Customer.cnpj == formatted_cnpj).delete()
+        db.commit()
+
+        # Create intercompany customer with the same CNPJ but formatted
+        intercompany_customer = Customer(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            razao_social="Intercompany Branch Customer SP",
+            cnpj=formatted_cnpj,
+            state_id=sp_state_id
+        )
+        db.add(intercompany_customer)
+
+        # Create a new product for this test
+        prod_intercompany = Product(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            company_id=company.id,
+            nome="Product Intercompany Revenda",
+            tipo=ProductType.EQUIPAMENTO,
+            finalidade=ProductFinalidade.REVENDA,
+            codigo="SKU-INTERCO-123"
+        )
+        db.add(prod_intercompany)
+
+        # Get or create a dummy supplier
+        supplier = db.query(Supplier).filter(Supplier.tenant_id == tenant_id).first()
+        if not supplier:
+            supplier = Supplier(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                cnpj="11111111000111",
+                razao_social="Fornecedor Intercompany Test"
+            )
+            db.add(supplier)
+        db.commit()
+
+        # 1. Create a sales budget for the intercompany customer.
+        create_payload = SalesBudgetCreate(
+            customer_id=str(intercompany_customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo="Oportunidade Intercompany Test",
+            observacoes="Intercompany same CNPJ flow",
+            data_orcamento="2026-06-02T12:00:00",
+            responsavel_ids=[peon_user.id],
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    product_id=prod_intercompany.id,
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"),
+                    markup=Decimal("1.5"),
+                    quantidade=Decimal("10"),
+                )
+            ]
+        )
+        sales_budget = create_budget(db, tenant_id, str(company.id), create_payload)
+        db.commit()
+
+        print(f"Created intercompany sales budget ID: {sales_budget.id}")
+        
+        # 2. Create a purchase budget (supplier budget) linked to this sales_budget_id.
+        purchase_budget = PurchaseBudget(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            company_id=company.id,
+            sales_budget_id=sales_budget.id,
+            supplier_id=supplier.id,
+            tipo_orcamento="REVENDA",
+            frete_tipo="CIF",
+            frete_percent=Decimal("0.0"),
+            data_orcamento=func.now()
+        )
+        db.add(purchase_budget)
+        db.flush()
+
+        purchase_item = PurchaseBudgetItem(
+            id=uuid.uuid4(),
+            budget_id=purchase_budget.id,
+            product_id=prod_intercompany.id,
+            quantidade=Decimal("10"),
+            valor_unitario=Decimal("80.00"),  # Base purchase cost
+            frete_percent=Decimal("0"),
+            frete_valor=Decimal("50.00"),    # Total freight for 10 units = 5.00/unit
+            ipi_percent=Decimal("10"),
+            ipi_valor=Decimal("80.00"),      # Total IPI for 10 units = 8.00/unit
+            icms_percent=Decimal("12"),
+            difal_unitario=Decimal("4.00"),   # 4.00/unit
+            st_unitario=Decimal("3.00"),      # 3.00/unit
+            total_item=Decimal("980.00")
+        )
+        db.add(purchase_item)
+        db.commit()
+
+        # 3. Call update_budget on the sales budget. This should trigger recalculation,
+        # find the purchase budget, extract cost composition, zero out sales taxes/commissions/expenses,
+        # and override selling price to base_unitario + taxes + freight.
+        update_payload = SalesBudgetUpdate(
+            customer_id=str(intercompany_customer.id),
+            vendedor_id=str(manager_professional.id),
+            titulo="Oportunidade Intercompany Test (Recalculado)",
+            observacoes="Intercompany same CNPJ flow recalculated",
+            data_orcamento="2026-06-02T12:00:00",
+            responsavel_ids=[peon_user.id],
+            items=[
+                SalesBudgetItemCreate(
+                    tipo_item="MERCADORIA",
+                    product_id=prod_intercompany.id,
+                    descricao_servico=None,
+                    usa_parametros_padrao=True,
+                    custo_unit_base=Decimal("100.00"), # Will be overridden by base_unitario (80.00)
+                    markup=Decimal("1.5"),             # Will be calculated as venda_unit / custo_unit_base
+                    quantidade=Decimal("10"),
+                )
+            ]
+        )
+        updated_sales_budget = update_budget(db, tenant_id, str(sales_budget.id), update_payload, peon_user.id)
+        db.commit()
+
+        # 4. Verify assertions!
+        assert len(updated_sales_budget.items) == 1
+        item = updated_sales_budget.items[0]
+
+        # Verify custo base is overridden to purchase base_unitario (80.00)
+        print(f"Item custo_unit_base: {item.custo_unit_base} (Expected: 80.00)")
+        assert float(item.custo_unit_base) == 80.00
+
+        # Verify venda_unit is base (80) + IPI (8) + ST (0) + DIFAL (11.20) + Freight (5) = 104.20
+        print(f"Item venda_unit: {item.venda_unit} (Expected: 104.20)")
+        assert float(item.venda_unit) == 104.20
+
+        # Verify total_venda is 104.20 * 10 = 1042.00
+        print(f"Item total_venda: {item.total_venda} (Expected: 1042.00)")
+        assert float(item.total_venda) == 1042.00
+
+        # Verify all sales taxes and costs are exactly 0.00
+        print(f"Item sales taxes/expenses/commissions:")
+        print(f"  pis_unit: {item.pis_unit} (Expected: 0)")
+        print(f"  cofins_unit: {item.cofins_unit} (Expected: 0)")
+        print(f"  csll_unit: {item.csll_unit} (Expected: 0)")
+        print(f"  irpj_unit: {item.irpj_unit} (Expected: 0)")
+        print(f"  icms_unit: {item.icms_unit} (Expected: 0)")
+        print(f"  iss_unit: {item.iss_unit} (Expected: 0)")
+        print(f"  frete_venda_unit: {item.frete_venda_unit} (Expected: 0)")
+        print(f"  comissao_unit: {item.comissao_unit} (Expected: 0)")
+        print(f"  despesa_adm_unit: {item.despesa_adm_unit} (Expected: 0)")
+
+        assert float(item.pis_unit) == 0.0
+        assert float(item.cofins_unit) == 0.0
+        assert float(item.csll_unit) == 0.0
+        assert float(item.irpj_unit) == 0.0
+        assert float(item.icms_unit) == 0.0
+        assert float(item.iss_unit) == 0.0
+        assert float(item.frete_venda_unit) == 0.0
+        assert float(item.comissao_unit) == 0.0
+        assert float(item.despesa_adm_unit) == 0.0
+
+        # Verify profit margin (selling price (104.20) - cost base (80) = 24.20)
+        # Margem = lucro / venda * 100 = 24.20 / 104.20 * 100 = 23.2246%
+        print(f"Item lucro_unit: {item.lucro_unit} (Expected: 24.20)")
+        print(f"Item margem_unit: {item.margem_unit}% (Expected: 23.2246%)")
+        assert float(item.lucro_unit) == 24.20
+        assert abs(float(item.margem_unit) - 23.2246) < 0.001
+
+        print("Intercompany sales budget verification passed successfully!")
+
+        # --- Test 10: Product Creation & Duplication Validation ---
+        print("\n--- Test 10: Product Creation & Duplication Validation ---")
         from src.modules.products.service import ProductService
         from src.modules.products.schemas import ProductCreate, ProductType, ProductFinalidade
-        from src.modules.products.models import Product
         from fastapi import HTTPException
 
         # Clean up any leftover products from previous runs
