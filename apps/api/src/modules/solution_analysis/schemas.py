@@ -132,7 +132,7 @@ class SolutionAnalysisSummary(BaseModel):
     nome_solucao_b: Optional[str] = None
     nome_solucao_c: Optional[str] = None
     criado_por_nome: Optional[str] = None
-    usuario_id: Optional[UUID] = None
+    usuario_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     qtde_linhas: int
