@@ -686,7 +686,10 @@ def run_tests():
         from src.modules.products.schemas import ProductCreate, ProductType, ProductFinalidade
         from fastapi import HTTPException
 
-        # Clean up any leftover products from previous runs
+        # Clean up any leftover products and solution analyses from previous runs
+        from src.modules.solution_analysis.models import SolutionAnalysisItem, SolutionAnalysis
+        db.query(SolutionAnalysisItem).delete()
+        db.query(SolutionAnalysis).delete()
         db.query(Product).filter(Product.tenant_id == tenant_id, Product.codigo == "SKU-UNICO-123").delete()
         db.query(Product).filter(Product.tenant_id == tenant_id, Product.nome == "PRODUTO TESTE UNICO").delete()
         db.commit()

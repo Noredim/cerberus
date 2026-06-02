@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from src.core.base import Base
+from src.modules.purchase_budgets.models import PurchaseBudget
 
 
 class SolutionAnalysis(Base):
