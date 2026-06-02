@@ -856,6 +856,14 @@ class OpportunitiesReportService:
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
 
+        # Check if company CNPJ is same as customer CNPJ (Intercompany)
+        is_same_cnpj = False
+        if opportunity.company and opportunity.customer and opportunity.company.cnpj and opportunity.customer.cnpj:
+            import re
+            def clean_cnpj(val):
+                return re.sub(r"\D", "", val)
+            is_same_cnpj = clean_cnpj(opportunity.company.cnpj) == clean_cnpj(opportunity.customer.cnpj)
+
         # Build tax lookup map: product_id -> {difal, st, source}
         opp_product_taxes = {}
         
@@ -976,15 +984,26 @@ class OpportunitiesReportService:
                 purchase_tax_unit = difal_unit + st_unit
                 
                 # Sales tax unit
-                pis_unit = float(item.pis_unit or 0.0)
-                cofins_unit = float(item.cofins_unit or 0.0)
-                csll_unit = float(item.csll_unit or 0.0)
-                irpj_unit = float(item.irpj_unit or 0.0)
-                icms_unit = float(item.icms_unit or 0.0)
-                iss_unit = float(item.iss_unit or 0.0)
+                if is_same_cnpj and item.tipo_item == "MERCADORIA":
+                    pis_unit = 0.0
+                    cofins_unit = 0.0
+                    csll_unit = 0.0
+                    irpj_unit = 0.0
+                    icms_unit = 0.0
+                    iss_unit = 0.0
+                else:
+                    pis_unit = float(item.pis_unit or 0.0)
+                    cofins_unit = float(item.cofins_unit or 0.0)
+                    csll_unit = float(item.csll_unit or 0.0)
+                    irpj_unit = float(item.irpj_unit or 0.0)
+                    icms_unit = float(item.icms_unit or 0.0)
+                    iss_unit = float(item.iss_unit or 0.0)
                 sales_tax_unit = pis_unit + cofins_unit + csll_unit + irpj_unit + icms_unit + iss_unit
                 
-                venda_unit = float(item.venda_unit or 0.0)
+                if is_same_cnpj and item.tipo_item == "MERCADORIA":
+                    venda_unit = custo_unit + purchase_tax_unit + ipi_unit
+                else:
+                    venda_unit = float(item.venda_unit or 0.0)
                 venda_total = venda_unit * qty
                 custo_total = custo_unit * qty
                 purchase_tax_total = purchase_tax_unit * qty
@@ -994,17 +1013,25 @@ class OpportunitiesReportService:
                 sales_tax_total = sales_tax_unit * qty
                 
                 # Expenses
-                frete_venda_unit = float(item.frete_venda_unit or 0.0)
-                desp_adm_unit = float(item.despesa_adm_unit or 0.0)
-                comissao_unit = float(item.comissao_unit or 0.0)
+                if is_same_cnpj and item.tipo_item == "MERCADORIA":
+                    frete_venda_unit = 0.0
+                    desp_adm_unit = 0.0
+                    comissao_unit = 0.0
+                else:
+                    frete_venda_unit = float(item.frete_venda_unit or 0.0)
+                    desp_adm_unit = float(item.despesa_adm_unit or 0.0)
+                    comissao_unit = float(item.comissao_unit or 0.0)
                 
                 frete_total = frete_venda_unit * qty
                 desp_adm_total = desp_adm_unit * qty
                 comissao_total = comissao_unit * qty
                 despesas_adm_total = frete_total + desp_adm_total + comissao_total
                 
-                lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
-                mkp_venda = float(item.markup or 1.0)
+                lucro_total = 0.0 if (is_same_cnpj and item.tipo_item == "MERCADORIA") else (venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total)
+                if is_same_cnpj and item.tipo_item == "MERCADORIA":
+                    mkp_venda = (venda_unit / custo_unit) if custo_unit > 0 else 1.0
+                else:
+                    mkp_venda = float(item.markup or 1.0)
                 
                 items_details.append({
                     "product_id": item.product_id,
@@ -1076,15 +1103,27 @@ class OpportunitiesReportService:
                             custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - purchase_tax_unit)
                             
                             # Sales tax from kit summary
-                            sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            pis_unit = float(summary.get("pis_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            cofins_unit = float(summary.get("cofins_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            csll_unit = float(summary.get("csll_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            irpj_unit = float(summary.get("irpj_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            icms_unit = float(summary.get("icms_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            iss_unit = float(summary.get("iss_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            if is_same_cnpj:
+                                sales_tax_unit = 0.0
+                                pis_unit = 0.0
+                                cofins_unit = 0.0
+                                csll_unit = 0.0
+                                irpj_unit = 0.0
+                                icms_unit = 0.0
+                                iss_unit = 0.0
+                            else:
+                                sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                pis_unit = float(summary.get("pis_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                cofins_unit = float(summary.get("cofins_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                csll_unit = float(summary.get("csll_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                irpj_unit = float(summary.get("irpj_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                icms_unit = float(summary.get("icms_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                iss_unit = float(summary.get("iss_unit") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                             
-                            venda_unit = float(summary.get("venda_unitario_item") or 0.0)
+                            if is_same_cnpj:
+                                venda_unit = custo_unit + purchase_tax_unit + ipi_unit
+                            else:
+                                venda_unit = float(summary.get("venda_unitario_item") or 0.0)
                             venda_total = venda_unit * component_qty
                             custo_total = custo_unit * component_qty
                             purchase_tax_total = purchase_tax_unit * component_qty
@@ -1094,17 +1133,25 @@ class OpportunitiesReportService:
                             sales_tax_total = sales_tax_unit * component_qty
                             
                             # Expenses
-                            frete_venda_unit = float(summary.get("frete_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            desp_adm_unit = float(summary.get("desp_adm_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
-                            comissao_unit = float(summary.get("comissao_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                            if is_same_cnpj:
+                                frete_venda_unit = 0.0
+                                desp_adm_unit = 0.0
+                                comissao_unit = 0.0
+                            else:
+                                frete_venda_unit = float(summary.get("frete_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                desp_adm_unit = float(summary.get("desp_adm_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
+                                comissao_unit = float(summary.get("comissao_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                             
                             frete_total = frete_venda_unit * component_qty
                             desp_adm_total = desp_adm_unit * component_qty
                             comissao_total = comissao_unit * component_qty
                             despesas_adm_total = frete_total + desp_adm_total + comissao_total
                             
-                            lucro_total = venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total
-                            mkp_venda = float(summary.get("fator_item") or 1.0)
+                            lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - purchase_tax_total - sales_tax_total - despesas_adm_total)
+                            if is_same_cnpj:
+                                mkp_venda = (venda_unit / custo_unit) if custo_unit > 0 else 1.0
+                            else:
+                                mkp_venda = float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
@@ -1163,14 +1210,21 @@ class OpportunitiesReportService:
         venda_consolidada = sum(x["_venda_total"] for x in items_details)
         custo_consolidado = sum(x["_custo_total"] for x in items_details)
         custo_impostos = sum(x["_purchase_tax_total"] for x in items_details)
-        impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
-        despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
         
-        lucro_total = venda_consolidada - (custo_consolidado + custo_impostos + impostos_venda + despesas_totais)
-        margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
-        
-        # Markup geral
-        markup = (venda_consolidada / (custo_consolidado + custo_impostos)) if (custo_consolidado + custo_impostos) > 0 else 1.0
+        if is_same_cnpj:
+            impostos_venda = 0.0
+            despesas_totais = 0.0
+            lucro_total = 0.0
+            margem_percentual = 0.0
+            markup = 1.0
+            custo_total_com_impostos = venda_consolidada
+        else:
+            impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
+            despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
+            lucro_total = venda_consolidada - (custo_consolidado + custo_impostos + impostos_venda + despesas_totais)
+            margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+            markup = (venda_consolidada / (custo_consolidado + custo_impostos)) if (custo_consolidado + custo_impostos) > 0 else 1.0
+            custo_total_com_impostos = custo_consolidado + custo_impostos
 
         kpis = {
             "venda_consolidada": format_currency(venda_consolidada),
@@ -1181,7 +1235,7 @@ class OpportunitiesReportService:
             "lucro_total": format_currency(lucro_total),
             "margem_percentual": f"{margem_percentual:.2f}",
             "markup": f"{markup:.2f}",
-            "custo_total_com_impostos": format_currency(custo_consolidado + custo_impostos)
+            "custo_total_com_impostos": format_currency(custo_total_com_impostos)
         }
 
         # 4. Block 2: Supplier Summaries
@@ -1254,13 +1308,36 @@ class OpportunitiesReportService:
         iss_unit = (iss_total / total_qty) if total_qty > 0 else 0.0
         
         # Nominal tax rates directly from opportunity defaults if active, otherwise 0.0% (Point 3)
-        pis_rate = float(opportunity.perc_pis or 0.0) if pis_total > 0 else 0.0
-        cofins_rate = float(opportunity.perc_cofins or 0.0) if cofins_total > 0 else 0.0
-        csll_rate = float(opportunity.perc_csll or 0.0) if csll_total > 0 else 0.0
-        irpj_rate = float(opportunity.perc_irpj or 0.0) if irpj_total > 0 else 0.0
-        icms_rate = float(opportunity.perc_icms_interno or 0.0) if icms_total > 0 else 0.0
-        iss_rate = float(opportunity.perc_iss or 0.0) if iss_total > 0 else 0.0
-        total_sales_tax_rate = pis_rate + cofins_rate + csll_rate + irpj_rate + icms_rate + iss_rate
+        if is_same_cnpj:
+            pis_rate = 0.0
+            cofins_rate = 0.0
+            csll_rate = 0.0
+            irpj_rate = 0.0
+            icms_rate = 0.0
+            iss_rate = 0.0
+            total_sales_tax_rate = 0.0
+            
+            pis_unit = 0.0
+            cofins_unit = 0.0
+            csll_unit = 0.0
+            irpj_unit = 0.0
+            icms_unit = 0.0
+            iss_unit = 0.0
+            
+            pis_total = 0.0
+            cofins_total = 0.0
+            csll_total = 0.0
+            irpj_total = 0.0
+            icms_total = 0.0
+            iss_total = 0.0
+        else:
+            pis_rate = float(opportunity.perc_pis or 0.0) if pis_total > 0 else 0.0
+            cofins_rate = float(opportunity.perc_cofins or 0.0) if cofins_total > 0 else 0.0
+            csll_rate = float(opportunity.perc_csll or 0.0) if csll_total > 0 else 0.0
+            irpj_rate = float(opportunity.perc_irpj or 0.0) if irpj_total > 0 else 0.0
+            icms_rate = float(opportunity.perc_icms_interno or 0.0) if icms_total > 0 else 0.0
+            iss_rate = float(opportunity.perc_iss or 0.0) if iss_total > 0 else 0.0
+            total_sales_tax_rate = pis_rate + cofins_rate + csll_rate + irpj_rate + icms_rate + iss_rate
         
         sales_taxes_summary = [
             {"name": "PIS", "percent": f"{pis_rate:.2f}%", "unit": format_currency(pis_unit), "total": format_currency(pis_total)},
@@ -1300,14 +1377,27 @@ class OpportunitiesReportService:
         comissao_total = sum(x["_comissao_total"] for x in items_details)
         
         # Unit values calculated based on total divided by total quantity (Point 4)
-        frete_unit = (frete_total / total_qty) if total_qty > 0 else 0.0
-        desp_adm_unit = (desp_adm_total / total_qty) if total_qty > 0 else 0.0
-        comissao_unit = (comissao_total / total_qty) if total_qty > 0 else 0.0
-        
-        # Percentages relative to total revenue (venda_consolidada)
-        frete_pct = (frete_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
-        desp_adm_pct = (desp_adm_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
-        comissao_pct = (comissao_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+        if is_same_cnpj:
+            frete_pct = 0.0
+            desp_adm_pct = 0.0
+            comissao_pct = 0.0
+            
+            frete_unit = 0.0
+            desp_adm_unit = 0.0
+            comissao_unit = 0.0
+            
+            frete_total = 0.0
+            desp_adm_total = 0.0
+            comissao_total = 0.0
+        else:
+            frete_unit = (frete_total / total_qty) if total_qty > 0 else 0.0
+            desp_adm_unit = (desp_adm_total / total_qty) if total_qty > 0 else 0.0
+            comissao_unit = (comissao_total / total_qty) if total_qty > 0 else 0.0
+            
+            # Percentages relative to total revenue (venda_consolidada)
+            frete_pct = (frete_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+            desp_adm_pct = (desp_adm_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+            comissao_pct = (comissao_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
         
         expenses_summary = [
             {"name": "Despesas Administrativas", "percent": f"{desp_adm_pct:.2f}%", "unit": format_currency(desp_adm_unit), "total": format_currency(desp_adm_total)},

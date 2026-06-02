@@ -655,6 +655,29 @@ def run_tests():
         assert float(item.lucro_unit) == 24.20
         assert abs(float(item.margem_unit) - 23.2246) < 0.001
 
+        # Verify intercompany PDF report calculations
+        import jinja2
+        captured_kpis = {}
+        orig_render = jinja2.Template.render
+        def temp_render(self, *args, **kwargs):
+            nonlocal captured_kpis
+            captured_kpis = kwargs.get("kpis", {})
+            return "<html></html>"
+        jinja2.Template.render = temp_render
+        try:
+            from src.modules.sales_budgets.reports import OpportunitiesReportService
+            OpportunitiesReportService.generate_venda_approval_pdf(db, updated_sales_budget.id, admin_user)
+        finally:
+            jinja2.Template.render = orig_render
+
+        print("Captured intercompany report KPIs:", captured_kpis)
+        assert captured_kpis.get("impostos_venda") == "0,00"
+        assert captured_kpis.get("despesas_totais") == "0,00"
+        assert captured_kpis.get("lucro_total") == "0,00"
+        assert captured_kpis.get("margem_percentual") == "0.00"
+        assert captured_kpis.get("venda_consolidada") == captured_kpis.get("custo_total_com_impostos")
+        print("Intercompany PDF report variables verified successfully!")
+
         print("Intercompany sales budget verification passed successfully!")
 
         # --- Test 10: Product Creation & Duplication Validation ---
