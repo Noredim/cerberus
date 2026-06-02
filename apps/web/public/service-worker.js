@@ -1,4 +1,4 @@
-const CACHE_VERSION = '1.0.4';
+const CACHE_VERSION = '1.0.5';
 const STATIC_CACHE_NAME = `cerberus-pwa-static-v${CACHE_VERSION}`;
 const DYNAMIC_CACHE_NAME = `cerberus-pwa-dynamic-v${CACHE_VERSION}`;
 
@@ -40,7 +40,7 @@ self.addEventListener('install', (event) => {
     })
   );
   // Force active service worker to become the active one immediately (controlled by user click later)
-  // self.skipWaiting(); -> Controlled via SKIP_WAITING message in P4
+  self.skipWaiting();
 });
 
 // 2. Activate Event - Cache Clean-up
