@@ -2,6 +2,31 @@ import os
 import sys
 import psycopg2
 
+def sanitize_db_url(url: str) -> str:
+    if not url or not url.startswith("postgres"):
+        return url
+    
+    import re
+    from urllib.parse import quote_plus
+    
+    scheme = ""
+    if "://" in url:
+        scheme, rest = url.split("://", 1)
+    else:
+        scheme, rest = "postgresql", url
+
+    if "@" in rest:
+        parts = rest.rsplit("@", 1)
+        user_pass = parts[0]
+        host_db = parts[1]
+        if ":" in user_pass:
+            user, pwd = user_pass.split(":", 1)
+            if "%" not in pwd or not re.match(r'%[0-9a-fA-F]{2}', pwd):
+                pwd = quote_plus(pwd)
+            return f"{scheme}://{user}:{pwd}@{host_db}"
+            
+    return url
+
 def run():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
@@ -16,6 +41,7 @@ def run():
             print(f"Error loading database settings: {e}")
             sys.exit(1)
 
+    database_url = sanitize_db_url(database_url)
     print("Connecting to database to run SQL migrations...")
     try:
         # Convert connection string if it contains sqlalchemy dialect parts
