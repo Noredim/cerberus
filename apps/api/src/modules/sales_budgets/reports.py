@@ -2102,27 +2102,29 @@ class OpportunitiesReportService:
         total_impostos_mensal_calc = 0.0
 
         prazo_contrato = opportunity.prazo_contrato_meses or 36
-        prazo_instalacao = opportunity.prazo_instalacao_meses if opportunity.prazo_instalacao_meses is not None else 1
+        prazo_instalacao = opportunity.prazo_instalacao_meses or 0
         prazo_fat = max(1, prazo_contrato - prazo_instalacao)
+
+        # Pre-accumulate totals using aligned frontend logic
+        faturamento_total_rental = 0.0
+        impostos_totais = 0.0
+        custo_op_total = 0.0
 
         for item in opportunity.rental_items:
             qty = float(item.quantidade)
             pb_info = product_suppliers.get(item.product_id) if item.product_id else None
             pb_item = pb_info["pb_item"] if pb_info else None
             
-            custo_unit = float(item.custo_aquisicao_unit or 0.0)
-            if custo_unit == 0.0 and pb_item:
-                custo_unit = float(pb_item.valor_unitario or 0.0)
-                
+            # Use same fallback order as frontend: kit_investimento_total or custo_total_aquisicao
+            custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
+            total_aquisicao_calc += custo_total
+            
             difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
             purchase_tax_unit = difal_unit + st_unit + ipi_unit
-            
-            custo_total = (custo_unit + purchase_tax_unit) * qty
-            total_aquisicao_calc += custo_total
             total_st_difal += purchase_tax_unit * qty
             
-            # Commission
-            comissao_item = float(item.kit_comissao or 0.0) * qty if item.opportunity_kit_id else float(item.comissao_mensal or 0.0) * qty
+            # Commission (Frontend only adds kit_comissao)
+            comissao_item = float(item.kit_comissao or 0.0) * qty
             total_comissao_calc += comissao_item
             comissao_total_aquisicao += comissao_item
             
@@ -2149,19 +2151,26 @@ class OpportunitiesReportService:
             total_locacao_mensal_calc += loc_mensal_item
             
             # Prazo
-            prazo_item = int(item.prazo_contrato or prazo_contrato)
+            prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
+            prazo_item = max(0, prazo_item_raw - prazo_instalacao)
             
             # Vlr Total
-            vlr_total_item = fat_mensal_total_item * prazo_item
+            vlr_total_item = fat_mensal_total_item * prazo_item_raw
             total_vlr_total_calc += vlr_total_item
             
             # Impostos Mensal
             impostos_mensal_item = float(item.impostos_mensal or 0.0) * qty
             total_impostos_mensal_calc += impostos_mensal_item
 
-            # Custo Operacional (Support & Monitoring)
+            # Custo Operacional (Support & Monitoring) - load kit's custo_monitoramento_unitario directly to match frontend
+            custo_monitoramento = 0.0
             if item.opportunity_kit_id:
-                custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + float(item.kit_venda_unit_monitoramento or 0.0)) * qty
+                kit = kits_by_id.get(item.opportunity_kit_id)
+                if kit:
+                    custo_monitoramento = float(kit.custo_monitoramento_unitario or 0.0)
+
+            if item.opportunity_kit_id:
+                custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + custo_monitoramento) * qty
             else:
                 custo_op_mensal = float(item.custo_manut_mensal or 0.0) * qty
 
@@ -2171,11 +2180,19 @@ class OpportunitiesReportService:
                 impostos_instalacao_total += impostos_mensal_item
                 custo_op_instalacao_total += custo_op_mensal
                 investimento_instalacao += custo_total
+                
+                faturamento_total_rental += fat_mensal_total_item
+                impostos_totais += impostos_mensal_item
+                custo_op_total += custo_op_mensal
             else:
                 locacao_mensal += fat_mensal_total_item
                 impostos_mensal_total += impostos_mensal_item
                 custo_op_mensal_total += custo_op_mensal
                 investimento_rental += custo_total
+                
+                faturamento_total_rental += (fat_mensal_total_item * prazo_item) + instalacao_item
+                impostos_totais += impostos_mensal_item * prazo_item
+                custo_op_total += custo_op_mensal * prazo_item
                 
             items_details.append({
                 "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento de Locação"),
@@ -2189,7 +2206,7 @@ class OpportunitiesReportService:
                 "monitoramento": format_currency(monitoramento_item),
                 "fat_mensal": format_currency(fat_mensal_unit),
                 "fat_mensal_total": format_currency(fat_mensal_total_item),
-                "prazo": prazo_item,
+                "prazo": prazo_item_raw,
                 "vlr_total": format_currency(vlr_total_item),
                 "impostos_mensal": format_currency(impostos_mensal_item),
                 # ReportLab fallback fields
@@ -2265,10 +2282,9 @@ class OpportunitiesReportService:
         # Net revenue comissao (Director commission)
         perc_comissao_diretoria = float(opportunity.perc_comissao_diretoria or 0.0)
         
-        faturamento_total_rental = locacao_mensal * prazo_fat + total_instalacao
         investimento_rental = total_aquisicao_calc + comissao_total_aquisicao
-        impostos_total_rental = impostos_mensal_total * prazo_fat + impostos_instalacao_total
-        custo_op_total_rental = custo_op_mensal_total * prazo_fat + custo_op_instalacao_total
+        impostos_total_rental = impostos_totais
+        custo_op_total_rental = custo_op_total
         
         diretor_rec_liq = faturamento_total_rental - investimento_rental - impostos_total_rental - custo_op_total_rental
         
@@ -2283,18 +2299,14 @@ class OpportunitiesReportService:
         # Capex & Payback
         receita_contratada = faturamento_total_rental
         
-        # Capex (investimento total de aquisição + comissão + impostos de instalação)
-        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total
-        
-        # Totais
-        impostos_totais = (impostos_mensal_total * prazo_fat) + impostos_instalacao_total
-        custo_op_total = (custo_op_mensal_total * prazo_fat) + custo_op_instalacao_total
+        # Capex (investimento total de aquisição + comissão)
+        investimento_total = total_aquisicao_calc + comissao_total_aquisicao
         
         # Project Total Cost (Capex + Impostos + Custos Operacionais)
         custo_total_projeto = investimento_total + impostos_totais + custo_op_total
         
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal
-        retorno_mensal_liquido = total_fat_mensal_total_calc - total_impostos_mensal_calc - custo_op_mensal_total
+        retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total
         
         # Payback in months
         payback = investimento_total / retorno_mensal_liquido if retorno_mensal_liquido > 0 else 0.0
@@ -2421,7 +2433,7 @@ class OpportunitiesReportService:
             "receita_contratada": format_currency(receita_contratada),
             "investimento_total": format_currency(custo_total_projeto),  # User requested card value to show total cost
             "investimento_capex": format_currency(investimento_total),    # Capex purchase value (total_aquisicao + comissao)
-            "locacao_mensal": format_currency(total_fat_mensal_total_calc),
+            "locacao_mensal": format_currency(locacao_mensal),
             "custo_op_total": format_currency(custo_op_total),
             "impostos_totais": format_currency(impostos_totais),
             "margem_liquida": f"{margem_liquida_val:.2f}",
