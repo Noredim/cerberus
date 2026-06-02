@@ -10,6 +10,14 @@ interface Product {
   tipo?: string;
 }
 
+interface BudgetOption {
+  id: string;
+  numero_orcamento: string;
+  supplier_name: string;
+  custo_revenda: number;
+  custo_uso_consumo: number;
+}
+
 interface SlotState {
   product: Product | null;
   quantidade: string;
@@ -17,6 +25,9 @@ interface SlotState {
   results: Product[];
   searching: boolean;
   open: boolean;
+  budgets: BudgetOption[];
+  selectedBudget: BudgetOption | null;
+  loadingBudgets: boolean;
 }
 
 const emptySlot = (): SlotState => ({
@@ -26,6 +37,9 @@ const emptySlot = (): SlotState => ({
   results: [],
   searching: false,
   open: false,
+  budgets: [],
+  selectedBudget: null,
+  loadingBudgets: false,
 });
 
 interface Props {
@@ -79,11 +93,33 @@ export function AddItemsModal({ isOpen, onClose, analise, onSuccess }: Props) {
     []
   );
 
-  const handleSelect = (
+  const handleSelect = async (
     product: Product,
     setter: React.Dispatch<React.SetStateAction<SlotState>>
   ) => {
-    setter((p) => ({ ...p, product, search: product.nome, open: false, results: [] }));
+    setter((p) => ({
+      ...p,
+      product,
+      search: product.nome,
+      open: false,
+      results: [],
+      loadingBudgets: true,
+      budgets: [],
+      selectedBudget: null,
+    }));
+    try {
+      const { data } = await api.get(`/solution-analysis/budgets-by-product/${product.id}`);
+      setter((p) => ({
+        ...p,
+        budgets: data,
+        loadingBudgets: false,
+      }));
+    } catch {
+      setter((p) => ({
+        ...p,
+        loadingBudgets: false,
+      }));
+    }
   };
 
   const handleSave = async () => {
@@ -106,7 +142,11 @@ export function AddItemsModal({ isOpen, onClose, analise, onSuccess }: Props) {
 
     const toSlotPayload = (slot: SlotState) =>
       slot.product
-        ? { item_id: slot.product.id, quantidade: parseFloat(slot.quantidade) }
+        ? {
+            item_id: slot.product.id,
+            quantidade: parseFloat(slot.quantidade),
+            budget_id: slot.selectedBudget?.id || null,
+          }
         : null;
 
     setSaving(true);
@@ -236,6 +276,37 @@ export function AddItemsModal({ isOpen, onClose, analise, onSuccess }: Props) {
                   </button>
                 )}
               </div>
+
+              {slot.product && (
+                <div className="mt-1.5 flex items-center gap-2 text-xs">
+                  <span className="text-text-muted shrink-0">Buscar preço em:</span>
+                  {slot.loadingBudgets ? (
+                    <span className="text-text-muted animate-pulse">Carregando orçamentos...</span>
+                  ) : slot.budgets.length === 0 ? (
+                    <span className="text-text-muted italic">Nenhum orçamento de compra com este produto (usa preço de referência)</span>
+                  ) : (
+                    <select
+                      value={slot.selectedBudget?.id || ''}
+                      onChange={(e) => {
+                        const opt = slot.budgets.find(b => b.id === e.target.value) || null;
+                        setSlot(p => ({ ...p, selectedBudget: opt }));
+                      }}
+                      className="px-2 py-1 border border-border-subtle rounded bg-bg-deep text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    >
+                      <option value="">Preço de Referência ({analise.tipo_analise === 'REVENDA' ? 'Revenda' : 'Uso/Consumo'})</option>
+                      {slot.budgets.map((b) => {
+                        const price = analise.tipo_analise === 'REVENDA' ? b.custo_revenda : b.custo_uso_consumo;
+                        const formattedPrice = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+                        return (
+                          <option key={b.id} value={b.id}>
+                            OC: {b.numero_orcamento} — {b.supplier_name} ({formattedPrice})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

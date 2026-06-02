@@ -40,8 +40,16 @@ def run():
         cur.execute(sql2)
         print("V002__companies_tax_profiles.sql executed successfully.")
         
+        # 3. Run V003
+        print("Running SQL migration V003__solution_analysis_budget_refs.sql...")
+        v003_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V003__solution_analysis_budget_refs.sql')
+        with open(v003_path, 'r', encoding='utf-8') as f:
+            sql3 = f.read()
+        cur.execute(sql3)
+        print("V003__solution_analysis_budget_refs.sql executed successfully.")
+        
         conn.close()
-        print("All SQL migrations completed successfully! ✅")
+        print("All SQL migrations completed successfully!")
     except Exception as e:
         print(f"Error executing SQL migrations: {e}")
         sys.exit(1)

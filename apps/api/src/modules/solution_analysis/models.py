@@ -57,6 +57,7 @@ class SolutionAnalysisItem(Base):
     qtd_a = Column(Numeric(15, 4), nullable=True)
     vlr_unit_a = Column(Numeric(18, 4), nullable=True)
     vlr_total_a = Column(Numeric(18, 4), nullable=True)
+    budget_a_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
 
     # Solução B
     item_b_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=True)
@@ -64,6 +65,7 @@ class SolutionAnalysisItem(Base):
     qtd_b = Column(Numeric(15, 4), nullable=True)
     vlr_unit_b = Column(Numeric(18, 4), nullable=True)
     vlr_total_b = Column(Numeric(18, 4), nullable=True)
+    budget_b_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
 
     # Solução C
     item_c_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=True)
@@ -71,6 +73,7 @@ class SolutionAnalysisItem(Base):
     qtd_c = Column(Numeric(15, 4), nullable=True)
     vlr_unit_c = Column(Numeric(18, 4), nullable=True)
     vlr_total_c = Column(Numeric(18, 4), nullable=True)
+    budget_c_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
 
     # Result
     melhor_solucao = Column(String(10), nullable=True)   # A | B | C | EMPATE
@@ -84,3 +87,6 @@ class SolutionAnalysisItem(Base):
     produto_a = relationship("Product", foreign_keys=[item_a_id])
     produto_b = relationship("Product", foreign_keys=[item_b_id])
     produto_c = relationship("Product", foreign_keys=[item_c_id])
+    budget_a = relationship("PurchaseBudget", foreign_keys=[budget_a_id])
+    budget_b = relationship("PurchaseBudget", foreign_keys=[budget_b_id])
+    budget_c = relationship("PurchaseBudget", foreign_keys=[budget_c_id])

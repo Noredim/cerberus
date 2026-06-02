@@ -230,17 +230,45 @@ class SolutionAnalysisService:
         # Resolve products and calculate values
         def _slot_values(slot):
             if not slot or not slot.item_id:
-                return None, None, None, None
+                return None, None, None, None, None
 
             product = self._resolve_product(slot.item_id, tenant_id)
-            price = self._get_price(product, analise.tipo_analise)
+            
+            price = None
+            if slot.budget_id:
+                from src.modules.purchase_budgets.models import PurchaseBudgetItem
+                budget_item = (
+                    self.db.query(PurchaseBudgetItem)
+                    .filter(
+                        PurchaseBudgetItem.budget_id == slot.budget_id,
+                        PurchaseBudgetItem.product_id == slot.item_id
+                    )
+                    .first()
+                )
+                if budget_item:
+                    from src.modules.solution_analysis.router import calculate_purchase_item_cost
+                    costs = calculate_purchase_item_cost(self.db, budget_item)
+                    cost_val = costs["custo_revenda"] if analise.tipo_analise == "REVENDA" else costs["custo_uso_consumo"]
+                    price = Decimal(str(cost_val))
+
+            if price is None:
+                price = self._get_price(product, analise.tipo_analise)
+
             qty = slot.quantidade
             display_name = f"[{product.codigo}]{product.nome}" if product.codigo else product.nome
-            return product.id, display_name, price, qty * price
+            
+            if slot.budget_id:
+                from src.modules.purchase_budgets.models import PurchaseBudget
+                pb = self.db.query(PurchaseBudget).filter(PurchaseBudget.id == slot.budget_id).first()
+                if pb:
+                    ref_num = pb.numero_orcamento or "Sem Número"
+                    display_name = f"{display_name} (Ref: {ref_num})"
 
-        a_id, a_nome, a_unit, a_total = _slot_values(data.solucao_a)
-        b_id, b_nome, b_unit, b_total = _slot_values(data.solucao_b)
-        c_id, c_nome, c_unit, c_total = _slot_values(data.solucao_c)
+            return product.id, display_name, price, qty * price, slot.budget_id
+
+        a_id, a_nome, a_unit, a_total, a_bid = _slot_values(data.solucao_a)
+        b_id, b_nome, b_unit, b_total, b_bid = _slot_values(data.solucao_b)
+        c_id, c_nome, c_unit, c_total, c_bid = _slot_values(data.solucao_c)
 
         next_seq = (
             self.db.query(SolutionAnalysisItem)
@@ -257,18 +285,21 @@ class SolutionAnalysisService:
             qtd_a=data.solucao_a.quantidade if data.solucao_a else None,
             vlr_unit_a=a_unit,
             vlr_total_a=a_total,
+            budget_a_id=a_bid,
             # B
             item_b_id=b_id,
             item_b_nome=b_nome,
             qtd_b=data.solucao_b.quantidade if data.solucao_b else None,
             vlr_unit_b=b_unit,
             vlr_total_b=b_total,
+            budget_b_id=b_bid,
             # C
             item_c_id=c_id,
             item_c_nome=c_nome,
             qtd_c=data.solucao_c.quantidade if data.solucao_c else None,
             vlr_unit_c=c_unit,
             vlr_total_c=c_total,
+            budget_c_id=c_bid,
         )
         self._compute_line_result(item)
         self.db.add(item)

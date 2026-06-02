@@ -737,6 +737,112 @@ def run_tests():
             assert e.status_code == 400
             assert "Já existe um produto cadastrado com o código/SKU" in e.detail
 
+        # --- Test 11: Solution Analysis Purchase Budget Pricing ---
+        print("\n--- Test 11: Solution Analysis Purchase Budget Pricing ---")
+        from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+        from src.modules.purchase_budgets.schemas import PurchaseBudgetCreate, PurchaseBudgetItemCreate
+        from src.modules.purchase_budgets.service import PurchaseBudgetService
+        from src.modules.suppliers.models import Supplier
+        from src.modules.solution_analysis.service import SolutionAnalysisService
+        from src.modules.solution_analysis.schemas import SolutionAnalysisCreate, SolutionAnalysisItemCreate, SolutionItemSlot
+
+        # 1. Create a supplier
+        supplier = db.query(Supplier).filter(Supplier.tenant_id == tenant_id).first()
+        if not supplier:
+            supplier = Supplier(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                razao_social="Fornecedor Teste",
+                cnpj="11222333000144",
+                uf="SP"
+            )
+            db.add(supplier)
+            db.flush()
+
+        # 2. Create a purchase budget with product
+        from datetime import datetime
+        pb_create = PurchaseBudgetCreate(
+            supplier_id=supplier.id,
+            forma_pagamento_id=None,
+            data_vencimento_inicial=None,
+            forma_pagamento_snapshot=None,
+            data_orcamento=datetime.now(),
+            validade=None,
+            numero_orcamento="OC-TESTE-11",
+            vendedor_nome="Vendedor Compra",
+            vendedor_telefone=None,
+            vendedor_email=None,
+            tipo_orcamento="REVENDA",
+            frete_tipo="FOB",
+            frete_percent=Decimal("5.0"), # 5% frete
+            ipi_calculado=False,
+            sales_budget_id=None,
+            dolar_orcamento=False,
+            valor_conversao=None,
+            items=[
+                PurchaseBudgetItemCreate(
+                    product_id=p1.id,
+                    codigo_fornecedor="EXT-11",
+                    ncm=None,
+                    quantidade=Decimal("10"),
+                    valor_unitario=Decimal("1000.00"),
+                    valor_unitario_dolar=None,
+                    ipi_percent=Decimal("10.0"), # 10% IPI
+                    icms_percent=Decimal("12.0"),
+                    difal_unitario=Decimal("0.0"),
+                    st_unitario=Decimal("0.0")
+                )
+            ]
+        )
+        pb = PurchaseBudgetService.create_budget(db, tenant_id, company.id, pb_create)
+        db.commit()
+
+        # 3. Create a solution analysis
+        sa_service = SolutionAnalysisService(db)
+        sa_create = SolutionAnalysisCreate(
+            titulo="Comparativo Teste Orçamento Compra",
+            tipo_analise="REVENDA",
+            nome_solucao_a="Solução Com Orçamento",
+            nome_solucao_b="Solução Sem Orçamento"
+        )
+        sa = sa_service.create_analysis(tenant_id, str(company.id), sa_create, admin_user)
+
+        # 4. Add items using budget_id reference for Solução A
+        sa_item_payload = SolutionAnalysisItemCreate(
+            solucao_a=SolutionItemSlot(
+                item_id=p1.id,
+                quantidade=Decimal("2"),
+                budget_id=pb.id
+            ),
+            solucao_b=SolutionItemSlot(
+                item_id=p1.id,
+                quantidade=Decimal("2") # Fallback to reference price
+            )
+        )
+        
+        # We need to make sure product has reference price populated to avoid 422 for slot B
+        p1.vlr_referencia_revenda = Decimal("2000.00")
+        db.commit()
+
+        sa_item = sa_service.add_item(str(sa.id), tenant_id, sa_item_payload, admin_user)
+        db.commit()
+
+        # 5. Assertions
+        # Custo unitário com impostos no orçamento de compra:
+        # valor_unitario (1000) + frete_unit (5% = 50) + ipi_unit (10% = 100) = 1150.00
+        print(f"Slot A Unit Price (from OC): {sa_item.vlr_unit_a} (Expected: 1150.00)")
+        assert float(sa_item.vlr_unit_a) == 1150.00
+        
+        # Display name check
+        print(f"Slot A Item Name: {sa_item.item_a_nome}")
+        assert "Ref: OC-TESTE-11" in sa_item.item_a_nome
+
+        # Slot B should use reference price (2000.00)
+        print(f"Slot B Unit Price (Fallback): {sa_item.vlr_unit_b} (Expected: 2000.00)")
+        assert float(sa_item.vlr_unit_b) == 2000.00
+
+        print("Solution Analysis Purchase Budget Pricing test passed successfully!")
+
         print("\nALL WORKFLOW WORK PATTERNS COMPLETED SUCCESSFULLY!")
 
     finally:

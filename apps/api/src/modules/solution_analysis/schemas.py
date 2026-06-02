@@ -12,6 +12,7 @@ class SolutionItemSlot(BaseModel):
     """One solution slot inside an add-items request."""
     item_id: Optional[UUID] = None
     quantidade: Optional[Decimal] = None
+    budget_id: Optional[UUID] = None
 
     @field_validator("quantidade")
     @classmethod
@@ -39,6 +40,7 @@ class SolutionAnalysisItemResponse(BaseModel):
     qtd_a: Optional[Decimal] = None
     vlr_unit_a: Optional[Decimal] = None
     vlr_total_a: Optional[Decimal] = None
+    budget_a_id: Optional[UUID] = None
 
     # B
     item_b_id: Optional[UUID] = None
@@ -46,6 +48,7 @@ class SolutionAnalysisItemResponse(BaseModel):
     qtd_b: Optional[Decimal] = None
     vlr_unit_b: Optional[Decimal] = None
     vlr_total_b: Optional[Decimal] = None
+    budget_b_id: Optional[UUID] = None
 
     # C
     item_c_id: Optional[UUID] = None
@@ -53,6 +56,7 @@ class SolutionAnalysisItemResponse(BaseModel):
     qtd_c: Optional[Decimal] = None
     vlr_unit_c: Optional[Decimal] = None
     vlr_total_c: Optional[Decimal] = None
+    budget_c_id: Optional[UUID] = None
 
     # Result
     melhor_solucao: Optional[str] = None
