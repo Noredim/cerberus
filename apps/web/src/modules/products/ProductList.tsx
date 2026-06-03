@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     Package,
     Search,
@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { productApi } from './api/productApi';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Product } from './types';
+import { Tooltip } from '../../components/ui/Tooltip';
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '-';
@@ -43,9 +44,8 @@ const ProductList: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     
     // Refs para sincronizar scroll horizontal se necessário, ou usar max-height
-    const tableContainerRef = useRef<HTMLDivElement>(null);
 
-    const fetchProducts = async () => {
+    const fetchProducts = useCallback(async () => {
         setLoading(true);
         try {
             const data = await productApi.list({
@@ -59,7 +59,7 @@ const ProductList: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [search, typeFilter]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -67,16 +67,16 @@ const ProductList: React.FC = () => {
             fetchProducts();
         }, 300);
         return () => clearTimeout(timer);
-    }, [search, typeFilter]);
+    }, [fetchProducts]);
 
     const handleDelete = async (id: string, name: string) => {
         if (!window.confirm(`Certeza que deseja excluir o produto "${name}"? Esta ação não pode ser desfeita.`)) return;
         try {
             await productApi.delete(id);
             fetchProducts();
-        } catch (error: any) {
+        } catch (error) {
             console.error('Delete error:', error);
-            const msg = error.response?.data?.detail || 'Erro ao excluir produto.';
+            const msg = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Erro ao excluir produto.';
             alert(msg);
         }
     };
@@ -132,13 +132,12 @@ const ProductList: React.FC = () => {
                 </div>
 
                 <div 
-                    ref={tableContainerRef}
                     className="min-h-[200px] overflow-auto max-h-[calc(100vh-280px)] relative"
                 >
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle sticky top-0 z-10">
                             <tr>
-                                <th className="px-6 py-4">Produto</th>
+                                <th className="px-6 py-4 max-w-[320px] md:max-w-[400px]">Produto</th>
                                 <th className="px-6 py-4">SKU / Código</th>
                                 <th className="px-6 py-4">Finalidade</th>
                                 <th className="px-6 py-4">VLR Revenda</th>
@@ -172,9 +171,9 @@ const ProductList: React.FC = () => {
                                         key={product.id}
                                         className="group hover:bg-bg-deep/50 transition-colors"
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-6 py-4 whitespace-normal break-words max-w-[320px] md:max-w-[400px]">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${product.tipo === 'EQUIPAMENTO'
+                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${product.tipo === 'EQUIPAMENTO'
                                                     ? 'bg-brand-primary/10 text-brand-primary'
                                                     : product.tipo === 'SERVICO'
                                                     ? 'bg-indigo-500/10 text-indigo-500'
@@ -182,9 +181,13 @@ const ProductList: React.FC = () => {
                                                     }`}>
                                                     {product.tipo === 'EQUIPAMENTO' ? <Package className="w-5 h-5" /> : product.tipo === 'SERVICO' ? <Activity className="w-5 h-5" /> : <Key className="w-5 h-5" />}
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold text-text-primary text-sm">{product.nome}</span>
-                                                    <span className="text-xs text-text-muted">{product.unidade || 'UN'} | {product.categoria || 'Sem categoria'}</span>
+                                                <div className="flex flex-col min-w-0">
+                                                    <Tooltip content={<div className="max-w-xs">{product.nome}</div>}>
+                                                        <span className="font-semibold text-text-primary text-sm line-clamp-2 text-left">
+                                                            {product.nome}
+                                                        </span>
+                                                    </Tooltip>
+                                                    <span className="text-xs text-text-muted mt-0.5">{product.unidade || 'UN'} | {product.categoria || 'Sem categoria'}</span>
                                                 </div>
                                             </div>
                                         </td>
