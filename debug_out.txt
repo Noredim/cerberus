@@ -1,0 +1,12 @@
+Total budgets in DB: 92
+
+==================================================
+Found Budget: STM-049/2026 - Oportunidade Teste Workflow (Edição Aprovada)
+Status: GANHO
+Valor Total: 1000.0000
+Prazo Contrato: 36
+Prazo Instalação: 1
+Comissão Diretoria: 12.5000%
+Rental items count: 0
+
+Rental Items:
