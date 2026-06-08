@@ -6,15 +6,15 @@ services:
     container_name: cerberus_db_prod
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-cerberus_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cerberus_password}
-      POSTGRES_DB: ${POSTGRES_DB:-cerberus}
+      POSTGRES_USER: cerberus
+      POSTGRES_PASSWORD: W@rs26
+      POSTGRES_DB: cerberus
     volumes:
-      - ${POSTGRES_DATA_DIR:-/opt/cerberus/data/postgres}:/var/lib/postgresql/data
+      - /opt/cerberus/data/postgres:/var/lib/postgresql/data
     networks:
       - cerberus_prod_network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-cerberus_user} -d $${POSTGRES_DB:-cerberus}" ]
+      test: [ "CMD-SHELL", "pg_isready -U cerberus -d cerberus" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,11 +27,11 @@ services:
     restart: always
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-cerberus_user}:${POSTGRES_PASSWORD:-cerberus_password}@db:5432/${POSTGRES_DB:-cerberus}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://localhost}
-      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://cerberus:W@rs26@db:5432/cerberus
+      - ALLOWED_ORIGINS=https://cerberus.warslab.com.br
+      - JWT_SECRET=e2c8ef16a06b9bb429d475a841f6c8b3782ba2bcf799adc7106927e69ce234cd
     volumes:
-      - ${UPLOADS_DATA_DIR:-/opt/cerberus/data/uploads}:/app/uploads
+      - /opt/cerberus/data/uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
     container_name: cerberus_web_prod
     restart: always
     environment:
-      - VITE_API_URL=${VITE_API_URL:-/api}
+      - VITE_API_URL=/api
     networks:
       - cerberus_prod_network
 
