@@ -68,3 +68,18 @@ Usar a documentação em docs/ai-context como fonte principal de conhecimento.
 ## Importante
 
 Se houver dúvida sobre alguma regra de negócio, consultar a documentação antes de implementar.
+
+
+## Regras de Consumo de Contexto
+
+- Nunca listar o projeto inteiro de forma recursiva.
+- Nunca abrir `node_modules`, `.git`, `dist`, `build`, `.venv`, `venv`, `__pycache__` ou arquivos gerados.
+- Para entender a estrutura do projeto, leia sempre `docs/ai-context/project-files-clean.txt`.
+- Para tarefas simples, leia no máximo 5 arquivos antes de responder.
+- Para tarefas médias, leia no máximo 10 arquivos antes de apresentar plano.
+- Nunca procurar arquivos por tentativa e erro sem antes consultar `project-files-clean.txt`.
+- O frontend principal está em `apps/web/src`.
+- As engines estão em `engines/`.
+- A documentação de contexto está em `docs/ai-context/`.
+- As SPECS estão em `docs/specs/`.
+- Se não encontrar um arquivo, consulte `docs/ai-context/project-files-clean.txt` antes de tentar outro caminho.
