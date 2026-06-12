@@ -8,59 +8,54 @@ Arquitetura:
 
 Multi-Tenant
 
-Toda entidade de domínio deve respeitar o isolamento por tenant_id.
+O Cerberus utiliza uma arquitetura modular.
 
-Estrutura principal:
+Os modelos não ficam em uma pasta global.
 
-migrations/
+Cada módulo possui seus próprios arquivos.
 
-models/
+Estrutura encontrada:
 
-schemas/
+apps/api/src/modules/
 
-seed/
+Padrão dos módulos:
 
-database/
+models.py
+schemas.py
+service.py
+router.py
 
-Arquivos importantes:
+Exemplos confirmados:
 
-src/core/database.py
+sales_budgets/
+purchase_budgets/
+opportunity_kits/
+
+Alguns módulos podem possuir apenas parte dessa estrutura.
 
 Objetivo:
 
-Este documento orienta a IA sobre a organização do banco de dados do Cerberus.
+Este documento orienta a IA sobre a organização do banco de dados e das entidades.
 
 Fluxo recomendado:
 
 1. Ler este índice.
-2. Identificar as entidades envolvidas.
-3. Ler apenas os models necessários.
-4. Verificar migrations relacionadas.
-5. Verificar impacto nas APIs e engines.
-6. Propor um plano.
-7. Implementar apenas após aprovação.
+2. Identificar o módulo envolvido.
+3. Localizar o models.py do módulo.
+4. Verificar schemas.py.
+5. Verificar service.py.
+6. Verificar router.py.
+7. Criar um plano.
+8. Implementar apenas após aprovação.
 
 Regras:
 
+* Nunca procurar models globais sem necessidade.
 * Nunca alterar migrations antigas.
-* Nunca apagar colunas existentes sem solicitação.
-* Nunca quebrar compatibilidade com dados existentes.
-* Nunca ignorar tenant_id.
-* Nunca criar tabelas duplicadas.
-* Sempre preservar integridade dos dados.
-* Sempre analisar impacto nas engines.
-* Ler apenas as entidades envolvidas na tarefa.
+* Nunca quebrar compatibilidade.
+* Nunca ignorar tenant_id quando aplicável.
+* Ler apenas o módulo envolvido.
 
-Para regras de negócio consultar:
+Se o módulo não existir, responder:
 
-PRD.md
-
-SPECS.md
-
-docs/ai-context/03-regras-de-negocio.md
-
-Para arquitetura consultar:
-
-docs/ai-context/02-project-backend.md
-
-docs/ai-context/04-project-engines.md
+"NÃO ENCONTRADO."

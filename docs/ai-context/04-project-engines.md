@@ -4,47 +4,17 @@ Engines principais:
 
 engines/
 
-Estrutura esperada:
+O Cerberus utiliza engines externas especializadas para cálculos críticos do negócio.
 
-tax_engine/
-cost_engine/
-pricing_engine/
+Estrutura existente:
+
 contract_engine/
 
-As engines do Cerberus são serviços especializados responsáveis pelos cálculos críticos do sistema.
+cost_engine/
 
-Responsabilidades:
+pricing_engine/
 
-tax_engine
-
-* cálculos tributários
-* impostos
-* benefícios fiscais
-* ST
-* DIFAL
-* ISS
-
-cost_engine
-
-* formação do custo real
-* composição de custos
-* custos adicionais
-
-pricing_engine
-
-* formação do preço de venda
-* margem
-* markup
-* preço sugerido
-
-contract_engine
-
-* locação
-* comodato
-* recorrência
-* ROI
-* payback
-* mensalidades
+tax_engine/
 
 Objetivo:
 
@@ -54,23 +24,50 @@ Fluxo recomendado:
 
 1. Ler este índice.
 2. Identificar qual engine está envolvida.
-3. Ler apenas os arquivos necessários.
-4. Validar as regras de negócio relacionadas.
-5. Propor um plano.
+3. Ler apenas a engine necessária.
+4. Identificar os arquivos impactados.
+5. Criar um plano.
 6. Implementar apenas após aprovação.
+
+Responsabilidades gerais:
+
+tax_engine
+
+* cálculos tributários
+* benefícios fiscais
+* ST
+* DIFAL
+* ISS
+
+cost_engine
+
+* composição de custos
+* custo real
+* custos adicionais
+
+pricing_engine
+
+* formação de preço
+* margem
+* markup
+
+contract_engine
+
+* locação
+* comodato
+* recorrência
+* ROI
+* payback
 
 Regras:
 
-* Nunca alterar regras matemáticas sem justificativa.
-* Nunca alterar contratos de entrada e saída das engines sem necessidade.
-* Nunca modificar múltiplas engines ao mesmo tempo.
-* Sempre preservar compatibilidade.
+* Nunca alterar múltiplas engines sem necessidade.
+* Nunca modificar regras matemáticas sem análise.
+* Nunca alterar contratos de entrada e saída sem validação.
 * Sempre preservar memória de cálculo.
-* Sempre preservar rastreabilidade dos resultados.
+* Sempre preservar rastreabilidade.
 * Ler apenas a engine envolvida na tarefa.
 
-Em caso de dúvida sobre regras de negócio, consultar:
+Se a engine não existir, responder:
 
-PRD.md
-SPECS.md
-docs/ai-context/03-regras-de-negocio.md
+"NÃO ENCONTRADO."
