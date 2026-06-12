@@ -16,7 +16,7 @@ class Product(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     
     codigo = Column(String(50), nullable=False, index=True)
-    nome = Column(String(255), nullable=False)
+    nome = Column(String(300), nullable=False)  # Aumentei de 255 para 300 caracteres
     descricao = Column(Text)
     
     tipo = Column(String(20), nullable=False) # EQUIPAMENTO, SERVICO
@@ -79,3 +79,4 @@ class ProductSupplier(Base):
 
     product = relationship("Product", back_populates="suppliers")
     supplier = relationship("Supplier")
+
