@@ -53,6 +53,13 @@ class ProductService:
                 detail=f"Já existe um produto cadastrado com o nome '{payload.nome}' nesta empresa (Código: {existing_name.codigo})."
             )
 
+        # Validate product name length
+        if len(payload.nome) > 300:
+            raise HTTPException(
+                status_code=400,
+                detail="Nome do produto muito grande - reduza a descrição"
+            )
+
         product_data = payload.model_dump(exclude={'suppliers'})
         product = Product(
             tenant_id=tenant_id,
@@ -123,6 +130,13 @@ class ProductService:
         product = self.get_product(tenant_id, product_id, company_id)
         if not product:
             return None
+        
+        # Validate product name length for updates
+        if payload.nome and len(payload.nome) > 300:
+            raise HTTPException(
+                status_code=400,
+                detail="Nome do produto muito grande - reduza a descrição"
+            )
         
         update_data = payload.model_dump(exclude_unset=True, exclude={'suppliers'})
         for key, value in update_data.items():
