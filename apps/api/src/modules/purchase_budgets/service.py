@@ -73,8 +73,9 @@ class PurchaseBudgetService:
         )
         if sales_budget_id:
             query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
-        else:
-            query = query.filter(PurchaseBudget.sales_budget_id.is_(None))
+        # If sales_budget_id is None, we do not filter by sales_budget_id,
+        # which means both global and opportunity-linked purchase budgets are considered.
+
             
         items_desc = query.order_by(PurchaseBudget.data_orcamento.desc(), PurchaseBudget.created_at.desc()).all()
 
