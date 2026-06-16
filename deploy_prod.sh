@@ -7,6 +7,17 @@ set -e
 
 echo "🚀 Starting Cerberus Production Deployment..."
 
+# 0. Fetch latest changes from Git
+echo "⬇️  Pulling latest changes from git..."
+git pull
+
+# 0.1 Check and stop development containers to avoid port conflicts
+if [ -f docker-compose.yml ]; then
+    echo "🧹 Stopping development containers if running..."
+    docker compose down --remove-orphans || docker-compose down --remove-orphans
+fi
+
+
 # 1. Create directory structure on host
 echo "📂 Creating host directories under /opt/cerberus..."
 sudo mkdir -p /opt/cerberus/data/postgres
