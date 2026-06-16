@@ -533,6 +533,67 @@ def check_user_has_budget_access(db: Session, user_id: str, tenant_id: str, budg
     return is_responsible
 
 
+def _sync_missing_product_prices(db: Session, tenant_id: str, sales_budget_id: Optional[UUID], items: list, rental_items: list):
+    """
+    Collects all product IDs involved in the sales budget (directly or via kits)
+    and synchronizes their reference prices from the opportunity purchase budgets
+    if they are missing in the catalog.
+    """
+    from src.modules.purchase_budgets.service import PurchaseBudgetService
+    from src.modules.opportunity_kits.models import OpportunityKit
+    
+    product_ids = set()
+
+    # 1. Collect from direct items
+    for item in items:
+        prod_id = getattr(item, "product_id", None) or (item.get("product_id") if isinstance(item, dict) else None)
+        if prod_id:
+            product_ids.add(str(prod_id))
+
+    # 2. Collect from rental items
+    for item in rental_items:
+        prod_id = getattr(item, "product_id", None) or (item.get("product_id") if isinstance(item, dict) else None)
+        if prod_id:
+            product_ids.add(str(prod_id))
+
+    # 3. Collect from Opportunity Kits referenced by the items/rental items
+    kit_ids = set()
+    for item in items:
+        kit_id = getattr(item, "opportunity_kit_id", None) or (item.get("opportunity_kit_id") if isinstance(item, dict) else None)
+        if kit_id:
+            kit_ids.add(str(kit_id))
+    for item in rental_items:
+        kit_id = getattr(item, "opportunity_kit_id", None) or (item.get("opportunity_kit_id") if isinstance(item, dict) else None)
+        if kit_id:
+            kit_ids.add(str(kit_id))
+
+    if kit_ids:
+        kits = db.query(OpportunityKit).filter(
+            OpportunityKit.id.in_(list(kit_ids)),
+            OpportunityKit.tenant_id == tenant_id
+        ).all()
+        for kit in kits:
+            for kit_item in kit.items:
+                if kit_item.tipo_item == "PRODUTO" and kit_item.product_id:
+                    product_ids.add(str(kit_item.product_id))
+            for cost in kit.costs:
+                if cost.tipo_item == "PRODUTO" and cost.product_id:
+                    product_ids.add(str(cost.product_id))
+
+    # 4. Synchronize reference prices for products that have missing values in the catalog
+    for pid in product_ids:
+        product = db.query(Product).filter(Product.id == pid, Product.tenant_id == tenant_id).first()
+        if product:
+            # Check if any price is missing
+            if product.vlr_referencia_revenda is None or product.vlr_referencia_uso_consumo is None:
+                PurchaseBudgetService.sync_product_reference_prices(
+                    db,
+                    product_id=pid,
+                    tenant_id=tenant_id,
+                    sales_budget_id=sales_budget_id
+                )
+
+
 def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudgetCreate) -> SalesBudget:
     company = db.query(Company).filter(Company.id == company_id).first()
     cp = company.sales_parameters if company else None
@@ -619,6 +680,9 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
     perfil_st_ativo = True
     if tax_profile and tax_profile.perfil_tarifario_st is False:
         perfil_st_ativo = False
+
+    # Sync missing product reference prices from opportunity purchase budgets
+    _sync_missing_product_prices(db, tenant_id, budget.id, data.items, data.rental_items)
 
     _process_sale_items(db, budget, data.items, tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo)
 
@@ -881,6 +945,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     perfil_st_ativo = True
     if tax_profile and tax_profile.perfil_tarifario_st is False:
         perfil_st_ativo = False
+
+    # Sync missing product reference prices from opportunity purchase budgets
+    _sync_missing_product_prices(db, tenant_id, budget.id, data.items, data.rental_items)
 
     _process_sale_items(db, budget, data.items, budget.tenant_id, company_uf, customer_uf, defaults, perfil_st_ativo)
 

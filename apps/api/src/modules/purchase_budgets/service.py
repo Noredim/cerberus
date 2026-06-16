@@ -40,7 +40,7 @@ class PurchaseBudgetService:
         return budget
 
     @staticmethod
-    def sync_product_reference_prices(db: Session, product_id: str, tenant_id: str):
+    def sync_product_reference_prices(db: Session, product_id: str, tenant_id: str, sales_budget_id: Optional[UUID] = None):
         """
         Recalculates product reference prices by looking up the latest REVENDA budget
         and the latest ATIVO_IMOBILIZADO_USO_CONSUMO budget.
@@ -57,16 +57,26 @@ class PurchaseBudgetService:
         if not product:
             return
 
+        # If sync is triggered for a sales budget, skip if catalog reference prices are already populated.
+        if sales_budget_id:
+            if product.vlr_referencia_revenda is not None or product.vlr_referencia_uso_consumo is not None:
+                return
+
         now = datetime.now()
         prod_service = ProductService(db)
         ncm_service = NcmService(db)
 
         # 1. Fetch all budget items for this product in descending order of budget date
-        items_desc = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+        query = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
             PurchaseBudgetItem.product_id == product_id,
-            PurchaseBudget.tenant_id == tenant_id,
-            PurchaseBudget.sales_budget_id.is_(None)
-        ).order_by(PurchaseBudget.data_orcamento.desc(), PurchaseBudget.created_at.desc()).all()
+            PurchaseBudget.tenant_id == tenant_id
+        )
+        if sales_budget_id:
+            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+        else:
+            query = query.filter(PurchaseBudget.sales_budget_id.is_(None))
+            
+        items_desc = query.order_by(PurchaseBudget.data_orcamento.desc(), PurchaseBudget.created_at.desc()).all()
 
         latest_revenda = None
         latest_uso_consumo = None
@@ -224,7 +234,7 @@ class PurchaseBudgetService:
         """
         product_ids = {item.product_id for item in budget.items}
         for pid in product_ids:
-            PurchaseBudgetService.sync_product_reference_prices(db, str(pid), budget.tenant_id)
+            PurchaseBudgetService.sync_product_reference_prices(db, str(pid), budget.tenant_id, sales_budget_id=budget.sales_budget_id)
 
     @staticmethod
     def calculate_item_totals(frete_tipo: str, frete_percent_cabecalho: float, ipi_calculado: bool, item: dict):
@@ -322,9 +332,8 @@ class PurchaseBudgetService:
         db.refresh(db_budget)
         
         # Fire reference price rule
-        if db_budget.sales_budget_id is None:
-            PurchaseBudgetService._update_product_reference_prices(db, db_budget)
-            db.commit()
+        PurchaseBudgetService._update_product_reference_prices(db, db_budget)
+        db.commit()
         
         return db_budget
 
@@ -388,11 +397,10 @@ class PurchaseBudgetService:
         db.commit()
         db.refresh(db_budget)
         
-        if db_budget.sales_budget_id is None:
-            PurchaseBudgetService._update_product_reference_prices(db, db_budget)
-            for old_pid in old_product_ids:
-                PurchaseBudgetService.sync_product_reference_prices(db, str(old_pid), tenant_id)
-            db.commit()
+        PurchaseBudgetService._update_product_reference_prices(db, db_budget)
+        for old_pid in old_product_ids:
+            PurchaseBudgetService.sync_product_reference_prices(db, str(old_pid), tenant_id, sales_budget_id=db_budget.sales_budget_id)
+        db.commit()
             
         return db_budget
 
@@ -453,9 +461,8 @@ class PurchaseBudgetService:
         db.refresh(negotiation)
         
         # Re-fire reference price rule after negotiation
-        if budget.sales_budget_id is None:
-            PurchaseBudgetService._update_product_reference_prices(db, budget)
-            db.commit()
+        PurchaseBudgetService._update_product_reference_prices(db, budget)
+        db.commit()
         
         return negotiation
 
