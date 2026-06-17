@@ -501,8 +501,8 @@ def get_tarefas(
     if not company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
-    LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
-    return LicitacaoService.get_tarefas(db, tenant_id, licitacao_id)
+    licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+    return LicitacaoService.get_tarefas(db, tenant_id, licitacao_id, licitacao, current_user)
 
 @router.post("/{licitacao_id}/tarefas", response_model=schemas.LicitacaoTarefaResponse)
 def create_tarefa(

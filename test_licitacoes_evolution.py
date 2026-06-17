@@ -457,12 +457,131 @@ def run_tests():
         )
         print(f"Comment added: {comment.descricao}")
         assert comment.descricao == "Andamento de teste comentando tarefa"
+        print("\n--- Test 11: Task & Checklist Sincronização, Permissões e Filtros ---")
+        analyst_normal = LicitacaoService.add_analista(
+            db, tenant_id, company_id, lic.id,
+            normal_user.id, 4, admin
+        )
+        tech_item = db.query(LicitacaoChecklistItem).filter(LicitacaoChecklistItem.id == tech_item.id).first()
+        
+        # 11a. Sync Status: Em Andamento -> Em Andamento
+        print("Testing status sync: Em Andamento...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Em Andamento"),
+            admin
+        )
+        db.refresh(tech_item)
+        print(f"Checklist item status is: {tech_item.status} (Expected: Em Andamento)")
+        assert tech_item.status == "Em Andamento"
+
+        # 11b. Sync Status: Pausada -> Pausado
+        print("Testing status sync: Pausada...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Pausada"),
+            admin
+        )
+        db.refresh(tech_item)
+        print(f"Checklist item status is: {tech_item.status} (Expected: Pausado)")
+        assert tech_item.status == "Pausado"
+
+        # 11c. Sync Status: Concluída -> Concluído
+        print("Testing status sync: Concluída...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Concluída"),
+            admin
+        )
+        db.refresh(tech_item)
+        print(f"Checklist item status is: {tech_item.status} (Expected: Concluído)")
+        assert tech_item.status == "Concluído"
+        assert tech_item.data_conclusao is not None
+
+        # 11d. Reopen and Sync Status: Cancelada -> Não Aplicável
+        print("Reopening and testing status sync: Cancelada...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Pendente"),
+            admin
+        )
+        db.refresh(tech_item)
+        assert tech_item.status == "Pendente"
+        assert tech_item.data_conclusao is None
+
+        # Sync responsible
+        print("Testing sync of responsible to checklist item...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(responsavel_id=normal_user.id),
+            admin
+        )
+        db.refresh(tech_item)
+        print(f"Checklist item responsible is: {tech_item.usuario_id} (Expected: {normal_user.id})")
+        assert str(tech_item.usuario_id) == str(normal_user.id)
+
+        # 11e. Cancel guard: Analyst tries to cancel task1 (should fail)
+        print("Attempting to cancel task as normal user (analyst)...")
+        try:
+            LicitacaoService.update_tarefa(
+                db, tenant_id, company_id, lic.id, task1.id,
+                LicitacaoTarefaUpdate(status="Cancelada"),
+                normal_user
+            )
+            raise AssertionError("Should have blocked cancel action by analyst")
+        except Exception as e:
+            print(f"Successfully blocked cancel action: {getattr(e, 'detail', str(e))}")
+            assert getattr(e, 'status_code', None) == 403
+
+        # PO cancels task1 (should succeed)
+        print("Canceling task as admin (PO)...")
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Cancelada"),
+            admin
+        )
+        db.refresh(tech_item)
+        db.refresh(task1)
+        assert task1.status == "Cancelada"
+        assert tech_item.status == "Não Aplicável"
+        print("Cancel succeeded and checklist item is 'Não Aplicável'.")
+
+        # 11f. Visibility Filter
+        print("Testing visibility filtering for analysts...")
+        task2 = LicitacaoService.create_tarefa(
+            db, tenant_id, company_id, lic.id,
+            LicitacaoTarefaCreate(
+                titulo="Tarefa do Admin",
+                responsavel_id=admin.id,
+                data_limite=analyst_limit
+            ),
+            admin
+        )
+        # admin reopens task1 and assigns it to normal_user
+        LicitacaoService.update_tarefa(
+            db, tenant_id, company_id, lic.id, task1.id,
+            LicitacaoTarefaUpdate(status="Pendente", responsavel_id=normal_user.id),
+            admin
+        )
+
+        # Get tasks as normal_user (analyst)
+        tasks_normal = LicitacaoService.get_tarefas(db, tenant_id, lic.id, lic, normal_user)
+        print(f"Tasks visible to normal_user: {[t.titulo for t in tasks_normal]}")
+        assert len(tasks_normal) == 1
+        assert str(tasks_normal[0].id) == str(task1.id)
+
+        # Get tasks as admin (PO / admin)
+        tasks_admin = LicitacaoService.get_tarefas(db, tenant_id, lic.id, lic, admin)
+        print(f"Tasks visible to admin: {[t.titulo for t in tasks_admin]}")
+        assert len(tasks_admin) >= 2
 
         # Clean up added tasks & applications
+        db.delete(task2)
         db.delete(comment)
         db.delete(task1)
         db.delete(task_avulsa)
         db.delete(app1)
+        db.delete(analyst_normal)
         db.delete(non_team_user)
         db.commit()
 

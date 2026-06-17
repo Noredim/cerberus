@@ -4,7 +4,7 @@ import {
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
   FileSpreadsheet, Package, ChevronRight, ChevronDown, 
   Loader2, AlertCircle, ShieldAlert, Award, RefreshCw, Layers, History, Users, Search,
-  CheckSquare, ListTodo, MessageSquare, Calendar, UserCheck, Activity, Clock, Trash
+  CheckSquare, ListTodo, MessageSquare, Calendar, UserCheck, Activity, Clock, Trash, Play
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
@@ -173,6 +173,10 @@ export function LicitacaoForm() {
 
   // Edit lock indicator
   const isLocked = ['Ganha', 'Perdida', 'Cancelada'].includes(detail?.status || '');
+
+  // Task cancel permission check
+  const canCancelTask = String(detail?.po_id) === String(user?.id) || 
+    user?.roles?.some(r => ['ADMIN', 'DIRETORIA', 'GERENTE'].includes(r));
 
   useEffect(() => {
     if (id) {
@@ -1593,11 +1597,15 @@ export function LicitacaoForm() {
                                   onChange={(e) => handleChecklistItemUpdate(item.id, e.target.value, undefined)}
                                   className={`border rounded-md py-1.5 px-3 text-xs font-semibold focus:outline-none h-9 ${
                                     item.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                    item.status === 'Em Andamento' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                    item.status === 'Pausado' ? 'bg-amber-50 text-amber-700 border-amber-300' :
                                     item.status === 'Não Aplicável' ? 'bg-slate-100 text-slate-600 border-slate-300' :
                                     'bg-bg-deep text-text-primary border-border-subtle'
                                   }`}
                                 >
                                   <option value="Pendente">Pendente</option>
+                                  <option value="Em Andamento">Em Andamento</option>
+                                  <option value="Pausado">Pausado</option>
                                   <option value="Concluído">Concluído</option>
                                   <option value="Não Aplicável">Não Aplicável</option>
                                 </select>
@@ -1687,11 +1695,15 @@ export function LicitacaoForm() {
                                           onChange={(e) => handleUpdateTechAplicacao(ap.id, e.target.value)}
                                           className={`border rounded px-2.5 py-1 text-xs font-semibold focus:outline-none h-8 cursor-pointer ${
                                             ap.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                            ap.status === 'Em Andamento' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                            ap.status === 'Pausado' ? 'bg-amber-50 text-amber-700 border-amber-300' :
                                             ap.status === 'Não Aplicável' ? 'bg-slate-100 text-slate-600 border-slate-300' :
                                             'bg-bg-deep text-text-primary border-border-subtle'
                                           }`}
                                         >
                                           <option value="Pendente">Pendente</option>
+                                          <option value="Em Andamento">Em Andamento</option>
+                                          <option value="Pausado">Pausado</option>
                                           <option value="Concluído">Concluído</option>
                                           <option value="Não Aplicável">Não Aplicável</option>
                                         </select>
@@ -1795,6 +1807,7 @@ export function LicitacaoForm() {
                   <option value="Todos">Status: Todos</option>
                   <option value="Pendente">Status: Pendente</option>
                   <option value="Em Andamento">Status: Em Andamento</option>
+                  <option value="Pausada">Status: Pausada</option>
                   <option value="Concluída">Status: Concluída</option>
                   <option value="Cancelada">Status: Cancelada</option>
                 </select>
@@ -1847,6 +1860,7 @@ export function LicitacaoForm() {
                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                             task.status === 'Pendente' ? 'bg-slate-100 text-slate-700' :
                             task.status === 'Em Andamento' ? 'bg-blue-50 text-blue-700' :
+                            task.status === 'Pausada' ? 'bg-amber-50 text-amber-700 border border-amber-300' :
                             task.status === 'Concluída' ? 'bg-emerald-50 text-emerald-700' :
                             'bg-rose-50 text-rose-700'
                           }`}>
@@ -1893,8 +1907,20 @@ export function LicitacaoForm() {
                                     <Activity className="w-3.5 h-3.5 mr-1 text-blue-500" /> Em Andamento
                                   </Button>
                                 )}
+
+                                {task.status === 'Em Andamento' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleTaskStatusChange(task.id, 'Pausada')} className="h-8 text-xs py-1 px-2.5 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300">
+                                    <Clock className="w-3.5 h-3.5 mr-1 text-amber-500" /> Pausar
+                                  </Button>
+                                )}
+
+                                {task.status === 'Pausada' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleTaskStatusChange(task.id, 'Em Andamento')} className="h-8 text-xs py-1 px-2.5 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300">
+                                    <Play className="w-3.5 h-3.5 mr-1 text-blue-500" /> Retomar
+                                  </Button>
+                                )}
                                 
-                                {['Pendente', 'Em Andamento'].includes(task.status) && (
+                                {['Pendente', 'Em Andamento', 'Pausada'].includes(task.status) && (
                                   <Button size="sm" variant="outline" onClick={() => handleTaskStatusChange(task.id, 'Concluída')} className="h-8 text-xs py-1 px-2.5 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300">
                                     <CheckSquare className="w-3.5 h-3.5 mr-1 text-emerald-500" /> Concluir
                                   </Button>
@@ -1911,7 +1937,7 @@ export function LicitacaoForm() {
                                   </Button>
                                 )}
 
-                                {['Pendente', 'Em Andamento'].includes(task.status) && (
+                                {['Pendente', 'Em Andamento', 'Pausada'].includes(task.status) && canCancelTask && (
                                   <Button size="sm" variant="outline" onClick={() => handleTaskStatusChange(task.id, 'Cancelada')} className="h-8 text-xs py-1 px-2.5 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300">
                                     <Trash className="w-3.5 h-3.5 mr-1 text-rose-500" /> Cancelar
                                   </Button>

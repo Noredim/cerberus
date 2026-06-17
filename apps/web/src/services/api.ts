@@ -14,7 +14,7 @@ api.interceptors.request.use(
         const companyId = sessionStorage.getItem('@Cerberus:companyId');
         
         if (config.headers) {
-            if (token) {
+            if (token && !config.headers.Authorization) {
                 config.headers.Authorization = `Bearer ${token}`;
             }
             // Add X-Company-Id for all non-login routes

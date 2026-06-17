@@ -839,26 +839,9 @@ class LicitacaoService:
         return True
 
     @staticmethod
-    def get_tarefas(db: Session, tenant_id: str, licitacao_id: UUID) -> List[LicitacaoTarefa]:
-        return db.query(LicitacaoTarefa).filter(
-            LicitacaoTarefa.licitacao_id == licitacao_id,
-            LicitacaoTarefa.tenant_id == tenant_id
-        ).order_by(LicitacaoTarefa.created_at.desc()).all()
-
-    @staticmethod
-    def get_tarefa_by_id(db: Session, tenant_id: str, tarefa_id: UUID) -> LicitacaoTarefa:
-        tarefa = db.query(LicitacaoTarefa).filter(
-            LicitacaoTarefa.id == tarefa_id,
-            LicitacaoTarefa.tenant_id == tenant_id
-        ).first()
-        if not tarefa:
-            raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
-        return tarefa
-
-    @staticmethod
-    def check_reopen_permission(db: Session, tenant_id: str, licitacao: Licitacao, current_user: User):
+    def is_user_po_or_privileged(db: Session, tenant_id: str, licitacao: Licitacao, current_user: User) -> bool:
         if not current_user:
-            raise HTTPException(status_code=403, detail="Não autorizado.")
+            return False
         
         if str(licitacao.po_id) == str(current_user.id):
             return True
@@ -880,10 +863,68 @@ class LicitacaoService:
             if r and r.name in ["GERENTE", "DIRETORIA"]:
                 return True
 
-        raise HTTPException(
-            status_code=403,
-            detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem reabrir uma tarefa concluída."
+        return False
+
+    @staticmethod
+    def sync_tarefa_to_checklist(db: Session, tenant_id: str, checklist_item_id: Optional[UUID], checklist_aplicacao_id: Optional[UUID], task_status: str, responsavel_id: str):
+        status_map = {
+            "Pendente": "Pendente",
+            "Em Andamento": "Em Andamento",
+            "Pausada": "Pausado",
+            "Concluída": "Concluído",
+            "Cancelada": "Não Aplicável"
+        }
+        mapped_status = status_map.get(task_status, "Pendente")
+        data_conclusao = datetime.now(timezone.utc) if mapped_status == "Concluído" else None
+
+        if checklist_item_id:
+            item = db.query(LicitacaoChecklistItem).filter(
+                LicitacaoChecklistItem.id == checklist_item_id,
+                LicitacaoChecklistItem.tenant_id == tenant_id
+            ).first()
+            if item:
+                item.status = mapped_status
+                item.usuario_id = responsavel_id
+                item.data_conclusao = data_conclusao
+        
+        if checklist_aplicacao_id:
+            aplicacao = db.query(LicitacaoChecklistAplicacao).filter(
+                LicitacaoChecklistAplicacao.id == checklist_aplicacao_id,
+                LicitacaoChecklistAplicacao.tenant_id == tenant_id
+            ).first()
+            if aplicacao:
+                aplicacao.status = mapped_status
+                aplicacao.usuario_id = responsavel_id
+                aplicacao.data_conclusao = data_conclusao
+
+    @staticmethod
+    def get_tarefas(db: Session, tenant_id: str, licitacao_id: UUID, licitacao: Licitacao, current_user: User) -> List[LicitacaoTarefa]:
+        query = db.query(LicitacaoTarefa).filter(
+            LicitacaoTarefa.licitacao_id == licitacao_id,
+            LicitacaoTarefa.tenant_id == tenant_id
         )
+        if current_user and not LicitacaoService.is_user_po_or_privileged(db, tenant_id, licitacao, current_user):
+            query = query.filter(LicitacaoTarefa.responsavel_id == current_user.id)
+            
+        return query.order_by(LicitacaoTarefa.created_at.desc()).all()
+
+    @staticmethod
+    def get_tarefa_by_id(db: Session, tenant_id: str, tarefa_id: UUID) -> LicitacaoTarefa:
+        tarefa = db.query(LicitacaoTarefa).filter(
+            LicitacaoTarefa.id == tarefa_id,
+            LicitacaoTarefa.tenant_id == tenant_id
+        ).first()
+        if not tarefa:
+            raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+        return tarefa
+
+    @staticmethod
+    def check_reopen_permission(db: Session, tenant_id: str, licitacao: Licitacao, current_user: User):
+        if not LicitacaoService.is_user_po_or_privileged(db, tenant_id, licitacao, current_user):
+            raise HTTPException(
+                status_code=403,
+                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem reabrir uma tarefa concluída."
+            )
 
     @staticmethod
     def create_tarefa(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, data: LicitacaoTarefaCreate, current_user: User) -> LicitacaoTarefa:
@@ -952,6 +993,8 @@ class LicitacaoService:
         db.add(tarefa)
         db.flush()
 
+        LicitacaoService.sync_tarefa_to_checklist(db, tenant_id, data.checklist_item_id, data.checklist_aplicacao_id, "Pendente", data.responsavel_id)
+
         andamento = LicitacaoTarefaAndamento(
             tarefa_id=tarefa.id,
             tenant_id=tenant_id,
@@ -984,6 +1027,13 @@ class LicitacaoService:
         new_status = data.status
         if old_status == "Concluída" and new_status is not None and new_status != "Concluída":
             LicitacaoService.check_reopen_permission(db, tenant_id, licitacao, current_user)
+
+        if new_status == "Cancelada" and old_status != "Cancelada":
+            if not LicitacaoService.is_user_po_or_privileged(db, tenant_id, licitacao, current_user):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem cancelar tarefas."
+                )
 
         if data.titulo is not None:
             tarefa.titulo = data.titulo
@@ -1030,6 +1080,8 @@ class LicitacaoService:
                     )
 
         db.flush()
+
+        LicitacaoService.sync_tarefa_to_checklist(db, tenant_id, tarefa.checklist_item_id, tarefa.checklist_aplicacao_id, tarefa.status, tarefa.responsavel_id)
 
         usuario_nome = current_user.name if current_user else "Sistema"
         usuario_id = str(current_user.id) if current_user else "system"
