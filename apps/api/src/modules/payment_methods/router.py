@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import date
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_current_user
+from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 from src.modules.users.models import User
 from .schemas import (
     FormaPagamentoCreate, FormaPagamentoUpdate, FormaPagamentoOut, 
@@ -25,16 +25,16 @@ class SimulationInput(BaseModel):
 
 def check_admin_or_finance(user: User):
     roles = [r.role.value for r in user.roles]
+    if "ENGENHARIA_PRECO" in roles and "ADMIN" not in roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Perfil de Engenharia de Preço não possui permissão para gerenciar formas de pagamento"
+        )
     if "ADMIN" not in roles and "DIRETORIA" not in roles:
-        # Check if they are in "Financeiro" role. Since we do not have a separate 
-        # database role check other than ADMIN and DIRETORIA, we will allow them if they are admin or director.
-        # But wait, to be safe and compatible, let's keep the authorization check to ADMIN / DIRETORIA for mutations,
-        # and allow others to read/view.
-        # Let's check: Section 13 says:
-        # Criar/Alterar/Inativar: Administrador: Sim, Financeiro: Sim, others: Não.
-        # For this application, since we don't have separate role groups for "Financeiro" yet,
-        # we will allow ADMIN and DIRETORIA users to perform these actions.
-        pass
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Apenas administradores e diretores podem gerenciar formas de pagamento"
+        )
 
 @router.get("", response_model=List[FormaPagamentoOut])
 def list_formas(
@@ -54,7 +54,7 @@ def get_forma(
         raise HTTPException(status_code=404, detail="Forma de pagamento não encontrada")
     return forma
 
-@router.post("", response_model=FormaPagamentoOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=FormaPagamentoOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
 def create_forma(
     data: FormaPagamentoCreate,
     db: Session = Depends(get_db),
@@ -64,7 +64,7 @@ def create_forma(
     check_admin_or_finance(current_user)
     return PaymentMethodsService.create_forma(db, current_user.tenant_id, data)
 
-@router.put("/{forma_id}", response_model=FormaPagamentoOut)
+@router.put("/{forma_id}", response_model=FormaPagamentoOut, dependencies=[Depends(check_not_engenharia_preco)])
 def update_forma(
     forma_id: UUID,
     data: FormaPagamentoUpdate,
@@ -80,7 +80,7 @@ def update_forma(
         raise HTTPException(status_code=404, detail="Forma de pagamento não encontrada")
     return forma
 
-@router.delete("/{forma_id}")
+@router.delete("/{forma_id}", dependencies=[Depends(check_not_engenharia_preco)])
 def delete_forma(
     forma_id: UUID,
     db: Session = Depends(get_db),

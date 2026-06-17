@@ -16,9 +16,16 @@ API_URL = "http://localhost:8000"
 
 def run_tests():
     # 1. Connect to the DB to create/update the ENGENHARIA_PRECO test user
-    engine = create_engine("postgresql://cerberus_user:cerberus_password@db:5432/cerberus")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = SessionLocal()
+    from sqlalchemy import text
+    try:
+        engine = create_engine("postgresql://cerberus_user:cerberus_password@localhost:5433/cerberus")
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+    except Exception:
+        engine = create_engine("postgresql://cerberus_user:cerberus_password@db:5432/cerberus")
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        db = SessionLocal()
 
     try:
         # Find master tenant
@@ -109,6 +116,9 @@ def run_tests():
     assert_forbidden("GET", "/tax-benefits")
     assert_forbidden("GET", "/cadastro/ncm-st")
     assert_forbidden("POST", "/ncm")
+    assert_forbidden("POST", "/cadastro/formas-pagamento", json_payload={})
+    assert_forbidden("PUT", "/cadastro/formas-pagamento/00000000-0000-0000-0000-000000000000", json_payload={})
+    assert_forbidden("DELETE", "/cadastro/formas-pagamento/00000000-0000-0000-0000-000000000000")
 
     # 4. Test Allowed Routes (should NOT be 403)
     logger.info("\n--- TESTING PERMITTED ENDPOINTS ---")

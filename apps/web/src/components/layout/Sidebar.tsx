@@ -107,7 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                         return {
                             ...item,
                             subItems: item.subItems?.filter(sub => 
-                                ['Formas de Pagamento', 'Produtos'].includes(sub.label)
+                                ['Produtos'].includes(sub.label)
                             )
                         };
                     }
@@ -121,7 +121,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                                     'Kits (oportunidades)', 
                                     'Orçamento de compra', 
                                     'Oportunidades', 
-                                    'Comparativos de soluções'
+                                    'Comparativos de soluções',
+                                    'Licitações'
                                 ].includes(sub.label)
                             )
                         };

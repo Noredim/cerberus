@@ -87,6 +87,44 @@ const ProtectedRoute = () => {
       );
   }
 
+  // Se o usuário tem o perfil ENGENHARIA_PRECO, bloquear rotas não autorizadas
+  const isEngenhariaPreco = user?.roles?.includes('ENGENHARIA_PRECO') && !user?.roles?.includes('ADMIN');
+  if (isEngenhariaPreco) {
+      const path = window.location.pathname;
+      const allowedPaths = [
+          '/',                     // Painel Geral / Dashboard
+          '/cadastro/produtos',    // Produtos
+          '/cadastros/clientes',   // Clientes
+          '/cadastros/fornecedores',// Fornecedores
+          '/cadastros/kits',       // Kits (oportunidades)
+          '/orcamentos-compras',   // Orçamento de compra
+          '/orcamentos-vendas',    // Oportunidades
+          '/comercial/comparativos',// Comparativos de soluções
+          '/comercial/licitacoes', // Licitações
+          '/settings',             // Configurações
+      ];
+      
+      const isAllowed = allowedPaths.some(allowed => 
+          path === allowed || path.startsWith(allowed + '/')
+      );
+      
+      if (!isAllowed) {
+          return (
+             <div className="min-h-screen bg-bg-deep flex items-center justify-center p-4 text-center">
+                 <div className="bg-bg-surface p-8 rounded-lg border border-border-subtle max-w-md">
+                     <div className="bg-brand-danger/10 p-3 rounded-full mb-4 mx-auto w-fit">
+                         <ServerOff className="w-8 h-8 text-brand-danger" />
+                     </div>
+                     <h2 className="text-xl font-bold text-text-primary mb-2">Acesso Negado</h2>
+                     <p className="text-sm text-text-muted">
+                         Você não possui permissão para acessar esta página.
+                     </p>
+                 </div>
+             </div>
+          );
+      }
+  }
+
   return (
     <Shell>
       <Outlet />
