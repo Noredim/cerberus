@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
+from decimal import Decimal
 
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
+from src.modules.opportunity_kits.models import OpportunityKit
 
 from . import schemas
 from .service import LicitacaoService
@@ -213,12 +215,22 @@ def add_item(
     if not lote:
         raise HTTPException(status_code=404, detail="Lote não encontrado")
     
+    # Calculate quantidade_total
+    qty_total = data.quantidade
+    if data.tipo_fornecimento == "Mensal":
+        qty_total = data.quantidade * Decimal(str(data.total_meses))
+    else:
+        qty_total = data.quantidade
+
     item = LicitacaoItem(
         lote_id=lote_id,
         codigo=data.codigo,
         nome=data.nome,
         descricao=data.descricao,
-        quantidade=data.quantidade
+        quantidade=data.quantidade,
+        tipo_fornecimento=data.tipo_fornecimento,
+        total_meses=data.total_meses,
+        quantidade_total=qty_total
     )
     db.add(item)
     
@@ -254,10 +266,41 @@ def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     
+    # Validação de travamento de edição de campos de quantidade quando há kits ativos
+    has_kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_item_id == item_id).first() is not None
+    if has_kits:
+        qty_changed = Decimal(str(item.quantidade)) != Decimal(str(data.quantidade))
+        tipo_changed = item.tipo_fornecimento != data.tipo_fornecimento
+        meses_changed = item.total_meses != data.total_meses
+        if qty_changed or tipo_changed or meses_changed:
+            raise HTTPException(
+                status_code=400,
+                detail="Este item está vinculado a um Kit de Oportunidade e seus campos quantitativos (Quantidade, Tipo de Fornecimento ou Total de Meses) não podem ser alterados diretamente."
+            )
+
+    # Calculate quantidade_total
+    qty_total = data.quantidade
+    if data.tipo_fornecimento == "Mensal":
+        qty_total = data.quantidade * Decimal(str(data.total_meses))
+    else:
+        qty_total = data.quantidade
+
+    # Detailed history logging
+    prev_tipo = item.tipo_fornecimento
+    prev_meses = "vazio" if item.total_meses is None else str(item.total_meses)
+    prev_total = str(item.quantidade_total)
+    
+    new_tipo = data.tipo_fornecimento
+    new_meses = "vazio" if data.total_meses is None else str(data.total_meses)
+    new_total = str(qty_total)
+
     item.codigo = data.codigo
     item.nome = data.nome
     item.descricao = data.descricao
     item.quantidade = data.quantidade
+    item.tipo_fornecimento = data.tipo_fornecimento
+    item.total_meses = data.total_meses
+    item.quantidade_total = qty_total
     
     # Log to timeline
     LicitacaoService.register_history(
@@ -265,7 +308,7 @@ def update_item(
         licitacao_id,
         tenant_id,
         user_id,
-        f"{current_user.name} alterou o Item {data.codigo}: {data.nome}."
+        f"{current_user.name} alterou o Item {data.codigo}: {data.nome}. Detalhes: Tipo de Fornecimento de {prev_tipo} para {new_tipo}, Total de Meses de {prev_meses} para {new_meses}, Quantidade Total de {prev_total} para {new_total}."
     )
     
     db.commit()
@@ -292,6 +335,14 @@ def delete_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     
+    # Travamento de exclusão se houver kit vinculado
+    has_kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_item_id == item_id).first() is not None
+    if has_kits:
+        raise HTTPException(
+            status_code=400,
+            detail="Não é possível excluir este item pois ele está vinculado a um Kit de Oportunidade ativo."
+        )
+
     item_code = item.codigo
     item_name = item.nome
     
@@ -399,7 +450,7 @@ def get_checklist(
     if not company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
-    return LicitacaoService.get_checklist(db, tenant_id, licitacao_id)
+    return LicitacaoService.get_checklist(db, tenant_id, licitacao_id, current_user)
 
 @router.put("/{licitacao_id}/checklist/items/{item_id}", response_model=schemas.LicitacaoChecklistItemResponse)
 def update_checklist_item(

@@ -72,12 +72,21 @@ class LicitacaoService:
             db.flush()
 
             for item_data in lote_data.items:
+                qty_total = item_data.quantidade
+                if item_data.tipo_fornecimento == "Mensal":
+                    qty_total = item_data.quantidade * Decimal(str(item_data.total_meses))
+                else:
+                    qty_total = item_data.quantidade
+
                 item = LicitacaoItem(
                     lote_id=lote.id,
                     codigo=item_data.codigo,
                     nome=item_data.nome,
                     descricao=item_data.descricao,
-                    quantidade=item_data.quantidade
+                    quantidade=item_data.quantidade,
+                    tipo_fornecimento=item_data.tipo_fornecimento,
+                    total_meses=item_data.total_meses,
+                    quantidade_total=qty_total
                 )
                 db.add(item)
 
@@ -363,6 +372,9 @@ class LicitacaoService:
         if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
             raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
 
+        # Check permissions
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
+
         # Check if analyst user exists
         analyst_user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant_id).first()
         if not analyst_user:
@@ -409,6 +421,9 @@ class LicitacaoService:
         licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
         if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
             raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        # Check permissions
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
 
         analista = db.query(LicitacaoAnalista).filter(
             LicitacaoAnalista.id == analista_id,
@@ -541,7 +556,14 @@ class LicitacaoService:
         db.flush()
 
     @staticmethod
-    def get_checklist(db: Session, tenant_id: str, licitacao_id: UUID) -> List[LicitacaoChecklistGrupo]:
+    def get_checklist(db: Session, tenant_id: str, licitacao_id: UUID, current_user: Optional[User] = None) -> List[LicitacaoChecklistGrupo]:
+        licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id, Licitacao.tenant_id == tenant_id).first()
+        if not licitacao:
+            raise HTTPException(status_code=404, detail="Licitação não encontrada")
+        
+        if current_user:
+            LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
+
         grupos = db.query(LicitacaoChecklistGrupo).filter(
             LicitacaoChecklistGrupo.licitacao_id == licitacao_id,
             LicitacaoChecklistGrupo.tenant_id == tenant_id
@@ -565,6 +587,12 @@ class LicitacaoService:
         ).first()
         if not item:
             raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
+
+        licitacao = item.grupo.licitacao
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
+
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
 
         old_status = item.status
         old_usuario_id = item.usuario_id
@@ -617,6 +645,8 @@ class LicitacaoService:
             raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
 
         licitacao_id = item.grupo.licitacao_id
+        licitacao = item.grupo.licitacao
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
 
         # Validate that usuario_id is in the team
         is_in_team = db.query(LicitacaoAnalista).filter(
@@ -668,6 +698,9 @@ class LicitacaoService:
         if not aplicacao:
             raise HTTPException(status_code=404, detail="Aplicação técnica não encontrada.")
 
+        licitacao = aplicacao.licitacao
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
+
         old_status = aplicacao.status
 
         if data.status is not None:
@@ -705,6 +738,9 @@ class LicitacaoService:
         if not aplicacao:
             raise HTTPException(status_code=404, detail="Aplicação técnica não encontrada.")
 
+        licitacao = aplicacao.licitacao
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
+
         licitacao_id = aplicacao.licitacao_id
         item_nome = aplicacao.item.nome
         analista_nome = aplicacao.usuario.name if aplicacao.usuario else "Desconhecido"
@@ -731,29 +767,7 @@ class LicitacaoService:
             raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
 
         # Check permissions
-        is_po = str(licitacao.po_id) == str(current_user.id)
-        is_privileged = False
-        if current_user:
-            is_privileged = db.query(UserRole).filter(
-                UserRole.user_id == current_user.id,
-                UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
-            ).first() is not None
-            if not is_privileged:
-                from src.modules.roles.models import Role
-                prof = db.query(Professional).filter(
-                    Professional.user_id == current_user.id,
-                    Professional.tenant_id == tenant_id
-                ).first()
-                if prof and prof.role_id is not None:
-                    r = db.query(Role).filter(Role.id == prof.role_id).first()
-                    if r and r.name in ["GERENTE", "DIRETORIA"]:
-                        is_privileged = True
-
-        if not is_po and not is_privileged:
-            raise HTTPException(
-                status_code=403,
-                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem adicionar itens ao checklist."
-            )
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
 
         # Get max ordem to append
         from sqlalchemy import func
@@ -798,29 +812,7 @@ class LicitacaoService:
             raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
 
         # Check permissions
-        is_po = str(licitacao.po_id) == str(current_user.id)
-        is_privileged = False
-        if current_user:
-            is_privileged = db.query(UserRole).filter(
-                UserRole.user_id == current_user.id,
-                UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
-            ).first() is not None
-            if not is_privileged:
-                from src.modules.roles.models import Role
-                prof = db.query(Professional).filter(
-                    Professional.user_id == current_user.id,
-                    Professional.tenant_id == tenant_id
-                ).first()
-                if prof and prof.role_id is not None:
-                    r = db.query(Role).filter(Role.id == prof.role_id).first()
-                    if r and r.name in ["GERENTE", "DIRETORIA"]:
-                        is_privileged = True
-
-        if not is_po and not is_privileged:
-            raise HTTPException(
-                status_code=403,
-                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem remover itens do checklist."
-            )
+        LicitacaoService.check_user_edit_permission(db, tenant_id, licitacao, current_user)
 
         item_nome = item.nome
         db.delete(item)
@@ -864,6 +856,14 @@ class LicitacaoService:
                 return True
 
         return False
+
+    @staticmethod
+    def check_user_edit_permission(db: Session, tenant_id: str, licitacao: Licitacao, current_user: User):
+        if not LicitacaoService.is_user_po_or_privileged(db, tenant_id, licitacao, current_user):
+            raise HTTPException(
+                status_code=403,
+                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA possuem essa permissão."
+            )
 
     @staticmethod
     def sync_tarefa_to_checklist(db: Session, tenant_id: str, checklist_item_id: Optional[UUID], checklist_aplicacao_id: Optional[UUID], task_status: str, responsavel_id: str):

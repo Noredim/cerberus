@@ -912,6 +912,13 @@ class OpportunityKitService:
         if data.prazo_instalacao_meses > data.prazo_contrato_meses:
             raise ValueError("Prazo de instalação não pode ser maior que o prazo do contrato.")
             
+        qty_kits = data.quantidade_kits
+        if data.licitacao_item_id:
+            from src.modules.licitacoes.models import LicitacaoItem
+            lic_item = self.db.query(LicitacaoItem).filter(LicitacaoItem.id == data.licitacao_item_id).first()
+            if lic_item:
+                qty_kits = int(lic_item.quantidade_total)
+
         kit = OpportunityKit(
             tenant_id=tenant_id,
             company_id=company_id,
@@ -920,7 +927,7 @@ class OpportunityKitService:
             licitacao_item_id=data.licitacao_item_id,
             nome_kit=data.nome_kit,
             descricao_kit=data.descricao_kit,
-            quantidade_kits=data.quantidade_kits,
+            quantidade_kits=qty_kits,
             tipo_contrato=data.tipo_contrato,
             prazo_contrato_meses=data.prazo_contrato_meses,
             prazo_instalacao_meses=data.prazo_instalacao_meses,

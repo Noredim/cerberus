@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
@@ -10,6 +10,28 @@ class LicitacaoItemBase(BaseModel):
     nome: str
     descricao: Optional[str] = None
     quantidade: Decimal = Field(default=Decimal(1))
+    tipo_fornecimento: str = Field(default="Unitário")
+    total_meses: Optional[int] = Field(default=None)
+    quantidade_total: Optional[Decimal] = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_fornecimento(self) -> "LicitacaoItemBase":
+        tipo = self.tipo_fornecimento
+        meses = self.total_meses
+        qty = self.quantidade
+
+        if qty <= 0:
+            raise ValueError("A quantidade do item deve ser maior que zero.")
+
+        if tipo == "Mensal":
+            if meses is None:
+                raise ValueError("O total de meses é obrigatório para fornecimento Mensal.")
+            if meses <= 0:
+                raise ValueError("O total de meses deve ser maior que zero para fornecimento Mensal.")
+        elif tipo == "Unitário":
+            self.total_meses = None
+
+        return self
 
 class LicitacaoItemCreate(LicitacaoItemBase):
     pass

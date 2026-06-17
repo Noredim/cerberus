@@ -4,7 +4,7 @@ import {
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
   FileSpreadsheet, Package, ChevronRight, ChevronDown, 
   Loader2, AlertCircle, ShieldAlert, Award, RefreshCw, Layers, History, Users, Search,
-  CheckSquare, ListTodo, MessageSquare, Calendar, UserCheck, Activity, Clock, Trash, Play
+  CheckSquare, ListTodo, MessageSquare, UserCheck, Activity, Clock, Trash, Play
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
@@ -31,6 +31,9 @@ interface LicitacaoItemData {
   nome: string;
   descricao?: string;
   quantidade: number;
+  tipo_fornecimento: string;
+  total_meses?: number | null;
+  quantidade_total: number;
   kits: KitItem[];
 }
 
@@ -163,7 +166,7 @@ export function LicitacaoForm() {
 
   // CRUD Modals
   const [loteModal, setLoteModal] = useState<{ open: boolean; editId?: string; numero: string; nome: string; descricao: string } | null>(null);
-  const [itemModal, setItemModal] = useState<{ open: boolean; editId?: string; loteId: string; codigo: string; nome: string; descricao: string; quantidade: number } | null>(null);
+  const [itemModal, setItemModal] = useState<{ open: boolean; editId?: string; loteId: string; codigo: string; nome: string; descricao: string; quantidade: number; tipo_fornecimento: string; total_meses: number | null } | null>(null);
   const [kitCreateModal, setKitCreateModal] = useState<{ open: boolean; itemId: string; nome_kit: string; tipo_contrato: string; prazo_contrato_meses: number; prazo_instalacao_meses: number } | null>(null);
 
   // Deletions Warnings
@@ -174,9 +177,11 @@ export function LicitacaoForm() {
   // Edit lock indicator
   const isLocked = ['Ganha', 'Perdida', 'Cancelada'].includes(detail?.status || '');
 
-  // Task cancel permission check
-  const canCancelTask = String(detail?.po_id) === String(user?.id) || 
+  const isPOOrManager = String(detail?.po_id) === String(user?.id) || 
     user?.roles?.some(r => ['ADMIN', 'DIRETORIA', 'GERENTE'].includes(r));
+
+  // Task cancel permission check
+  const canCancelTask = isPOOrManager;
 
   useEffect(() => {
     if (id) {
@@ -697,24 +702,57 @@ export function LicitacaoForm() {
       const lote = detail.lotes.find(l => l.id === loteId);
       const item = lote?.items.find(i => i.id === itemId);
       if (item) {
-        setItemModal({ open: true, editId: itemId, loteId, codigo: item.codigo, nome: item.nome, descricao: item.descricao || '', quantidade: item.quantidade });
+        setItemModal({ 
+          open: true, 
+          editId: itemId, 
+          loteId, 
+          codigo: item.codigo, 
+          nome: item.nome, 
+          descricao: item.descricao || '', 
+          quantidade: item.quantidade,
+          tipo_fornecimento: item.tipo_fornecimento || 'Unitário',
+          total_meses: item.total_meses ?? 1
+        });
       }
     } else {
-      setItemModal({ open: true, loteId, codigo: '', nome: '', descricao: '', quantidade: 1 });
+      setItemModal({ 
+        open: true, 
+        loteId, 
+        codigo: '', 
+        nome: '', 
+        descricao: '', 
+        quantidade: 1,
+        tipo_fornecimento: 'Unitário',
+        total_meses: 1
+      });
     }
   };
 
   const handleItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemModal) return;
-    const { editId, loteId, codigo, nome, descricao, quantidade } = itemModal;
+    const { editId, loteId, codigo, nome, descricao, quantidade, tipo_fornecimento, total_meses } = itemModal;
     if (!codigo || !nome || quantidade <= 0) return;
 
+    if (tipo_fornecimento === 'Mensal' && (!total_meses || total_meses <= 0)) {
+      alert('Total de meses deve ser maior que zero.');
+      return;
+    }
+
     try {
+      const payload = {
+        codigo,
+        nome,
+        descricao,
+        quantidade,
+        tipo_fornecimento,
+        total_meses: tipo_fornecimento === 'Mensal' ? total_meses : null
+      };
+
       if (editId) {
-        await api.put(`/licitacoes/${id}/items/${editId}`, { codigo, nome, descricao, quantidade });
+        await api.put(`/licitacoes/${id}/items/${editId}`, payload);
       } else {
-        await api.post(`/licitacoes/${id}/lotes/${loteId}/items`, { codigo, nome, descricao, quantidade });
+        await api.post(`/licitacoes/${id}/lotes/${loteId}/items`, payload);
       }
       setItemModal(null);
       loadAll();
@@ -901,7 +939,7 @@ export function LicitacaoForm() {
           { id: 'lotes', label: 'Lotes / Itens / Kits', icon: Layers },
           { id: 'orcamentos', label: 'Orçamentos de Compra', icon: FileSpreadsheet },
           { id: 'timeline', label: 'Linha do Tempo', icon: History }
-        ].map(tab => (
+        ].filter(tab => tab.id !== 'checklist' || isPOOrManager).map(tab => (
           <button
             key={tab.id}
             type="button"
@@ -1077,7 +1115,7 @@ export function LicitacaoForm() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-text-muted uppercase tracking-wider">P.O. Responsável</label>
                   <select
-                    disabled={isLocked}
+                    disabled={isLocked || !isPOOrManager}
                     value={poId || ''}
                     onChange={e => setPoId(e.target.value)}
                     className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none focus:border-brand-primary h-11"
@@ -1101,7 +1139,7 @@ export function LicitacaoForm() {
                 Analistas e Prazos
               </h3>
 
-              {!isLocked && (
+              {!isLocked && isPOOrManager && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-surface border border-border-subtle/85 rounded-lg p-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Selecionar Analista</label>
@@ -1177,7 +1215,7 @@ export function LicitacaoForm() {
                         <th className="py-2.5 px-4">Data Zero (Início)</th>
                         <th className="py-2.5 px-4 text-center">Prazo</th>
                         <th className="py-2.5 px-4">Previsão Entrega</th>
-                        {!isLocked && <th className="py-2.5 px-4 text-center">Ações</th>}
+                        {!isLocked && isPOOrManager && <th className="py-2.5 px-4 text-center">Ações</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1187,7 +1225,7 @@ export function LicitacaoForm() {
                           <td className="py-3 px-4 text-text-muted font-mono">{new Date(a.data_zero).toLocaleDateString('pt-BR')}</td>
                           <td className="py-3 px-4 text-center text-text-muted font-bold">{a.prazo_dias_uteis} dias úteis</td>
                           <td className="py-3 px-4 font-mono font-bold text-brand-primary">{new Date(a.data_limite).toLocaleDateString('pt-BR')}</td>
-                          {!isLocked && (
+                          {!isLocked && isPOOrManager && (
                             <td className="py-3 px-4 text-center">
                               <button
                                 type="button"
@@ -1332,15 +1370,27 @@ export function LicitacaoForm() {
                 <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-6 space-y-6">
                   {/* Item Details */}
                   <div className="flex items-start justify-between border-b border-border-subtle/40 pb-4">
-                    <div>
+                    <div className="space-y-1">
                       <h3 className="text-lg font-bold text-text-primary">
                         Item {selectedItem.codigo}: {selectedItem.nome}
                       </h3>
-                      <p className="text-text-muted text-sm mt-1">{selectedItem.descricao || 'Sem descrição cadastrada'}</p>
+                      <p className="text-text-muted text-sm">{selectedItem.descricao || 'Sem descrição cadastrada'}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted pt-1">
+                        <span>Fornecimento: <strong className="text-text-primary">{selectedItem.tipo_fornecimento || 'Unitário'}</strong></span>
+                        {selectedItem.tipo_fornecimento === 'Mensal' && (
+                          <span>Duração: <strong className="text-text-primary">{selectedItem.total_meses} meses</strong></span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-xs text-text-muted block uppercase font-bold">Quantidade</span>
-                      <span className="text-xl font-bold text-text-primary mt-0.5 block">{Number(selectedItem.quantidade)}</span>
+                    <div className="flex gap-4">
+                      <div className="text-right border-r border-border-subtle/40 pr-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold">Qtd. Unitária</span>
+                        <span className="text-lg font-bold text-text-primary mt-0.5 block">{Number(selectedItem.quantidade)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold text-brand-primary">Qtd. Total</span>
+                        <span className="text-lg font-bold text-brand-primary mt-0.5 block">{Number(selectedItem.quantidade_total ?? selectedItem.quantidade)}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -1533,7 +1583,7 @@ export function LicitacaoForm() {
           </div>
         )}
 
-        {activeTab === 'checklist' && (
+        {activeTab === 'checklist' && isPOOrManager && (
           <div className="space-y-6 animate-in fade-in">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle/40 pb-3">
               <div>
@@ -2060,6 +2110,13 @@ export function LicitacaoForm() {
         maxWidth="md"
       >
         <form onSubmit={handleItemSubmit} className="space-y-4">
+          {itemModal?.editId && !!(detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length) && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <span>Este item está vinculado a um Kit de Oportunidade e seus campos quantitativos (Quantidade, Tipo de Fornecimento e Meses) não podem ser alterados diretamente.</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-1 space-y-1.5">
               <label className="text-xs font-bold text-text-muted uppercase">Código Item *</label>
@@ -2086,6 +2143,18 @@ export function LicitacaoForm() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-1 space-y-1.5">
+              <label className="text-xs font-bold text-text-muted uppercase">Tipo de Fornecimento *</label>
+              <select
+                value={itemModal?.tipo_fornecimento || 'Unitário'}
+                onChange={e => setItemModal(prev => prev ? { ...prev, tipo_fornecimento: e.target.value } : null)}
+                disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
+                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
+              >
+                <option value="Unitário">Unitário</option>
+                <option value="Mensal">Mensal</option>
+              </select>
+            </div>
+            <div className="col-span-1 space-y-1.5">
               <label className="text-xs font-bold text-text-muted uppercase">Quantidade *</label>
               <input
                 type="number"
@@ -2093,9 +2162,36 @@ export function LicitacaoForm() {
                 required
                 value={itemModal?.quantidade || ''}
                 onChange={e => setItemModal(prev => prev ? { ...prev, quantidade: Number(e.target.value) } : null)}
+                disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
                 className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
               />
             </div>
+            {itemModal?.tipo_fornecimento === 'Mensal' ? (
+              <div className="col-span-1 space-y-1.5">
+                <label className="text-xs font-bold text-text-muted uppercase">Total de Meses *</label>
+                <input
+                  type="number"
+                  step="1"
+                  required
+                  value={itemModal?.total_meses || ''}
+                  onChange={e => setItemModal(prev => prev ? { ...prev, total_meses: Number(e.target.value) } : null)}
+                  disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
+                  className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
+                />
+              </div>
+            ) : (
+              <div className="col-span-1 space-y-1.5 opacity-50">
+                <label className="text-xs font-bold text-text-muted uppercase">Total de Meses</label>
+                <input
+                  type="text"
+                  disabled
+                  value="N/A"
+                  className="w-full bg-bg-deep/50 border border-border-subtle/50 rounded-md py-2 px-3 text-sm text-text-muted cursor-not-allowed h-11"
+                />
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold text-text-muted uppercase">Descrição</label>
               <input
@@ -2105,6 +2201,12 @@ export function LicitacaoForm() {
                 className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
                 placeholder="Especificações do item..."
               />
+            </div>
+            <div className="col-span-1 space-y-1.5">
+              <label className="text-xs font-bold text-text-muted uppercase">Quantidade Total do Item</label>
+              <div className="w-full bg-bg-deep/50 border border-border-subtle/50 rounded-md py-2 px-3 text-sm text-brand-primary font-bold h-11 flex items-center">
+                {Number((itemModal?.quantidade || 0) * (itemModal?.tipo_fornecimento === 'Mensal' ? (itemModal?.total_meses || 0) : 1))}
+              </div>
             </div>
           </div>
           <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">

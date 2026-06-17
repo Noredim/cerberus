@@ -334,6 +334,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     policyName: string;
   } | null>(null);
 
+  const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
+
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
     licitacao_id: licitacaoIdParam || undefined,
@@ -380,6 +382,26 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     custo_monitoramento_unitario: 0,
     fator_monitoramento: 1.0,
   });
+
+  useEffect(() => {
+    const fetchItemDetails = async () => {
+      const licId = form.licitacao_id;
+      const itemId = form.licitacao_item_id;
+      if (licId && itemId) {
+        try {
+          const res = await api.get(`/licitacoes/${licId}`);
+          const lic = res.data;
+          const item = lic.lotes?.flatMap((l: any) => l.items || []).find((i: any) => i.id === itemId);
+          if (item) {
+            setLicitacaoItemDetails(item);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar detalhes do item da licitação:", err);
+        }
+      }
+    };
+    fetchItemDetails();
+  }, [form.licitacao_id, form.licitacao_item_id]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Tracks the previously applied tipo_contrato so we can detect user-initiated changes
@@ -1633,6 +1655,41 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
               1. Informações Gerais
             </h2>
+
+            {licitacaoItemDetails && (
+              <div className="mb-6 p-4 bg-brand-primary/5 border border-brand-primary/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <span className="text-[10px] text-brand-primary uppercase font-bold tracking-wider block mb-1">Item de Edital Vinculado</span>
+                  <h4 className="text-sm font-bold text-text-primary">
+                    Item {licitacaoItemDetails.codigo} — {licitacaoItemDetails.nome}
+                  </h4>
+                  {licitacaoItemDetails.descricao && (
+                    <p className="text-text-muted text-xs mt-1">{licitacaoItemDetails.descricao}</p>
+                  )}
+                </div>
+                <div className="flex gap-4 shrink-0 text-right">
+                  <div>
+                    <span className="text-[9px] text-text-muted uppercase block font-bold">Fornecimento</span>
+                    <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.tipo_fornecimento || 'Unitário'}</span>
+                  </div>
+                  {licitacaoItemDetails.tipo_fornecimento === 'Mensal' && (
+                    <div>
+                      <span className="text-[9px] text-text-muted uppercase block font-bold">Meses</span>
+                      <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.total_meses}m</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-[9px] text-text-muted uppercase block font-bold">Qtd. Base</span>
+                    <span className="text-xs font-semibold text-text-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-brand-primary uppercase block font-bold">Qtd. Total</span>
+                    <span className="text-xs font-bold text-brand-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Nome do Kit</label>

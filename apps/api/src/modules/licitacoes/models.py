@@ -92,6 +92,9 @@ class LicitacaoItem(Base):
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     descricao: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     quantidade: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=1.0)
+    tipo_fornecimento: Mapped[str] = mapped_column(String(50), nullable=False, default="Unitário")
+    total_meses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    quantidade_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=1.0)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

@@ -12,8 +12,10 @@ from src.modules.professionals.models import Professional
 from src.modules.roles.models import Role
 from src.modules.companies.models import Company
 from src.modules.customers.models import Customer
+import src.modules.sales_proposals.models
+import src.modules.sales_budgets.models
 from src.modules.licitacoes.models import (
-    Licitacao, LicitacaoAnalista, LicitacaoHistory, LicitacaoChecklistGrupo,
+    Licitacao, LicitacaoLote, LicitacaoItem, LicitacaoAnalista, LicitacaoHistory, LicitacaoChecklistGrupo,
     LicitacaoChecklistItem, LicitacaoChecklistAplicacao, LicitacaoTarefa, LicitacaoTarefaAndamento
 )
 from src.modules.licitacoes.schemas import (
@@ -23,6 +25,7 @@ from src.modules.licitacoes.schemas import (
 )
 from src.modules.purchase_budgets.models import PurchaseBudget
 from src.modules.opportunity_kits.models import OpportunityKit
+from src.modules.opportunity_kits.service import OpportunityKitService
 from src.modules.licitacoes.service import LicitacaoService
 
 def run_tests():
@@ -588,6 +591,90 @@ def run_tests():
         # Cleanup
         db.delete(analyst)
         db.delete(lic)
+        db.commit()
+
+        print("\n--- Test 8: LicitacaoItem Quantity and Supply Type LPs ---")
+        # Create a temporary tender and lote for item tests
+        lic_test = Licitacao(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            customer_id=customer.id,
+            numero_edital="Pregão Teste Quantidade",
+            status="Criada",
+            modalidade="Pregão",
+            tipo_licitacao="Menor preço",
+            valor_total_estimado=Decimal("0.00"),
+            valor_total_venda=Decimal("0.00"),
+            margem_ponderada_global=Decimal("0.00"),
+            precisa_aprovacao_diretoria=False,
+            aprovado_diretoria=False
+        )
+        db.add(lic_test)
+        db.commit()
+        db.refresh(lic_test)
+
+        lote = LicitacaoLote(
+            licitacao_id=lic_test.id,
+            numero="Lote 99",
+            nome="Lote Teste Quantidade"
+        )
+        db.add(lote)
+        db.commit()
+        db.refresh(lote)
+
+        # 1. Create a Unitary item
+        item_unit = LicitacaoItem(
+            lote_id=lote.id,
+            codigo="99.1",
+            nome="Item Unitario Teste",
+            quantidade=Decimal("5"),
+            tipo_fornecimento="Unitário",
+            quantidade_total=Decimal("5")
+        )
+        db.add(item_unit)
+        db.commit()
+        db.refresh(item_unit)
+        print(f"Item Unitario: quantidade={item_unit.quantidade}, tipo={item_unit.tipo_fornecimento}, total={item_unit.quantidade_total}")
+        assert item_unit.quantidade_total == Decimal("5")
+
+        # 2. Create a Monthly item
+        item_mensal = LicitacaoItem(
+            lote_id=lote.id,
+            codigo="99.2",
+            nome="Item Mensal Teste",
+            quantidade=Decimal("2"),
+            tipo_fornecimento="Mensal",
+            total_meses=12,
+            quantidade_total=Decimal("24")
+        )
+        db.add(item_mensal)
+        db.commit()
+        db.refresh(item_mensal)
+        print(f"Item Mensal: quantidade={item_mensal.quantidade}, tipo={item_mensal.tipo_fornecimento}, total={item_mensal.quantidade_total}")
+        assert item_mensal.quantidade_total == Decimal("24")
+
+        # 3. Create a Kit linked to the monthly item and check inheritance
+        print("Creating OpportunityKit linked to Item Mensal...")
+        kit_service = OpportunityKitService(db)
+        from src.modules.opportunity_kits.schemas import OpportunityKitCreate
+        kit_data = OpportunityKitCreate(
+            nome_kit="Kit Teste Quantidade",
+            tipo_contrato="LOCACAO",
+            prazo_contrato_meses=12,
+            licitacao_id=lic_test.id,
+            licitacao_item_id=item_mensal.id,
+            quantidade_kits=1 # Should be overridden by LicitacaoItem.quantidade_total
+        )
+        kit_obj = kit_service.create_kit(tenant_id=tenant_id, company_id=str(company_id), data=kit_data)
+        print(f"Kit criado: quantidade_kits={kit_obj.quantidade_kits} (Expected: 24)")
+        assert kit_obj.quantidade_kits == 24
+
+        # Clean up the test items
+        db.delete(kit_obj)
+        db.delete(item_mensal)
+        db.delete(item_unit)
+        db.delete(lote)
+        db.delete(lic_test)
         db.commit()
 
         print("\nALL TEST CASES COMPLETED SUCCESSFULLY! [SUCCESS]")
