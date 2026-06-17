@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
   FileSpreadsheet, Package, ChevronRight, ChevronDown, 
@@ -109,7 +109,16 @@ export function LicitacaoForm() {
   const [detail, setDetail] = useState<LicitacaoDetail | null>(null);
   
   // Tabs State
-  const [activeTab, setActiveTab] = useState('dados_gerais');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'dados_gerais';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   // Lists
   const [customers, setCustomers] = useState<any[]>([]);

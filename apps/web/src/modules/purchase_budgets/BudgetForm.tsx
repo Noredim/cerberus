@@ -201,7 +201,7 @@ export function BudgetForm() {
         await api.post('/purchase-budgets', payload);
       }
       if (licitacaoId) {
-        navigate(`/comercial/licitacoes/${licitacaoId}`);
+        navigate(`/comercial/licitacoes/${licitacaoId}?tab=orcamentos`);
       } else {
         navigate('/orcamentos-compras');
       }
@@ -283,7 +283,7 @@ export function BudgetForm() {
            <p className="text-text-muted text-sm ml-10">Lançamento de detalhes, impostos e negociações comerciais.</p>
         </div>
         <div className="flex gap-3 items-center ml-10 md:ml-0">
-            <Button variant="outline" onClick={() => navigate(licitacaoId ? `/comercial/licitacoes/${licitacaoId}` : '/orcamentos-compras')} className="bg-white">
+            <Button variant="outline" onClick={() => navigate(licitacaoId ? `/comercial/licitacoes/${licitacaoId}?tab=orcamentos` : '/orcamentos-compras?tab=orcamentos')} className="bg-white">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>

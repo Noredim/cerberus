@@ -912,7 +912,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         return;
       }
       if (form.licitacao_id) {
-        navigate(`/comercial/licitacoes/${form.licitacao_id}`);
+        navigate(`/comercial/licitacoes/${form.licitacao_id}?tab=lotes`);
       } else if (sourceBudgetId || form.sales_budget_id) {
         navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
       } else {
@@ -956,7 +956,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       {!isModal && (
         <div className="flex items-center gap-4">
           <Button variant="ghost" type="button" onClick={() => {
-            if (form.licitacao_id) navigate(`/comercial/licitacoes/${form.licitacao_id}`);
+            if (form.licitacao_id) navigate(`/comercial/licitacoes/${form.licitacao_id}?tab=lotes`);
             else if (sourceBudgetId || form.sales_budget_id) navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
             else navigate('/cadastros/kits');
           }}>
