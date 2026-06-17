@@ -61,6 +61,26 @@ def run_tests():
         tenant_id = company.tenant_id
         company_id = company.id
 
+        # Seed CompanySalesParameter for the company if not exists
+        from src.modules.companies.models import CompanySalesParameter
+        sales_params = db.query(CompanySalesParameter).filter(CompanySalesParameter.company_id == company_id).first()
+        if not sales_params:
+            print("Creating CompanySalesParameter for test...")
+            sales_params = CompanySalesParameter(
+                id=uuid.uuid4(),
+                company_id=company_id
+            )
+            db.add(sales_params)
+            
+        sales_params.pis_locacao = Decimal('0.65')
+        sales_params.cofins_locacao = Decimal('3.00')
+        sales_params.csll_locacao = Decimal('1.00')
+        sales_params.irpj_locacao = Decimal('1.20')
+        sales_params.iss_locacao = Decimal('2.00')
+        sales_params.icms_interno_locacao = Decimal('4.00')
+        sales_params.despesa_administrativa_locacao = Decimal('5.00')
+        db.commit()
+
         # Get or create customer
         customer = db.query(Customer).filter(Customer.tenant_id == tenant_id).first()
         if not customer:
@@ -668,6 +688,16 @@ def run_tests():
         kit_obj = kit_service.create_kit(tenant_id=tenant_id, company_id=str(company_id), data=kit_data)
         print(f"Kit criado: quantidade_kits={kit_obj.quantidade_kits} (Expected: 24)")
         assert kit_obj.quantidade_kits == 24
+
+        # Verify that default taxes are fetched from seeded CompanySalesParameter
+        print(f"Verifying tax rates on created kit: PIS={kit_obj.aliq_pis}, COFINS={kit_obj.aliq_cofins}, CSLL={kit_obj.aliq_csll}, IRPJ={kit_obj.aliq_irpj}, ISS={kit_obj.aliq_iss}, ICMS={kit_obj.aliq_icms}")
+        assert kit_obj.aliq_pis == Decimal('0.65')
+        assert kit_obj.aliq_cofins == Decimal('3.00')
+        assert kit_obj.aliq_csll == Decimal('1.00')
+        assert kit_obj.aliq_irpj == Decimal('1.20')
+        assert kit_obj.aliq_iss == Decimal('2.00')
+        assert kit_obj.aliq_icms == Decimal('4.00')
+        assert kit_obj.perc_despesas_adm == Decimal('5.00')
 
         # Clean up the test items
         db.delete(kit_obj)

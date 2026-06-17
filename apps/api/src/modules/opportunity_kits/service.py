@@ -919,6 +919,42 @@ class OpportunityKitService:
             if lic_item:
                 qty_kits = int(lic_item.quantidade_total)
 
+        # Default taxes and parameters to database company parameters if not specified or passed as 0
+        from src.modules.companies.models import CompanySalesParameter
+        sales_params = self.db.query(CompanySalesParameter).filter(CompanySalesParameter.company_id == company_id).first()
+        
+        # Suffix mapping based on tipo_contrato
+        suffix = "locacao"
+        if data.tipo_contrato == "COMODATO":
+            suffix = "comodato"
+        elif data.tipo_contrato in ("VENDA_EQUIPAMENTOS", "INSTALACAO"):
+            suffix = "venda"
+            
+        def pick_param(base: str, passed_val) -> float:
+            val = float(passed_val) if passed_val is not None else 0.0
+            if val > 0.0:
+                return val
+            if not sales_params:
+                return 0.0
+            # Try specific suffix field first
+            specific_field = f"{base}_{suffix}"
+            specific_val = getattr(sales_params, specific_field, None)
+            if specific_val is not None and float(specific_val) > 0.0:
+                return float(specific_val)
+            # Fallback to generic base field
+            generic_val = getattr(sales_params, base, 0.0)
+            return float(generic_val or 0.0)
+
+        aliq_pis = pick_param("pis", data.aliq_pis)
+        aliq_cofins = pick_param("cofins", data.aliq_cofins)
+        aliq_csll = pick_param("csll", data.aliq_csll)
+        aliq_irpj = pick_param("irpj", data.aliq_irpj)
+        aliq_iss = pick_param("iss", data.aliq_iss)
+        aliq_icms = pick_param("icms_interno", data.aliq_icms)
+        perc_despesas_adm = pick_param("despesa_administrativa", data.perc_despesas_adm)
+        perc_comissao = pick_param("comissionamento", data.perc_comissao)
+        perc_frete_venda = pick_param("frete_venda_padrao", data.perc_frete_venda)
+
         kit = OpportunityKit(
             tenant_id=tenant_id,
             company_id=company_id,
@@ -943,15 +979,15 @@ class OpportunityKitService:
             fator_manutencao=data.fator_manutencao,
             havera_manutencao=data.havera_manutencao,
             qtd_meses_manutencao=data.qtd_meses_manutencao,
-            perc_frete_venda=data.perc_frete_venda,
-            perc_despesas_adm=data.perc_despesas_adm,
-            perc_comissao=data.perc_comissao,
-            aliq_pis=data.aliq_pis,
-            aliq_cofins=data.aliq_cofins,
-            aliq_csll=data.aliq_csll,
-            aliq_irpj=data.aliq_irpj,
-            aliq_iss=data.aliq_iss,
-            aliq_icms=data.aliq_icms,
+            perc_frete_venda=perc_frete_venda,
+            perc_despesas_adm=perc_despesas_adm,
+            perc_comissao=perc_comissao,
+            aliq_pis=aliq_pis,
+            aliq_cofins=aliq_cofins,
+            aliq_csll=aliq_csll,
+            aliq_irpj=aliq_irpj,
+            aliq_iss=aliq_iss,
+            aliq_icms=aliq_icms,
             faturamento_servico_separado=data.faturamento_servico_separado,
             custo_manut_mensal_kit=data.custo_manut_mensal_kit,
             custo_suporte_mensal_kit=data.custo_suporte_mensal_kit,
