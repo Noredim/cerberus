@@ -2090,7 +2090,7 @@ export function LicitacaoForm() {
             <textarea
               rows={3}
               value={loteModal?.descricao || ''}
-              onChange={e => setLoteModal(prev => prev ? { ...prev, descricao: e.target.value } : null)}
+                      onChange={e => setLoteModal(prev => prev ? { ...prev, descricao: e.target.value } : null)}
               className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none resize-none"
               placeholder="Descrição ou observações do lote..."
             />
@@ -2106,114 +2106,149 @@ export function LicitacaoForm() {
       <Modal
         isOpen={!!itemModal?.open}
         onClose={() => setItemModal(null)}
-        title={itemModal?.editId ? 'Editar Item' : 'Novo Item'}
+        title={itemModal?.editId ? "Editar Item da Licitação" : "Novo Item da Licitação"}
         maxWidth="md"
       >
-        <form onSubmit={handleItemSubmit} className="space-y-4">
-          {itemModal?.editId && !!(detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length) && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <span>Este item está vinculado a um Kit de Oportunidade e seus campos quantitativos (Quantidade, Tipo de Fornecimento e Meses) não podem ser alterados diretamente.</span>
-            </div>
-          )}
+        {(() => {
+          const isItemLocked = !!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length);
+          return (
+            <form onSubmit={handleItemSubmit} className="space-y-5">
+              {itemModal?.editId && isItemLocked && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-600 flex items-start gap-2.5 shadow-sm">
+                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <span>Este item está vinculado a um Kit de Oportunidade. Seus campos quantitativos (Quantidade, Tipo de Fornecimento e Meses) estão bloqueados para manter a integridade dos cálculos.</span>
+                </div>
+              )}
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Código Item *</label>
-              <input
-                type="text"
-                required
-                value={itemModal?.codigo || ''}
-                onChange={e => setItemModal(prev => prev ? { ...prev, codigo: e.target.value } : null)}
-                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-                placeholder="Ex: 1.1"
-              />
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Nome do Item *</label>
-              <input
-                type="text"
-                required
-                value={itemModal?.nome || ''}
-                onChange={e => setItemModal(prev => prev ? { ...prev, nome: e.target.value } : null)}
-                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-                placeholder="Ex: Switch L3 24 portas"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Tipo de Fornecimento *</label>
-              <select
-                value={itemModal?.tipo_fornecimento || 'Unitário'}
-                onChange={e => setItemModal(prev => prev ? { ...prev, tipo_fornecimento: e.target.value } : null)}
-                disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
-                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-              >
-                <option value="Unitário">Unitário</option>
-                <option value="Mensal">Mensal</option>
-              </select>
-            </div>
-            <div className="col-span-1 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Quantidade *</label>
-              <input
-                type="number"
-                step="1"
-                required
-                value={itemModal?.quantidade || ''}
-                onChange={e => setItemModal(prev => prev ? { ...prev, quantidade: Number(e.target.value) } : null)}
-                disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
-                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-              />
-            </div>
-            {itemModal?.tipo_fornecimento === 'Mensal' ? (
-              <div className="col-span-1 space-y-1.5">
-                <label className="text-xs font-bold text-text-muted uppercase">Total de Meses *</label>
-                <input
-                  type="number"
-                  step="1"
-                  required
-                  value={itemModal?.total_meses || ''}
-                  onChange={e => setItemModal(prev => prev ? { ...prev, total_meses: Number(e.target.value) } : null)}
-                  disabled={!!(itemModal?.editId && detail?.lotes.flatMap(l => l.items).find(i => i.id === itemModal.editId)?.kits?.length)}
-                  className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-                />
+              {/* Informações Gerais */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1 space-y-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Código Item *</label>
+                  <input
+                    type="text"
+                    required
+                    value={itemModal?.codigo || ''}
+                    onChange={e => setItemModal(prev => prev ? { ...prev, codigo: e.target.value } : null)}
+                    className="input-primary w-full"
+                    placeholder="Ex: 1.1"
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Nome do Item *</label>
+                  <input
+                    type="text"
+                    required
+                    value={itemModal?.nome || ''}
+                    onChange={e => setItemModal(prev => prev ? { ...prev, nome: e.target.value } : null)}
+                    className="input-primary w-full"
+                    placeholder="Ex: Switch L3 24 portas"
+                  />
+                </div>
               </div>
-            ) : (
-              <div className="col-span-1 space-y-1.5 opacity-50">
-                <label className="text-xs font-bold text-text-muted uppercase">Total de Meses</label>
+
+              {/* Descrição */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Descrição</label>
                 <input
                   type="text"
-                  disabled
-                  value="N/A"
-                  className="w-full bg-bg-deep/50 border border-border-subtle/50 rounded-md py-2 px-3 text-sm text-text-muted cursor-not-allowed h-11"
+                  value={itemModal?.descricao || ''}
+                  onChange={e => setItemModal(prev => prev ? { ...prev, descricao: e.target.value } : null)}
+                  className="input-primary w-full"
+                  placeholder="Especificações, marca, modelo ou detalhes adicionais..."
                 />
               </div>
-            )}
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Descrição</label>
-              <input
-                type="text"
-                value={itemModal?.descricao || ''}
-                onChange={e => setItemModal(prev => prev ? { ...prev, descricao: e.target.value } : null)}
-                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-                placeholder="Especificações do item..."
-              />
-            </div>
-            <div className="col-span-1 space-y-1.5">
-              <label className="text-xs font-bold text-text-muted uppercase">Quantidade Total do Item</label>
-              <div className="w-full bg-bg-deep/50 border border-border-subtle/50 rounded-md py-2 px-3 text-sm text-brand-primary font-bold h-11 flex items-center">
-                {Number((itemModal?.quantidade || 0) * (itemModal?.tipo_fornecimento === 'Mensal' ? (itemModal?.total_meses || 0) : 1))}
+
+              {/* Card de Configuração de Fornecimento e Quantidade (Região Comum) */}
+              <div className="bg-bg-deep/40 p-4 rounded-xl border border-border-subtle/80 space-y-4 shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-text-primary uppercase tracking-wider">Configuração de Quantidades</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    itemModal?.tipo_fornecimento === 'Mensal'
+                      ? 'bg-brand-info/15 text-brand-info border-brand-info/20'
+                      : 'bg-text-muted/15 text-text-muted border-text-muted/20'
+                  }`}>
+                    {itemModal?.tipo_fornecimento === 'Mensal' ? 'Recorrente' : 'Faturamento Único'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Tipo de Fornecimento */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-text-muted uppercase">Tipo de Fornecimento *</label>
+                    <select
+                      value={itemModal?.tipo_fornecimento || 'Unitário'}
+                      onChange={e => setItemModal(prev => prev ? { ...prev, tipo_fornecimento: e.target.value } : null)}
+                      disabled={isItemLocked}
+                      className="input-primary w-full pl-2 cursor-pointer"
+                    >
+                      <option value="Unitário">Unitário</option>
+                      <option value="Mensal">Mensal</option>
+                    </select>
+                  </div>
+
+                  {/* Quantidade */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-text-muted uppercase">Quantidade Base *</label>
+                    <input
+                      type="number"
+                      step="1"
+                      required
+                      value={itemModal?.quantidade || ''}
+                      onChange={e => setItemModal(prev => prev ? { ...prev, quantidade: Number(e.target.value) } : null)}
+                      disabled={isItemLocked}
+                      className="input-primary w-full"
+                      placeholder="Ex: 5"
+                    />
+                  </div>
+
+                  {/* Total de Meses */}
+                  {itemModal?.tipo_fornecimento === 'Mensal' ? (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-text-muted uppercase">Total de Meses *</label>
+                      <input
+                        type="number"
+                        step="1"
+                        required
+                        value={itemModal?.total_meses || ''}
+                        onChange={e => setItemModal(prev => prev ? { ...prev, total_meses: Number(e.target.value) } : null)}
+                        disabled={isItemLocked}
+                        className="input-primary w-full"
+                        placeholder="Ex: 12"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 flex flex-col justify-between">
+                      <label className="text-xs font-bold text-text-muted uppercase">Total de Meses</label>
+                      <div className="flex items-center min-h-[38px] w-full rounded-lg border border-border-subtle bg-bg-deep/40 px-3 text-xs text-text-muted cursor-not-allowed select-none">
+                        Parcela Única (N/A)
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quantidade Total Display */}
+                <div className="pt-3 border-t border-border-subtle/50 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-text-primary">Quantidade Total do Item</span>
+                    <span className="text-[11px] text-text-muted">Multiplicação da quantidade pelo total de meses</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-brand-primary/10 text-brand-primary font-extrabold text-base px-4 py-1.5 rounded-lg border border-brand-primary/25 shadow-sm">
+                    <span>{Number((itemModal?.quantidade || 0) * (itemModal?.tipo_fornecimento === 'Mensal' ? (itemModal?.total_meses || 0) : 1))}</span>
+                    <span className="text-xs font-medium text-brand-primary/75">
+                      {itemModal?.tipo_fornecimento === 'Mensal' ? 'un. totais' : 'un. únicas'}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">
-            <Button type="button" variant="outline" onClick={() => setItemModal(null)}>Cancelar</Button>
-            <Button type="submit">Salvar Item</Button>
-          </div>
-        </form>
+
+              {/* Botões de Ação */}
+              <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">
+                <Button type="button" variant="outline" onClick={() => setItemModal(null)}>Cancelar</Button>
+                <Button type="submit">Salvar Item</Button>
+              </div>
+            </form>
+          );
+        })()}
       </Modal>
 
       {/* KIT CREATE MODAL */}
