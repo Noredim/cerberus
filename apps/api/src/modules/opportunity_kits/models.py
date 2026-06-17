@@ -15,6 +15,8 @@ class OpportunityKit(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), nullable=True, index=True)
     sales_proposal_id = Column(UUID(as_uuid=True), ForeignKey("sales_proposals.id", ondelete="CASCADE"), nullable=True, index=True)
+    licitacao_id = Column(UUID(as_uuid=True), ForeignKey("licitacoes.id", ondelete="CASCADE"), nullable=True, index=True)
+    licitacao_item_id = Column(UUID(as_uuid=True), ForeignKey("licitacao_items.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Dados Gerais
     nome_kit = Column(String(255), nullable=False)
@@ -74,6 +76,8 @@ class OpportunityKit(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     company = relationship("Company")
+    licitacao = relationship("Licitacao", back_populates="kits", foreign_keys=[licitacao_id])
+    licitacao_item = relationship("LicitacaoItem", back_populates="kits", foreign_keys=[licitacao_item_id])
     items = relationship("OpportunityKitItem", back_populates="kit", cascade="all, delete-orphan")
     costs = relationship("OpportunityKitCost", back_populates="kit", cascade="all, delete-orphan")
     monthly_costs = relationship("OpportunityKitMonthlyCost", back_populates="kit", cascade="all, delete-orphan")

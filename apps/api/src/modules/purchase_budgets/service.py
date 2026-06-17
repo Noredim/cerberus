@@ -18,7 +18,7 @@ import openpyxl
 
 class PurchaseBudgetService:
     @staticmethod
-    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None):
+    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None):
         # returns budgets with nested supplier and items
         query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
         if company_id:
@@ -27,6 +27,8 @@ class PurchaseBudgetService:
             query = query.filter(PurchaseBudget.supplier_id == supplier_id)
         if sales_budget_id:
             query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+        if licitacao_id:
+            query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
         return query.order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
@@ -40,7 +42,7 @@ class PurchaseBudgetService:
         return budget
 
     @staticmethod
-    def sync_product_reference_prices(db: Session, product_id: str, tenant_id: str, sales_budget_id: Optional[UUID] = None):
+    def sync_product_reference_prices(db: Session, product_id: str, tenant_id: str, sales_budget_id: Optional[UUID] = None, licitacao_id: Optional[UUID] = None):
         """
         Recalculates product reference prices by looking up the latest REVENDA budget
         and the latest ATIVO_IMOBILIZADO_USO_CONSUMO budget.
@@ -57,8 +59,8 @@ class PurchaseBudgetService:
         if not product:
             return
 
-        # If sync is triggered for a sales budget, skip if catalog reference prices are already populated.
-        if sales_budget_id:
+        # If sync is triggered for a sales budget or licitacao, skip if catalog reference prices are already populated.
+        if sales_budget_id or licitacao_id:
             if product.vlr_referencia_revenda is not None or product.vlr_referencia_uso_consumo is not None:
                 return
 
@@ -73,6 +75,8 @@ class PurchaseBudgetService:
         )
         if sales_budget_id:
             query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+        elif licitacao_id:
+            query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
         # If sales_budget_id is None, we do not filter by sales_budget_id,
         # which means both global and opportunity-linked purchase budgets are considered.
 
@@ -235,7 +239,13 @@ class PurchaseBudgetService:
         """
         product_ids = {item.product_id for item in budget.items}
         for pid in product_ids:
-            PurchaseBudgetService.sync_product_reference_prices(db, str(pid), budget.tenant_id, sales_budget_id=budget.sales_budget_id)
+            PurchaseBudgetService.sync_product_reference_prices(
+                db, 
+                str(pid), 
+                budget.tenant_id, 
+                sales_budget_id=budget.sales_budget_id,
+                licitacao_id=budget.licitacao_id
+            )
 
     @staticmethod
     def calculate_item_totals(frete_tipo: str, frete_percent_cabecalho: float, ipi_calculado: bool, item: dict):
@@ -299,6 +309,7 @@ class PurchaseBudgetService:
             frete_percent=data.frete_percent,
             ipi_calculado=data.ipi_calculado,
             sales_budget_id=data.sales_budget_id,
+            licitacao_id=data.licitacao_id,
             dolar_orcamento=data.dolar_orcamento,
             valor_conversao=data.valor_conversao
         )
@@ -362,6 +373,7 @@ class PurchaseBudgetService:
         db_budget.frete_percent = data.frete_percent
         db_budget.ipi_calculado = data.ipi_calculado
         db_budget.sales_budget_id = data.sales_budget_id
+        db_budget.licitacao_id = data.licitacao_id
         db_budget.dolar_orcamento = data.dolar_orcamento
         db_budget.valor_conversao = data.valor_conversao
         

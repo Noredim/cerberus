@@ -114,3 +114,41 @@ def preview_kit_financials(
     service = OpportunityKitService(db)
     return service.recalculate_kit_preview(current_user.tenant_id, str(company_id), data)
 
+
+@router.delete("/{kit_id}", status_code=204)
+def delete_kit(
+    kit_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    active_company_id: str = Depends(get_active_company)
+):
+    if not active_company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
+    service = OpportunityKitService(db)
+    kit = service.get_kit(str(kit_id), current_user.tenant_id, active_company_id)
+    if not kit:
+        raise HTTPException(status_code=404, detail="Kit não encontrado")
+    
+    licitacao_id = kit.licitacao_id
+    nome_kit = kit.nome_kit
+    
+    db.delete(kit)
+    db.commit()
+    
+    if licitacao_id:
+        try:
+            from src.modules.licitacoes.service import LicitacaoService
+            LicitacaoService.register_history(
+                db, 
+                licitacao_id, 
+                current_user.tenant_id, 
+                current_user.id, 
+                f"{current_user.name} excluiu o kit {nome_kit}."
+            )
+            db.commit()
+            LicitacaoService.recalculate_licitacao(db, current_user.tenant_id, licitacao_id)
+        except Exception:
+            pass
+            
+    return None
+

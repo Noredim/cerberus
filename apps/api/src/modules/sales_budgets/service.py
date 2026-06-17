@@ -1270,7 +1270,7 @@ def delete_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optional
     db.commit()
     return True
 
-def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA", sales_company_id: Optional[str] = None, sales_budget_id: Optional[str] = None) -> dict:
+def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: str, tipo: str = "REVENDA", sales_company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, licitacao_id: Optional[str] = None) -> dict:
     from src.modules.products.models import Product
     from src.modules.products.service import ProductService
     from src.modules.ncm.services.ncm_service import NcmService
@@ -1291,6 +1291,15 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
         # Query across all purchase budgets linked to this opportunity that contain the product
         linked_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
             PurchaseBudget.sales_budget_id == sales_budget_id,
+            PurchaseBudget.tenant_id == tenant_id,
+            PurchaseBudgetItem.product_id == product_id
+        ).first()
+        if linked_item:
+            ref_budget_id = linked_item.budget_id
+    elif licitacao_id:
+        # Query across all purchase budgets linked to this licitacao that contain the product
+        linked_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
+            PurchaseBudget.licitacao_id == licitacao_id,
             PurchaseBudget.tenant_id == tenant_id,
             PurchaseBudgetItem.product_id == product_id
         ).first()

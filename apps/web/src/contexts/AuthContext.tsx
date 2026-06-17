@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { api } from '../services/api';
+import { api, resolvePendingRequests, rejectPendingRequests } from '../services/api';
+import { ReauthModal } from '../modules/auth/ReauthModal';
 
 interface User {
     id: string;
@@ -37,6 +38,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [isLoading, setIsLoading] = useState(true);
     const [userCompanies, setUserCompanies] = useState<UserCompany[]>([]);
     const [activeCompanyId, setActiveCompanyIdState] = useState<string | null>(null);
+    const [showReauthModal, setShowReauthModal] = useState(false);
+
+    useEffect(() => {
+        const handleSessionExpired = () => {
+            setShowReauthModal(true);
+        };
+
+        window.addEventListener('cerberus-session-expired', handleSessionExpired);
+        return () => {
+            window.removeEventListener('cerberus-session-expired', handleSessionExpired);
+        };
+    }, []);
+
+    const handleReauthSuccess = (token: string, userData: User) => {
+        sessionStorage.setItem('@Cerberus:token', token);
+        sessionStorage.setItem('@Cerberus:user', JSON.stringify(userData));
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        setUser(userData);
+        resolvePendingRequests(token);
+        setShowReauthModal(false);
+    };
+
+    const handleReauthCancel = () => {
+        rejectPendingRequests(new Error('Session expired. User cancelled re-authentication.'));
+        logout();
+        setShowReauthModal(false);
+        window.location.href = '/login';
+    };
 
     const fetchCompanies = async () => {
         try {
@@ -128,6 +157,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setActiveCompany
         }}>
             {children}
+            {showReauthModal && user && (
+                <ReauthModal
+                    isOpen={showReauthModal}
+                    email={user.email}
+                    onSuccess={handleReauthSuccess}
+                    onCancel={handleReauthCancel}
+                />
+            )}
         </AuthContext.Provider>
     );
 };

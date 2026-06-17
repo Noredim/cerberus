@@ -18,11 +18,11 @@ class OpportunityKitService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_product_info(self, product_id: str, tenant_id: str, considerar_st_ou_difal: str = "DIFAL", company_id: Optional[str] = None, sales_budget_id: Optional[str] = None) -> dict:
+    def get_product_info(self, product_id: str, tenant_id: str, considerar_st_ou_difal: str = "DIFAL", company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, licitacao_id: Optional[str] = None) -> dict:
         from src.modules.sales_budgets.service import calculate_product_cost_composition
 
         tipo_calc = "REVENDA" if considerar_st_ou_difal == "ST" else "USO_CONSUMO"
-        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, tipo_calc, sales_company_id=company_id, sales_budget_id=sales_budget_id)
+        comp = calculate_product_cost_composition(self.db, product_id, tenant_id, tipo_calc, sales_company_id=company_id, sales_budget_id=sales_budget_id, licitacao_id=licitacao_id)
         if not comp:
             product = self.db.query(Product).filter(
                 Product.id == product_id,
@@ -115,8 +115,15 @@ class OpportunityKitService:
 
     def calculate_financials(self, kit: OpportunityKit, tenant_id: str) -> dict:
         from src.modules.sales_budgets.models import SalesBudget
-        sales_budget = self.db.query(SalesBudget).filter(SalesBudget.id == kit.sales_budget_id).first()
-        company_id = str(sales_budget.company_id) if sales_budget else None
+        from src.modules.licitacoes.models import Licitacao
+        company_id = None
+        sales_budget = None
+        if kit.sales_budget_id:
+            sales_budget = self.db.query(SalesBudget).filter(SalesBudget.id == kit.sales_budget_id).first()
+            company_id = str(sales_budget.company_id) if sales_budget else None
+        elif kit.licitacao_id:
+            licitacao = self.db.query(Licitacao).filter(Licitacao.id == kit.licitacao_id).first()
+            company_id = str(licitacao.company_id) if licitacao else None
         
         # 2. Prazos do Contrato
         prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
@@ -358,7 +365,14 @@ class OpportunityKitService:
             else:
                 if item.product_id:
                     tax_mode = "ST" if (kit.tipo_contrato == "VENDA_EQUIPAMENTOS" or getattr(kit, "considerar_st_ou_difal", "DIFAL") == "ST") else "DIFAL"
-                    info = self.get_product_info(str(item.product_id), tenant_id, tax_mode, company_id, sales_budget_id=str(sales_budget.id) if sales_budget else None)
+                    info = self.get_product_info(
+                        str(item.product_id), 
+                        tenant_id, 
+                        tax_mode, 
+                        company_id, 
+                        sales_budget_id=str(sales_budget.id) if sales_budget else None,
+                        licitacao_id=str(kit.licitacao_id) if kit.licitacao_id else None
+                    )
                 else:
                     info = {
                         "cost": Decimal("0.0"),
@@ -902,6 +916,8 @@ class OpportunityKitService:
             tenant_id=tenant_id,
             company_id=company_id,
             sales_budget_id=data.sales_budget_id,
+            licitacao_id=data.licitacao_id,
+            licitacao_item_id=data.licitacao_item_id,
             nome_kit=data.nome_kit,
             descricao_kit=data.descricao_kit,
             quantidade_kits=data.quantidade_kits,

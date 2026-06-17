@@ -39,6 +39,7 @@ from src.modules.man_hours.models import ManHour  # type: ignore
 from src.modules.sales_proposals.models import SalesProposal, SalesProposalKit, SalesProposalLog  # type: ignore
 from src.modules.document_templates.models import DocumentTemplate, DocumentVersion, DocumentVariable, DocumentAudit  # type: ignore
 from src.modules.notifications.models import Notification  # type: ignore
+from src.modules.licitacoes.models import Licitacao, LicitacaoLote, LicitacaoItem  # type: ignore
 from src.core.config import settings  # type: ignore
 target_metadata = Base.metadata
 

@@ -13,6 +13,8 @@ from src.modules.roles.models import Role
 from src.modules.companies.models import Company
 from src.modules.customers.models import Customer
 from src.modules.products.models import Product
+from src.modules.licitacoes.models import Licitacao, LicitacaoLote, LicitacaoItem
+from src.modules.purchase_budgets.models import PurchaseBudget
 from src.modules.opportunity_kits.models import OpportunityKit
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, SalesBudgetHistory, SalesBudgetApproval
 from src.modules.sales_budgets.schemas import SalesBudgetUpdate, SalesBudgetItemCreate

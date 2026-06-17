@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Save, ArrowLeft, Upload, Loader2, Download, Plus, FileText, UserSquare2, Truck as TruckIcon, BadgeDollarSign, Building2 } from 'lucide-react';
 import { BudgetItemsGrid } from './components/BudgetItemsGrid';
@@ -12,7 +12,16 @@ import { api } from '../../services/api';
 export function BudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isEditing = Boolean(id);
+  const [licitacaoId, setLicitacaoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const lId = searchParams.get('licitacao_id');
+    if (lId) {
+      setLicitacaoId(lId);
+    }
+  }, [searchParams]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -120,6 +129,7 @@ export function BudgetForm() {
       setDataVencimentoInicial(b.data_vencimento_inicial ? new Date(b.data_vencimento_inicial).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
       setDolarOrcamento(Boolean(b.dolar_orcamento));
       setValorConversao(b.valor_conversao !== null && b.valor_conversao !== undefined ? Number(b.valor_conversao) : '');
+      setLicitacaoId(b.licitacao_id || null);
 
       if (b.items && b.items.length > 0) {
         setItems(b.items.map((item: any) => ({
@@ -180,6 +190,7 @@ export function BudgetForm() {
       ipi_calculado: ipiCalculado,
       dolar_orcamento: dolarOrcamento,
       valor_conversao: dolarOrcamento && valorConversao !== '' ? round4(valorConversao) : null,
+      licitacao_id: licitacaoId || null,
       items: cleanItems
     };
     console.log('Saving payload:', JSON.stringify(payload, null, 2));
@@ -189,7 +200,11 @@ export function BudgetForm() {
       } else {
         await api.post('/purchase-budgets', payload);
       }
-      navigate('/orcamentos-compras');
+      if (licitacaoId) {
+        navigate(`/comercial/licitacoes/${licitacaoId}`);
+      } else {
+        navigate('/orcamentos-compras');
+      }
     } catch (error: any) {
       console.error('Save error:', error);
       console.error('Response data:', error?.response?.data);
@@ -268,7 +283,7 @@ export function BudgetForm() {
            <p className="text-text-muted text-sm ml-10">Lançamento de detalhes, impostos e negociações comerciais.</p>
         </div>
         <div className="flex gap-3 items-center ml-10 md:ml-0">
-            <Button variant="outline" onClick={() => navigate('/orcamentos-compras')} className="bg-white">
+            <Button variant="outline" onClick={() => navigate(licitacaoId ? `/comercial/licitacoes/${licitacaoId}` : '/orcamentos-compras')} className="bg-white">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>

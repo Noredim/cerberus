@@ -291,6 +291,8 @@ interface KitFormValues {
   forma_execucao?: string;
   custo_monitoramento_unitario: number;
   fator_monitoramento: number;
+  licitacao_id?: string;
+  licitacao_item_id?: string;
 }
 
 export interface OpportunityKitFormProps {
@@ -309,6 +311,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sourceBudgetId = initialSalesBudgetId || searchParams.get('source_budget_id');
+  const licitacaoIdParam = searchParams.get('licitacao_id');
+  const licitacaoItemIdParam = searchParams.get('licitacao_item_id');
 
   const [financials, setFinancials] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -332,6 +336,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
+    licitacao_id: licitacaoIdParam || undefined,
+    licitacao_item_id: licitacaoItemIdParam || undefined,
     nome_kit: '',
     descricao_kit: '',
     quantidade_kits: 1,
@@ -883,7 +889,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         onSuccess(savedKit);
         return;
       }
-      if (sourceBudgetId || form.sales_budget_id) {
+      if (form.licitacao_id) {
+        navigate(`/comercial/licitacoes/${form.licitacao_id}`);
+      } else if (sourceBudgetId || form.sales_budget_id) {
         navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
       } else {
         navigate('/cadastros/kits');
@@ -926,7 +934,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       {!isModal && (
         <div className="flex items-center gap-4">
           <Button variant="ghost" type="button" onClick={() => {
-            if (sourceBudgetId || form.sales_budget_id) navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
+            if (form.licitacao_id) navigate(`/comercial/licitacoes/${form.licitacao_id}`);
+            else if (sourceBudgetId || form.sales_budget_id) navigate(`/cadastros/orcamentos/${sourceBudgetId || form.sales_budget_id}?tab=locacao`);
             else navigate('/cadastros/kits');
           }}>
             <ArrowLeft className="w-4 h-4 mr-2" />

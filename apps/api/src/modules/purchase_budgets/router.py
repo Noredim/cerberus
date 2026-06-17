@@ -21,6 +21,7 @@ def list_budgets(
     limit: int = Query(100, ge=1, le=1000),
     supplier_id: Optional[str] = None,
     sales_budget_id: Optional[UUID] = None,
+    licitacao_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
@@ -28,7 +29,7 @@ def list_budgets(
     """
     Listar orcamentos de compra.
     """
-    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id, company_id)
+    return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id, company_id, licitacao_id)
 
 @router.get("/{budget_id}", response_model=schemas.PurchaseBudgetOut)
 def get_budget(

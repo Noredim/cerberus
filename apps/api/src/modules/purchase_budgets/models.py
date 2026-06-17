@@ -13,6 +13,7 @@ class PurchaseBudget(Base):
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="SET NULL"), nullable=True, index=True)
+    licitacao_id = Column(UUID(as_uuid=True), ForeignKey("licitacoes.id", ondelete="SET NULL"), nullable=True, index=True)
     
     supplier_id = Column(String, ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True)
     forma_pagamento_id = Column(UUID(as_uuid=True), ForeignKey("formas_pagamento.id", ondelete="SET NULL"), nullable=True)
@@ -39,6 +40,7 @@ class PurchaseBudget(Base):
     # Relationships
     supplier = relationship("Supplier")
     forma_pagamento = relationship("FormaPagamento")
+    licitacao = relationship("Licitacao", back_populates="purchase_budgets")
     items = relationship("PurchaseBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     negotiations = relationship("PurchaseBudgetNegotiation", back_populates="budget", cascade="all, delete-orphan")
 

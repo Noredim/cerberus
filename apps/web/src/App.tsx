@@ -38,6 +38,8 @@ import { SolutionAnalysisList } from './modules/solution_analysis/SolutionAnalys
 import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalysisForm';
 import { SalesProposalList } from './modules/sales_proposals/SalesProposalList';
 import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
+import { LicitacaoList } from './modules/licitacoes/LicitacaoList';
+import { LicitacaoForm } from './modules/licitacoes/LicitacaoForm';
 import KitAnalyticReport from './modules/reports/KitAnalyticReport';
 import FormasPagamentoList from './modules/payment_methods/FormasPagamentoList';
 import FormasPagamentoForm from './modules/payment_methods/FormasPagamentoForm';
@@ -184,6 +186,10 @@ function App() {
             {/* Comercial: Propostas de Venda */}
             <Route path="/comercial/propostas" element={<SalesProposalList />} />
             <Route path="/comercial/propostas/:id" element={<SalesProposalForm />} />
+
+            {/* Comercial: Licitações */}
+            <Route path="/comercial/licitacoes" element={<LicitacaoList />} />
+            <Route path="/comercial/licitacoes/:id" element={<LicitacaoForm />} />
 
 
             {/* Relatórios */}

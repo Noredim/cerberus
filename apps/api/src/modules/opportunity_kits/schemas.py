@@ -93,6 +93,8 @@ class OpportunityKitMonthlyCostResponse(OpportunityKitMonthlyCostBase):
 
 class OpportunityKitBase(BaseModel):
     sales_budget_id: Optional[UUID] = None
+    licitacao_id: Optional[UUID] = None
+    licitacao_item_id: Optional[UUID] = None
     nome_kit: str
     descricao_kit: Optional[str] = None
     quantidade_kits: int = Field(default=1)

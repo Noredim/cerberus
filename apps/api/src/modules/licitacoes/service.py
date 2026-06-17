@@ -1,0 +1,1087 @@
+from sqlalchemy.orm import Session
+from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+from decimal import Decimal
+from fastapi import HTTPException
+
+from .models import (
+    Licitacao, LicitacaoLote, LicitacaoItem, LicitacaoAnalista, LicitacaoHistory,
+    LicitacaoChecklistGrupo, LicitacaoChecklistItem, LicitacaoChecklistAplicacao,
+    LicitacaoTarefa, LicitacaoTarefaAndamento
+)
+from .schemas import (
+    LicitacaoCreate, LicitacaoUpdate, LicitacaoChecklistAplicacaoCreate,
+    LicitacaoChecklistAplicacaoUpdate, LicitacaoChecklistItemUpdate,
+    LicitacaoTarefaCreate, LicitacaoTarefaUpdate, LicitacaoChecklistItemCreate
+)
+from src.modules.opportunity_kits.models import OpportunityKit
+from src.modules.opportunity_kits.service import OpportunityKitService
+from src.modules.companies.models import CommercialPolicy, CommercialPolicyRole
+from src.modules.users.models import User, UserRole, UserRoleEnum
+from src.modules.professionals.models import Professional
+
+class LicitacaoService:
+    @staticmethod
+    def get_licitacoes(db: Session, tenant_id: str, company_id: str, skip: int = 0, limit: int = 100, status: Optional[str] = None) -> tuple[List[Licitacao], int]:
+        query = db.query(Licitacao).filter(Licitacao.tenant_id == tenant_id, Licitacao.company_id == company_id)
+        if status:
+            query = query.filter(Licitacao.status == status)
+        total = query.count()
+        items = query.order_by(Licitacao.created_at.desc()).offset(skip).limit(limit).all()
+        return items, total
+
+    @staticmethod
+    def get_licitacao_by_id(db: Session, tenant_id: str, licitacao_id: UUID, company_id: str) -> Licitacao:
+        licitacao = db.query(Licitacao).filter(
+            Licitacao.id == licitacao_id,
+            Licitacao.tenant_id == tenant_id,
+            Licitacao.company_id == company_id
+        ).first()
+        if not licitacao:
+            raise HTTPException(status_code=404, detail="Licitação não encontrada")
+        return licitacao
+
+    @staticmethod
+    def create_licitacao(db: Session, tenant_id: str, company_id: str, data: LicitacaoCreate, current_user: User = None) -> Licitacao:
+        licitacao = Licitacao(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            customer_id=data.customer_id,
+            numero_edital=data.numero_edital,
+            descricao=data.descricao,
+            data_publicacao=data.data_publicacao,
+            data_licitacao=data.data_licitacao,
+            data_limite_questionamento=data.data_limite_questionamento,
+            po_id=data.po_id,
+            status="Criada",
+            modalidade=data.modalidade,
+            tipo_licitacao=data.tipo_licitacao
+        )
+        db.add(licitacao)
+        db.flush()
+
+        for lote_data in data.lotes:
+            lote = LicitacaoLote(
+                licitacao_id=licitacao.id,
+                numero=lote_data.numero,
+                nome=lote_data.nome,
+                descricao=lote_data.descricao
+            )
+            db.add(lote)
+            db.flush()
+
+            for item_data in lote_data.items:
+                item = LicitacaoItem(
+                    lote_id=lote.id,
+                    codigo=item_data.codigo,
+                    nome=item_data.nome,
+                    descricao=item_data.descricao,
+                    quantidade=item_data.quantidade
+                )
+                db.add(item)
+
+        # Seed default checklist
+        LicitacaoService.seed_checklist(db, tenant_id, licitacao.id)
+
+        # Log creation
+        usuario_nome = current_user.name if current_user else "Sistema"
+        usuario_id = current_user.id if current_user else "system"
+        LicitacaoService.register_history(
+            db, 
+            licitacao.id, 
+            tenant_id, 
+            usuario_id, 
+            f"{usuario_nome} criou a Licitação."
+        )
+
+        db.commit()
+        db.refresh(licitacao)
+        LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao.id)
+        return licitacao
+
+    @staticmethod
+    def update_licitacao(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, data: LicitacaoUpdate, current_user: User = None) -> Licitacao:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+
+        # Regra 1.b: Ganha, Perdida, Cancelada travam para edição
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        update_data = data.model_dump(exclude_unset=True)
+        
+        # Check P.O. edit permissions
+        new_po_id = update_data.get("po_id")
+        if new_po_id is not None and licitacao.po_id is not None and str(licitacao.po_id) != str(new_po_id):
+            if current_user:
+                # Check UserRole (ADMIN or DIRETORIA)
+                is_privileged = db.query(UserRole).filter(
+                    UserRole.user_id == current_user.id,
+                    UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
+                ).first() is not None
+                
+                if not is_privileged:
+                    # Check if Professional role is GERENTE or DIRETORIA
+                    from src.modules.roles.models import Role
+                    prof = db.query(Professional).filter(
+                        Professional.user_id == current_user.id,
+                        Professional.tenant_id == tenant_id
+                    ).first()
+                    role_allowed = False
+                    if prof and prof.role_id:
+                        r = db.query(Role).filter(Role.id == prof.role_id).first()
+                        if r and r.name in ["GERENTE", "DIRETORIA"]:
+                            role_allowed = True
+                    if not role_allowed:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Apenas usuários com perfil GERENTE ou DIRETORIA podem alterar o P.O. após sua definição."
+                        )
+
+        # Validate status transition to Em Análise/Precificação
+        new_status = update_data.get("status")
+        if new_status == "Em Análise/Precificação":
+            final_po_id = new_po_id if new_po_id is not None else licitacao.po_id
+            if not final_po_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Não é possível alterar para 'Em Análise/Precificação' sem um P.O. definido."
+                )
+            
+            # Count analysts
+            num_analysts = db.query(LicitacaoAnalista).filter(
+                LicitacaoAnalista.licitacao_id == licitacao_id
+            ).count()
+            if num_analysts == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Não é possível alterar para 'Em Análise/Precificação' sem pelo menos um analista definido."
+                )
+
+        # Generate logs for changes
+        usuario_nome = current_user.name if current_user else "Sistema"
+        usuario_id = current_user.id if current_user else "system"
+        
+        # Log status change
+        if new_status and new_status != licitacao.status:
+            LicitacaoService.register_history(
+                db, 
+                licitacao.id, 
+                tenant_id, 
+                usuario_id, 
+                f"{usuario_nome} alterou o status para {new_status}."
+            )
+            
+        # Log P.O. change
+        if new_po_id is not None and str(new_po_id) != str(licitacao.po_id):
+            po_user = db.query(User).filter(User.id == new_po_id).first()
+            po_name = po_user.name if po_user else "Desconhecido"
+            LicitacaoService.register_history(
+                db, 
+                licitacao.id, 
+                tenant_id, 
+                usuario_id, 
+                f"{usuario_nome} definiu o P.O. como {po_name}."
+            )
+
+        # Log fields change (generic description if metadata changes)
+        changed_fields = []
+        for key in ["numero_edital", "descricao", "data_publicacao", "data_licitacao", "modalidade", "tipo_licitacao"]:
+            if key in update_data and update_data[key] != getattr(licitacao, key):
+                changed_fields.append(key)
+        if changed_fields:
+            LicitacaoService.register_history(
+                db,
+                licitacao.id,
+                tenant_id,
+                usuario_id,
+                f"{usuario_nome} atualizou os dados gerais: {', '.join(changed_fields)}."
+            )
+
+        # Apply updates
+        for key, value in update_data.items():
+            setattr(licitacao, key, value)
+
+        db.commit()
+        db.refresh(licitacao)
+
+        # Recalculate margins and check limits
+        LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao.id)
+        
+        # Alçada de aprovação check
+        if current_user and new_status == "Aprovada para Envio":
+            LicitacaoService.validate_licitacao_approval(db, current_user, company_id, licitacao)
+
+        return licitacao
+
+    @staticmethod
+    def delete_licitacao(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID) -> bool:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser excluída.")
+        
+        db.delete(licitacao)
+        db.commit()
+        return True
+
+    @staticmethod
+    def recalculate_licitacao(db: Session, tenant_id: str, licitacao_id: UUID) -> Licitacao:
+        licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+        if not licitacao:
+            return None
+
+        # Fetch all kits linked to this licitacao
+        kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_id == licitacao_id).all()
+        
+        kit_service = OpportunityKitService(db)
+        total_venda = Decimal("0.0")
+        total_lucro_global = Decimal("0.0")
+        total_estimado = Decimal("0.0")
+
+        for kit in kits:
+            try:
+                # Recalculate financials dynamically
+                fin = kit_service.calculate_financials(kit, tenant_id)
+                summary = fin.get("summary", {})
+                
+                qty = Decimal(str(kit.quantidade_kits or 1))
+                
+                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
+                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
+                    
+                    total_venda += valor_mensal_kit * qty
+                    total_lucro_global += lucro_mensal_kit * qty
+                else:
+                    # Rental or Comodato lifetime
+                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
+                    vlr_instal_calc = sa_val = Decimal(str(summary.get("vlr_instal_calc", 0)))
+                    prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
+                    
+                    fat_lifetime = (valor_mensal_kit * Decimal(prazo_mensalidades) + vlr_instal_calc) * qty
+                    
+                    # We compute profit lifetime
+                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
+                    # Recalculate upfront setup installation profit if applicable
+                    # (Installation margin is factor * setup cost minus taxes and commission)
+                    imposto_instalacao = Decimal(str(summary.get("imposto_instalacao", 0)))
+                    lucro_instalacao = vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * Decimal(str(kit.perc_comissao or 0)) / Decimal("100.0"))
+                    
+                    lucro_lifetime = (lucro_mensal_kit * Decimal(prazo_mensalidades)) * qty + (lucro_instalacao * qty)
+                    
+                    total_venda += fat_lifetime
+                    total_lucro_global += lucro_lifetime
+
+            except Exception as e:
+                # Fallback to model values if calculation fails
+                pass
+
+        licitacao.valor_total_venda = total_venda
+        if total_venda > 0:
+            licitacao.margem_ponderada_global = (total_lucro_global / total_venda) * Decimal("100.0")
+        else:
+            licitacao.margem_ponderada_global = Decimal("0.0")
+
+        db.commit()
+        db.refresh(licitacao)
+        return licitacao
+
+    @staticmethod
+    def validate_licitacao_approval(db: Session, current_user: User, company_id: str, licitacao: Licitacao):
+        """
+        Checks if the global weighted margin of the tender is below the commercial policy factor
+        for the user's role. If yes, flags need for director approval.
+        """
+        professional = db.query(Professional).filter(
+            Professional.user_id == current_user.id,
+            Professional.tenant_id == current_user.tenant_id
+        ).first()
+
+        if not professional or not professional.role_id:
+            return
+
+        policies = db.query(CommercialPolicy).join(
+            CommercialPolicyRole
+        ).filter(
+            CommercialPolicy.company_id == company_id,
+            CommercialPolicy.ativo == True,
+            CommercialPolicyRole.role_id == professional.role_id
+        ).all()
+
+        if not policies:
+            return
+
+        # Get the MINIMUM margin factor allowed for this user
+        min_allowed = min(p.fator_limite for p in policies)
+        
+        # Convert factor (e.g. 1.15) to minimum margin percentage: (factor - 1) * 100
+        # If factor is 1.0, minimum margin is 0%. If factor is 1.15, minimum margin is 15%.
+        min_margin_percent = (min_allowed - Decimal("1.0")) * Decimal("100.0")
+
+        if licitacao.margem_ponderada_global < min_margin_percent:
+            # Requires Director approval
+            licitacao.precisa_aprovacao_diretoria = True
+            licitacao.aprovado_diretoria = False
+            licitacao.status = "Em Análise/Precificação"  # Send back to pricing stage
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"A margem global da licitação ({licitacao.margem_ponderada_global:.2f}%) está abaixo do limite permitido ({min_margin_percent:.2f}%). O edital foi retido para aprovação da Diretoria."
+            )
+
+    @staticmethod
+    def calculate_data_limite(data_zero: datetime, prazo_dias_uteis: int) -> datetime:
+        current_date = data_zero
+        added_days = 0
+        while added_days < prazo_dias_uteis:
+            current_date += timedelta(days=1)
+            if current_date.weekday() < 5:  # Monday=0 to Friday=4 are business days
+                added_days += 1
+        return current_date
+
+    @staticmethod
+    def register_history(db: Session, licitacao_id: UUID, tenant_id: str, usuario_id: str, descricao: str):
+        log_entry = LicitacaoHistory(
+            licitacao_id=licitacao_id,
+            tenant_id=tenant_id,
+            usuario_id=usuario_id,
+            descricao=descricao
+        )
+        db.add(log_entry)
+        db.flush()
+
+    @staticmethod
+    def get_history(db: Session, tenant_id: str, licitacao_id: UUID) -> List[LicitacaoHistory]:
+        return db.query(LicitacaoHistory).filter(
+            LicitacaoHistory.licitacao_id == licitacao_id,
+            LicitacaoHistory.tenant_id == tenant_id
+        ).order_by(LicitacaoHistory.data_movimentacao.desc()).all()
+
+    @staticmethod
+    def add_analista(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, user_id: str, prazo_dias_uteis: int, current_user: User) -> LicitacaoAnalista:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        # Check if analyst user exists
+        analyst_user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant_id).first()
+        if not analyst_user:
+            raise HTTPException(status_code=404, detail="Usuário analista não encontrado")
+
+        # Check if already added
+        existing = db.query(LicitacaoAnalista).filter(
+            LicitacaoAnalista.licitacao_id == licitacao_id,
+            LicitacaoAnalista.usuario_id == user_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Este analista já está adicionado a esta licitação.")
+
+        # Data Zero is the creation date of the bid
+        data_zero = licitacao.created_at or datetime.now(timezone.utc)
+        data_limite = LicitacaoService.calculate_data_limite(data_zero, prazo_dias_uteis)
+
+        analista = LicitacaoAnalista(
+            licitacao_id=licitacao_id,
+            tenant_id=tenant_id,
+            usuario_id=user_id,
+            data_zero=data_zero,
+            prazo_dias_uteis=prazo_dias_uteis,
+            data_limite=data_limite
+        )
+        db.add(analista)
+        db.flush()
+
+        # Log to timeline
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            current_user.id if current_user else "system",
+            f"{usuario_nome} adicionou o analista {analyst_user.name} com prazo de {prazo_dias_uteis} dias úteis."
+        )
+
+        db.commit()
+        return analista
+
+    @staticmethod
+    def remove_analista(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, analista_id: UUID, current_user: User) -> bool:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        analista = db.query(LicitacaoAnalista).filter(
+            LicitacaoAnalista.id == analista_id,
+            LicitacaoAnalista.licitacao_id == licitacao_id
+        ).first()
+        if not analista:
+            raise HTTPException(status_code=404, detail="Analista não encontrado nesta licitação.")
+
+        analyst_name = analista.usuario.name if analista.usuario else "Desconhecido"
+
+        db.delete(analista)
+        db.flush()
+
+        # Log to timeline
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            current_user.id if current_user else "system",
+            f"{usuario_nome} removeu o analista {analyst_name}."
+        )
+
+        db.commit()
+        return True
+
+    @staticmethod
+    def link_purchase_budget(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, budget_id: UUID, current_user: User) -> bool:
+        from src.modules.purchase_budgets.models import PurchaseBudget
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        budget = db.query(PurchaseBudget).filter(
+            PurchaseBudget.id == budget_id,
+            PurchaseBudget.tenant_id == tenant_id
+        ).first()
+        if not budget:
+            raise HTTPException(status_code=404, detail="Orçamento de compra não encontrado.")
+
+        if budget.licitacao_id == licitacao_id:
+            return True
+
+        budget.licitacao_id = licitacao_id
+        db.flush()
+
+        # Log to timeline
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            current_user.id if current_user else "system",
+            f"{usuario_nome} vinculou o orçamento de compra {budget.numero_orcamento or 'Sem Número'}."
+        )
+
+        db.commit()
+        return True
+
+    @staticmethod
+    def unlink_purchase_budget(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, budget_id: UUID, current_user: User) -> bool:
+        from src.modules.purchase_budgets.models import PurchaseBudget
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        budget = db.query(PurchaseBudget).filter(
+            PurchaseBudget.id == budget_id,
+            PurchaseBudget.licitacao_id == licitacao_id
+        ).first()
+        if not budget:
+            raise HTTPException(status_code=404, detail="Orçamento de compra não está vinculado a esta licitação.")
+
+        budget.licitacao_id = None
+        db.flush()
+
+        # Log to timeline
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            current_user.id if current_user else "system",
+            f"{usuario_nome} desvinculou o orçamento de compra {budget.numero_orcamento or 'Sem Número'}."
+        )
+
+        db.commit()
+        return True
+
+    @staticmethod
+    def seed_checklist(db: Session, tenant_id: str, licitacao_id: UUID):
+        grupos_def = [
+            ("Habilitação", [
+                ("Verificar Regularidade Fiscal", "Conferência de certidões, FGTS, INSS, Receita Federal e Trabalhista."),
+                ("Verificar Qualificação Técnica", "Conferência de atestados de capacidade técnica e registros em conselhos."),
+                ("Verificar Qualificação Econômico-Financeira", "Análise de balanço patrimonial e índices de liquidez."),
+                ("Verificar necessidade de Checklist CERCA", "Avaliação de exigência e elaboração do checklist CERCA (Certificado de Registro Cadastral)."),
+                ("Verificar regularidade no SICAF", "Validação do cadastro e certidões no Sistema de Cadastramento Unificado de Fornecedores.")
+            ]),
+            ("Análise Técnica", [
+                ("Análise de Requisitos do Edital", "Estudo detalhado do termo de referência e exigências técnicas."),
+                ("Validação de Especificação Técnica", "Confronto entre a especificação do edital e as soluções ofertadas.")
+            ]),
+            ("Checklist de Fechamento", [
+                ("Revisão de Margens e Custos", "Verificação final da precificação, impostos e rentabilidade."),
+                ("Aprovação de Proposta Final", "Garantia de que todos os documentos e propostas estão assinados e prontos.")
+            ])
+        ]
+        
+        for g_idx, (g_nome, items_def) in enumerate(grupos_def):
+            grupo = LicitacaoChecklistGrupo(
+                licitacao_id=licitacao_id,
+                tenant_id=tenant_id,
+                nome=g_nome,
+                ordem=g_idx
+            )
+            db.add(grupo)
+            db.flush()
+            
+            for i_idx, (i_nome, i_desc) in enumerate(items_def):
+                item = LicitacaoChecklistItem(
+                    grupo_id=grupo.id,
+                    tenant_id=tenant_id,
+                    nome=i_nome,
+                    descricao=i_desc,
+                    status="Pendente",
+                    ordem=i_idx
+                )
+                db.add(item)
+        db.flush()
+
+    @staticmethod
+    def get_checklist(db: Session, tenant_id: str, licitacao_id: UUID) -> List[LicitacaoChecklistGrupo]:
+        grupos = db.query(LicitacaoChecklistGrupo).filter(
+            LicitacaoChecklistGrupo.licitacao_id == licitacao_id,
+            LicitacaoChecklistGrupo.tenant_id == tenant_id
+        ).order_by(LicitacaoChecklistGrupo.ordem.asc()).all()
+        
+        if not grupos:
+            LicitacaoService.seed_checklist(db, tenant_id, licitacao_id)
+            db.commit()
+            grupos = db.query(LicitacaoChecklistGrupo).filter(
+                LicitacaoChecklistGrupo.licitacao_id == licitacao_id,
+                LicitacaoChecklistGrupo.tenant_id == tenant_id
+            ).order_by(LicitacaoChecklistGrupo.ordem.asc()).all()
+            
+        return grupos
+
+    @staticmethod
+    def update_checklist_item(db: Session, tenant_id: str, item_id: UUID, data: LicitacaoChecklistItemUpdate, current_user: User) -> LicitacaoChecklistItem:
+        item = db.query(LicitacaoChecklistItem).filter(
+            LicitacaoChecklistItem.id == item_id,
+            LicitacaoChecklistItem.tenant_id == tenant_id
+        ).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
+
+        old_status = item.status
+        old_usuario_id = item.usuario_id
+
+        if data.status is not None:
+            item.status = data.status
+            if data.status == "Concluído":
+                item.data_conclusao = datetime.now(timezone.utc)
+            elif data.status in ["Pendente", "Não Aplicável"]:
+                item.data_conclusao = None
+
+        if data.usuario_id is not None:
+            if data.usuario_id == "":
+                item.usuario_id = None
+            else:
+                item.usuario_id = data.usuario_id
+
+        db.flush()
+
+        # Log change to history
+        usuario_nome = current_user.name if current_user else "Sistema"
+        msg = f"{usuario_nome} alterou o item '{item.nome}'"
+        parts = []
+        if old_status != item.status:
+            parts.append(f"de '{old_status}' para '{item.status}'")
+        if old_usuario_id != item.usuario_id:
+            responsavel_nome = item.usuario.name if item.usuario else "ninguém"
+            parts.append(f"responsável definido como '{responsavel_nome}'")
+        
+        if parts:
+            msg += " (" + ", ".join(parts) + ")"
+            LicitacaoService.register_history(
+                db,
+                item.grupo.licitacao_id,
+                tenant_id,
+                str(current_user.id) if current_user else "system",
+                msg
+            )
+
+        db.commit()
+        return item
+
+    @staticmethod
+    def create_technical_aplicacao(db: Session, tenant_id: str, item_id: UUID, data: LicitacaoChecklistAplicacaoCreate, current_user: User) -> LicitacaoChecklistAplicacao:
+        item = db.query(LicitacaoChecklistItem).filter(
+            LicitacaoChecklistItem.id == item_id,
+            LicitacaoChecklistItem.tenant_id == tenant_id
+        ).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
+
+        licitacao_id = item.grupo.licitacao_id
+
+        # Validate that usuario_id is in the team
+        is_in_team = db.query(LicitacaoAnalista).filter(
+            LicitacaoAnalista.licitacao_id == licitacao_id,
+            LicitacaoAnalista.usuario_id == data.usuario_id
+        ).first() is not None
+
+        licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+        if not is_in_team and licitacao and str(licitacao.po_id) == str(data.usuario_id):
+            is_in_team = True
+
+        if not is_in_team:
+            raise HTTPException(
+                status_code=400,
+                detail="O usuário selecionado para a aplicação técnica deve fazer parte da equipe da licitação."
+            )
+
+        aplicacao = LicitacaoChecklistAplicacao(
+            licitacao_id=licitacao_id,
+            tenant_id=tenant_id,
+            item_id=item_id,
+            usuario_id=data.usuario_id,
+            status="Pendente",
+            observacao=data.observacao
+        )
+        db.add(aplicacao)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        analyst_user = db.query(User).filter(User.id == data.usuario_id).first()
+        analista_nome = analyst_user.name if analyst_user else "Desconhecido"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            str(current_user.id) if current_user else "system",
+            f"{usuario_nome} adicionou uma aplicação técnica no item '{item.nome}' para o analista '{analista_nome}'."
+        )
+
+        db.commit()
+        return aplicacao
+
+    @staticmethod
+    def update_technical_aplicacao(db: Session, tenant_id: str, aplicacao_id: UUID, data: LicitacaoChecklistAplicacaoUpdate, current_user: User) -> LicitacaoChecklistAplicacao:
+        aplicacao = db.query(LicitacaoChecklistAplicacao).filter(
+            LicitacaoChecklistAplicacao.id == aplicacao_id,
+            LicitacaoChecklistAplicacao.tenant_id == tenant_id
+        ).first()
+        if not aplicacao:
+            raise HTTPException(status_code=404, detail="Aplicação técnica não encontrada.")
+
+        old_status = aplicacao.status
+
+        if data.status is not None:
+            aplicacao.status = data.status
+            if data.status == "Concluído":
+                aplicacao.data_conclusao = datetime.now(timezone.utc)
+            elif data.status in ["Pendente", "Não Aplicável"]:
+                aplicacao.data_conclusao = None
+
+        if data.observacao is not None:
+            aplicacao.observacao = data.observacao
+
+        db.flush()
+
+        # Log change
+        usuario_nome = current_user.name if current_user else "Sistema"
+        if old_status != aplicacao.status:
+            LicitacaoService.register_history(
+                db,
+                aplicacao.licitacao_id,
+                tenant_id,
+                str(current_user.id) if current_user else "system",
+                f"{usuario_nome} alterou o status da aplicação técnica de '{aplicacao.item.nome}' para '{aplicacao.status}'."
+            )
+
+        db.commit()
+        return aplicacao
+
+    @staticmethod
+    def delete_technical_aplicacao(db: Session, tenant_id: str, aplicacao_id: UUID, current_user: User) -> bool:
+        aplicacao = db.query(LicitacaoChecklistAplicacao).filter(
+            LicitacaoChecklistAplicacao.id == aplicacao_id,
+            LicitacaoChecklistAplicacao.tenant_id == tenant_id
+        ).first()
+        if not aplicacao:
+            raise HTTPException(status_code=404, detail="Aplicação técnica não encontrada.")
+
+        licitacao_id = aplicacao.licitacao_id
+        item_nome = aplicacao.item.nome
+        analista_nome = aplicacao.usuario.name if aplicacao.usuario else "Desconhecido"
+
+        db.delete(aplicacao)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            str(current_user.id) if current_user else "system",
+            f"{usuario_nome} removeu a aplicação técnica de '{item_nome}' do analista '{analista_nome}'."
+        )
+
+        db.commit()
+        return True
+
+    @staticmethod
+    def create_checklist_item(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, grupo_id: UUID, data: LicitacaoChecklistItemCreate, current_user: User) -> LicitacaoChecklistItem:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        # Check permissions
+        is_po = str(licitacao.po_id) == str(current_user.id)
+        is_privileged = False
+        if current_user:
+            is_privileged = db.query(UserRole).filter(
+                UserRole.user_id == current_user.id,
+                UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
+            ).first() is not None
+            if not is_privileged:
+                from src.modules.roles.models import Role
+                prof = db.query(Professional).filter(
+                    Professional.user_id == current_user.id,
+                    Professional.tenant_id == tenant_id
+                ).first()
+                if prof and prof.role_id is not None:
+                    r = db.query(Role).filter(Role.id == prof.role_id).first()
+                    if r and r.name in ["GERENTE", "DIRETORIA"]:
+                        is_privileged = True
+
+        if not is_po and not is_privileged:
+            raise HTTPException(
+                status_code=403,
+                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem adicionar itens ao checklist."
+            )
+
+        # Get max ordem to append
+        from sqlalchemy import func
+        max_ord = db.query(func.max(LicitacaoChecklistItem.ordem)).filter(
+            LicitacaoChecklistItem.grupo_id == grupo_id
+        ).scalar() or 0
+
+        item = LicitacaoChecklistItem(
+            grupo_id=grupo_id,
+            tenant_id=tenant_id,
+            nome=data.nome,
+            descricao=data.descricao,
+            status="Pendente",
+            ordem=max_ord + 1
+        )
+        db.add(item)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            str(current_user.id) if current_user else "system",
+            f"{usuario_nome} adicionou o item '{data.nome}' ao checklist."
+        )
+
+        db.commit()
+        return item
+
+    @staticmethod
+    def delete_checklist_item(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, item_id: UUID, current_user: User) -> bool:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        item = db.query(LicitacaoChecklistItem).filter(
+            LicitacaoChecklistItem.id == item_id,
+            LicitacaoChecklistItem.tenant_id == tenant_id
+        ).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item de checklist não encontrado.")
+
+        # Check permissions
+        is_po = str(licitacao.po_id) == str(current_user.id)
+        is_privileged = False
+        if current_user:
+            is_privileged = db.query(UserRole).filter(
+                UserRole.user_id == current_user.id,
+                UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
+            ).first() is not None
+            if not is_privileged:
+                from src.modules.roles.models import Role
+                prof = db.query(Professional).filter(
+                    Professional.user_id == current_user.id,
+                    Professional.tenant_id == tenant_id
+                ).first()
+                if prof and prof.role_id is not None:
+                    r = db.query(Role).filter(Role.id == prof.role_id).first()
+                    if r and r.name in ["GERENTE", "DIRETORIA"]:
+                        is_privileged = True
+
+        if not is_po and not is_privileged:
+            raise HTTPException(
+                status_code=403,
+                detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem remover itens do checklist."
+            )
+
+        item_nome = item.nome
+        db.delete(item)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            str(current_user.id) if current_user else "system",
+            f"{usuario_nome} removeu o item '{item_nome}' do checklist."
+        )
+
+        db.commit()
+        return True
+
+    @staticmethod
+    def get_tarefas(db: Session, tenant_id: str, licitacao_id: UUID) -> List[LicitacaoTarefa]:
+        return db.query(LicitacaoTarefa).filter(
+            LicitacaoTarefa.licitacao_id == licitacao_id,
+            LicitacaoTarefa.tenant_id == tenant_id
+        ).order_by(LicitacaoTarefa.created_at.desc()).all()
+
+    @staticmethod
+    def get_tarefa_by_id(db: Session, tenant_id: str, tarefa_id: UUID) -> LicitacaoTarefa:
+        tarefa = db.query(LicitacaoTarefa).filter(
+            LicitacaoTarefa.id == tarefa_id,
+            LicitacaoTarefa.tenant_id == tenant_id
+        ).first()
+        if not tarefa:
+            raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+        return tarefa
+
+    @staticmethod
+    def check_reopen_permission(db: Session, tenant_id: str, licitacao: Licitacao, current_user: User):
+        if not current_user:
+            raise HTTPException(status_code=403, detail="Não autorizado.")
+        
+        if str(licitacao.po_id) == str(current_user.id):
+            return True
+
+        is_privileged = db.query(UserRole).filter(
+            UserRole.user_id == current_user.id,
+            UserRole.role.in_([UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA])
+        ).first() is not None
+        if is_privileged:
+            return True
+
+        from src.modules.roles.models import Role
+        prof = db.query(Professional).filter(
+            Professional.user_id == current_user.id,
+            Professional.tenant_id == tenant_id
+        ).first()
+        if prof and prof.role_id is not None:
+            r = db.query(Role).filter(Role.id == prof.role_id).first()
+            if r and r.name in ["GERENTE", "DIRETORIA"]:
+                return True
+
+        raise HTTPException(
+            status_code=403,
+            detail="Apenas o P.O. da licitação ou usuários com perfil GERENTE ou DIRETORIA podem reabrir uma tarefa concluída."
+        )
+
+    @staticmethod
+    def create_tarefa(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, data: LicitacaoTarefaCreate, current_user: User) -> LicitacaoTarefa:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        creator_id = str(current_user.id) if current_user else "system"
+
+        is_creator_in_team = (str(licitacao.po_id) == creator_id) or (
+            db.query(LicitacaoAnalista).filter(
+                LicitacaoAnalista.licitacao_id == licitacao_id,
+                LicitacaoAnalista.usuario_id == creator_id
+            ).first() is not None
+        )
+
+        is_resp_in_team = (str(licitacao.po_id) == str(data.responsavel_id)) or (
+            db.query(LicitacaoAnalista).filter(
+                LicitacaoAnalista.licitacao_id == licitacao_id,
+                LicitacaoAnalista.usuario_id == data.responsavel_id
+            ).first() is not None
+        )
+
+        if not is_resp_in_team:
+            raise HTTPException(
+                status_code=400,
+                detail="O responsável selecionado deve fazer parte da equipe da licitação."
+            )
+
+        if not is_creator_in_team:
+            if str(data.responsavel_id) == creator_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Usuários fora da equipe da licitação não podem atribuir tarefas para si mesmos."
+                )
+
+        analyst = db.query(LicitacaoAnalista).filter(
+            LicitacaoAnalista.licitacao_id == licitacao_id,
+            LicitacaoAnalista.usuario_id == data.responsavel_id
+        ).first()
+        if analyst:
+            if data.data_limite.tzinfo is None:
+                data_limite_aware = data.data_limite.replace(tzinfo=timezone.utc)
+            else:
+                data_limite_aware = data.data_limite
+
+            analyst_limit_aware = analyst.data_limite
+            if analyst_limit_aware.tzinfo is None:
+                analyst_limit_aware = analyst_limit_aware.replace(tzinfo=timezone.utc)
+
+            if data_limite_aware.date() > analyst_limit_aware.date():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A data limite da tarefa não pode ser posterior ao prazo de previsão de entrega do analista ({analyst_limit_aware.strftime('%d/%m/%Y')})."
+                )
+
+        tarefa = LicitacaoTarefa(
+            licitacao_id=licitacao_id,
+            tenant_id=tenant_id,
+            checklist_item_id=data.checklist_item_id,
+            checklist_aplicacao_id=data.checklist_aplicacao_id,
+            titulo=data.titulo,
+            descricao=data.descricao,
+            responsavel_id=data.responsavel_id,
+            criador_id=creator_id,
+            data_limite=data.data_limite,
+            status="Pendente"
+        )
+        db.add(tarefa)
+        db.flush()
+
+        andamento = LicitacaoTarefaAndamento(
+            tarefa_id=tarefa.id,
+            tenant_id=tenant_id,
+            usuario_id=creator_id,
+            descricao="Tarefa criada.",
+            status_anterior="Pendente",
+            status_novo="Pendente"
+        )
+        db.add(andamento)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            creator_id,
+            f"{usuario_nome} criou a tarefa '{tarefa.titulo}'."
+        )
+
+        db.commit()
+        return tarefa
+
+    @staticmethod
+    def update_tarefa(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, tarefa_id: UUID, data: LicitacaoTarefaUpdate, current_user: User) -> LicitacaoTarefa:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        tarefa = LicitacaoService.get_tarefa_by_id(db, tenant_id, tarefa_id)
+
+        old_status = tarefa.status
+        new_status = data.status
+        if old_status == "Concluída" and new_status is not None and new_status != "Concluída":
+            LicitacaoService.check_reopen_permission(db, tenant_id, licitacao, current_user)
+
+        if data.titulo is not None:
+            tarefa.titulo = data.titulo
+        if data.descricao is not None:
+            tarefa.descricao = data.descricao
+        if data.responsavel_id is not None:
+            tarefa.responsavel_id = data.responsavel_id
+        if data.data_limite is not None:
+            tarefa.data_limite = data.data_limite
+        if new_status is not None:
+            tarefa.status = new_status
+
+        if data.responsavel_id is not None or data.data_limite is not None:
+            is_resp_in_team = (str(licitacao.po_id) == str(tarefa.responsavel_id)) or (
+                db.query(LicitacaoAnalista).filter(
+                    LicitacaoAnalista.licitacao_id == licitacao_id,
+                    LicitacaoAnalista.usuario_id == tarefa.responsavel_id
+                ).first() is not None
+            )
+            if not is_resp_in_team:
+                raise HTTPException(
+                    status_code=400,
+                    detail="O responsável selecionado deve fazer parte da equipe da licitação."
+                )
+
+            analyst = db.query(LicitacaoAnalista).filter(
+                LicitacaoAnalista.licitacao_id == licitacao_id,
+                LicitacaoAnalista.usuario_id == tarefa.responsavel_id
+            ).first()
+            if analyst:
+                if tarefa.data_limite.tzinfo is None:
+                    data_limite_aware = tarefa.data_limite.replace(tzinfo=timezone.utc)
+                else:
+                    data_limite_aware = tarefa.data_limite
+
+                analyst_limit_aware = analyst.data_limite
+                if analyst_limit_aware.tzinfo is None:
+                    analyst_limit_aware = analyst_limit_aware.replace(tzinfo=timezone.utc)
+
+                if data_limite_aware.date() > analyst_limit_aware.date():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"A data limite da tarefa não pode ser posterior ao prazo de previsão de entrega do analista ({analyst_limit_aware.strftime('%d/%m/%Y')})."
+                    )
+
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        usuario_id = str(current_user.id) if current_user else "system"
+
+        if old_status != tarefa.status:
+            andamento = LicitacaoTarefaAndamento(
+                tarefa_id=tarefa.id,
+                tenant_id=tenant_id,
+                usuario_id=usuario_id,
+                descricao=f"Status alterado para '{tarefa.status}'.",
+                status_anterior=old_status,
+                status_novo=tarefa.status
+            )
+            db.add(andamento)
+            
+            LicitacaoService.register_history(
+                db,
+                licitacao_id,
+                tenant_id,
+                usuario_id,
+                f"{usuario_nome} alterou o status da tarefa '{tarefa.titulo}' de '{old_status}' para '{tarefa.status}'."
+            )
+
+        db.commit()
+        return tarefa
+
+    @staticmethod
+    def create_tarefa_andamento(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, tarefa_id: UUID, descricao: str, current_user: User) -> LicitacaoTarefaAndamento:
+        LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        tarefa = LicitacaoService.get_tarefa_by_id(db, tenant_id, tarefa_id)
+
+        usuario_id = str(current_user.id) if current_user else "system"
+
+        andamento = LicitacaoTarefaAndamento(
+            tarefa_id=tarefa.id,
+            tenant_id=tenant_id,
+            usuario_id=usuario_id,
+            descricao=descricao,
+            status_anterior=tarefa.status,
+            status_novo=tarefa.status
+        )
+        db.add(andamento)
+        db.flush()
+
+        usuario_nome = current_user.name if current_user else "Sistema"
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            usuario_id,
+            f"{usuario_nome} adicionou um andamento na tarefa '{tarefa.titulo}': {descricao[:100]}"
+        )
+
+        db.commit()
+        return andamento

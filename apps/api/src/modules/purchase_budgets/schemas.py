@@ -105,6 +105,7 @@ class PurchaseBudgetBase(BaseModel):
     data_vencimento_inicial: Optional[datetime] = None
     forma_pagamento_snapshot: Optional[dict] = None
     sales_budget_id: Optional[UUID] = None
+    licitacao_id: Optional[UUID] = None
     numero_orcamento: Optional[str] = None
     data_orcamento: datetime
     validade: Optional[datetime] = None
