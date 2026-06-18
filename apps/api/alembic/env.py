@@ -43,7 +43,8 @@ from src.modules.licitacoes.models import Licitacao, LicitacaoLote, LicitacaoIte
 from src.core.config import settings  # type: ignore
 target_metadata = Base.metadata
 
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+db_url = settings.DATABASE_URL.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", db_url)
 
 
 def run_migrations_offline() -> None:
