@@ -245,7 +245,7 @@ def add_item(
     
     db.commit()
     db.refresh(item)
-    return item
+    return LicitacaoService.populate_item_kits_financials(db, tenant_id, item)
 
 @router.put("/{licitacao_id}/items/{item_id}", response_model=schemas.LicitacaoItemResponse)
 def update_item(
@@ -315,7 +315,7 @@ def update_item(
     db.refresh(item)
     
     LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao_id)
-    return item
+    return LicitacaoService.populate_item_kits_financials(db, tenant_id, item)
 
 @router.delete("/{licitacao_id}/items/{item_id}", status_code=204)
 def delete_item(

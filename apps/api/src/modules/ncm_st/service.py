@@ -105,8 +105,12 @@ class NcmStService:
         if strategy == "REPLACE":
             db.execute(delete(NcmStItem).where(NcmStItem.cad_ncm_st_id == header_id))
         
+        # Auto-detect delimiter based on header line
+        first_line = csv_content.splitlines()[0] if csv_content else ""
+        delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
+        
         f = io.StringIO(csv_content)
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, delimiter=delimiter)
         
         items_to_insert = []
         processed = 0
@@ -135,7 +139,10 @@ class NcmStService:
                 }
                 items_to_insert.append(item_data)
                 success += 1
-            except Exception:
+            except Exception as e:
+                import traceback
+                print(f"FAILED ROW item={row.get('item')} NCM={row.get('ncm_sh')}: {str(e)}")
+                traceback.print_exc()
                 errors += 1
                 continue
             

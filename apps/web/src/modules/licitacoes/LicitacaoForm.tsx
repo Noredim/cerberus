@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
@@ -17,9 +17,13 @@ interface KitItem {
   nome_kit: string;
   tipo_contrato: string;
   quantidade_kits: number;
+  perc_comissao: number;
   summary?: {
     valor_mensal_kit: number;
+    custo_total_mensal_kit: number;
+    lucro_mensal_kit: number;
     vlr_instal_calc: number;
+    imposto_instalacao: number;
     margem_kit: number;
   };
 }
@@ -872,6 +876,55 @@ export function LicitacaoForm() {
 
   const selectedItem = detail?.lotes.flatMap(l => l.items).find(i => i.id === selectedItemId);
 
+  const itemTotals = useMemo(() => {
+    if (!selectedItem || !selectedItem.kits || selectedItem.kits.length === 0) {
+      return { venda: 0, custo: 0, lucro: 0, margem: 0 };
+    }
+
+    let totalVenda = 0;
+    let totalCusto = 0;
+    let totalLucro = 0;
+
+    const isUnitario = selectedItem.tipo_fornecimento === 'Unitário';
+    const months = selectedItem.tipo_fornecimento === 'Mensal' ? Number(selectedItem.total_meses || 1) : 1;
+
+    selectedItem.kits.forEach(k => {
+      const summary = k.summary;
+      if (!summary) return;
+
+      const valorMensal = Number(summary.valor_mensal_kit || 0);
+      const custoTotalMensal = Number(summary.custo_total_mensal_kit || 0);
+      const lucroMensal = Number(summary.lucro_mensal_kit || 0);
+      const vlrInstal = Number(summary.vlr_instal_calc || 0);
+      const impostoInstal = Number(summary.imposto_instalacao || 0);
+      const percComissao = Number(k.perc_comissao || 0);
+
+      if (isUnitario) {
+        totalVenda += valorMensal;
+        totalCusto += custoTotalMensal;
+        totalLucro += lucroMensal;
+      } else {
+        const lucroInstalacao = vlrInstal - impostoInstal - (vlrInstal * percComissao / 100);
+
+        const kitVendaTotal = valorMensal * months + vlrInstal;
+        const kitLucroTotal = (lucroMensal * months) + lucroInstalacao;
+
+        totalVenda += kitVendaTotal;
+        totalLucro += kitLucroTotal;
+        totalCusto += (kitVendaTotal - kitLucroTotal);
+      }
+    });
+
+    const margemGeral = totalVenda > 0 ? (totalLucro / totalVenda) * 100 : 0;
+
+    return {
+      venda: totalVenda,
+      custo: totalCusto,
+      lucro: totalLucro,
+      margem: margemGeral
+    };
+  }, [selectedItem]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-text-muted space-y-4">
@@ -1403,6 +1456,36 @@ export function LicitacaoForm() {
                     </div>
                   </div>
 
+                  {/* Item Consolidated Totalizer */}
+                  {selectedItem.kits.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl border border-border-subtle/80 bg-slate-50/10 shadow-sm">
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Venda</span>
+                        <span className="text-base font-extrabold text-brand-primary tabular-nums block">
+                          {itemTotals.venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Custo</span>
+                        <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                          {itemTotals.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
+                        <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                          {itemTotals.lucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Geral</span>
+                        <span className="text-base font-extrabold text-emerald-600 tabular-nums block">
+                          {itemTotals.margem.toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Kits Section */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -1429,50 +1512,85 @@ export function LicitacaoForm() {
                             <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold">
                               <th className="py-2.5 px-4">Nome do Kit</th>
                               <th className="py-2.5 px-4">Operação / Contrato</th>
-                              <th className="py-2.5 px-4 text-right">Mensal</th>
-                              <th className="py-2.5 px-4 text-right">Setup / Instalação</th>
+                              {selectedItem.tipo_fornecimento === 'Unitário' ? (
+                                <>
+                                  <th className="py-2.5 px-4 text-right">Valor de Venda Unitário</th>
+                                  <th className="py-2.5 px-4 text-right">Quantidade</th>
+                                  <th className="py-2.5 px-4 text-right">Venda Total</th>
+                                </>
+                              ) : (
+                                <>
+                                  <th className="py-2.5 px-4 text-right">Mensal</th>
+                                  <th className="py-2.5 px-4 text-right">Setup / Instalação</th>
+                                </>
+                              )}
                               <th className="py-2.5 px-4 text-right">Margem</th>
                               <th className="py-2.5 px-4 text-center">Ações</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {selectedItem.kits.map(k => (
-                              <tr key={k.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
-                                <td className="py-3 px-4 font-semibold text-text-primary">{k.nome_kit}</td>
-                                <td className="py-3 px-4 font-mono uppercase text-text-muted tracking-wider">{k.tipo_contrato}</td>
-                                <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                  {Number(k.summary?.valor_mensal_kit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </td>
-                                <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                  {Number(k.summary?.vlr_instal_calc || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </td>
-                                <td className="py-3 px-4 text-right font-bold text-brand-primary tabular-nums">
-                                  {Number(k.summary?.margem_kit || 0).toFixed(2)}%
-                                </td>
-                                <td className="py-3 px-4 text-center">
-                                  <div className="flex justify-center items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
-                                      className="p-1 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer"
-                                      title="Editar Simulação do Kit"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    {!isLocked && (
+                            {selectedItem.kits.map(k => {
+                              const isUnitario = selectedItem.tipo_fornecimento === 'Unitário';
+                              const quantity = Number(selectedItem.quantidade || 0);
+                              const vendaTotal = Number(k.summary?.valor_mensal_kit || 0);
+                              const valorVendaUnitario = quantity > 0 ? vendaTotal / quantity : 0;
+
+                              return (
+                                <tr key={k.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
+                                  <td className="py-3 px-4 font-semibold text-text-primary">{k.nome_kit}</td>
+                                  <td className="py-3 px-4 font-mono uppercase text-text-muted tracking-wider">{k.tipo_contrato}</td>
+                                  
+                                  {isUnitario ? (
+                                    <>
+                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                        {valorVendaUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </td>
+                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                        {quantity}
+                                      </td>
+                                      <td className="py-3 px-4 text-right font-mono text-brand-primary tabular-nums font-semibold">
+                                        {vendaTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                        {Number(k.summary?.valor_mensal_kit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </td>
+                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                        {Number(k.summary?.vlr_instal_calc || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </td>
+                                    </>
+                                  )}
+                                  
+                                  <td className="py-3 px-4 text-right font-bold text-brand-primary tabular-nums">
+                                    {Number(k.summary?.margem_kit || 0).toFixed(2)}%
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    <div className="flex justify-center items-center gap-1.5">
                                       <button
                                         type="button"
-                                        onClick={() => handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id)}
-                                        className="p-1 hover:bg-rose-50 text-rose-600 rounded cursor-pointer"
-                                        title="Excluir Kit"
+                                        onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
+                                        className="p-1 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer"
+                                        title="Editar Simulação do Kit"
                                       >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Edit2 className="w-3.5 h-3.5" />
                                       </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
+                                      {!isLocked && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id)}
+                                          className="p-1 hover:bg-rose-50 text-rose-600 rounded cursor-pointer"
+                                          title="Excluir Kit"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

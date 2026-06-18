@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     ArrowLeft,
     Upload,
+    Download,
     Search,
     CheckCircle2,
     FileSpreadsheet,
@@ -91,6 +92,23 @@ const NcmStDetails: React.FC = () => {
         setTimeout(() => setImportSummary(null), 10000);
     };
 
+    const handleDownloadTemplate = async () => {
+        try {
+            const response = await api.get('/cadastro/ncm-st/modelo-csv', {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'modelo_importacao_ncm_st.csv');
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode?.removeChild(link);
+        } catch (error) {
+            console.error('Erro ao baixar modelo CSV:', error);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center p-12">
@@ -141,13 +159,23 @@ const NcmStDetails: React.FC = () => {
                             </span>
                         </div>
                     </div>
-                    <Button
-                        onClick={() => setIsImportModalOpen(true)}
-                        className="bg-brand-primary hover:shadow-lg hover:shadow-brand-primary/20 flex items-center gap-2 h-12 px-6"
-                    >
-                        <Upload className="w-5 h-5" />
-                        Importar CSV
-                    </Button>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            onClick={handleDownloadTemplate}
+                            className="text-brand-primary border border-brand-primary/20 hover:bg-brand-primary/5 flex items-center gap-2 h-12 px-6"
+                        >
+                            <Download className="w-5 h-5" />
+                            Baixar Modelo
+                        </Button>
+                        <Button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="bg-brand-primary hover:shadow-lg hover:shadow-brand-primary/20 flex items-center gap-2 h-12 px-6"
+                        >
+                            <Upload className="w-5 h-5" />
+                            Importar CSV
+                        </Button>
+                    </div>
                 </div>
 
                 {importSummary && (

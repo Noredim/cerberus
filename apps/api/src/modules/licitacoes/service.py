@@ -32,6 +32,36 @@ class LicitacaoService:
         return items, total
 
     @staticmethod
+    def populate_kits_financials(db: Session, tenant_id: str, licitacao: Licitacao) -> Licitacao:
+        if not licitacao:
+            return licitacao
+        kit_service = OpportunityKitService(db)
+        for lote in licitacao.lotes:
+            for item in lote.items:
+                for kit in item.kits:
+                    try:
+                        fin = kit_service.calculate_financials(kit, tenant_id)
+                        kit.summary = fin["summary"]
+                        kit.item_summaries = fin["item_summaries"]
+                    except Exception:
+                        pass
+        return licitacao
+
+    @staticmethod
+    def populate_item_kits_financials(db: Session, tenant_id: str, item: LicitacaoItem) -> LicitacaoItem:
+        if not item:
+            return item
+        kit_service = OpportunityKitService(db)
+        for kit in item.kits:
+            try:
+                fin = kit_service.calculate_financials(kit, tenant_id)
+                kit.summary = fin["summary"]
+                kit.item_summaries = fin["item_summaries"]
+            except Exception:
+                pass
+        return item
+
+    @staticmethod
     def get_licitacao_by_id(db: Session, tenant_id: str, licitacao_id: UUID, company_id: str) -> Licitacao:
         licitacao = db.query(Licitacao).filter(
             Licitacao.id == licitacao_id,
@@ -40,7 +70,7 @@ class LicitacaoService:
         ).first()
         if not licitacao:
             raise HTTPException(status_code=404, detail="Licitação não encontrada")
-        return licitacao
+        return LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
 
     @staticmethod
     def create_licitacao(db: Session, tenant_id: str, company_id: str, data: LicitacaoCreate, current_user: User = None) -> Licitacao:
@@ -221,7 +251,7 @@ class LicitacaoService:
         if current_user and new_status == "Aprovada para Envio":
             LicitacaoService.validate_licitacao_approval(db, current_user, company_id, licitacao)
 
-        return licitacao
+        return LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
 
     @staticmethod
     def delete_licitacao(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID) -> bool:
@@ -259,15 +289,15 @@ class LicitacaoService:
                     valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
                     lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
                     
-                    total_venda += valor_mensal_kit * qty
-                    total_lucro_global += lucro_mensal_kit * qty
+                    total_venda += valor_mensal_kit
+                    total_lucro_global += lucro_mensal_kit
                 else:
                     # Rental or Comodato lifetime
                     valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
                     vlr_instal_calc = sa_val = Decimal(str(summary.get("vlr_instal_calc", 0)))
                     prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
                     
-                    fat_lifetime = (valor_mensal_kit * Decimal(prazo_mensalidades) + vlr_instal_calc) * qty
+                    fat_lifetime = valor_mensal_kit * Decimal(prazo_mensalidades) + vlr_instal_calc
                     
                     # We compute profit lifetime
                     lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
@@ -276,7 +306,7 @@ class LicitacaoService:
                     imposto_instalacao = Decimal(str(summary.get("imposto_instalacao", 0)))
                     lucro_instalacao = vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * Decimal(str(kit.perc_comissao or 0)) / Decimal("100.0"))
                     
-                    lucro_lifetime = (lucro_mensal_kit * Decimal(prazo_mensalidades)) * qty + (lucro_instalacao * qty)
+                    lucro_lifetime = (lucro_mensal_kit * Decimal(prazo_mensalidades)) + lucro_instalacao
                     
                     total_venda += fat_lifetime
                     total_lucro_global += lucro_lifetime

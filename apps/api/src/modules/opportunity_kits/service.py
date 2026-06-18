@@ -702,11 +702,16 @@ class OpportunityKitService:
         # 16. Receita Liquida
         receita_liquida_mensal_kit = valor_mensal_kit - valor_impostos
 
+        # 16.5 Sales expenses (freight, admin expenses, and commission)
+        vlt_frete_venda = valor_mensal_kit * perc_frete_venda
+        vlt_despesas_adm = valor_mensal_kit * perc_despesas_adm
+        vlt_comissao = valor_mensal_kit * perc_comissao
+
         # 17. Lucro Mensal
         if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total - (vlt_frete_venda + vlt_despesas_adm + vlt_comissao)
         else:
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 - (vlt_frete_venda + vlt_despesas_adm + vlt_comissao)
 
         margem_kit = Decimal("0.0")
         if receita_liquida_mensal_kit > 0:
@@ -1037,6 +1042,12 @@ class OpportunityKitService:
         self.db.commit()
 
         self.db.refresh(kit)
+        if kit.licitacao_id:
+            try:
+                from src.modules.licitacoes.service import LicitacaoService
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
+            except Exception:
+                pass
         fin = self.calculate_financials(kit, tenant_id)
         kit.summary = fin["summary"]
         kit.item_summaries = fin["item_summaries"]
@@ -1108,6 +1119,12 @@ class OpportunityKitService:
 
         self.db.commit()
         self.db.refresh(kit)
+        if kit.licitacao_id:
+            try:
+                from src.modules.licitacoes.service import LicitacaoService
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
+            except Exception:
+                pass
         fin = self.calculate_financials(kit, tenant_id)
         kit.summary = fin["summary"]
         kit.item_summaries = fin["item_summaries"]

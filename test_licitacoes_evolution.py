@@ -699,12 +699,113 @@ def run_tests():
         assert kit_obj.aliq_icms == Decimal('4.00')
         assert kit_obj.perc_despesas_adm == Decimal('5.00')
 
+        # 4. Verify that fetching via LicitacaoService.get_licitacao_by_id populates the kits' summaries
+        print("Verifying LicitacaoService.get_licitacao_by_id populates summaries...")
+        refreshed_lic = LicitacaoService.get_licitacao_by_id(db, tenant_id, lic_test.id, str(company_id))
+        
+        found_kit = None
+        for lt in refreshed_lic.lotes:
+            for it in lt.items:
+                if it.id == item_mensal.id:
+                    for kt in it.kits:
+                        found_kit = kt
+        assert found_kit is not None
+        assert found_kit.summary is not None
+        print(f"Found kit summary: valor_mensal_kit={found_kit.summary.get('valor_mensal_kit')} (Expected not None)")
+        assert found_kit.summary.get('valor_mensal_kit') is not None
+
         # Clean up the test items
         db.delete(kit_obj)
         db.delete(item_mensal)
         db.delete(item_unit)
         db.delete(lote)
         db.delete(lic_test)
+        db.commit()
+
+        # 5. Verify recalculate_licitacao does not double multiply by qty
+        print("\n--- Test 9: Recalculate Licitacao Totals without Double Multiplication ---")
+        lic_calc = Licitacao(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            customer_id=customer.id,
+            numero_edital="Pregão Teste Calculo",
+            status="Criada",
+            modalidade="Pregão",
+            tipo_licitacao="Menor preço",
+            valor_total_estimado=Decimal("0.00"),
+            valor_total_venda=Decimal("0.00"),
+            margem_ponderada_global=Decimal("0.00"),
+            precisa_aprovacao_diretoria=False,
+            aprovado_diretoria=False
+        )
+        db.add(lic_calc)
+        db.commit()
+        db.refresh(lic_calc)
+
+        lote_calc = LicitacaoLote(
+            licitacao_id=lic_calc.id,
+            numero="Lote 1",
+            nome="Lote Teste Calculo"
+        )
+        db.add(lote_calc)
+        db.commit()
+        db.refresh(lote_calc)
+
+        item_calc = LicitacaoItem(
+            lote_id=lote_calc.id,
+            codigo="1.1",
+            nome="QSFP Optic 40G",
+            quantidade=Decimal("4"),
+            tipo_fornecimento="Unitário",
+            quantidade_total=Decimal("4")
+        )
+        db.add(item_calc)
+        db.commit()
+        db.refresh(item_calc)
+
+        kit_calc = OpportunityKit(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            licitacao_id=lic_calc.id,
+            licitacao_item_id=item_calc.id,
+            nome_kit="Kit - MODULO QSFP+",
+            tipo_contrato="VENDA_EQUIPAMENTOS",
+            quantidade_kits=4,
+            prazo_contrato_meses=12
+        )
+        db.add(kit_calc)
+        db.commit()
+        db.refresh(kit_calc)
+
+        orig_calc = OpportunityKitService.calculate_financials
+        OpportunityKitService.calculate_financials = lambda self, k, t: {
+            "summary": {
+                "valor_mensal_kit": Decimal("118063.48"),
+                "lucro_mensal_kit": Decimal("48524.31"),
+                "custo_total_mensal_kit": Decimal("55690.32"),
+                "margem_kit": Decimal("41.10")
+            },
+            "item_summaries": []
+        }
+
+        try:
+            LicitacaoService.recalculate_licitacao(db, tenant_id, lic_calc.id)
+            db.refresh(lic_calc)
+            
+            print(f"Recalculated Licitacao: valor_total_venda={lic_calc.valor_total_venda} (Expected: 118063.48)")
+            print(f"Recalculated Licitacao: margem_ponderada_global={lic_calc.margem_ponderada_global:.2f}% (Expected: 41.10%)")
+            
+            assert lic_calc.valor_total_venda == Decimal("118063.48")
+            assert round(lic_calc.margem_ponderada_global, 2) == Decimal("41.10")
+            print("Test 9 OK! [SUCCESS]")
+        finally:
+            OpportunityKitService.calculate_financials = orig_calc
+
+        # Clean up Test 9 items
+        db.delete(kit_calc)
+        db.delete(item_calc)
+        db.delete(lote_calc)
+        db.delete(lic_calc)
         db.commit()
 
         print("\nALL TEST CASES COMPLETED SUCCESSFULLY! [SUCCESS]")
