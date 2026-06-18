@@ -83,4 +83,7 @@ out.txt
 tmp/
 roles_map.txt
 implementation_plan.md
+scratch/
+*.pdf
+
 
