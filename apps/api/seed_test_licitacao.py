@@ -106,7 +106,6 @@ def run():
             lote = LicitacaoLote(
                 id=uuid.uuid4(),
                 licitacao_id=lic.id,
-                tenant_id=tenant_id,
                 numero="1",
                 nome="Lote 1 - Equipamentos de Rede",
                 descricao="Lote de rede",
@@ -123,7 +122,6 @@ def run():
             item = LicitacaoItem(
                 id=uuid.uuid4(),
                 lote_id=lote.id,
-                tenant_id=tenant_id,
                 codigo="1",
                 nome="Switches de Borda 24 Portas PoE",
                 descricao="Switches PoE",
