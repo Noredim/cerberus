@@ -208,29 +208,29 @@ class OpportunityKitUpdate(BaseModel):
     margem_minima_desejada: Optional[Decimal] = None
 
 class OpportunityKitFinancialSummary(BaseModel):
-    prazo_mensalidades: int
-    custo_operacional_mensal_kit: Decimal
-    custo_aquisicao_kit: Decimal
-    custo_aquisicao_produtos: Decimal
-    custo_aquisicao_servicos: Decimal
-    custo_aquisicao_total: Decimal
-    total_difal_kit: Decimal
-    custo_total_mensal_kit: Decimal
-    tx_locacao: Decimal
+    prazo_mensalidades: Optional[int] = None
+    custo_operacional_mensal_kit: Optional[Decimal] = None
+    custo_aquisicao_kit: Optional[Decimal] = None
+    custo_aquisicao_produtos: Optional[Decimal] = None
+    custo_aquisicao_servicos: Optional[Decimal] = None
+    custo_aquisicao_total: Optional[Decimal] = None
+    total_difal_kit: Optional[Decimal] = None
+    custo_total_mensal_kit: Optional[Decimal] = None
+    tx_locacao: Optional[Decimal] = None
     
-    vlr_instal_calc: Decimal
-    valor_mensal_locacao_base: Decimal
-    vlt_manut: Decimal
-    valor_base_venda: Decimal
-    valor_parcela_locacao: Decimal
-    manutencao_mensal: Decimal
-    valor_mensal_antes_impostos: Decimal
-    aliq_total_impostos: Decimal
-    valor_impostos: Decimal
-    valor_mensal_kit: Decimal
-    receita_liquida_mensal_kit: Decimal
-    lucro_mensal_kit: Decimal
-    margem_kit: Decimal
+    vlr_instal_calc: Optional[Decimal] = None
+    valor_mensal_locacao_base: Optional[Decimal] = None
+    vlt_manut: Optional[Decimal] = None
+    valor_base_venda: Optional[Decimal] = None
+    valor_parcela_locacao: Optional[Decimal] = None
+    manutencao_mensal: Optional[Decimal] = None
+    valor_mensal_antes_impostos: Optional[Decimal] = None
+    aliq_total_impostos: Optional[Decimal] = None
+    valor_impostos: Optional[Decimal] = None
+    valor_mensal_kit: Optional[Decimal] = None
+    receita_liquida_mensal_kit: Optional[Decimal] = None
+    lucro_mensal_kit: Optional[Decimal] = None
+    margem_kit: Optional[Decimal] = None
     
     # Totalizadores financeiros do Kit
     venda_total: Optional[Decimal] = None

@@ -79,6 +79,14 @@ class OpportunityKit(Base):
     lucro_minimo = Column(Numeric(15, 4), nullable=True)
     margem_minima_resultante = Column(Numeric(6, 4), nullable=True)
     
+    # Financial fields
+    custo_total = Column(Numeric(15, 4), nullable=False, default=0.0)
+    venda_total = Column(Numeric(15, 4), nullable=False, default=0.0)
+    lucro_estimado = Column(Numeric(15, 4), nullable=False, default=0.0)
+    margem_geral = Column(Numeric(10, 4), nullable=False, default=0.0)
+    custo_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    venda_unitario = Column(Numeric(15, 4), nullable=False, default=0.0)
+    
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

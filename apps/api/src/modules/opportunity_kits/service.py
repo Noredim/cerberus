@@ -1097,7 +1097,7 @@ class OpportunityKitService:
         if kit.licitacao_id:
             try:
                 from src.modules.licitacoes.service import LicitacaoService
-                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
+                LicitacaoService.invalidate_licitacao_totals(self.db, kit.licitacao_id)
             except Exception:
                 pass
         fin = self.calculate_financials(kit, tenant_id)
@@ -1195,7 +1195,7 @@ class OpportunityKitService:
         if kit.licitacao_id:
             try:
                 from src.modules.licitacoes.service import LicitacaoService
-                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
+                LicitacaoService.invalidate_licitacao_totals(self.db, kit.licitacao_id)
             except Exception:
                 pass
         fin = self.calculate_financials(kit, tenant_id)

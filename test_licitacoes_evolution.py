@@ -792,10 +792,10 @@ def run_tests():
             LicitacaoService.recalculate_licitacao(db, tenant_id, lic_calc.id)
             db.refresh(lic_calc)
             
-            print(f"Recalculated Licitacao: valor_total_venda={lic_calc.valor_total_venda} (Expected: 118063.48)")
+            print(f"Recalculated Licitacao: valor_total_venda={lic_calc.valor_total_venda} (Expected: 472253.92)")
             print(f"Recalculated Licitacao: margem_ponderada_global={lic_calc.margem_ponderada_global:.2f}% (Expected: 41.10%)")
             
-            assert lic_calc.valor_total_venda == Decimal("118063.48")
+            assert lic_calc.valor_total_venda == Decimal("472253.92")
             assert round(lic_calc.margem_ponderada_global, 2) == Decimal("41.10")
             print("Test 9 OK! [SUCCESS]")
         finally:

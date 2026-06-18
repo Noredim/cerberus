@@ -35,9 +35,13 @@ class Licitacao(Base):
     # Métricas consolidadas globais
     valor_total_estimado = Column(Numeric(15, 4), nullable=False, default=0.0)
     valor_total_venda = Column(Numeric(15, 4), nullable=False, default=0.0)
+    custo_total = Column(Numeric(15, 4), nullable=False, default=0.0)
+    lucro_estimado = Column(Numeric(15, 4), nullable=False, default=0.0)
     margem_ponderada_global = Column(Numeric(10, 4), nullable=False, default=0.0)
     precisa_aprovacao_diretoria = Column(Boolean, nullable=False, default=False)
     aprovado_diretoria = Column(Boolean, nullable=False, default=False)
+    totais_status = Column(String(50), nullable=False, default="PENDENTE_RECALCULO")
+    totais_atualizados_em = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
@@ -74,6 +78,11 @@ class LicitacaoLote(Base):
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     descricao: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
+    custo_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    venda_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    lucro_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    margem_geral: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False, default=0.0)
+    
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
@@ -95,6 +104,13 @@ class LicitacaoItem(Base):
     tipo_fornecimento: Mapped[str] = mapped_column(String(50), nullable=False, default="Unitário")
     total_meses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     quantidade_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=1.0)
+    
+    custo_unitario: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    custo_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    venda_unitario: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    venda_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    lucro_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    margem_geral: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False, default=0.0)
     
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

@@ -12,6 +12,7 @@ from src.modules.opportunity_kits.models import OpportunityKit
 from . import schemas
 from .service import LicitacaoService
 from .models import LicitacaoLote, LicitacaoItem, Licitacao
+from .reports import LicitacoesReportService
 
 router = APIRouter(
     prefix="/licitacoes",
@@ -46,6 +47,21 @@ def get_licitacao(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
     return LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+
+@router.post("/{licitacao_id}/recalculate", response_model=schemas.LicitacaoResponse)
+def recalculate_licitacao(
+    licitacao_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    tenant_id = str(current_user.tenant_id)
+    licitacao = LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao_id)
+    if not licitacao:
+        raise HTTPException(status_code=404, detail="Licitação não encontrada")
+    return licitacao
 
 @router.post("", response_model=schemas.LicitacaoResponse)
 def create_licitacao(
@@ -120,6 +136,7 @@ def add_lote(
     
     db.commit()
     db.refresh(lote)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return lote
 
 @router.put("/{licitacao_id}/lotes/{lote_id}", response_model=schemas.LicitacaoLoteResponse)
@@ -156,6 +173,7 @@ def update_lote(
     
     db.commit()
     db.refresh(lote)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return lote
 
 @router.delete("/{licitacao_id}/lotes/{lote_id}", status_code=204)
@@ -191,7 +209,7 @@ def delete_lote(
     )
     
     db.commit()
-    LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao_id)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return None
 
 # --- Itens CRUD endpoints ---
@@ -245,6 +263,7 @@ def add_item(
     
     db.commit()
     db.refresh(item)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return LicitacaoService.populate_item_kits_financials(db, tenant_id, item)
 
 @router.put("/{licitacao_id}/items/{item_id}", response_model=schemas.LicitacaoItemResponse)
@@ -314,7 +333,7 @@ def update_item(
     db.commit()
     db.refresh(item)
     
-    LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao_id)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return LicitacaoService.populate_item_kits_financials(db, tenant_id, item)
 
 @router.delete("/{licitacao_id}/items/{item_id}", status_code=204)
@@ -359,7 +378,7 @@ def delete_item(
     
     db.commit()
     
-    LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao_id)
+    LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return None
 
 
@@ -607,4 +626,17 @@ def get_dashboard_summary(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
     return LicitacaoService.get_dashboard_summary(db, tenant_id, company_id, licitacao_id, current_user)
+
+
+@router.get("/{licitacao_id}/reports/envio-proposta")
+def get_envio_proposta_report(
+    licitacao_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    return LicitacoesReportService.generate_envio_proposta_pdf(db, licitacao_id, current_user)
+
 

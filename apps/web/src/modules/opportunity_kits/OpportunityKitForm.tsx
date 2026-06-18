@@ -1374,36 +1374,36 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
                   <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border-subtle">
                     {/* Lucro da Venda */}
-                    <div className={`rounded-xl p-3 relative border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
-                      <div>
+                    <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                      <div className="min-w-0 flex-1">
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Venda</span>
-                        <div className={`text-base font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
-                        <div className="text-[9px] text-text-muted mt-0.5">
+                        <div className={`text-base font-black truncate ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
+                        <div className="text-[9px] text-text-muted mt-0.5 truncate">
                           Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
                         </div>
                         <div className="text-[9px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
-                          <span>Fat: {fmtC(totalVenda)}</span>
-                          <span>Aq: {fmtC(custoB4 + custoB5)}</span>
-                          <span>Imp: {fmtC(impostosB45)}</span>
-                          <span>Desp: {fmtC(despVenda)}</span>
+                          <span className="truncate">Fat: {fmtC(totalVenda)}</span>
+                          <span className="truncate">Aq: {fmtC(custoB4 + custoB5)}</span>
+                          <span className="truncate">Imp: {fmtC(impostosB45)}</span>
+                          <span className="truncate">Desp: {fmtC(despVenda)}</span>
                         </div>
                       </div>
-                      <div className={`absolute top-3 right-3 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                      <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
                         <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
                         <span className="text-sm font-black">{margemVenda.toFixed(1)}%</span>
                       </div>
                     </div>
 
                     {/* Lucro Manutenção 12m */}
-                    <div className={`rounded-xl p-3 relative border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
-                      <div>
+                    <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                      <div className="min-w-0 flex-1">
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manut. (12m)</span>
-                        <div className={`text-base font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
-                        <div className="text-[9px] text-text-muted mt-0.5 font-mono">
+                        <div className={`text-base font-black truncate ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
+                        <div className="text-[9px] text-text-muted mt-0.5 font-mono truncate">
                           {fmtC(lucroMensalB6)}/mês em 12m
                         </div>
                       </div>
-                      <div className={`absolute top-3 right-3 text-right px-2.5 py-1 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                      <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
                         <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
                         <span className="text-sm font-black">{margemManut12m.toFixed(1)}%</span>
                       </div>

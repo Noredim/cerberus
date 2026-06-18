@@ -75,9 +75,24 @@ class LicitacaoService:
             summary["venda_unitario"] = round(venda_unitario, 2)
             summary["custo_unitario"] = round(custo_unitario, 2)
             
+            # Physically persist in DB
+            kit.venda_total = round(venda_total, 2)
+            kit.custo_total = round(custo_total, 2)
+            kit.lucro_estimado = round(lucro_estimado, 2)
+            kit.margem_geral = round(margem_geral, 2)
+            kit.venda_unitario = round(venda_unitario, 2)
+            kit.custo_unitario = round(custo_unitario, 2)
+            
             return venda_total, custo_total, lucro_estimado
         except Exception:
             return Decimal("0.0"), Decimal("0.0"), Decimal("0.0")
+
+    @staticmethod
+    def invalidate_licitacao_totals(db: Session, licitacao_id: UUID) -> None:
+        licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+        if licitacao:
+            licitacao.totais_status = "PENDENTE_RECALCULO"
+            db.commit()
 
     @staticmethod
     def populate_kits_financials(db: Session, tenant_id: str, licitacao: Licitacao) -> Licitacao:
@@ -114,8 +129,8 @@ class LicitacaoService:
                     item.venda_unitario = round(item_venda_total / item_qty, 2)
                     item.custo_unitario = round(item_custo_total / item_qty, 2)
                 else:
-                    item.venda_unitario = None
-                    item.custo_unitario = None
+                    item.venda_unitario = Decimal("0.0")
+                    item.custo_unitario = Decimal("0.0")
                     
                 lote_venda_total += item_venda_total
                 lote_custo_total += item_custo_total
@@ -138,31 +153,50 @@ class LicitacaoService:
     def populate_item_kits_financials(db: Session, tenant_id: str, item: LicitacaoItem) -> LicitacaoItem:
         if not item:
             return item
-        kit_service = OpportunityKitService(db)
-        
-        item_venda_total = Decimal("0.0")
-        item_custo_total = Decimal("0.0")
-        item_lucro_estimado = Decimal("0.0")
-        
+            
+        # In-memory mapping from physical columns for O(1) fetch
         for kit in item.kits:
-            v_t, c_t, l_e = LicitacaoService._calculate_kit_financials(kit, tenant_id, kit_service)
-            item_venda_total += v_t
-            item_custo_total += c_t
-            item_lucro_estimado += l_e
+            venda_unit = kit.venda_unitario or Decimal("0.0")
+            prazo = kit.prazo_contrato_meses or 1
+            qty_kits = kit.quantidade_kits or 1
             
-        item.venda_total = round(item_venda_total, 2)
-        item.custo_total = round(item_custo_total, 2)
-        item.lucro_estimado = round(item_lucro_estimado, 2)
-        item.margem_geral = round((item_lucro_estimado / item_venda_total * Decimal("100.0")) if item_venda_total > 0 else Decimal("0.0"), 2)
-        
-        item_qty = Decimal(str(item.quantidade or 1))
-        if item.tipo_fornecimento == "Unitário" and item_qty > 0:
-            item.venda_unitario = round(item_venda_total / item_qty, 2)
-            item.custo_unitario = round(item_custo_total / item_qty, 2)
-        else:
-            item.venda_unitario = None
-            item.custo_unitario = None
+            valor_mensal = (
+                (venda_unit / Decimal(str(prazo)))
+                if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
+                else venda_unit
+            )
             
+            lucro_est = kit.lucro_estimado or Decimal("0.0")
+            lucro_mensal = (
+                (lucro_est / Decimal(str(qty_kits)) / Decimal(str(prazo)))
+                if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
+                else (lucro_est / Decimal(str(qty_kits)))
+            )
+
+            kit.summary = {
+                "venda_total": kit.venda_total or Decimal("0.0"),
+                "custo_total": kit.custo_total or Decimal("0.0"),
+                "lucro_estimado": kit.lucro_estimado or Decimal("0.0"),
+                "margem_geral": kit.margem_geral or Decimal("0.0"),
+                "venda_unitario": venda_unit,
+                "custo_unitario": kit.custo_unitario or Decimal("0.0"),
+                "custo_aquisicao_kit": kit.custo_unitario or Decimal("0.0"),
+                "custo_aquisicao_total": kit.custo_total or Decimal("0.0"),
+                "valor_mensal_kit": valor_mensal,
+                "lucro_mensal_kit": lucro_mensal,
+                "margem_kit": kit.margem_geral or Decimal("0.0"),
+                "vlr_instal_calc": Decimal("0.0"),
+                "valor_impostos": Decimal("0.0"),
+                "total_ipi_kit": Decimal("0.0"),
+                "total_st_kit": Decimal("0.0"),
+                "total_difal_kit": Decimal("0.0"),
+                "vlt_frete_venda": Decimal("0.0"),
+                "vlt_despesas_adm": Decimal("0.0"),
+                "vlt_comissao": Decimal("0.0"),
+                "tipo_contrato": kit.tipo_contrato,
+                "quantidade_kits": kit.quantidade_kits,
+                "prazo_contrato_meses": kit.prazo_contrato_meses
+            }
         return item
 
     @staticmethod
@@ -174,7 +208,53 @@ class LicitacaoService:
         ).first()
         if not licitacao:
             raise HTTPException(status_code=404, detail="Licitação não encontrada")
-        return LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
+            
+        # Populate minimal kit summaries in-memory from physical columns for frontend compatibility
+        for lote in licitacao.lotes:
+            for item in lote.items:
+                for kit in item.kits:
+                    venda_unit = kit.venda_unitario or Decimal("0.0")
+                    prazo = kit.prazo_contrato_meses or 1
+                    qty_kits = kit.quantidade_kits or 1
+                    
+                    valor_mensal = (
+                        (venda_unit / Decimal(str(prazo)))
+                        if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
+                        else venda_unit
+                    )
+                    
+                    lucro_est = kit.lucro_estimado or Decimal("0.0")
+                    lucro_mensal = (
+                        (lucro_est / Decimal(str(qty_kits)) / Decimal(str(prazo)))
+                        if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
+                        else (lucro_est / Decimal(str(qty_kits)))
+                    )
+
+                    kit.summary = {
+                        "venda_total": kit.venda_total or Decimal("0.0"),
+                        "custo_total": kit.custo_total or Decimal("0.0"),
+                        "lucro_estimado": kit.lucro_estimado or Decimal("0.0"),
+                        "margem_geral": kit.margem_geral or Decimal("0.0"),
+                        "venda_unitario": venda_unit,
+                        "custo_unitario": kit.custo_unitario or Decimal("0.0"),
+                        "custo_aquisicao_kit": kit.custo_unitario or Decimal("0.0"),
+                        "custo_aquisicao_total": kit.custo_total or Decimal("0.0"),
+                        "valor_mensal_kit": valor_mensal,
+                        "lucro_mensal_kit": lucro_mensal,
+                        "margem_kit": kit.margem_geral or Decimal("0.0"),
+                        "vlr_instal_calc": Decimal("0.0"),
+                        "valor_impostos": Decimal("0.0"),
+                        "total_ipi_kit": Decimal("0.0"),
+                        "total_st_kit": Decimal("0.0"),
+                        "total_difal_kit": Decimal("0.0"),
+                        "vlt_frete_venda": Decimal("0.0"),
+                        "vlt_despesas_adm": Decimal("0.0"),
+                        "vlt_comissao": Decimal("0.0"),
+                        "tipo_contrato": kit.tipo_contrato,
+                        "quantidade_kits": kit.quantidade_kits,
+                        "prazo_contrato_meses": kit.prazo_contrato_meses
+                    }
+        return licitacao
 
     @staticmethod
     def create_licitacao(db: Session, tenant_id: str, company_id: str, data: LicitacaoCreate, current_user: User = None) -> Licitacao:
@@ -347,15 +427,17 @@ class LicitacaoService:
 
         db.commit()
         db.refresh(licitacao)
-
-        # Recalculate margins and check limits
-        LicitacaoService.recalculate_licitacao(db, tenant_id, licitacao.id)
         
         # Alçada de aprovação check
         if current_user and new_status == "Aprovada para Envio":
+            if licitacao.totais_status == "PENDENTE_RECALCULO":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Não é possível aprovar a licitação enquanto houver recálculos pendentes. Por favor, clique em 'Recalcular Margem' primeiro."
+                )
             LicitacaoService.validate_licitacao_approval(db, current_user, company_id, licitacao)
 
-        return LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
+        return LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao.id, company_id)
 
     @staticmethod
     def delete_licitacao(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID) -> bool:
@@ -373,58 +455,26 @@ class LicitacaoService:
         if not licitacao:
             return None
 
-        # Fetch all kits linked to this licitacao
-        kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_id == licitacao_id).all()
+        # Hierarchical recalculation and model population
+        licitacao = LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
         
-        kit_service = OpportunityKitService(db)
+        # Recalculate global valor_total_venda and margem_ponderada_global
         total_venda = Decimal("0.0")
         total_lucro_global = Decimal("0.0")
-        total_estimado = Decimal("0.0")
-
-        for kit in kits:
-            try:
-                # Recalculate financials dynamically
-                fin = kit_service.calculate_financials(kit, tenant_id)
-                summary = fin.get("summary", {})
-                
-                qty = Decimal(str(kit.quantidade_kits or 1))
-                
-                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
-                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
-                    
-                    total_venda += valor_mensal_kit
-                    total_lucro_global += lucro_mensal_kit
-                else:
-                    # Rental or Comodato lifetime
-                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
-                    vlr_instal_calc = sa_val = Decimal(str(summary.get("vlr_instal_calc", 0)))
-                    prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
-                    
-                    fat_lifetime = valor_mensal_kit * Decimal(prazo_mensalidades) + vlr_instal_calc
-                    
-                    # We compute profit lifetime
-                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
-                    # Recalculate upfront setup installation profit if applicable
-                    # (Installation margin is factor * setup cost minus taxes and commission)
-                    imposto_instalacao = Decimal(str(summary.get("imposto_instalacao", 0)))
-                    lucro_instalacao = vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * Decimal(str(kit.perc_comissao or 0)) / Decimal("100.0"))
-                    
-                    lucro_lifetime = (lucro_mensal_kit * Decimal(prazo_mensalidades)) + lucro_instalacao
-                    
-                    total_venda += fat_lifetime
-                    total_lucro_global += lucro_lifetime
-
-            except Exception as e:
-                # Fallback to model values if calculation fails
-                pass
-
-        licitacao.valor_total_venda = total_venda
+        
+        for lote in licitacao.lotes:
+            total_venda += lote.venda_total
+            total_lucro_global += lote.lucro_estimado
+            
+        licitacao.valor_total_venda = round(total_venda, 2)
         if total_venda > 0:
-            licitacao.margem_ponderada_global = (total_lucro_global / total_venda) * Decimal("100.0")
+            licitacao.margem_ponderada_global = round((total_lucro_global / total_venda) * Decimal("100.0"), 2)
         else:
             licitacao.margem_ponderada_global = Decimal("0.0")
-
+            
+        licitacao.totais_status = "ATUALIZADO"
+        licitacao.totais_atualizados_em = datetime.now()
+        
         db.commit()
         db.refresh(licitacao)
         return licitacao

@@ -146,7 +146,7 @@ def delete_kit(
                 f"{current_user.name} excluiu o kit {nome_kit}."
             )
             db.commit()
-            LicitacaoService.recalculate_licitacao(db, current_user.tenant_id, licitacao_id)
+            LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
         except Exception:
             pass
             

@@ -102,6 +102,8 @@ interface LicitacaoDetail {
   created_at?: string;
   custo_total?: number;
   lucro_estimado?: number;
+  totais_status?: string;
+  totais_atualizados_em?: string;
 }
 
 interface PurchaseBudgetSummary {
@@ -141,6 +143,7 @@ export function LicitacaoForm() {
   const [loading, setLoading] = useState(true);
   const [savingHeader, setSavingHeader] = useState(false);
   const [detail, setDetail] = useState<LicitacaoDetail | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   
   // Tabs State
   const [searchParams] = useSearchParams();
@@ -232,25 +235,65 @@ export function LicitacaoForm() {
     }
   }, [id]);
 
+  const ensureCustomersLoaded = async () => {
+    if (customers.length > 0) return;
+    try {
+      const res = await api.get('/cadastro/clientes', { params: { limit: 500 } });
+      setCustomers(Array.isArray(res.data) ? res.data : res.data.items || []);
+    } catch (err) {
+      console.error('Failed to load customers:', err);
+    }
+  };
+
+  const ensureUsersLoaded = async () => {
+    if (usersList.length > 0) return;
+    try {
+      const res = await api.get('/users', { params: { limit: 500 } });
+      setUsersList(res.data || []);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    }
+  };
+
+  const ensureStatesLoaded = async () => {
+    if (statesList.length > 0) return;
+    try {
+      const res = await api.get('/catalog/states');
+      setStatesList(res.data || []);
+    } catch (err) {
+      console.error('Failed to load states:', err);
+    }
+  };
+
+  const loadDataForTab = (tabName: string) => {
+    if (tabName === 'dados_gerais') {
+      ensureCustomersLoaded();
+    } else if (tabName === 'equipe') {
+      ensureUsersLoaded();
+    } else if (tabName === 'checklist') {
+      loadChecklist();
+      ensureUsersLoaded();
+    } else if (tabName === 'tarefas') {
+      loadTasks();
+      ensureUsersLoaded();
+    } else if (tabName === 'orcamentos') {
+      loadPurchaseBudgets();
+    } else if (tabName === 'timeline') {
+      loadHistory();
+    }
+  };
+
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [detRes, custRes, appRes, usersRes, historyRes, statesRes] = await Promise.all([
+      const [detRes, appRes] = await Promise.all([
         api.get(`/licitacoes/${id}`),
-        api.get('/cadastro/clientes', { params: { limit: 500 } }),
-        api.get('/sales-budgets/check-approver'),
-        api.get('/users', { params: { limit: 500 } }),
-        api.get(`/licitacoes/${id}/history`),
-        api.get('/catalog/states')
+        api.get('/sales-budgets/check-approver')
       ]);
 
       const d: LicitacaoDetail = detRes.data;
       setDetail(d);
-      setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
       setIsApprover(appRes.data.is_approver || false);
-      setUsersList(usersRes.data || []);
-      setHistoryList(historyRes.data || []);
-      setStatesList(statesRes.data || []);
 
       // Set header states
       setNumeroEdital(d.numero_edital);
@@ -271,8 +314,8 @@ export function LicitacaoForm() {
       });
       setExpandedLotes(expansions);
 
-      // Load purchase budgets associated with this tender
-      loadPurchaseBudgets();
+      // Load additional data depending on the initial tab
+      loadDataForTab(initialTab);
 
     } catch (err) {
       console.error(err);
@@ -512,10 +555,12 @@ export function LicitacaoForm() {
   const handleRecalculate = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/licitacoes/${id}`);
+      const res = await api.post(`/licitacoes/${id}/recalculate`);
       setDetail(res.data);
-    } catch (err) {
+      alert('Margens e totais recalculados com sucesso!');
+    } catch (err: any) {
       console.error(err);
+      alert(err.response?.data?.detail || 'Erro ao recalcular margens');
     } finally {
       setLoading(false);
     }
@@ -551,6 +596,32 @@ export function LicitacaoForm() {
       alert(err.response?.data?.detail || err.message || 'Falha ao salvar cabeçalho');
     } finally {
       setSavingHeader(false);
+    }
+  };
+
+  const handleDownloadPropostaPdf = async () => {
+    try {
+      setDownloadingPdf(true);
+      const response = await api.get(`/licitacoes/${id}/reports/envio-proposta`, {
+        responseType: 'blob'
+      });
+      
+      const file = new Blob([response.data], { type: 'application/pdf' });
+      const fileURL = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = fileURL;
+      
+      const numEditalClean = (detail?.numero_edital || id || 'report').replace(/[\/\\?%*:|"<>]/g, '_');
+      link.setAttribute('download', `envio-proposta-edital-${numEditalClean}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(fileURL);
+    } catch (err: any) {
+      console.error('Failed to download PDF report:', err);
+      alert('Falha ao gerar o relatório em PDF. Por favor, tente novamente ou verifique se as dependências do servidor estão configuradas.');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -1004,6 +1075,25 @@ export function LicitacaoForm() {
         </div>
       )}
 
+      {/* Recalculate Alert Panel */}
+      {detail.totais_status === 'PENDENTE_RECALCULO' && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/35 rounded-xl text-amber-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex gap-3 items-start">
+            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-sm text-text-primary">Os totais financeiros estão desatualizados</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                Houve alterações recentes no edital, lotes, itens ou kits. Por favor, clique em "Recalcular Margem" para atualizar os valores de custo, venda, lucro e margem ponderada.
+              </p>
+            </div>
+          </div>
+          <Button onClick={handleRecalculate} size="sm" className="bg-amber-600 hover:bg-amber-700 text-white border-none shrink-0">
+            <RefreshCw className="w-4 h-4 mr-1.5 animate-pulse" />
+            Recalcular Agora
+          </Button>
+        </div>
+      )}
+
       {/* Tabs Navigation */}
       <nav className="flex gap-1 border-b border-border-subtle p-1 bg-surface rounded-t-lg">
         {[
@@ -1014,6 +1104,7 @@ export function LicitacaoForm() {
           { id: 'tarefas', label: 'Tarefas', icon: ListTodo },
           { id: 'lotes', label: 'Lotes / Itens / Kits', icon: Layers },
           { id: 'orcamentos', label: 'Orçamentos de Compra', icon: FileSpreadsheet },
+          { id: 'relatorios', label: 'Relatórios', icon: FileText },
           { id: 'timeline', label: 'Linha do Tempo', icon: History }
         ].filter(tab => tab.id !== 'checklist' || isPOOrManager).map(tab => (
           <button
@@ -1021,15 +1112,7 @@ export function LicitacaoForm() {
             type="button"
             onClick={() => {
               setActiveTab(tab.id);
-              if (tab.id === 'timeline') {
-                loadHistory();
-              } else if (tab.id === 'orcamentos') {
-                loadPurchaseBudgets();
-              } else if (tab.id === 'checklist') {
-                loadChecklist();
-              } else if (tab.id === 'tarefas') {
-                loadTasks();
-              }
+              loadDataForTab(tab.id);
             }}
             className={`flex items-center gap-2 px-6 py-3 rounded-md text-sm font-bold transition-all cursor-pointer ${
               activeTab === tab.id
@@ -1071,6 +1154,8 @@ export function LicitacaoForm() {
                     disabled={isLocked}
                     value={customerId}
                     onChange={e => setCustomerId(e.target.value)}
+                    onClick={() => ensureCustomersLoaded()}
+                    onFocus={() => ensureCustomersLoaded()}
                     className="flex-1 bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary"
                   >
                     <option value="">Selecione o órgão...</option>
@@ -1082,7 +1167,10 @@ export function LicitacaoForm() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setQuickClientModal(true)}
+                      onClick={() => {
+                        ensureStatesLoaded();
+                        setQuickClientModal(true);
+                      }}
                       className="px-3"
                       title="Cadastrar novo Órgão por CNPJ"
                     >
@@ -2456,6 +2544,58 @@ export function LicitacaoForm() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'relatorios' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle/40 pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-brand-primary" />
+                  Central de Relatórios da Licitação
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Selecione um dos relatórios disponíveis abaixo para gerar e exportar em formato PDF.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-5 space-y-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-text-primary uppercase tracking-wide">Relatório de Envio de Proposta</h4>
+                  <p className="text-xs text-text-muted leading-relaxed">
+                    Compila e formata toda a precificação comercial organizada por Lote, Item e Kit.
+                    Inclui preços de venda atuais, preços mínimos, descontos máximos concedidos e margens consolidadas por nível.
+                  </p>
+                  <p className="text-[10px] text-amber-600 font-semibold mt-1">
+                    Nota: Colunas de custo e lucro serão automaticamente ocultadas se você não tiver as permissões necessárias.
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-border-subtle/30 flex items-center justify-between">
+                  <span className="text-xs font-bold text-text-muted">Formato: PDF (A4 Retrato)</span>
+                  <Button
+                    type="button"
+                    disabled={downloadingPdf}
+                    onClick={handleDownloadPropostaPdf}
+                    className="flex items-center gap-1.5 font-bold"
+                  >
+                    {downloadingPdf ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4" />
+                        Exportar PDF
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

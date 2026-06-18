@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Relatório de Envio de Proposta comercial do sistema Cerberus.">
+    <title>Relatório de Envio de Proposta - Edital {{ licitacao.numero_edital }}</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO DA PRIMEIRA PÁGINA -->
+    <div class="first-page-header">
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+            <tr>
+                <!-- LOGO DA EMPRESA SELECIONADA -->
+                <td style="width: 30%; vertical-align: middle; padding: 0;">
+                    {% if company_logo %}
+                        <img src="{{ company_logo }}" alt="Logo Empresa" style="max-height: 45px; max-width: 180px; display: block;" />
+                    {% else %}
+                        <div style="font-size: 13pt; font-weight: bold; color: #0f172a; text-transform: uppercase; font-family: 'Outfit', 'Inter', sans-serif;">
+                            {{ licitacao.company_nome }}
+                        </div>
+                    {% endif %}
+                </td>
+                
+                <!-- DADOS DA LICITAÇÃO -->
+                <td style="width: 70%; text-align: right; vertical-align: middle; padding: 0; font-size: 7.5pt; color: #475569; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 2px;">
+                        Relatório de Envio de Proposta
+                    </div>
+                    <div>
+                        <strong>Edital:</strong> {{ licitacao.numero_edital }}
+                    </div>
+                    <div style="margin-top: 1px;">
+                        <strong>Cliente:</strong> {{ licitacao.customer_nome }}
+                    </div>
+                    <div style="margin-top: 1px;">
+                        <strong>Responsável (P.O.):</strong> {{ licitacao.po_nome }} &nbsp;|&nbsp; 
+                        <strong>Status:</strong> 
+                        <span class="status-badge {{ licitacao.status }}">
+                            {{ licitacao.status }}
+                        </span>
+                    </div>
+                    <div style="margin-top: 1px;">
+                        <strong>Modalidade:</strong> {{ licitacao.modalidade }} &nbsp;|&nbsp;
+                        <strong>Tipo:</strong> {{ licitacao.tipo_licitacao }}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- COMPACT KPI PANEL -->
+        <div class="compact-kpi-row">
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Venda Atual (Total)</span>
+                <span class="kpi-val" style="color: #1e3a8a;">R$ {{ geral_totals.preco_atual }}</span>
+            </div>
+            {% if can_see_cost %}
+                <div class="compact-kpi-card">
+                    <span class="kpi-label">Venda Mínima (Total)</span>
+                    <span class="kpi-val" style="color: #475569;">R$ {{ geral_totals.preco_minimo }}</span>
+                </div>
+                <div class="compact-kpi-card">
+                    <span class="kpi-label">Margem Atual Ponderada</span>
+                    <span class="kpi-val" style="color: #10b981;">{{ geral_totals.margem_atual }}</span>
+                </div>
+                <div class="compact-kpi-card">
+                    <span class="kpi-label">Margem Mínima Ponderada</span>
+                    <span class="kpi-val" style="color: #059669;">{{ geral_totals.margem_minima }}</span>
+                </div>
+            {% endif %}
+            <div class="compact-kpi-card">
+                <span class="kpi-label">Desconto Máx. Permitido</span>
+                <span class="kpi-val" style="color: #b91c1c;">R$ {{ geral_totals.desconto_max_val }} ({{ geral_totals.desconto_max_pct }})</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOOP DE LOTES -->
+    {% for lote in lotes_data %}
+        <div class="lote-section avoid-break">
+            <div class="lote-header">{{ lote.nome_lote }}</div>
+            
+            <!-- LOOP DE ITENS DO LOTE -->
+            {% for item in lote["items"] %}
+                <div class="item-block avoid-break">
+                    <div class="item-header">{{ item.nome_concatenado }}</div>
+                    
+                    {% if item.has_kits %}
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 25%;">Kit de Oportunidade</th>
+                                    <th class="text-center" style="width: 6%;">Qtd</th>
+                                    <th class="text-center" style="width: 12%;">Tipo Contrato</th>
+                                    <th class="text-right" style="width: 12%;">Preço Atual</th>
+                                    <th class="text-center" style="width: 6%;">Fat. At.</th>
+                                    {% if can_see_cost %}
+                                        <th class="text-center" style="width: 8%;">Marg. At.</th>
+                                        <th class="text-right" style="width: 12%;">Preço Mín.</th>
+                                        <th class="text-center" style="width: 6%;">Fat. Mín.</th>
+                                        <th class="text-center" style="width: 8%;">Marg. Mín.</th>
+                                    {% endif %}
+                                    <th class="text-right" style="width: 15%;">Desconto Máx.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for kit in item.kits %}
+                                    <tr>
+                                        <td>{{ kit.nome_kit }}</td>
+                                        <td class="text-center">{{ kit.quantidade }}</td>
+                                        <td class="text-center" style="font-size: 7pt;">{{ kit.tipo_contrato }}</td>
+                                        <td class="text-right font-bold">R$ {{ kit.preco_atual }}</td>
+                                        <td class="text-center">{{ kit.fator_atual }}</td>
+                                        {% if can_see_cost %}
+                                            <td class="text-center" style="color: #10b981;">{{ kit.margem_atual }}</td>
+                                            <td class="text-right">R$ {{ kit.preco_minimo }}</td>
+                                            <td class="text-center">{{ kit.fator_minimo }}</td>
+                                            <td class="text-center" style="color: #059669;">{{ kit.margem_minima }}</td>
+                                        {% endif %}
+                                        <td class="text-right" style="color: #b91c1c;">
+                                            {% if kit.preco_minimo == 'Não calculado' %}
+                                                ---
+                                            {% else %}
+                                                R$ {{ kit.desconto_max_val }}<br/>
+                                                <span style="font-size: 6.5pt; color: #ef4444;">({{ kit.desconto_max_pct }})</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                
+                                <!-- TOTALIZADOR DO ITEM -->
+                                <tr class="total-row">
+                                    <td>TOTAL DO ITEM</td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">R$ {{ item.preco_atual }}</td>
+                                    <td class="text-center">-</td>
+                                    {% if can_see_cost %}
+                                        <td class="text-center" style="color: #10b981;">{{ item.margem_atual }}</td>
+                                        <td class="text-right">R$ {{ item.preco_minimo }}</td>
+                                        <td class="text-center">-</td>
+                                        <td class="text-center" style="color: #059669;">{{ item.margem_minima }}</td>
+                                    {% endif %}
+                                    <td class="text-right" style="color: #b91c1c;">
+                                        {% if item.preco_minimo == 'Não calculado' %}
+                                            ---
+                                        {% else %}
+                                            R$ {{ item.desconto_max_val }}<br/>
+                                            <span style="font-size: 6.5pt; color: #ef4444;">({{ item.desconto_max_pct }})</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div style="font-size: 7.5pt; color: #64748b; font-style: italic; padding: 4px 6px; border: 1px dashed #cbd5e1; border-radius: 4px; margin-bottom: 8px;">
+                            Não há Kits de Oportunidade vinculados a este item.
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            
+            <!-- TOTALIZADOR DO LOTE -->
+            <div class="avoid-break" style="margin-top: 10px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; margin-bottom: 15px;">
+                <table class="data-table" style="margin-bottom: 0;">
+                    <tbody>
+                        <tr style="background-color: #eff6ff; font-weight: bold;">
+                            <td style="width: 25%; font-size: 8pt; color: #1e3a8a;">TOTAL CONSOLIDADO DO LOTE</td>
+                            <td class="text-right" style="width: 20%; font-size: 8pt; color: #1e3a8a;">Preço: R$ {{ lote.preco_atual }}</td>
+                            {% if can_see_cost %}
+                                <td class="text-center" style="width: 15%; font-size: 8pt; color: #10b981;">Margem: {{ lote.margem_atual }}</td>
+                                <td class="text-right" style="width: 20%; font-size: 8pt; color: #475569;">Mínimo: R$ {{ lote.preco_minimo }}</td>
+                                <td class="text-center" style="width: 15%; font-size: 8pt; color: #059669;">Mín. Margem: {{ lote.margem_minima }}</td>
+                            {% endif %}
+                            <td class="text-right" style="width: 25%; font-size: 8pt; color: #b91c1c;">
+                                Desconto Máx: R$ {{ lote.desconto_max_val }} 
+                                <span style="font-size: 7pt; font-weight: normal; color: #ef4444;">({{ lote.desconto_max_pct }})</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endfor %}
+
+    <!-- RESUMO GERAL DA LICITAÇÃO -->
+    <div class="summary-block avoid-break">
+        <div class="summary-title">Resumo Geral da Licitação</div>
+        <table class="data-table">
+            <thead>
+                <tr style="background-color: #0f172a; color: #ffffff;">
+                    <th>Descrição</th>
+                    <th class="text-right" style="width: 22%;">Venda Atual</th>
+                    {% if can_see_cost %}
+                        <th class="text-center" style="width: 15%;">Margem Geral</th>
+                        <th class="text-right" style="width: 22%;">Venda Mínima</th>
+                        <th class="text-center" style="width: 15%;">Margem Mínima</th>
+                    {% endif %}
+                    <th class="text-right" style="width: 26%;">Desconto Máximo</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="font-weight: bold; background-color: #f8fafc;">
+                    <td>TOTAIS CONSOLIDADOS (LOTE 1 A {{ lotes_data|length }})</td>
+                    <td class="text-right" style="color: #1e3a8a; font-size: 8.5pt;">R$ {{ geral_totals.preco_atual }}</td>
+                    {% if can_see_cost %}
+                        <td class="text-center" style="color: #10b981; font-size: 8.5pt;">{{ geral_totals.margem_atual }}</td>
+                        <td class="text-right" style="color: #475569; font-size: 8.5pt;">R$ {{ geral_totals.preco_minimo }}</td>
+                        <td class="text-center" style="color: #059669; font-size: 8.5pt;">{{ geral_totals.margem_minima }}</td>
+                    {% endif %}
+                    <td class="text-right" style="color: #b91c1c; font-size: 8.5pt;">
+                        R$ {{ geral_totals.desconto_max_val }}<br/>
+                        <span style="font-size: 7pt; font-weight: normal; color: #ef4444;">({{ geral_totals.desconto_max_pct }})</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- AUDITORIA E ASSINATURA -->
+    <div class="audit-info">
+        Relatório emitido pelo sistema Cerberus em {{ emissao_data_hora }} por {{ auditoria.usuario_emissor }}.<br/>
+        ID da Licitação: {{ licitacao.id }} | ID do Usuário: {{ auditoria.usuario_emissor }} | Versão do Documento: v{{ auditoria.versao }}
+    </div>
+
+</body>
+</html>
