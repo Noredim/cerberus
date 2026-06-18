@@ -1,16 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
   FileSpreadsheet, Package, ChevronRight, ChevronDown, 
   Loader2, AlertCircle, ShieldAlert, Award, RefreshCw, Layers, History, Users, Search,
-  CheckSquare, ListTodo, MessageSquare, UserCheck, Activity, Clock, Trash, Play
+  CheckSquare, ListTodo, MessageSquare, UserCheck, Activity, Clock, Trash, Play,
+  LayoutDashboard
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import Modal from '../../components/modals/Modal';
 import { useCompanies } from '../companies/hooks/useCompanies';
+import { Tooltip } from '../../components/ui/Tooltip';
+import { LicitacaoDashboard } from './components/LicitacaoDashboard';
 
 interface KitItem {
   id: string;
@@ -25,6 +28,21 @@ interface KitItem {
     vlr_instal_calc: number;
     imposto_instalacao: number;
     margem_kit: number;
+    venda_total?: number;
+    custo_total?: number;
+    lucro_estimado?: number;
+    margem_geral?: number;
+    venda_unitario?: number;
+    custo_unitario?: number;
+    custo_aquisicao_kit?: number;
+    custo_aquisicao_total?: number;
+    total_ipi_kit?: number;
+    total_st_kit?: number;
+    total_difal_kit?: number;
+    valor_impostos?: number;
+    vlt_frete_venda?: number;
+    vlt_despesas_adm?: number;
+    vlt_comissao?: number;
   };
 }
 
@@ -39,6 +57,12 @@ interface LicitacaoItemData {
   total_meses?: number | null;
   quantidade_total: number;
   kits: KitItem[];
+  custo_unitario?: number | null;
+  custo_total?: number;
+  venda_unitario?: number | null;
+  venda_total?: number;
+  lucro_estimado?: number;
+  margem_geral?: number;
 }
 
 interface LicitacaoLoteData {
@@ -48,6 +72,10 @@ interface LicitacaoLoteData {
   nome: string;
   descricao?: string;
   items: LicitacaoItemData[];
+  custo_total?: number;
+  venda_total?: number;
+  lucro_estimado?: number;
+  margem_geral?: number;
 }
 
 interface LicitacaoDetail {
@@ -72,6 +100,8 @@ interface LicitacaoDetail {
   lotes: LicitacaoLoteData[];
   analistas: any[];
   created_at?: string;
+  custo_total?: number;
+  lucro_estimado?: number;
 }
 
 interface PurchaseBudgetSummary {
@@ -114,7 +144,7 @@ export function LicitacaoForm() {
   
   // Tabs State
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'dados_gerais';
+  const initialTab = searchParams.get('tab') || 'dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
@@ -876,54 +906,37 @@ export function LicitacaoForm() {
 
   const selectedItem = detail?.lotes.flatMap(l => l.items).find(i => i.id === selectedItemId);
 
-  const itemTotals = useMemo(() => {
-    if (!selectedItem || !selectedItem.kits || selectedItem.kits.length === 0) {
-      return { venda: 0, custo: 0, lucro: 0, margem: 0 };
-    }
+  // Consolidation of costs and purchase/sales taxes for selectedItem detail card
+  const totalAquisicaoBase = selectedItem ? selectedItem.kits.reduce((sum, k) => sum + Number(k.summary?.custo_aquisicao_total || 0), 0) : 0;
+  const totalIpi = selectedItem ? selectedItem.kits.reduce((sum, k) => sum + Number(k.summary?.total_ipi_kit || 0) * Number(k.quantidade_kits || 1), 0) : 0;
+  const totalSt = selectedItem ? selectedItem.kits.reduce((sum, k) => sum + Number(k.summary?.total_st_kit || 0) * Number(k.quantidade_kits || 1), 0) : 0;
+  const totalDifal = selectedItem ? selectedItem.kits.reduce((sum, k) => sum + Number(k.summary?.total_difal_kit || 0) * Number(k.quantidade_kits || 1), 0) : 0;
+  const totalAquisicaoTributada = totalAquisicaoBase + totalIpi + totalSt + totalDifal;
 
-    let totalVenda = 0;
-    let totalCusto = 0;
-    let totalLucro = 0;
+  const totalVendaImpostos = selectedItem ? selectedItem.kits.reduce((sum, k) => sum + Number(k.summary?.valor_impostos || 0) * Number(k.quantidade_kits || 1), 0) : 0;
+  const totalVendaDespesas = selectedItem ? selectedItem.kits.reduce((sum, k) => {
+    const sumExp = Number(k.summary?.vlt_frete_venda || 0) + Number(k.summary?.vlt_despesas_adm || 0) + Number(k.summary?.vlt_comissao || 0);
+    return sum + sumExp * Number(k.quantidade_kits || 1);
+  }, 0) : 0;
+  const totalCustosVenda = totalVendaImpostos + totalVendaDespesas;
 
-    const isUnitario = selectedItem.tipo_fornecimento === 'Unitário';
-    const months = selectedItem.tipo_fornecimento === 'Mensal' ? Number(selectedItem.total_meses || 1) : 1;
+  // Global/Licitacao level consolidations for top-level consolidated header
+  const globalKits = detail?.lotes.flatMap(l => l.items).flatMap(i => i.kits) || [];
+  
+  const globalAquisicaoBase = globalKits.reduce((sum, k) => sum + Number(k.summary?.custo_aquisicao_total || 0), 0);
+  const globalIpi = globalKits.reduce((sum, k) => sum + Number(k.summary?.total_ipi_kit || 0) * Number(k.quantidade_kits || 1), 0);
+  const globalSt = globalKits.reduce((sum, k) => sum + Number(k.summary?.total_st_kit || 0) * Number(k.quantidade_kits || 1), 0);
+  const globalDifal = globalKits.reduce((sum, k) => sum + Number(k.summary?.total_difal_kit || 0) * Number(k.quantidade_kits || 1), 0);
+  const globalAquisicaoTributada = globalAquisicaoBase + globalIpi + globalSt + globalDifal;
 
-    selectedItem.kits.forEach(k => {
-      const summary = k.summary;
-      if (!summary) return;
+  const globalVendaImpostos = globalKits.reduce((sum, k) => sum + Number(k.summary?.valor_impostos || 0) * Number(k.quantidade_kits || 1), 0);
+  const globalVendaDespesas = globalKits.reduce((sum, k) => {
+    const sumExp = Number(k.summary?.vlt_frete_venda || 0) + Number(k.summary?.vlt_despesas_adm || 0) + Number(k.summary?.vlt_comissao || 0);
+    return sum + sumExp * Number(k.quantidade_kits || 1);
+  }, 0);
+  const globalCustosVenda = globalVendaImpostos + globalVendaDespesas;
 
-      const valorMensal = Number(summary.valor_mensal_kit || 0);
-      const custoTotalMensal = Number(summary.custo_total_mensal_kit || 0);
-      const lucroMensal = Number(summary.lucro_mensal_kit || 0);
-      const vlrInstal = Number(summary.vlr_instal_calc || 0);
-      const impostoInstal = Number(summary.imposto_instalacao || 0);
-      const percComissao = Number(k.perc_comissao || 0);
-
-      if (isUnitario) {
-        totalVenda += valorMensal;
-        totalCusto += custoTotalMensal;
-        totalLucro += lucroMensal;
-      } else {
-        const lucroInstalacao = vlrInstal - impostoInstal - (vlrInstal * percComissao / 100);
-
-        const kitVendaTotal = valorMensal * months + vlrInstal;
-        const kitLucroTotal = (lucroMensal * months) + lucroInstalacao;
-
-        totalVenda += kitVendaTotal;
-        totalLucro += kitLucroTotal;
-        totalCusto += (kitVendaTotal - kitLucroTotal);
-      }
-    });
-
-    const margemGeral = totalVenda > 0 ? (totalLucro / totalVenda) * 100 : 0;
-
-    return {
-      venda: totalVenda,
-      custo: totalCusto,
-      lucro: totalLucro,
-      margem: margemGeral
-    };
-  }, [selectedItem]);
+  const canSeeCostAndProfit = isPOOrManager;
 
   if (loading) {
     return (
@@ -994,6 +1007,7 @@ export function LicitacaoForm() {
       {/* Tabs Navigation */}
       <nav className="flex gap-1 border-b border-border-subtle p-1 bg-surface rounded-t-lg">
         {[
+          { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
           { id: 'dados_gerais', label: 'Dados Gerais', icon: FileText },
           { id: 'equipe', label: 'Equipe', icon: Users },
           { id: 'checklist', label: 'Checklist', icon: CheckSquare },
@@ -1031,6 +1045,9 @@ export function LicitacaoForm() {
 
       {/* Tab Contents */}
       <div className="bg-surface rounded-b-lg border border-t-0 border-border-subtle p-6 shadow-sm">
+        {activeTab === 'dashboard' && (
+          <LicitacaoDashboard licitacaoId={id!} />
+        )}
         {activeTab === 'dados_gerais' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1321,288 +1338,551 @@ export function LicitacaoForm() {
         )}
 
         {activeTab === 'lotes' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Tree Navigation Card */}
-            <div className="lg:col-span-1 space-y-4">
-              <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-5 space-y-4">
-                <div className="flex items-center justify-between border-b border-border-subtle/40 pb-2">
-                  <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-brand-primary" />
-                    Estrutura de Lotes
-                  </h2>
-                  {!isLocked && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenLoteModal()}
-                      className="text-xs text-brand-primary hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" /> Lote
-                    </button>
-                  )}
-                </div>
-
-                {detail.lotes.length === 0 ? (
-                  <p className="text-xs text-text-muted text-center py-6">Nenhum lote criado neste edital.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {detail.lotes.map(l => {
-                      const isExpanded = expandedLotes[l.id];
-                      return (
-                        <div key={l.id} className="border border-border-subtle/50 rounded-lg p-2 bg-bg-deep/15">
-                          {/* Lote Header */}
-                          <div className="flex items-center justify-between group">
-                            <button
-                              type="button"
-                              onClick={() => toggleLoteExpansion(l.id)}
-                              className="flex items-center gap-1.5 font-semibold text-xs text-text-primary hover:text-brand-primary text-left cursor-pointer"
-                            >
-                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
-                              <span>Lote {l.numero}: {l.nome}</span>
-                            </button>
-                            
-                            {!isLocked && (
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onClick={() => handleOpenItemModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Adicionar Item">
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                                <button type="button" onClick={() => handleOpenLoteModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Editar Lote">
-                                  <Edit2 className="w-3 h-3" />
-                                </button>
-                                <button type="button" onClick={() => handleTriggerDeleteLote(l.id, l.nome)} className="p-1 text-text-muted hover:text-rose-600" title="Excluir Lote">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            )}
+          <div className="space-y-6">
+            {/* Nível 1: Licitação Consolidated Totals */}
+            <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-bg-deep/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2'}`}>
+              <div className="space-y-1">
+                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Venda Global</span>
+                <span className="text-lg font-extrabold text-brand-primary tabular-nums block">
+                  {Number(detail.valor_total_venda || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+              {canSeeCostAndProfit && (
+                <>
+                  {/* Custo de Aquisição (NEW) */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo de Aquisição</span>
+                    <Tooltip
+                      variant="light"
+                      content={
+                        <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                          <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição Global</div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">Custo Base (Compra):</span>
+                            <span className="font-mono font-semibold">
+                              {globalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
                           </div>
-
-                          {/* Items */}
-                          {isExpanded && (
-                            <div className="mt-2 pl-4 space-y-1 border-l border-border-subtle/40 ml-1.5">
-                              {l.items.length === 0 ? (
-                                <p className="text-[10px] text-text-muted py-1.5">Sem itens neste lote.</p>
-                              ) : (
-                                l.items.map(item => {
-                                  const isSelected = selectedItemId === item.id;
-                                  return (
-                                    <div
-                                      key={item.id}
-                                      onClick={() => {
-                                        setSelectedItemId(item.id);
-                                      }}
-                                      className={`flex items-center justify-between p-1.5 rounded-md cursor-pointer group text-xs transition-colors ${isSelected ? 'bg-brand-primary/10 text-brand-primary font-bold' : 'text-text-muted hover:text-text-primary hover:bg-bg-deep/40'}`}
-                                    >
-                                      <span className="truncate pr-2">Item {item.codigo} — {item.nome}</span>
-                                      {!isLocked && (
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleOpenItemModal(l.id, item.id); }}
-                                            className="p-0.5 text-text-muted hover:text-brand-primary"
-                                            title="Editar Item"
-                                          >
-                                            <Edit2 className="w-3 h-3" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleTriggerDeleteItem(item.id, item.nome); }}
-                                            className="p-0.5 text-text-muted hover:text-rose-600"
-                                            title="Excluir Item"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })
-                              )}
-                            </div>
-                          )}
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">IPI de Compra:</span>
+                            <span className="font-mono font-semibold">
+                              {globalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">ICMS ST de Compra:</span>
+                            <span className="font-mono font-semibold">
+                              {globalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">DIFAL de Compra:</span>
+                            <span className="font-mono font-semibold">
+                              {globalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                            <span>Total Aquisição:</span>
+                            <span className="font-mono">
+                              {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
                         </div>
-                      )
-                    })}
+                      }
+                    >
+                      <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                        {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </Tooltip>
                   </div>
-                )}
+
+                  {/* Custos de Venda (NEW) */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
+                    <Tooltip
+                      variant="light"
+                      content={
+                        <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                          <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda Global</div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">Impostos sobre Venda:</span>
+                            <span className="font-mono font-semibold">
+                              {globalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-slate-500">Despesas / Comissões / Frete:</span>
+                            <span className="font-mono font-semibold">
+                              {globalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                            <span>Total Venda:</span>
+                            <span className="font-mono">
+                              {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                        </div>
+                      }
+                    >
+                      <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                        {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </Tooltip>
+                  </div>
+
+                  {/* Custo Global */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo Global</span>
+                    <span className="text-lg font-extrabold text-text-primary tabular-nums block">
+                      {Number(detail.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+
+                  {/* Lucro Estimado */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
+                    <span className="text-lg font-extrabold text-text-primary tabular-nums block">
+                      {Number(detail.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className={`space-y-1 ${canSeeCostAndProfit ? 'border-l border-border-subtle/30 pl-4' : ''}`}>
+                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Global</span>
+                <span className="text-lg font-extrabold text-emerald-600 tabular-nums block">
+                  {Number(detail.margem_ponderada_global || 0).toFixed(2)}%
+                </span>
               </div>
             </div>
 
-            {/* Right Column: Selected Item Detail & Opportunity Kits */}
-            <div className="lg:col-span-2 space-y-4">
-              {selectedItem ? (
-                <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-6 space-y-6">
-                  {/* Item Details */}
-                  <div className="flex items-start justify-between border-b border-border-subtle/40 pb-4">
-                    <div className="space-y-1">
-                      <h3 className="text-lg font-bold text-text-primary">
-                        Item {selectedItem.codigo}: {selectedItem.nome}
-                      </h3>
-                      <p className="text-text-muted text-sm">{selectedItem.descricao || 'Sem descrição cadastrada'}</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted pt-1">
-                        <span>Fornecimento: <strong className="text-text-primary">{selectedItem.tipo_fornecimento || 'Unitário'}</strong></span>
-                        {selectedItem.tipo_fornecimento === 'Mensal' && (
-                          <span>Duração: <strong className="text-text-primary">{selectedItem.total_meses} meses</strong></span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="text-right border-r border-border-subtle/40 pr-4">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold">Qtd. Unitária</span>
-                        <span className="text-lg font-bold text-text-primary mt-0.5 block">{Number(selectedItem.quantidade)}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold text-brand-primary">Qtd. Total</span>
-                        <span className="text-lg font-bold text-brand-primary mt-0.5 block">{Number(selectedItem.quantidade_total ?? selectedItem.quantidade)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Item Consolidated Totalizer */}
-                  {selectedItem.kits.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl border border-border-subtle/80 bg-slate-50/10 shadow-sm">
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Venda</span>
-                        <span className="text-base font-extrabold text-brand-primary tabular-nums block">
-                          {itemTotals.venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      </div>
-                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Custo</span>
-                        <span className="text-base font-extrabold text-text-primary tabular-nums block">
-                          {itemTotals.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      </div>
-                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
-                        <span className="text-base font-extrabold text-text-primary tabular-nums block">
-                          {itemTotals.lucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      </div>
-                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Geral</span>
-                        <span className="text-base font-extrabold text-emerald-600 tabular-nums block">
-                          {itemTotals.margem.toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Kits Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
-                        <Package className="w-4 h-4 text-brand-primary" />
-                        Kits de Oportunidade Associados
-                      </h4>
-                      {!isLocked && (
-                        <Button type="button" onClick={() => handleOpenKitCreate(selectedItem.id)} size="sm">
-                          <Plus className="w-3.5 h-3.5 mr-1" /> Novo Kit
-                        </Button>
-                      )}
-                    </div>
-
-                    {selectedItem.kits.length === 0 ? (
-                      <div className="text-center py-12 border border-dashed border-border-subtle/80 rounded-xl text-text-muted text-xs space-y-2">
-                        <p>Nenhum kit de oportunidade cadastrado para este item.</p>
-                        <p className="text-[10px]">Toda precificação de item de licitação deve ser feita através de um Kit customizado.</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-hidden rounded-lg border border-border-subtle/60 bg-bg-surface">
-                        <table className="w-full text-xs text-left border-collapse">
-                          <thead>
-                            <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold">
-                              <th className="py-2.5 px-4">Nome do Kit</th>
-                              <th className="py-2.5 px-4">Operação / Contrato</th>
-                              {selectedItem.tipo_fornecimento === 'Unitário' ? (
-                                <>
-                                  <th className="py-2.5 px-4 text-right">Valor de Venda Unitário</th>
-                                  <th className="py-2.5 px-4 text-right">Quantidade</th>
-                                  <th className="py-2.5 px-4 text-right">Venda Total</th>
-                                </>
-                              ) : (
-                                <>
-                                  <th className="py-2.5 px-4 text-right">Mensal</th>
-                                  <th className="py-2.5 px-4 text-right">Setup / Instalação</th>
-                                </>
-                              )}
-                              <th className="py-2.5 px-4 text-right">Margem</th>
-                              <th className="py-2.5 px-4 text-center">Ações</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedItem.kits.map(k => {
-                              const isUnitario = selectedItem.tipo_fornecimento === 'Unitário';
-                              const quantity = Number(selectedItem.quantidade || 0);
-                              const vendaTotal = Number(k.summary?.valor_mensal_kit || 0);
-                              const valorVendaUnitario = quantity > 0 ? vendaTotal / quantity : 0;
-
-                              return (
-                                <tr key={k.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
-                                  <td className="py-3 px-4 font-semibold text-text-primary">{k.nome_kit}</td>
-                                  <td className="py-3 px-4 font-mono uppercase text-text-muted tracking-wider">{k.tipo_contrato}</td>
-                                  
-                                  {isUnitario ? (
-                                    <>
-                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                        {valorVendaUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                      </td>
-                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                        {quantity}
-                                      </td>
-                                      <td className="py-3 px-4 text-right font-mono text-brand-primary tabular-nums font-semibold">
-                                        {vendaTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                      </td>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                        {Number(k.summary?.valor_mensal_kit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                      </td>
-                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                        {Number(k.summary?.vlr_instal_calc || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                      </td>
-                                    </>
-                                  )}
-                                  
-                                  <td className="py-3 px-4 text-right font-bold text-brand-primary tabular-nums">
-                                    {Number(k.summary?.margem_kit || 0).toFixed(2)}%
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <div className="flex justify-center items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
-                                        className="p-1 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer"
-                                        title="Editar Simulação do Kit"
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      {!isLocked && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id)}
-                                          className="p-1 hover:bg-rose-50 text-rose-600 rounded cursor-pointer"
-                                          title="Excluir Kit"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Tree Navigation Card */}
+              <div className="lg:col-span-1 space-y-4">
+                <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-border-subtle/40 pb-2">
+                    <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-brand-primary" />
+                      Estrutura de Lotes
+                    </h2>
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLoteModal()}
+                        className="text-xs text-brand-primary hover:underline flex items-center gap-0.5 font-bold cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Lote
+                      </button>
                     )}
                   </div>
+
+                  {detail.lotes.length === 0 ? (
+                    <p className="text-xs text-text-muted text-center py-6">Nenhum lote criado neste edital.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.lotes.map(l => {
+                        const isExpanded = expandedLotes[l.id];
+                        return (
+                          <div key={l.id} className="border border-border-subtle/50 rounded-lg p-2 bg-bg-deep/15">
+                            {/* Lote Header */}
+                            <div className="flex items-center justify-between group">
+                              <button
+                                type="button"
+                                onClick={() => toggleLoteExpansion(l.id)}
+                                className="flex items-center gap-1.5 font-semibold text-xs text-text-primary hover:text-brand-primary text-left cursor-pointer"
+                              >
+                                {isExpanded ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
+                                <span>Lote {l.numero}: {l.nome}</span>
+                              </button>
+                              
+                              {!isLocked && (
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button type="button" onClick={() => handleOpenItemModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Adicionar Item">
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                  <button type="button" onClick={() => handleOpenLoteModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Editar Lote">
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                  <button type="button" onClick={() => handleTriggerDeleteLote(l.id, l.nome)} className="p-1 text-text-muted hover:text-rose-600" title="Excluir Lote">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Nível 2: Lote inline totals */}
+                            <div className="mt-1 pl-5 text-[10px] text-text-muted flex flex-wrap gap-x-2">
+                              <span>Venda: <strong className="text-text-primary">{Number(l.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
+                              {canSeeCostAndProfit && (
+                                <span>Custo: <strong className="text-text-primary">{Number(l.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
+                              )}
+                              <span>Margem: <strong className="text-emerald-600">{Number(l.margem_geral || 0).toFixed(1)}%</strong></span>
+                            </div>
+
+                            {/* Items */}
+                            {isExpanded && (
+                              <div className="mt-2 pl-4 space-y-1 border-l border-border-subtle/40 ml-1.5">
+                                {l.items.length === 0 ? (
+                                  <p className="text-[10px] text-text-muted py-1.5">Sem itens neste lote.</p>
+                                ) : (
+                                  l.items.map(item => {
+                                    const isSelected = selectedItemId === item.id;
+                                    return (
+                                      <div
+                                        key={item.id}
+                                        onClick={() => {
+                                          setSelectedItemId(item.id);
+                                        }}
+                                        className={`flex flex-col p-1.5 rounded-md cursor-pointer group text-xs transition-colors ${isSelected ? 'bg-brand-primary/10 text-brand-primary' : 'text-text-muted hover:text-text-primary hover:bg-bg-deep/40'}`}
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <span className={`truncate pr-2 ${isSelected ? 'font-bold text-brand-primary' : 'text-text-primary'}`}>
+                                            Item {item.codigo} — {item.nome}
+                                          </span>
+                                          {!isLocked && (
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleOpenItemModal(l.id, item.id); }}
+                                                className="p-0.5 text-text-muted hover:text-brand-primary"
+                                                title="Editar Item"
+                                              >
+                                                <Edit2 className="w-3 h-3" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleTriggerDeleteItem(item.id, item.nome); }}
+                                                className="p-0.5 text-text-muted hover:text-rose-600"
+                                                title="Excluir Item"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        {/* Item inline totals */}
+                                        <div className="mt-0.5 pl-1 text-[10px] text-text-muted flex flex-wrap gap-x-2">
+                                          <span>V: <strong className={isSelected ? 'text-brand-primary' : 'text-text-primary'}>{Number(item.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                          {canSeeCostAndProfit && (
+                                            <span>C: <strong className={isSelected ? 'text-brand-primary' : 'text-text-primary'}>{Number(item.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                          )}
+                                          <span>M: <strong className="text-emerald-600">{Number(item.margem_geral || 0).toFixed(1)}%</strong></span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-12 text-center text-text-muted text-sm">
-                  <Layers className="w-12 h-12 text-text-muted mx-auto opacity-30 mb-3" />
-                  Selecione um item na árvore de lotes à esquerda para visualizar e gerenciar seus kits de oportunidade.
-                </div>
-              )}
+              </div>
+
+              {/* Right Column: Selected Item Detail & Opportunity Kits */}
+              <div className="lg:col-span-2 space-y-4">
+                {selectedItem ? (
+                  <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-6 space-y-6">
+                    {/* Item Details */}
+                    <div className="flex items-start justify-between border-b border-border-subtle/40 pb-4">
+                      <div className="space-y-1">
+                        <h3 className="text-lg font-bold text-text-primary">
+                          Item {selectedItem.codigo}: {selectedItem.nome}
+                        </h3>
+                        <p className="text-text-muted text-sm">{selectedItem.descricao || 'Sem descrição cadastrada'}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted pt-1">
+                          <span>Fornecimento: <strong className="text-text-primary">{selectedItem.tipo_fornecimento || 'Unitário'}</strong></span>
+                          {selectedItem.tipo_fornecimento === 'Mensal' && (
+                            <span>Duração: <strong className="text-text-primary">{selectedItem.total_meses} meses</strong></span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="text-right border-r border-border-subtle/40 pr-4">
+                          <span className="text-[10px] text-text-muted block uppercase font-bold">Qtd. Unitária</span>
+                          <span className="text-lg font-bold text-text-primary mt-0.5 block">{Number(selectedItem.quantidade)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-text-muted block uppercase font-bold text-brand-primary">Qtd. Total</span>
+                          <span className="text-lg font-bold text-brand-primary mt-0.5 block">{Number(selectedItem.quantidade_total ?? selectedItem.quantidade)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Nível 3: Item Consolidated Totalizer */}
+                    {selectedItem.kits.length > 0 && (
+                      <div className="space-y-4">
+                        <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-slate-50/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2'}`}>
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Venda</span>
+                            <span className="text-base font-extrabold text-brand-primary tabular-nums block">
+                              {Number(selectedItem.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          {canSeeCostAndProfit && (
+                            <>
+                              {/* Custo de Aquisição (NEW) */}
+                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo de Aquisição</span>
+                                <Tooltip
+                                  variant="light"
+                                  content={
+                                    <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                                      <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição</div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">Custo Base (Compra):</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">IPI de Compra:</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">ICMS ST de Compra:</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">DIFAL de Compra:</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                        <span>Total Aquisição:</span>
+                                        <span className="font-mono">
+                                          {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  }
+                                >
+                                  <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                                    {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </Tooltip>
+                              </div>
+
+                              {/* Custos de Venda (NEW) */}
+                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
+                                <Tooltip
+                                  variant="light"
+                                  content={
+                                    <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                                      <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda</div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">Impostos sobre Venda:</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6">
+                                        <span className="text-slate-500">Despesas / Comissões / Frete:</span>
+                                        <span className="font-mono font-semibold">
+                                          {totalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                        <span>Total Venda:</span>
+                                        <span className="font-mono">
+                                          {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  }
+                                >
+                                  <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                                    {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </Tooltip>
+                              </div>
+
+                              {/* Total de Custo */}
+                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Custo</span>
+                                <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                                  {Number(selectedItem.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+
+                              {/* Lucro Estimado */}
+                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
+                                <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                                  {Number(selectedItem.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                          <div className={`space-y-1 ${canSeeCostAndProfit ? 'border-l border-border-subtle/30 pl-4' : ''}`}>
+                            <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Geral</span>
+                            <span className="text-base font-extrabold text-emerald-600 tabular-nums block">
+                              {Number(selectedItem.margem_geral || 0).toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Kits Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
+                          <Package className="w-4 h-4 text-brand-primary" />
+                          Kits de Oportunidade Associados
+                        </h4>
+                        {!isLocked && (
+                          <Button type="button" onClick={() => handleOpenKitCreate(selectedItem.id)} size="sm">
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Novo Kit
+                          </Button>
+                        )}
+                      </div>
+
+                      {selectedItem.kits.length === 0 ? (
+                        <div className="text-center py-12 border border-dashed border-border-subtle/80 rounded-xl text-text-muted text-xs space-y-2">
+                          <p>Nenhum kit de oportunidade cadastrado para este item.</p>
+                          <p className="text-[10px]">Toda precificação de item de licitação deve ser feita através de um Kit customizado.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden rounded-lg border border-border-subtle/60 bg-bg-surface">
+                          <table className="w-full text-xs text-left border-collapse">
+                            <thead>
+                              <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold">
+                                <th className="py-2.5 px-4">Nome do Kit</th>
+                                <th className="py-2.5 px-4">Operação / Contrato</th>
+                                <th className="py-2.5 px-4 text-right">Quantidade</th>
+                                {canSeeCostAndProfit && (
+                                  <>
+                                    <th className="py-2.5 px-4 text-right">Custo Unit.</th>
+                                    <th className="py-2.5 px-4 text-right">Custo Total</th>
+                                  </>
+                                )}
+                                {selectedItem.tipo_fornecimento === 'Unitário' ? (
+                                  <>
+                                    <th className="py-2.5 px-4 text-right">Venda Unit.</th>
+                                    <th className="py-2.5 px-4 text-right">Venda Total</th>
+                                  </>
+                                ) : (
+                                  <>
+                                    <th className="py-2.5 px-4 text-right">Mensal</th>
+                                    <th className="py-2.5 px-4 text-right">Setup / Instalação</th>
+                                    <th className="py-2.5 px-4 text-right">Venda Total</th>
+                                  </>
+                                )}
+                                {canSeeCostAndProfit && (
+                                  <th className="py-2.5 px-4 text-right">Lucro Est.</th>
+                                )}
+                                <th className="py-2.5 px-4 text-right">Margem</th>
+                                <th className="py-2.5 px-4 text-center">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedItem.kits.map(k => {
+                                const isUnitario = selectedItem.tipo_fornecimento === 'Unitário';
+                                const qty = Number(k.quantidade_kits || 1);
+                                const cUnit = Number(k.summary?.custo_aquisicao_kit || 0);
+                                const cTotal = Number(k.summary?.custo_aquisicao_total || 0);
+                                const vUnit = Number(k.summary?.venda_unitario || 0);
+                                const vTotal = Number(k.summary?.venda_total || 0);
+                                const lEst = Number(k.summary?.lucro_estimado || 0);
+                                const marg = Number(k.summary?.margem_geral || 0);
+
+                                return (
+                                  <tr key={k.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
+                                    <td className="py-3 px-4 font-semibold text-text-primary">{k.nome_kit}</td>
+                                    <td className="py-3 px-4 font-mono uppercase text-text-muted tracking-wider">{k.tipo_contrato}</td>
+                                    <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">{qty}</td>
+                                    
+                                    {canSeeCostAndProfit && (
+                                      <>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {cUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {cTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                      </>
+                                    )}
+                                    
+                                    {isUnitario ? (
+                                      <>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {vUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono text-brand-primary tabular-nums font-semibold">
+                                          {vTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {Number(k.summary?.valor_mensal_kit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {Number(k.summary?.vlr_instal_calc || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono text-brand-primary tabular-nums font-semibold">
+                                          {vTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                      </>
+                                    )}
+                                    
+                                    {canSeeCostAndProfit && (
+                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                        {lEst.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </td>
+                                    )}
+                                    
+                                    <td className="py-3 px-4 text-right font-bold text-emerald-600 tabular-nums">
+                                      {marg.toFixed(2)}%
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <div className="flex justify-center items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
+                                          className="p-1 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer"
+                                          title="Editar Simulação do Kit"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        {!isLocked && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id)}
+                                            className="p-1 hover:bg-rose-50 text-rose-600 rounded cursor-pointer"
+                                            title="Excluir Kit"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-12 text-center text-text-muted text-sm">
+                    <Layers className="w-12 h-12 text-text-muted mx-auto opacity-30 mb-3" />
+                    Selecione um item na árvore de lotes à esquerda para visualizar e gerenciar seus kits de oportunidade.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

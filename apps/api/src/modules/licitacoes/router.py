@@ -595,3 +595,16 @@ def create_tarefa_andamento(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
     return LicitacaoService.create_tarefa_andamento(db, tenant_id, company_id, licitacao_id, tarefa_id, data.descricao, current_user)
+
+@router.get("/{licitacao_id}/dashboard-summary", response_model=schemas.LicitacaoDashboardResponse)
+def get_dashboard_summary(
+    licitacao_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    tenant_id = str(current_user.tenant_id)
+    return LicitacaoService.get_dashboard_summary(db, tenant_id, company_id, licitacao_id, current_user)
+

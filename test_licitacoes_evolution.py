@@ -808,6 +808,131 @@ def run_tests():
         db.delete(lic_calc)
         db.commit()
 
+        print("\n--- Test 10: Target Margin Solver and Validation (Licitacoes) ---")
+        # Create a new tender
+        lic_solver = Licitacao(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            customer_id=customer.id,
+            numero_edital="Pregão 10/2026",
+            status="Criada",
+            modalidade="Pregão",
+            tipo_licitacao="Menor preço",
+            valor_total_estimado=Decimal("100000.00"),
+            valor_total_venda=Decimal("0.00"),
+            margem_ponderada_global=Decimal("0.00"),
+            precisa_aprovacao_diretoria=False,
+            aprovado_diretoria=False
+        )
+        db.add(lic_solver)
+        db.commit()
+        db.refresh(lic_solver)
+
+        lote_solver = LicitacaoLote(
+            licitacao_id=lic_solver.id,
+            numero="Lote 1",
+            nome="Lote Teste Solver"
+        )
+        db.add(lote_solver)
+        db.commit()
+        db.refresh(lote_solver)
+
+        item_solver = LicitacaoItem(
+            lote_id=lote_solver.id,
+            codigo="1.1",
+            nome="QSFP Optic 40G",
+            quantidade=Decimal("4"),
+            tipo_fornecimento="Unitário",
+            quantidade_total=Decimal("4")
+        )
+        db.add(item_solver)
+        db.commit()
+        db.refresh(item_solver)
+
+        # Create a product for solver tests
+        from src.modules.products.models import Product
+        product_solver = Product(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            company_id=company_id,
+            codigo="PROD_SOLVER_1",
+            nome="Product for Target Solver Test",
+            tipo="EQUIPAMENTO",
+            finalidade="REVENDA",
+            vlr_referencia_revenda=Decimal("100.00"),
+            vlr_referencia_uso_consumo=Decimal("100.00"),
+            ativo=True
+        )
+        db.add(product_solver)
+        db.commit()
+        db.refresh(product_solver)
+
+        # 10a. Create kit with higher margem_minima_desejada (should throw ValueError)
+        from src.modules.opportunity_kits.schemas import OpportunityKitCreate, OpportunityKitItemCreate
+        service_kit = OpportunityKitService(db)
+
+        # Let's check a normal creation first without margem_minima_desejada
+        kit_create_higher = OpportunityKitCreate(
+            nome_kit="Kit Solver Test",
+            tipo_contrato="VENDA_EQUIPAMENTOS",
+            quantidade_kits=4,
+            prazo_contrato_meses=12,
+            licitacao_id=lic_solver.id,
+            licitacao_item_id=item_solver.id,
+            fator_margem_locacao=Decimal("1.8000"),
+            margem_minima_desejada=Decimal("95.0000"),  # Very high, will exceed calculated margin
+            items=[OpportunityKitItemCreate(
+                descricao_item="Test product", 
+                quantidade_no_kit=1,
+                product_id=product_solver.id
+            )]
+        )
+
+        try:
+            service_kit.create_kit(tenant_id, str(company_id), kit_create_higher)
+            raise AssertionError("Should have blocked kit creation with invalid margin")
+        except ValueError as e:
+            print(f"Successfully blocked invalid margin: {str(e)}")
+            assert str(e) == "A margem mínima desejada não pode ser maior que a margem atual do Kit."
+
+        # 10b. Create kit with valid margem_minima_desejada (should succeed and run solver)
+        kit_create_valid = OpportunityKitCreate(
+            nome_kit="Kit Solver Test Valid",
+            tipo_contrato="VENDA_EQUIPAMENTOS",
+            quantidade_kits=4,
+            prazo_contrato_meses=12,
+            licitacao_id=lic_solver.id,
+            licitacao_item_id=item_solver.id,
+            fator_margem_locacao=Decimal("4.0000"),    # Factor 4.00 gives higher margin > 30%
+            margem_minima_desejada=Decimal("30.0000"),  # Valid lower margin
+            items=[OpportunityKitItemCreate(
+                descricao_item="Test product", 
+                quantidade_no_kit=1,
+                product_id=product_solver.id
+            )]
+        )
+
+        kit_valid = service_kit.create_kit(tenant_id, str(company_id), kit_create_valid)
+        print("Successfully created kit with valid target margin!")
+        print(f"Fator Mínimo Calculado: {kit_valid.fator_minimo_calculado}")
+        print(f"Valor Venda Mínimo: {kit_valid.valor_venda_minimo}")
+        print(f"Lucro Mínimo: {kit_valid.lucro_minimo}")
+        print(f"Margem Mínima Resultante: {kit_valid.margem_minima_resultante}%")
+
+        assert kit_valid.fator_minimo_calculado is not None
+        assert kit_valid.fator_minimo_calculado < Decimal("4.0000")
+        assert kit_valid.margem_minima_resultante is not None
+        assert round(kit_valid.margem_minima_resultante, 1) == Decimal("30.0")
+
+        # Clean up Test 10 items
+        db.delete(kit_valid)
+        db.delete(product_solver)
+        db.delete(item_solver)
+        db.delete(lote_solver)
+        db.delete(lic_solver)
+        db.commit()
+        print("Test 10 OK! [SUCCESS]")
+
         print("\nALL TEST CASES COMPLETED SUCCESSFULLY! [SUCCESS]")
 
     finally:

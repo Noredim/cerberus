@@ -142,6 +142,9 @@ class OpportunityKitBase(BaseModel):
     # Parâmetros de Monitoramento
     custo_monitoramento_unitario: Decimal = Field(default=Decimal(0.0))
     fator_monitoramento: Decimal = Field(default=Decimal(1.0))
+    
+    # Target Margin (Margem Alvo)
+    margem_minima_desejada: Optional[Decimal] = Field(default=None)
 
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
@@ -200,6 +203,9 @@ class OpportunityKitUpdate(BaseModel):
     
     custo_monitoramento_unitario: Optional[Decimal] = None
     fator_monitoramento: Optional[Decimal] = None
+    
+    # Target Margin (Margem Alvo)
+    margem_minima_desejada: Optional[Decimal] = None
 
 class OpportunityKitFinancialSummary(BaseModel):
     prazo_mensalidades: int
@@ -225,6 +231,14 @@ class OpportunityKitFinancialSummary(BaseModel):
     receita_liquida_mensal_kit: Decimal
     lucro_mensal_kit: Decimal
     margem_kit: Decimal
+    
+    # Totalizadores financeiros do Kit
+    venda_total: Optional[Decimal] = None
+    custo_total: Optional[Decimal] = None
+    lucro_estimado: Optional[Decimal] = None
+    margem_geral: Optional[Decimal] = None
+    custo_unitario: Optional[Decimal] = None
+    venda_unitario: Optional[Decimal] = None
     
     # New granular fields
     imposto_instalacao: Optional[Decimal] = Field(default=Decimal(0))
@@ -264,6 +278,12 @@ class OpportunityKitFinancialSummary(BaseModel):
     credito_icms_compra_total: Optional[Decimal] = Field(default=Decimal(0))
     total_st_kit: Optional[Decimal] = Field(default=Decimal(0))
     total_ipi_kit: Optional[Decimal] = Field(default=Decimal(0))
+    
+    # Target Margin (Margem Alvo) fields
+    fator_minimo_calculado: Optional[Decimal] = Field(default=None)
+    valor_venda_minimo: Optional[Decimal] = Field(default=None)
+    lucro_minimo: Optional[Decimal] = Field(default=None)
+    margem_minima_resultante: Optional[Decimal] = Field(default=None)
 
 
 class OpportunityKitItemFinancialSummary(BaseModel):

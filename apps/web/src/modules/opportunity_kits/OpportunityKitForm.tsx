@@ -293,6 +293,7 @@ interface KitFormValues {
   fator_monitoramento: number;
   licitacao_id?: string;
   licitacao_item_id?: string;
+  margem_minima_desejada?: number | '';
 }
 
 export interface OpportunityKitFormProps {
@@ -381,6 +382,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     monthly_costs: [],
     custo_monitoramento_unitario: 0,
     fator_monitoramento: 1.0,
+    margem_minima_desejada: '',
   });
 
   useEffect(() => {
@@ -447,6 +449,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       data.descricao_kit = data.descricao_kit ?? '';
       data.percentual_instalacao = data.percentual_instalacao ?? '';
       data.qtd_meses_manutencao = data.qtd_meses_manutencao ?? '';
+      data.margem_minima_desejada = data.margem_minima_desejada ?? '';
       data.perc_frete_venda = data.perc_frete_venda ?? 0;
       data.perc_despesas_adm = data.perc_despesas_adm ?? 0;
       data.perc_comissao = data.perc_comissao ?? 0;
@@ -655,6 +658,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       percentual_instalacao: data.percentual_instalacao === '' ? null : data.percentual_instalacao,
       fator_manutencao: data.fator_manutencao === '' ? null : data.fator_manutencao,
       qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
+      margem_minima_desejada: data.margem_minima_desejada === '' || data.margem_minima_desejada === undefined ? null : data.margem_minima_desejada,
       faturamento_servico_separado: data.faturamento_servico_separado || false,
       costs: sanitizedCosts,
       monthly_costs: data.monthly_costs,
@@ -885,6 +889,15 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       }
     }
 
+    if (form.licitacao_id && form.margem_minima_desejada !== '' && form.margem_minima_desejada !== undefined) {
+      const targetMargin = Number(form.margem_minima_desejada);
+      const currentMargin = financials?.summary?.margem_kit ?? 0;
+      if (targetMargin > currentMargin) {
+        setAlertMessage("A margem mínima desejada não pode ser maior que a margem atual do Kit.");
+        return;
+      }
+    }
+
     try {
       const payload = sanitizePayload(form);
       let savedKit = null;
@@ -949,6 +962,59 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const showBlock31 = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && !form.instalacao_inclusa;
   const opCosts = form.costs.filter(c => c.tipo_custo !== 'INSTALACAO');
   const instCosts = form.costs.filter(c => c.tipo_custo === 'INSTALACAO');
+
+  const renderTargetSolverHUD = () => {
+    if (!financials?.summary?.fator_minimo_calculado) return null;
+
+    const fatAtual = Number(form.fator_margem_locacao) || 0;
+    const fatMin = Number(financials.summary.fator_minimo_calculado) || 0;
+    const vlrAtual = Number(financials.summary.valor_mensal_kit || financials.summary.faturamento_total_venda || 0);
+    const vlrMin = Number(financials.summary.valor_venda_minimo) || 0;
+    const lucroAtual = Number(financials.summary.lucro_mensal_kit || financials.summary.lucro_equipamentos || 0);
+    const lucroMin = Number(financials.summary.lucro_minimo) || 0;
+    const margemAtual = Number(financials.summary.margem_kit || financials.summary.margem_equipamentos || 0);
+    const margemMin = Number(financials.summary.margem_minima_resultante) || 0;
+
+    return (
+      <div className="mt-4 p-4 bg-brand-primary/5 border border-brand-primary/25 rounded-2xl shadow-sm animate-fade-in w-full col-span-2">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-brand-primary mb-3 flex items-center gap-1.5">
+          <Calculator className="w-3.5 h-3.5" />
+          Simulação de Margem Alvo
+        </h4>
+        <div className="space-y-2.5 text-xs">
+          <div className="grid grid-cols-3 font-semibold text-text-muted border-b border-border-subtle pb-1">
+            <span>Métrica</span>
+            <span className="text-right">Atual</span>
+            <span className="text-right text-brand-primary">Mínimo (Alvo)</span>
+          </div>
+          
+          <div className="grid grid-cols-3">
+            <span className="text-text-secondary">Fator Margem</span>
+            <span className="text-right font-mono tabular-nums">{fatAtual.toFixed(4)}</span>
+            <span className="text-right font-bold text-brand-primary font-mono tabular-nums">{fatMin.toFixed(4)}</span>
+          </div>
+
+          <div className="grid grid-cols-3">
+            <span className="text-text-secondary">Preço Venda</span>
+            <span className="text-right font-mono tabular-nums">{fmtC(vlrAtual)}</span>
+            <span className="text-right font-bold text-brand-primary font-mono tabular-nums">{fmtC(vlrMin)}</span>
+          </div>
+
+          <div className="grid grid-cols-3">
+            <span className="text-text-secondary">Lucro</span>
+            <span className="text-right font-mono tabular-nums">{fmtC(lucroAtual)}</span>
+            <span className="text-right font-bold text-brand-primary font-mono tabular-nums">{fmtC(lucroMin)}</span>
+          </div>
+
+          <div className="grid grid-cols-3">
+            <span className="text-text-secondary">Margem</span>
+            <span className="text-right font-mono tabular-nums">{margemAtual.toFixed(1)}%</span>
+            <span className="text-right font-bold text-brand-primary font-mono tabular-nums">{margemMin.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className={`space-y-6 mx-auto ${isModal ? 'max-w-full pb-8' : 'max-w-[1600px] pb-24'}`}>
@@ -1308,7 +1374,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
                   <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border-subtle">
                     {/* Lucro da Venda */}
-                    <div className={`rounded-xl p-3 flex items-center justify-between border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                    <div className={`rounded-xl p-3 relative border ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
                       <div>
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Venda</span>
                         <div className={`text-base font-black ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
@@ -1322,14 +1388,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           <span>Desp: {fmtC(despVenda)}</span>
                         </div>
                       </div>
-                      <div className={`text-right ml-4 shrink-0 px-2.5 py-1.5 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                      <div className={`absolute top-3 right-3 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
                         <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
                         <span className="text-sm font-black">{margemVenda.toFixed(1)}%</span>
                       </div>
                     </div>
 
                     {/* Lucro Manutenção 12m */}
-                    <div className={`rounded-xl p-3 flex items-center justify-between border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                    <div className={`rounded-xl p-3 relative border ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
                       <div>
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manut. (12m)</span>
                         <div className={`text-base font-black ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
@@ -1337,7 +1403,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           {fmtC(lucroMensalB6)}/mês em 12m
                         </div>
                       </div>
-                      <div className={`text-right ml-4 shrink-0 px-2.5 py-1.5 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                      <div className={`absolute top-3 right-3 text-right px-2.5 py-1 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
                         <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
                         <span className="text-sm font-black">{margemManut12m.toFixed(1)}%</span>
                       </div>
@@ -1352,6 +1418,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         </div>
                       </div>
                     </div>
+
+                    {/* Target Margin Solver Summary */}
+                    {renderTargetSolverHUD()}
                   </div>
                 </div>
               );
@@ -1643,6 +1712,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
                     </div>
                   </div>
+
+                  {/* Target Margin Solver Summary */}
+                  {renderTargetSolverHUD()}
                 </div>
               </div>
             );
@@ -1865,6 +1937,34 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 <div>
                   <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
                   <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
+                </div>
+              )}
+
+              {form.licitacao_id && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Margem Mínima Desejada (%)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.margem_minima_desejada ?? ''}
+                    onChange={(e) => {
+                      const valStr = e.target.value;
+                      const val = valStr === '' ? '' : parseFloat(valStr);
+                      handleInputChange('margem_minima_desejada', val);
+                    }}
+                    onBlur={() => {
+                      if (form.margem_minima_desejada !== '' && form.margem_minima_desejada !== undefined && form.margem_minima_desejada !== null) {
+                        const targetMargin = Number(form.margem_minima_desejada);
+                        const currentMargin = financials?.summary?.margem_kit ?? 0;
+                        if (targetMargin > currentMargin) {
+                          setAlertMessage("A margem mínima desejada não pode ser maior que a margem atual do Kit.");
+                          handleInputChange('margem_minima_desejada', '');
+                        }
+                      }
+                    }}
+                    placeholder="Ex: 30.00"
+                    className="w-full"
+                  />
                 </div>
               )}
             </div>

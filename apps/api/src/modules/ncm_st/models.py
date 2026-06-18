@@ -36,8 +36,8 @@ class NcmStItem(Base):
     
     item = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True)
-    ncm_sh = Column(String(20), nullable=True)
-    ncm_normalizado = Column(String(20), index=True, nullable=True)
+    ncm_sh = Column(String(500), nullable=True)
+    ncm_normalizado = Column(String(500), index=True, nullable=True)
     cest = Column(String(20), nullable=True)
     descricao = Column(String, nullable=True)
     observacoes = Column(String, nullable=True)

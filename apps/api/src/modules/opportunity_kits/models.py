@@ -72,6 +72,13 @@ class OpportunityKit(Base):
     custo_software_mensal_kit = Column(Numeric(15, 4), nullable=False, default=0.0)
     custo_itens_acessorios_mensal_kit = Column(Numeric(15, 4), nullable=False, default=0.0)
     
+    # Target Margin (Margem Alvo) fields
+    margem_minima_desejada = Column(Numeric(6, 4), nullable=True)
+    fator_minimo_calculado = Column(Numeric(10, 4), nullable=True)
+    valor_venda_minimo = Column(Numeric(15, 4), nullable=True)
+    lucro_minimo = Column(Numeric(15, 4), nullable=True)
+    margem_minima_resultante = Column(Numeric(6, 4), nullable=True)
+    
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

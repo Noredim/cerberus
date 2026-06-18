@@ -113,7 +113,7 @@ class OpportunityKitService:
             "custo_unit_final": Decimal(comp.get("custo_unit_final", custo_base))
         }
 
-    def calculate_financials(self, kit: OpportunityKit, tenant_id: str) -> dict:
+    def calculate_financials(self, kit: OpportunityKit, tenant_id: str, override_factor: Optional[Decimal] = None) -> dict:
         from src.modules.sales_budgets.models import SalesBudget
         from src.modules.licitacoes.models import Licitacao
         company_id = None
@@ -291,7 +291,7 @@ class OpportunityKitService:
         total_st_kit = Decimal("0.0")
         total_ipi_kit = Decimal("0.0")
         
-        fator_margem = Decimal(str(kit.fator_margem_locacao or 1))
+        fator_margem = override_factor if override_factor is not None else Decimal(str(kit.fator_margem_locacao or 1))
 
         iss_val = Decimal(str(kit.aliq_iss or 0)) if kit.tipo_contrato in ["COMODATO", "INSTALACAO"] else Decimal("0.0")
         icms_val = Decimal(str(kit.aliq_icms or 0)) if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else Decimal("0.0")
@@ -811,8 +811,43 @@ class OpportunityKitService:
         custo_equip_total_calc = custo_aquisicao_kit + vlr_instal_calc
         custo_manut_total_calc = vlt_manut if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" else custo_operacional_mensal_kit
 
+        # Target Margin Solver (converts minimum desired margin to minimum factor, price, profit)
+        fator_minimo_calculado = None
+        valor_venda_minimo = None
+        lucro_minimo = None
+        margem_minima_resultante = None
+
+        if override_factor is None and getattr(kit, "margem_minima_desejada", None) is not None:
+            target_margin = Decimal(str(kit.margem_minima_desejada))
+            low = Decimal("0.0")
+            high = Decimal(str(kit.fator_margem_locacao or 1.0))
+            
+            # Binary search
+            for _ in range(25):
+                mid = (low + high) / 2
+                sub_res = self.calculate_financials(kit, tenant_id, override_factor=mid)
+                sub_margin = Decimal(str(sub_res["margem_kit_raw"]))
+                
+                if sub_margin >= target_margin:
+                    high = mid
+                else:
+                    low = mid
+            
+            best_factor = high
+            min_res = self.calculate_financials(kit, tenant_id, override_factor=best_factor)
+            
+            fator_minimo_calculado = best_factor
+            valor_venda_minimo = Decimal(str(min_res["summary"]["valor_mensal_kit"]))
+            lucro_minimo = Decimal(str(min_res["summary"]["lucro_mensal_kit"]))
+            margem_minima_resultante = Decimal(str(min_res["margem_kit_raw"]))
+
         return {
+            "margem_kit_raw": margem_kit,
             "summary": {
+                "fator_minimo_calculado": round(fator_minimo_calculado, 4) if fator_minimo_calculado is not None else None,
+                "valor_venda_minimo": round(valor_venda_minimo, 2) if valor_venda_minimo is not None else None,
+                "lucro_minimo": round(lucro_minimo, 2) if lucro_minimo is not None else None,
+                "margem_minima_resultante": round(margem_minima_resultante, 2) if margem_minima_resultante is not None else None,
                 "prazo_mensalidades": prazo_mensalidades,
                 "custo_operacional_mensal_kit": round(custo_operacional_mensal_kit, 2),  # type: ignore
                 "custo_aquisicao_kit": round(custo_aquisicao_kit, 2),  # type: ignore
@@ -999,7 +1034,8 @@ class OpportunityKitService:
             custo_seguro_mensal_kit=data.custo_seguro_mensal_kit,
             custo_logistica_mensal_kit=data.custo_logistica_mensal_kit,
             custo_software_mensal_kit=data.custo_software_mensal_kit,
-            custo_itens_acessorios_mensal_kit=data.custo_itens_acessorios_mensal_kit
+            custo_itens_acessorios_mensal_kit=data.custo_itens_acessorios_mensal_kit,
+            margem_minima_desejada=data.margem_minima_desejada
         )
         self.db.add(kit)
         self.db.flush()
@@ -1038,6 +1074,22 @@ class OpportunityKitService:
                 valor_unitario=mcost_data.valor_unitario
             )
             self.db.add(mcost)
+            
+        self.db.flush()
+        self.db.refresh(kit)
+
+        # Calculate financials to validate and populate minimum columns before committing
+        fin = self.calculate_financials(kit, tenant_id)
+        current_margin = Decimal(str(fin["margem_kit_raw"]))
+        
+        if kit.margem_minima_desejada is not None:
+            if Decimal(str(kit.margem_minima_desejada)) > current_margin:
+                raise ValueError("A margem mínima desejada não pode ser maior que a margem atual do Kit.")
+            
+            kit.fator_minimo_calculado = fin["summary"].get("fator_minimo_calculado")
+            kit.valor_venda_minimo = fin["summary"].get("valor_venda_minimo")
+            kit.lucro_minimo = fin["summary"].get("lucro_minimo")
+            kit.margem_minima_resultante = fin["summary"].get("margem_minima_resultante")
             
         self.db.commit()
 
@@ -1117,6 +1169,27 @@ class OpportunityKitService:
         if kit.prazo_instalacao_meses > kit.prazo_contrato_meses:
             raise ValueError("Prazo de instalação não pode ser maior que o prazo do contrato.")    
 
+        self.db.flush()
+        self.db.refresh(kit)
+
+        # Calculate financials to validate and populate minimum columns before committing
+        fin = self.calculate_financials(kit, tenant_id)
+        current_margin = Decimal(str(fin["margem_kit_raw"]))
+        
+        if kit.margem_minima_desejada is not None:
+            if Decimal(str(kit.margem_minima_desejada)) > current_margin:
+                raise ValueError("A margem mínima desejada não pode ser maior que a margem atual do Kit.")
+            
+            kit.fator_minimo_calculado = fin["summary"].get("fator_minimo_calculado")
+            kit.valor_venda_minimo = fin["summary"].get("valor_venda_minimo")
+            kit.lucro_minimo = fin["summary"].get("lucro_minimo")
+            kit.margem_minima_resultante = fin["summary"].get("margem_minima_resultante")
+        else:
+            kit.fator_minimo_calculado = None
+            kit.valor_venda_minimo = None
+            kit.lucro_minimo = None
+            kit.margem_minima_resultante = None
+
         self.db.commit()
         self.db.refresh(kit)
         if kit.licitacao_id:
@@ -1142,4 +1215,8 @@ class OpportunityKitService:
         kit.monthly_costs = [OpportunityKitMonthlyCost(**mc_data.model_dump()) for mc_data in getattr(data, "monthly_costs", [])]
         
         fin = self.calculate_financials(kit, tenant_id)
+        current_margin = Decimal(str(fin["margem_kit_raw"]))
+        if kit.margem_minima_desejada is not None:
+            if Decimal(str(kit.margem_minima_desejada)) > current_margin:
+                raise ValueError("A margem mínima desejada não pode ser maior que a margem atual do Kit.")
         return fin

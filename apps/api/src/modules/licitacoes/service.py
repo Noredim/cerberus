@@ -32,19 +32,106 @@ class LicitacaoService:
         return items, total
 
     @staticmethod
+    def _calculate_kit_financials(kit, tenant_id: str, kit_service: OpportunityKitService) -> tuple[Decimal, Decimal, Decimal]:
+        """Calcula e popula os campos financeiros de um kit em kit.summary.
+        Retorna (venda_total, custo_total, lucro_estimado).
+        """
+        try:
+            fin = kit_service.calculate_financials(kit, tenant_id)
+            summary = fin["summary"]
+            kit.summary = summary
+            kit.item_summaries = fin["item_summaries"]
+            
+            prazo_mensalidades = Decimal(str(summary.get("prazo_mensalidades") or 0))
+            valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit") or 0))
+            vlr_instal_calc = Decimal(str(summary.get("vlr_instal_calc") or 0))
+            lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit") or 0))
+            imposto_instalacao = Decimal(str(summary.get("imposto_instalacao") or 0))
+            
+            perc_comissao = Decimal(str(getattr(kit, "perc_comissao", 0) or 0))
+            quantidade_kits = Decimal(str(getattr(kit, "quantidade_kits", 1) or 1))
+            
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                venda_total = valor_mensal_kit * quantidade_kits
+                lucro_estimado = lucro_mensal_kit * quantidade_kits
+            else:
+                venda_total = (valor_mensal_kit * prazo_mensalidades + vlr_instal_calc) * quantidade_kits
+                lucro_estimado = (
+                    lucro_mensal_kit * prazo_mensalidades + 
+                    (vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * perc_comissao / Decimal(100.0)))
+                ) * quantidade_kits
+                
+            custo_total = venda_total - lucro_estimado
+            margem_geral = (lucro_estimado / venda_total * Decimal(100.0)) if venda_total > 0 else Decimal("0.0")
+            
+            venda_unitario = venda_total / quantidade_kits if quantidade_kits > 0 else Decimal("0.0")
+            custo_unitario = custo_total / quantidade_kits if quantidade_kits > 0 else Decimal("0.0")
+            
+            # Populate summary fields
+            summary["venda_total"] = round(venda_total, 2)
+            summary["custo_total"] = round(custo_total, 2)
+            summary["lucro_estimado"] = round(lucro_estimado, 2)
+            summary["margem_geral"] = round(margem_geral, 2)
+            summary["venda_unitario"] = round(venda_unitario, 2)
+            summary["custo_unitario"] = round(custo_unitario, 2)
+            
+            return venda_total, custo_total, lucro_estimado
+        except Exception:
+            return Decimal("0.0"), Decimal("0.0"), Decimal("0.0")
+
+    @staticmethod
     def populate_kits_financials(db: Session, tenant_id: str, licitacao: Licitacao) -> Licitacao:
         if not licitacao:
             return licitacao
         kit_service = OpportunityKitService(db)
+        
+        licitacao_custo_total = Decimal("0.0")
+        licitacao_lucro_estimado = Decimal("0.0")
+        
         for lote in licitacao.lotes:
+            lote_venda_total = Decimal("0.0")
+            lote_custo_total = Decimal("0.0")
+            lote_lucro_estimado = Decimal("0.0")
+            
             for item in lote.items:
+                item_venda_total = Decimal("0.0")
+                item_custo_total = Decimal("0.0")
+                item_lucro_estimado = Decimal("0.0")
+                
                 for kit in item.kits:
-                    try:
-                        fin = kit_service.calculate_financials(kit, tenant_id)
-                        kit.summary = fin["summary"]
-                        kit.item_summaries = fin["item_summaries"]
-                    except Exception:
-                        pass
+                    v_t, c_t, l_e = LicitacaoService._calculate_kit_financials(kit, tenant_id, kit_service)
+                    item_venda_total += v_t
+                    item_custo_total += c_t
+                    item_lucro_estimado += l_e
+                    
+                item.venda_total = round(item_venda_total, 2)
+                item.custo_total = round(item_custo_total, 2)
+                item.lucro_estimado = round(item_lucro_estimado, 2)
+                item.margem_geral = round((item_lucro_estimado / item_venda_total * Decimal("100.0")) if item_venda_total > 0 else Decimal("0.0"), 2)
+                
+                item_qty = Decimal(str(item.quantidade or 1))
+                if item.tipo_fornecimento == "Unitário" and item_qty > 0:
+                    item.venda_unitario = round(item_venda_total / item_qty, 2)
+                    item.custo_unitario = round(item_custo_total / item_qty, 2)
+                else:
+                    item.venda_unitario = None
+                    item.custo_unitario = None
+                    
+                lote_venda_total += item_venda_total
+                lote_custo_total += item_custo_total
+                lote_lucro_estimado += item_lucro_estimado
+                
+            lote.venda_total = round(lote_venda_total, 2)
+            lote.custo_total = round(lote_custo_total, 2)
+            lote.lucro_estimado = round(lote_lucro_estimado, 2)
+            lote.margem_geral = round((lote_lucro_estimado / lote_venda_total * Decimal("100.0")) if lote_venda_total > 0 else Decimal("0.0"), 2)
+            
+            licitacao_custo_total += lote_custo_total
+            licitacao_lucro_estimado += lote_lucro_estimado
+            
+        licitacao.custo_total = round(licitacao_custo_total, 2)
+        licitacao.lucro_estimado = round(licitacao_lucro_estimado, 2)
+        
         return licitacao
 
     @staticmethod
@@ -52,13 +139,30 @@ class LicitacaoService:
         if not item:
             return item
         kit_service = OpportunityKitService(db)
+        
+        item_venda_total = Decimal("0.0")
+        item_custo_total = Decimal("0.0")
+        item_lucro_estimado = Decimal("0.0")
+        
         for kit in item.kits:
-            try:
-                fin = kit_service.calculate_financials(kit, tenant_id)
-                kit.summary = fin["summary"]
-                kit.item_summaries = fin["item_summaries"]
-            except Exception:
-                pass
+            v_t, c_t, l_e = LicitacaoService._calculate_kit_financials(kit, tenant_id, kit_service)
+            item_venda_total += v_t
+            item_custo_total += c_t
+            item_lucro_estimado += l_e
+            
+        item.venda_total = round(item_venda_total, 2)
+        item.custo_total = round(item_custo_total, 2)
+        item.lucro_estimado = round(item_lucro_estimado, 2)
+        item.margem_geral = round((item_lucro_estimado / item_venda_total * Decimal("100.0")) if item_venda_total > 0 else Decimal("0.0"), 2)
+        
+        item_qty = Decimal(str(item.quantidade or 1))
+        if item.tipo_fornecimento == "Unitário" and item_qty > 0:
+            item.venda_unitario = round(item_venda_total / item_qty, 2)
+            item.custo_unitario = round(item_custo_total / item_qty, 2)
+        else:
+            item.venda_unitario = None
+            item.custo_unitario = None
+            
         return item
 
     @staticmethod
@@ -1167,3 +1271,323 @@ class LicitacaoService:
 
         db.commit()
         return andamento
+
+    @staticmethod
+    def get_dashboard_summary(db: Session, tenant_id: str, company_id: str, licitacao_id: UUID, current_user: User) -> dict:
+        from src.modules.purchase_budgets.models import PurchaseBudget
+
+        # 1. Fetch Licitacao (will raise 404 if not found or mismatch of tenant/company)
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        
+        # 2. Resumo da Licitação
+        cliente_nome = licitacao.customer_nome
+        po_nome = licitacao.po_nome
+        
+        qtd_analistas = len(licitacao.analistas)
+        qtd_lotes = len(licitacao.lotes)
+        qtd_itens = sum(len(lote.items) for lote in licitacao.lotes)
+        
+        # Calculate kits count and items in kits
+        kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_id == licitacao_id).all()
+        qtd_kits = len(kits)
+        
+        qtd_orcamentos = db.query(PurchaseBudget).filter(PurchaseBudget.licitacao_id == licitacao_id).count()
+        
+        resumo = {
+            "numero_edital": licitacao.numero_edital,
+            "cliente": cliente_nome,
+            "status": licitacao.status,
+            "data_publicacao": licitacao.data_publicacao,
+            "data_licitacao": licitacao.data_licitacao,
+            "po_responsavel": po_nome,
+            "qtd_analistas": qtd_analistas,
+            "qtd_lotes": qtd_lotes,
+            "qtd_itens": qtd_itens,
+            "qtd_kits": qtd_kits,
+            "qtd_orcamentos": qtd_orcamentos
+        }
+        
+        # 3. Resumo Financeiro
+        total_venda = licitacao.valor_total_venda or Decimal("0.0")
+        margem_geral = licitacao.margem_ponderada_global or Decimal("0.0")
+        
+        total_custo = Decimal("0.0")
+        total_lucro_global = Decimal("0.0")
+        kit_service = OpportunityKitService(db)
+        for kit in kits:
+            try:
+                fin = kit_service.calculate_financials(kit, tenant_id)
+                summary = fin.get("summary", {})
+                
+                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
+                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
+                    
+                    kit_venda = valor_mensal_kit
+                    kit_lucro = lucro_mensal_kit
+                else:
+                    valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit", 0)))
+                    vlr_instal_calc = Decimal(str(summary.get("vlr_instal_calc", 0)))
+                    prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
+                    
+                    kit_venda = valor_mensal_kit * Decimal(prazo_mensalidades) + vlr_instal_calc
+                    
+                    lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit", 0)))
+                    imposto_instalacao = Decimal(str(summary.get("imposto_instalacao", 0)))
+                    lucro_instalacao = vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * Decimal(str(kit.perc_comissao or 0)) / Decimal("100.0"))
+                    
+                    kit_lucro = (lucro_mensal_kit * Decimal(prazo_mensalidades)) + lucro_instalacao
+                
+                total_lucro_global += kit_lucro
+                total_custo += (kit_venda - kit_lucro)
+            except Exception:
+                pass
+                
+        financeiro = {
+            "total_custo": total_custo,
+            "total_venda": total_venda,
+            "lucro_estimado": total_lucro_global,
+            "margem_geral": margem_geral
+        }
+        
+        # 4. Checklist Progress
+        checklist_items = db.query(LicitacaoChecklistItem).join(LicitacaoChecklistGrupo).filter(
+            LicitacaoChecklistGrupo.licitacao_id == licitacao_id,
+            LicitacaoChecklistItem.tenant_id == tenant_id
+        ).all()
+        
+        std_items = [item for item in checklist_items if item.grupo.nome != "Análise Técnica"]
+        
+        tech_aplicacoes = db.query(LicitacaoChecklistAplicacao).filter(
+            LicitacaoChecklistAplicacao.licitacao_id == licitacao_id,
+            LicitacaoChecklistAplicacao.tenant_id == tenant_id
+        ).all()
+        
+        chk_points = []
+        for item in std_items:
+            chk_points.append(item.status)
+        for ap in tech_aplicacoes:
+            chk_points.append(ap.status)
+            
+        chk_total = len(chk_points)
+        chk_pendentes = sum(1 for status in chk_points if status in ["Pendente", "Pausado", "Pausada"])
+        chk_em_andamento = sum(1 for status in chk_points if status == "Em Andamento")
+        chk_concluidos = sum(1 for status in chk_points if status == "Concluído")
+        chk_nao_aplicaveis = sum(1 for status in chk_points if status == "Não Aplicável")
+        
+        chk_valid_total = chk_total - chk_nao_aplicaveis
+        chk_percentual = Decimal("0.0")
+        if chk_valid_total > 0:
+            chk_percentual = (Decimal(str(chk_concluidos)) / Decimal(str(chk_valid_total))) * Decimal("100.0")
+            
+        checklist = {
+            "total": chk_total,
+            "pendentes": chk_pendentes,
+            "em_andamento": chk_em_andamento,
+            "concluidos": chk_concluidos,
+            "nao_aplicaveis": chk_nao_aplicaveis,
+            "percentual": chk_percentual
+        }
+        
+        # 5. Tarefas
+        tarefas_obj = db.query(LicitacaoTarefa).filter(
+            LicitacaoTarefa.licitacao_id == licitacao_id,
+            LicitacaoTarefa.tenant_id == tenant_id
+        ).all()
+        
+        t_total = len(tarefas_obj)
+        t_pendentes = sum(1 for t in tarefas_obj if t.status == "Pendente")
+        t_em_andamento = sum(1 for t in tarefas_obj if t.status == "Em Andamento")
+        t_pausadas = sum(1 for t in tarefas_obj if t.status == "Pausada")
+        t_concluidas = sum(1 for t in tarefas_obj if t.status == "Concluída")
+        t_canceladas = sum(1 for t in tarefas_obj if t.status == "Cancelada")
+        
+        t_valid_total = t_total - t_canceladas
+        t_percentual = Decimal("0.0")
+        if t_valid_total > 0:
+            t_percentual = (Decimal(str(t_concluidas)) / Decimal(str(t_valid_total))) * Decimal("100.0")
+            
+        tarefas = {
+            "total": t_total,
+            "pendentes": t_pendentes,
+            "em_andamento": t_em_andamento,
+            "pausadas": t_pausadas,
+            "concluidas": t_concluidas,
+            "canceladas": t_canceladas,
+            "percentual": t_percentual
+        }
+        
+        # 6. Distribuição por Analista
+        current_time = datetime.now(timezone.utc)
+        distribuicao_analistas = []
+        for analista in licitacao.analistas:
+            analista_user_id = analista.usuario_id
+            
+            analista_tasks = [t for t in tarefas_obj if t.responsavel_id == analista_user_id]
+            t_pend = sum(1 for t in analista_tasks if t.status == "Pendente")
+            t_and = sum(1 for t in analista_tasks if t.status == "Em Andamento")
+            t_paus = sum(1 for t in analista_tasks if t.status == "Pausada")
+            t_conc = sum(1 for t in analista_tasks if t.status == "Concluída")
+            
+            t_atras = 0
+            for t in analista_tasks:
+                if t.status not in ["Concluída", "Cancelada"]:
+                    limit_date = t.data_limite
+                    if limit_date.tzinfo is None:
+                        limit_date = limit_date.replace(tzinfo=timezone.utc)
+                    if limit_date < current_time:
+                        t_atras += 1
+                        
+            chk_atrib = 0
+            for item in std_items:
+                if item.usuario_id == analista_user_id:
+                    chk_atrib += 1
+            for ap in tech_aplicacoes:
+                if ap.usuario_id == analista_user_id:
+                    chk_atrib += 1
+                    
+            if t_atras > 0:
+                status_ind = "Vermelho"
+            else:
+                has_warning = False
+                for t in analista_tasks:
+                    if t.status not in ["Concluída", "Cancelada"]:
+                        limit_date = t.data_limite
+                        if limit_date.tzinfo is None:
+                            limit_date = limit_date.replace(tzinfo=timezone.utc)
+                        if limit_date - current_time < timedelta(hours=24):
+                            has_warning = True
+                            break
+                status_ind = "Amarelo" if has_warning else "Verde"
+                
+            distribuicao_analistas.append({
+                "usuario_id": analista_user_id,
+                "nome": analista.usuario_nome,
+                "prazo_entrega": analista.data_limite,
+                "tarefas_pendentes": t_pend,
+                "tarefas_em_andamento": t_and,
+                "tarefas_pausadas": t_paus,
+                "tarefas_concluidas": t_conc,
+                "tarefas_atrasadas": t_atras,
+                "checklist_atribuidos": chk_atrib,
+                "status_indicador": status_ind
+            })
+            
+        # 7. Últimos Andamentos
+        history_objs = db.query(LicitacaoHistory).filter(
+            LicitacaoHistory.licitacao_id == licitacao_id,
+            LicitacaoHistory.tenant_id == tenant_id
+        ).order_by(LicitacaoHistory.data_movimentacao.desc()).limit(10).all()
+        
+        ultimos_andamentos = []
+        for h in history_objs:
+            ultimos_andamentos.append({
+                "data": h.data_movimentacao,
+                "usuario": h.usuario_nome,
+                "descricao": h.descricao
+            })
+            
+        # 8. Resumo Lotes
+        qtd_produtos = Decimal("0.0")
+        qtd_servicos = Decimal("0.0")
+        for kit in kits:
+            for item in kit.items:
+                if item.tipo_item == "PRODUTO":
+                    qtd_produtos += item.quantidade_no_kit
+                elif item.tipo_item == "SERVICO_PROPRIO":
+                    qtd_servicos += item.quantidade_no_kit
+                    
+        resumo_lotes = {
+            "qtd_lotes": qtd_lotes,
+            "qtd_itens": qtd_itens,
+            "qtd_kits": qtd_kits,
+            "qtd_produtos": qtd_produtos,
+            "qtd_servicos": qtd_servicos
+        }
+        
+        # 9. Alertas
+        alertas = []
+        
+        has_checklist_overdue = False
+        for t in tarefas_obj:
+            if (t.checklist_item_id or t.checklist_aplicacao_id) and t.status not in ["Concluída", "Cancelada"]:
+                limit_date = t.data_limite
+                if limit_date.tzinfo is None:
+                    limit_date = limit_date.replace(tzinfo=timezone.utc)
+                if limit_date < current_time:
+                    has_checklist_overdue = True
+                    break
+        if has_checklist_overdue:
+            alertas.append({
+                "tipo": "CHECKLIST_ATRASADO",
+                "mensagem": "Existem itens de checklist vinculados a tarefas atrasadas.",
+                "nivel": "Vermelho"
+            })
+            
+        t_atrasadas_total = 0
+        for t in tarefas_obj:
+            if t.status not in ["Concluída", "Cancelada"]:
+                limit_date = t.data_limite
+                if limit_date.tzinfo is None:
+                    limit_date = limit_date.replace(tzinfo=timezone.utc)
+                if limit_date < current_time:
+                    t_atrasadas_total += 1
+        if t_atrasadas_total > 0:
+            alertas.append({
+                "tipo": "TAREFA_ATRASADA",
+                "mensagem": f"Existem {t_atrasadas_total} tarefas operacionais com prazo vencido.",
+                "nivel": "Vermelho"
+            })
+            
+        analistas_atrasados = [da["nome"] for da in distribuicao_analistas if da["tarefas_atrasadas"] > 0]
+        if analistas_atrasados:
+            alertas.append({
+                "tipo": "ANALISTA_COM_TAREFA_VENCIDA",
+                "mensagem": f"Analistas com tarefas vencidas: {', '.join(analistas_atrasados)}.",
+                "nivel": "Vermelho"
+            })
+            
+        if not licitacao.po_id:
+            alertas.append({
+                "tipo": "LICITACAO_SEM_PO",
+                "mensagem": "Este edital de licitação não possui P.O. responsável definido.",
+                "nivel": "Vermelho"
+            })
+            
+        if licitacao.status != "Criada" and qtd_analistas == 0:
+            alertas.append({
+                "tipo": "LICITACAO_SEM_ANALISTAS",
+                "mensagem": "Nenhum analista alocado na equipe para esta licitação.",
+                "nivel": "Amarelo"
+            })
+            
+        items_sem_kits = []
+        for lote in licitacao.lotes:
+            for item in lote.items:
+                if not item.kits:
+                    items_sem_kits.append(item.codigo)
+        if items_sem_kits:
+            alertas.append({
+                "tipo": "ITEM_SEM_KITS",
+                "mensagem": f"Itens sem Kits de Oportunidade vinculados: {', '.join(items_sem_kits)}.",
+                "nivel": "Amarelo"
+            })
+            
+        if qtd_orcamentos == 0:
+            alertas.append({
+                "tipo": "ITEM_SEM_ORCAMENTOS",
+                "mensagem": "Não há orçamentos de compras de fornecedores vinculados a este edital.",
+                "nivel": "Amarelo"
+            })
+            
+        return {
+            "resumo": resumo,
+            "financeiro": financeiro,
+            "checklist": checklist,
+            "tarefas": tarefas,
+            "distribuicao_analistas": distribuicao_analistas,
+            "ultimos_andamentos": ultimos_andamentos,
+            "resumo_lotes": resumo_lotes,
+            "alertas": alertas
+        }
+

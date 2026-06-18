@@ -40,6 +40,14 @@ class LicitacaoItemResponse(LicitacaoItemBase):
     id: UUID
     lote_id: UUID
     kits: List[OpportunityKitResponse] = []
+    
+    # Financial fields
+    custo_unitario: Optional[Decimal] = None
+    custo_total: Optional[Decimal] = None
+    venda_unitario: Optional[Decimal] = None
+    venda_total: Optional[Decimal] = None
+    lucro_estimado: Optional[Decimal] = None
+    margem_geral: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
@@ -57,6 +65,12 @@ class LicitacaoLoteResponse(LicitacaoLoteBase):
     id: UUID
     licitacao_id: UUID
     items: List[LicitacaoItemResponse] = []
+    
+    # Financial fields
+    custo_total: Optional[Decimal] = None
+    venda_total: Optional[Decimal] = None
+    lucro_estimado: Optional[Decimal] = None
+    margem_geral: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
@@ -110,6 +124,10 @@ class LicitacaoSimpleResponse(LicitacaoBase):
 class LicitacaoResponse(LicitacaoSimpleResponse):
     lotes: List[LicitacaoLoteResponse] = []
     analistas: List['LicitacaoAnalistaResponse'] = []
+    
+    # Financial fields
+    custo_total: Optional[Decimal] = None
+    lucro_estimado: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
@@ -265,3 +283,80 @@ class LicitacaoTarefaResponse(BaseModel):
 
 class LicitacaoTarefaAndamentoCreate(BaseModel):
     descricao: str
+
+
+class LicitacaoDashboardResumo(BaseModel):
+    numero_edital: str
+    cliente: Optional[str] = None
+    status: str
+    data_publicacao: Optional[datetime] = None
+    data_licitacao: Optional[datetime] = None
+    po_responsavel: Optional[str] = None
+    qtd_analistas: int
+    qtd_lotes: int
+    qtd_itens: int
+    qtd_kits: int
+    qtd_orcamentos: int
+
+class LicitacaoDashboardFinanceiro(BaseModel):
+    total_custo: Decimal
+    total_venda: Decimal
+    lucro_estimado: Decimal
+    margem_geral: Decimal
+
+class LicitacaoDashboardChecklist(BaseModel):
+    total: int
+    pendentes: int
+    em_andamento: int
+    concluidos: int
+    nao_aplicaveis: int
+    percentual: Decimal
+
+class LicitacaoDashboardTarefas(BaseModel):
+    total: int
+    pendentes: int
+    em_andamento: int
+    pausadas: int
+    concluidas: int
+    canceladas: int
+    percentual: Decimal
+
+class LicitacaoDashboardAnalista(BaseModel):
+    usuario_id: str
+    nome: Optional[str] = None
+    prazo_entrega: datetime
+    tarefas_pendentes: int
+    tarefas_em_andamento: int
+    tarefas_pausadas: int
+    tarefas_concluidas: int
+    tarefas_atrasadas: int
+    checklist_atribuidos: int
+    status_indicador: str
+
+class LicitacaoDashboardHistory(BaseModel):
+    data: datetime
+    usuario: Optional[str] = None
+    descricao: str
+
+class LicitacaoDashboardResumoLotes(BaseModel):
+    qtd_lotes: int
+    qtd_itens: int
+    qtd_kits: int
+    qtd_produtos: Decimal
+    qtd_servicos: Decimal
+
+class LicitacaoDashboardAlerta(BaseModel):
+    tipo: str
+    mensagem: str
+    nivel: str
+
+class LicitacaoDashboardResponse(BaseModel):
+    resumo: LicitacaoDashboardResumo
+    financeiro: LicitacaoDashboardFinanceiro
+    checklist: LicitacaoDashboardChecklist
+    tarefas: LicitacaoDashboardTarefas
+    distribuicao_analistas: List[LicitacaoDashboardAnalista]
+    ultimos_andamentos: List[LicitacaoDashboardHistory]
+    resumo_lotes: LicitacaoDashboardResumoLotes
+    alertas: List[LicitacaoDashboardAlerta]
+
