@@ -29,6 +29,7 @@ def upgrade() -> None:
     sa.Column('manutencao_ano_percentual', sa.Numeric(precision=5, scale=2), nullable=False),
     sa.Column('comissao_percentual', sa.Numeric(precision=5, scale=2), nullable=False),
     sa.Column('ativo', sa.Boolean(), nullable=True),
+    sa.Column('is_default', sa.Boolean(), nullable=False, server_default=sa.text('false')),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ondelete='CASCADE'),

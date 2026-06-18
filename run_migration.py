@@ -53,6 +53,8 @@ def run():
         # 1. Run V001
         print("Running SQL migration V001__cnpj_schemas.sql...")
         v001_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V001__cnpj_schemas.sql')
+        if not os.path.exists(v001_path):
+            v001_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V001__cnpj_schemas.sql')
         with open(v001_path, 'r', encoding='utf-8') as f:
             sql1 = f.read()
         cur.execute(sql1)
@@ -61,6 +63,8 @@ def run():
         # 2. Run V002
         print("Running SQL migration V002__companies_tax_profiles.sql...")
         v002_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V002__companies_tax_profiles.sql')
+        if not os.path.exists(v002_path):
+            v002_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V002__companies_tax_profiles.sql')
         with open(v002_path, 'r', encoding='utf-8') as f:
             sql2 = f.read()
         cur.execute(sql2)
@@ -69,6 +73,8 @@ def run():
         # 3. Run V003
         print("Running SQL migration V003__solution_analysis_budget_refs.sql...")
         v003_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V003__solution_analysis_budget_refs.sql')
+        if not os.path.exists(v003_path):
+            v003_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V003__solution_analysis_budget_refs.sql')
         with open(v003_path, 'r', encoding='utf-8') as f:
             sql3 = f.read()
         cur.execute(sql3)
@@ -77,6 +83,8 @@ def run():
         # 4. Run V004
         print("Running SQL migration V004__licitacao_item_quantity_fields.sql...")
         v004_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V004__licitacao_item_quantity_fields.sql')
+        if not os.path.exists(v004_path):
+            v004_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V004__licitacao_item_quantity_fields.sql')
         with open(v004_path, 'r', encoding='utf-8') as f:
             sql4 = f.read()
         cur.execute(sql4)

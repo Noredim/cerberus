@@ -36,12 +36,43 @@ def run_tests():
 
     try:
         # Get active company and tenant
+        from src.modules.tenants.models import Tenant
+        from src.modules.catalog.models import State, City
+        
+        # Ensure tenant exists
+        tenant_id = "master_tenant"
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not tenant:
+            print("Creating master_tenant...")
+            tenant = Tenant(id=tenant_id, cnpj="12345678901234", razao_social="Master Tenant")
+            db.add(tenant)
+            db.commit()
+            
+        # Ensure State exists
+        state_sigla = "SP"
+        state = db.query(State).filter(State.sigla == state_sigla).first()
+        if not state:
+            print("Creating State SP...")
+            state = State(id=str(uuid.uuid4()), tenant_id=tenant_id, ibge_id=35, sigla=state_sigla, nome="São Paulo")
+            db.add(state)
+            db.commit()
+            db.refresh(state)
+
+        # Ensure City exists
+        city = db.query(City).filter(City.state_id == state.id).first()
+        if not city:
+            print("Creating City São Paulo...")
+            city = City(id=str(uuid.uuid4()), tenant_id=tenant_id, ibge_id=3550308, state_id=state.id, nome="São Paulo")
+            db.add(city)
+            db.commit()
+            db.refresh(city)
+
         company = db.query(Company).first()
         if not company:
             print("No company found. Seeding first...")
             company = Company(
                 id=uuid.uuid4(),
-                tenant_id="master_tenant",
+                tenant_id=tenant_id,
                 cnpj="12345678000199",
                 tipo="MATRIZ",
                 razao_social="Test Company",
@@ -52,7 +83,9 @@ def run_tests():
                 bairro="Sé",
                 data_abertura="1990-01-01",
                 situacao_cadastral="ATIVA",
-                porte="MEDIO"
+                porte="MEDIO",
+                state_id=state.id,
+                municipality_id=city.id
             )
             db.add(company)
             db.commit()
@@ -120,6 +153,9 @@ def run_tests():
             )
             db.add(admin_role)
             db.commit()
+        else:
+            admin.tenant_id = tenant_id
+            db.commit()
 
         # Create normal user
         normal_user = db.query(User).filter(User.email == "normal@warslab.com.br").first()
@@ -142,6 +178,9 @@ def run_tests():
                 role=UserRoleEnum.ENGENHARIA_PRECO
             )
             db.add(normal_role)
+            db.commit()
+        else:
+            normal_user.tenant_id = tenant_id
             db.commit()
 
         print("\n--- Test 1: Business Day Calculation ---")

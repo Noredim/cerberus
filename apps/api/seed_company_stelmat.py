@@ -74,7 +74,7 @@ def seed_stelmat():
             logger.info(f"City Cuiaba exists: {city.id}")
 
         # 4. Create or Update Company STELMAT
-        company_id = "147f0d08-e065-4fbf-8034-6ab4de731704"
+        company_id = uuid.UUID("147f0d08-e065-4fbf-8034-6ab4de731704")
         company = db.query(Company).filter(Company.id == company_id).first()
         if not company:
             logger.info(f"Creating Company STELMAT: {company_id}")
@@ -118,7 +118,7 @@ def seed_stelmat():
             db.commit()
 
         # 5. Create or Update Tax Profile
-        tax_profile_id = "6a4e9b4b-0370-4249-8997-b17e11d164e4"
+        tax_profile_id = uuid.UUID("6a4e9b4b-0370-4249-8997-b17e11d164e4")
         tax_profile = db.query(CompanyTaxProfile).filter(CompanyTaxProfile.id == tax_profile_id).first()
         if not tax_profile:
             logger.info(f"Creating Tax Profile: {tax_profile_id}")
@@ -143,7 +143,7 @@ def seed_stelmat():
         if not sales_param:
             logger.info("Creating Sales Parameters for STELMAT...")
             sales_param = CompanySalesParameter(
-                id=str(uuid.uuid4()),
+                id=uuid.uuid4(),
                 company_id=company.id,
                 mkp_padrao=Decimal("2.12"),
                 despesa_administrativa=Decimal("5.00"),
@@ -237,7 +237,7 @@ def seed_stelmat():
             ).first()
             if not existing_cnae:
                 new_cnae = CompanyCnae(
-                    id=str(uuid.uuid4()),
+                    id=uuid.uuid4(),
                     company_id=company.id,
                     cnae_codigo=cnae_code,
                     tipo=cnae_type
