@@ -2485,9 +2485,6 @@ class OpportunitiesReportService:
 
         # Supplier summaries
         mapped_by_supplier = {}
-        total_fornecedores_produtos = 0.0
-        total_fornecedores_impostos = 0.0
-
         for pb in purchase_budgets:
             supplier_id = pb.supplier_id
             if supplier_id not in mapped_by_supplier:
@@ -2498,41 +2495,64 @@ class OpportunitiesReportService:
                     "total_custo": 0.0,
                     "forma_pagamento": pb.forma_pagamento.descricao if pb.forma_pagamento else (pb.forma_pagamento_snapshot.get("descricao") if pb.forma_pagamento_snapshot else "Não informada")
                 }
-            
-            for pb_item in pb.items:
-                opp_qty = get_unpacked_qty(pb_item.product_id)
-                if opp_qty <= 0:
-                    continue
-                
-                difal_unit, st_unit, ipi_unit, _ = get_purchase_tax_breakdown(pb_item.product_id, pb_item)
-                tax_unit = difal_unit + st_unit + ipi_unit
-                val_unit = float(pb_item.valor_unitario)
-                
-                val_total = val_unit * opp_qty
-                tax_total = tax_unit * opp_qty
-                val_final = val_total + tax_total
-                
-                supplier_data = mapped_by_supplier[supplier_id]
-                supplier_data["total_sem_imposto"] += val_total
-                supplier_data["total_imposto"] += tax_total
-                supplier_data["total_custo"] += val_final
-                
-                total_fornecedores_produtos += val_total
-                total_fornecedores_impostos += tax_total
 
-        # Check own services costs (SERVICO_PROPRIO)
+        total_fornecedores_produtos = 0.0
+        total_fornecedores_impostos = 0.0
         total_own_services_cost = 0.0
+
         for item in opportunity.rental_items:
             qty = float(item.quantidade)
+            custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
+            
             if item.opportunity_kit_id:
                 kf = kits_financials.get(item.opportunity_kit_id)
                 if kf:
+                    # Loop over kit products/services in items
                     for c in kf.get("item_summaries", []):
-                        if c.get("tipo_item_entity") == "SERVICO_PROPRIO" or c.get("own_service_id") is not None:
-                            total_own_services_cost += float(c.get("custo_total_item_no_kit") or 0.0) * qty
+                        c_qty = float(c.get("quantidade_no_kit") or 1.0) * qty
+                        c_cost_total = float(c.get("custo_total_item_no_kit") or 0.0) * qty
+                        
+                        c_prod_id = c.get("product_id")
+                        c_uuid = UUID(c_prod_id) if isinstance(c_prod_id, str) else c_prod_id
+                        c_pb_info = product_suppliers.get(c_uuid) if c_uuid else None
+                        
+                        if c_pb_info:
+                            supplier_id = c_pb_info["pb"].supplier_id
+                            c_pb_item = c_pb_info["pb_item"]
+                            c_difal, c_st, c_ipi, _ = get_purchase_tax_breakdown(c_uuid, c_pb_item)
+                            c_tax_total = (c_difal + c_st + c_ipi) * c_qty
+                            
+                            supplier_data = mapped_by_supplier[supplier_id]
+                            supplier_data["total_sem_imposto"] += (c_cost_total - c_tax_total)
+                            supplier_data["total_imposto"] += c_tax_total
+                            supplier_data["total_custo"] += c_cost_total
+                            
+                            total_fornecedores_produtos += (c_cost_total - c_tax_total)
+                            total_fornecedores_impostos += c_tax_total
+                        else:
+                            total_own_services_cost += c_cost_total
+                            
                     for c in kf.get("cost_summaries", []):
                         if c.get("own_service_id") is not None:
-                            total_own_services_cost += float(c.get("custo_total_item_no_kit") or 0.0) * qty
+                            c_cost_total = float(c.get("custo_total_item_no_kit") or 0.0) * qty
+                            total_own_services_cost += c_cost_total
+            else:
+                pb_info = product_suppliers.get(item.product_id) if item.product_id else None
+                if pb_info:
+                    supplier_id = pb_info["pb"].supplier_id
+                    pb_item = pb_info["pb_item"]
+                    difal_unit, st_unit, ipi_unit, _ = get_purchase_tax_breakdown(item.product_id, pb_item)
+                    tax_total = (difal_unit + st_unit + ipi_unit) * qty
+                    
+                    supplier_data = mapped_by_supplier[supplier_id]
+                    supplier_data["total_sem_imposto"] += (custo_total - tax_total)
+                    supplier_data["total_imposto"] += tax_total
+                    supplier_data["total_custo"] += custo_total
+                    
+                    total_fornecedores_produtos += (custo_total - tax_total)
+                    total_fornecedores_impostos += tax_total
+                else:
+                    total_own_services_cost += custo_total
 
         if total_own_services_cost > 0.0:
             company_name = (opportunity.company.nome_fantasia or opportunity.company.razao_social or "STELMAT").upper()
@@ -2587,15 +2607,18 @@ class OpportunitiesReportService:
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total
         
         # Payback in months (Dynamic payback calculation based on month-by-month cash flow)
+        has_instalacao = any(item.is_kit_instalacao for item in opportunity.rental_items)
+        prazo_instalacao_cashflow = opportunity.prazo_instalacao_meses or (1 if has_instalacao else 0)
+
         saldo_acumulado_temp = -investimento_total
         payback_mes = None
         
         for m in range(1, prazo_contrato + 1):
-            if m <= prazo_instalacao:
-                fat_mes = total_instalacao / prazo_instalacao if prazo_instalacao > 0 else 0.0
+            if m <= prazo_instalacao_cashflow:
+                fat_mes = total_instalacao / prazo_instalacao_cashflow if prazo_instalacao_cashflow > 0 else 0.0
                 imp_mes = 0.0
-                op_mes = custo_op_instalacao_total / prazo_instalacao if (prazo_instalacao > 0 and total_instalacao > 0) else 0.0
-                com_mes = comissao_inst_calc / prazo_instalacao if (prazo_instalacao > 0 and total_instalacao > 0) else 0.0
+                op_mes = custo_op_instalacao_total / prazo_instalacao_cashflow if (prazo_instalacao_cashflow > 0 and total_instalacao > 0) else 0.0
+                com_mes = comissao_inst_calc / prazo_instalacao_cashflow if (prazo_instalacao_cashflow > 0 and total_instalacao > 0) else 0.0
             else:
                 fat_mes = locacao_mensal
                 imp_mes = impostos_mensal_total
@@ -2844,7 +2867,7 @@ class OpportunitiesReportService:
             custo_op_mensal=custo_op_mensal_total,
             comissao_mensal=comissao_mensal_calc,
             prazo_contrato=prazo_contrato,
-            prazo_instalacao=prazo_instalacao,
+            prazo_instalacao=prazo_instalacao_cashflow,
             total_instalacao=total_instalacao,
             impostos_instalacao=impostos_instalacao_total,
             custo_op_instalacao=custo_op_instalacao_total,

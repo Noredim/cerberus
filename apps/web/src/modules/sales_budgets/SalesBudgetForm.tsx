@@ -3319,7 +3319,8 @@ export function SalesBudgetForm() {
           const diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat);
 
           const pCtr = prazoContratoMeses || 1;
-          const pInst = prazoInstalacaoMeses || 0;
+          const hasInstalacao = rentalItems.some(ri => ri.is_kit_instalacao);
+          const pInst = prazoInstalacaoMeses || (hasInstalacao ? 1 : 0);
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
           const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
 

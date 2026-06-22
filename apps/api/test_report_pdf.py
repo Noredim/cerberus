@@ -23,6 +23,7 @@ import src.modules.purchase_budgets.models
 import src.modules.opportunity_kits.models
 import src.modules.sales_proposals.models
 import src.modules.own_services.models
+import src.modules.licitacoes.models
 
 from src.modules.sales_budgets.models import SalesBudget
 from src.modules.purchase_budgets.models import PurchaseBudget
