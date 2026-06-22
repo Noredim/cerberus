@@ -112,18 +112,42 @@
                         {% endif %}
                     </td>
                     <td class="text-center">{{ item.quantidade }}</td>
-                    <td class="text-right">R$ {{ item.custo_aquisicao }}</td>
-                    <td class="text-right">R$ {{ item.comissao }}</td>
-                    <td class="text-right">R$ {{ item.instalacao }}</td>
-                    <td class="text-right font-bold">R$ {{ item.locacao_mensal }}</td>
-                    <td class="text-right">R$ {{ item.manutencao_mes }}</td>
-                    <td class="text-right">R$ {{ item.monitoramento }}</td>
-                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ item.fat_mensal }}</td>
-                    <td class="text-right font-bold" style="color: #0284c7;">R$ {{ item.fat_mensal_total }}</td>
+                    <td class="text-right">{% if item.custo_aquisicao == "0,00" %}-{% else %}R$ {{ item.custo_aquisicao }}{% endif %}</td>
+                    <td class="text-right">{% if item.comissao == "0,00" %}-{% else %}R$ {{ item.comissao }}{% endif %}</td>
+                    <td class="text-right">{% if item.instalacao == "0,00" %}-{% else %}R$ {{ item.instalacao }}{% endif %}</td>
+                    <td class="text-right font-bold">{% if item.is_kit_instalacao or item.locacao_mensal == "0,00" %}-{% else %}R$ {{ item.locacao_mensal }}{% endif %}</td>
+                    <td class="text-right">{% if item.manutencao_mes == "0,00" %}-{% else %}R$ {{ item.manutencao_mes }}{% endif %}</td>
+                    <td class="text-right">{% if item.monitoramento == "0,00" %}-{% else %}R$ {{ item.monitoramento }}{% endif %}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">{% if item.fat_mensal == "0,00" %}-{% else %}R$ {{ item.fat_mensal }}{% endif %}</td>
+                    <td class="text-right font-bold" style="color: #0284c7;">{% if item.fat_mensal_total == "0,00" %}-{% else %}R$ {{ item.fat_mensal_total }}{% endif %}</td>
                     <td class="text-center">{{ item.prazo }}</td>
-                    <td class="text-right font-bold">R$ {{ item.vlr_total }}</td>
-                    <td class="text-right font-bold" style="color: #ea580c;">R$ {{ item.impostos_mensal }}</td>
+                    <td class="text-right font-bold">{% if item.vlr_total == "0,00" %}-{% else %}R$ {{ item.vlr_total }}{% endif %}</td>
+                    <td class="text-right font-bold" style="color: #ea580c;">{% if item.impostos_mensal == "0,00" %}-{% else %}R$ {{ item.impostos_mensal }}{% endif %}</td>
                 </tr>
+                {% if item.components %}
+                    {% for comp in item.components %}
+                    <tr class="component-row">
+                        <td class="component-name">
+                            ↳ {{ comp.descricao }}
+                            {% if comp.part_number %}
+                                <span style="font-size: 4.5pt; color: #94a3b8; font-family: monospace;">({{ comp.part_number }})</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ comp.quantidade }}</td>
+                        <td class="text-right">{% if comp.custo_aquisicao == "0,00" %}-{% else %}R$ {{ comp.custo_aquisicao }}{% endif %}</td>
+                        <td class="text-right">{% if comp.comissao == "0,00" %}-{% else %}R$ {{ comp.comissao }}{% endif %}</td>
+                        <td class="text-right">{% if comp.instalacao == "0,00" %}-{% else %}R$ {{ comp.instalacao }}{% endif %}</td>
+                        <td class="text-right">{% if comp.locacao_mensal == "0,00" %}-{% else %}R$ {{ comp.locacao_mensal }}{% endif %}</td>
+                        <td class="text-right">{% if comp.manutencao_mes == "0,00" %}-{% else %}R$ {{ comp.manutencao_mes }}{% endif %}</td>
+                        <td class="text-right">{% if comp.monitoramento == "0,00" %}-{% else %}R$ {{ comp.monitoramento }}{% endif %}</td>
+                        <td class="text-right">{% if comp.fat_mensal == "0,00" %}-{% else %}R$ {{ comp.fat_mensal }}{% endif %}</td>
+                        <td class="text-right">{% if comp.fat_mensal_total == "0,00" %}-{% else %}R$ {{ comp.fat_mensal_total }}{% endif %}</td>
+                        <td class="text-center">{{ comp.prazo }}</td>
+                        <td class="text-right">{% if comp.vlr_total == "0,00" %}-{% else %}R$ {{ comp.vlr_total }}{% endif %}</td>
+                        <td class="text-right" style="color: #ea580c;">{% if comp.impostos_mensal == "0,00" %}-{% else %}R$ {{ comp.impostos_mensal }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
                 {% endfor %}
                 <tr class="total-row">
                     <td>Total:</td>
@@ -220,12 +244,14 @@
                     {% endfor %}
                     
                     {% if impostos_instalacao_total > 0 %}
-                    <tr>
-                        <td>Impostos s/ Instalação (Adicional)</td>
-                        <td class="text-right">-</td>
-                        <td class="text-right">-</td>
-                        <td class="text-right font-bold">R$ {{ kpis.impostos_instalacao_str }}</td>
-                    </tr>
+                        {% for ti in taxes_instalacao_summary %}
+                        <tr>
+                            <td>{{ ti.name }}</td>
+                            <td class="text-right">{{ ti.percent }}%</td>
+                            <td class="text-right">-</td>
+                            <td class="text-right font-bold">R$ {{ ti.total }}</td>
+                        </tr>
+                        {% endfor %}
                     {% endif %}
                     
                     <tr class="total-row">
@@ -244,50 +270,56 @@
     <div class="avoid-break" style="margin-top: 10px;">
         <div class="section-title">Estudo de Rentabilidade de Capital (Payback & Fluxo de Caixa)</div>
         
-        <table style="width: 100%; border-collapse: collapse; margin-top: 6px;">
-            <tr>
-                <!-- Gráfico Inline SVG -->
-                <td style="width: 60%; vertical-align: top; padding-right: 12px;">
-                    <div class="chart-container">
-                        <div class="chart-title">Curva de Fluxo de Caixa Acumulado (mês a mês)</div>
-                        <div style="padding: 4px; display: block; margin: 0 auto; text-align: center;">
-                            {{ cashflow_chart_svg | safe }}
+        <!-- Gráfico Inline SVG -->
+        <div class="chart-container" style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 10px;">
+            <div class="chart-title">Curva de Fluxo de Caixa Acumulado (mês a mês)</div>
+            <div style="padding: 4px; display: block; margin: 0 auto; text-align: center;">
+                {{ cashflow_chart_svg | safe }}
+            </div>
+        </div>
+        
+        <!-- Memória de Cálculo e Detalhes do ROI -->
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 7.5pt; color: #334155; box-sizing: border-box; width: 100%;">
+            <div style="font-weight: bold; font-family: sans-serif; font-size: 8pt; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase;">
+                Memória de Cálculo Financeiro
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                <tr>
+                    <td style="width: 50%; vertical-align: top; padding-right: 15px; border-right: 1px dashed #cbd5e1;">
+                        <div style="margin-bottom: 4px;">
+                            <strong style="font-family: sans-serif; font-size: 8pt; color: #0f172a;">Investimento Inicial (Capex):</strong>
                         </div>
-                    </div>
-                </td>
-                
-                <!-- Memória de Cálculo e Detalhes do ROI -->
-                <td style="width: 40%; vertical-align: top;">
-                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 7.5pt; color: #334155; height: 215px;">
-                        <div style="font-weight: bold; font-family: sans-serif; font-size: 8pt; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase;">
-                            Memória de Cálculo Financeiro
-                        </div>
-                        
-                        <div style="margin-bottom: 6px;">
-                            <strong>Investimento Inicial (Capex):</strong><br>
-                            (+) Custos de Aquisição (Equipamentos): R$ {{ kpis.custo_total_aquisicao_bruto }}<br>
+                        <div style="line-height: 1.4;">
+                            (+) Aquisição Equipamentos de Terceiros: R$ {{ kpis.custo_aquisicao_terceiros_str }}<br>
+                            (+) Investimento com Serviços Próprios (Stelmat): R$ {{ kpis.custo_servicos_proprios_str }}<br>
                             (+) Comissão Comercial Locação: R$ {{ kpis.comissao_total_str }}<br>
                             (+) Impostos de Instalação/Startup: R$ {{ kpis.impostos_instalacao_str }}<br>
-                            <strong>(=) Investimento Total: R$ {{ kpis.investimento_total }}</strong>
+                            <strong style="color: #0f172a;">(=) Investimento Total (Capex): R$ {{ kpis.investimento_capex }}</strong><br>
+                            (-) Recebimento de Instalação (M1): R$ {{ total_instalacao_str or kpis.total_instalacao_str }}<br>
+                            <strong style="color: #0f766e;">(=) Saldo Capex a Amortizar: R$ {{ kpis.saldo_capex_amortizar_str }}</strong>
                         </div>
-                        
-                        <div style="margin-bottom: 6px; border-top: 1px dashed #cbd5e1; padding-top: 4px;">
-                            <strong>Resultado Mensal Líquido:</strong><br>
+                    </td>
+                    <td style="width: 50%; vertical-align: top; padding-left: 15px;">
+                        <div style="margin-bottom: 4px;">
+                            <strong style="font-family: sans-serif; font-size: 8pt; color: #0f172a;">Resultado Mensal Líquido:</strong>
+                        </div>
+                        <div style="line-height: 1.4; margin-bottom: 6px;">
                             (+) Faturamento de Locação Mensal: R$ {{ kpis.locacao_mensal }}<br>
                             (-) Custo Operacional Mensal: R$ {{ kpis.custo_op_mensal_total }}<br>
                             (-) Imposto sobre Locação Mensal: R$ {{ kpis.impostos_mensal_total }}<br>
-                            <strong>(=) Retorno Mensal Líquido (Ebitda): R$ {{ kpis.lucro_mensal_total }}</strong>
+                            <strong style="color: #0f172a;">(=) Retorno Mensal Líquido (Ebitda): R$ {{ kpis.lucro_mensal_total }}</strong>
                         </div>
                         
-                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 4px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif;">
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif; line-height: 1.3;">
                             Fórmula do Payback:<br>
-                            Payback = Capex ÷ Retorno Mensal Líquido<br>
-                            Payback = {{ kpis.investimento_total }} ÷ {{ kpis.lucro_mensal_total }} = <span style="font-size: 9pt; color: #166534;">{{ kpis.payback_meses }}</span>
+                            Payback = 1m (Instalação) + (Saldo Capex ÷ Retorno Mensal)<br>
+                            Payback = 1m + (({{ kpis.investimento_capex }} - {{ total_instalacao_str or kpis.total_instalacao_str }}) ÷ {{ kpis.lucro_mensal_total }}) = <span style="font-size: 9.5pt; color: #166534;">{{ kpis.payback_meses }}</span>
                         </div>
-                    </div>
-                </td>
-            </tr>
-        </table>
+                    </td>
+                </tr>
+            </table>
+        </div>
         
         <div class="audit-info" style="margin-top: 20px;">
             Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ opportunity.id }} | Versão do Relatório: {{ auditoria.versao }}

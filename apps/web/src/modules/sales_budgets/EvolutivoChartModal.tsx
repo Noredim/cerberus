@@ -139,8 +139,8 @@ export function EvolutivoChartModal({ isOpen, onClose, chartData, prazoContrato,
                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
                    <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="square" />
                    
-                   {paybackMes && <ReferenceArea x1={`M${paybackMes}`} x2={`M${paybackMes}`} fill="#e2e8f0" fillOpacity={0.5} />}
-                   {paybackMes && <ReferenceLine x={`M${paybackMes}`} stroke="#22c55e" strokeDasharray="4 4" strokeWidth={2} label={{ position: 'top', value: 'Payback', fill: '#22c55e', fontSize: 11, fontWeight: 'bold' }} />}
+                   {paybackMes && <ReferenceArea x1={`M${Math.ceil(paybackMes)}`} x2={`M${Math.ceil(paybackMes)}`} fill="#e2e8f0" fillOpacity={0.5} />}
+                   {paybackMes && <ReferenceLine x={`M${Math.ceil(paybackMes)}`} stroke="#22c55e" strokeDasharray="4 4" strokeWidth={2} label={{ position: 'top', value: 'Payback', fill: '#22c55e', fontSize: 11, fontWeight: 'bold' }} />}
                    
                    <Bar name="Gastos Operacionais" dataKey="GastosOperacionais" stackId="a" fill="#94a3b8" barSize={32} />
                    <Bar name="Quitar Investimento" dataKey="QuitarInvestimento" stackId="a" fill="#f97316" barSize={32} />
@@ -168,7 +168,7 @@ export function EvolutivoChartModal({ isOpen, onClose, chartData, prazoContrato,
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
                   {chartData.map((row, idx) => {
-                    const isPayback = paybackMes === (idx + 1);
+                    const isPayback = paybackMes !== null && Math.ceil(paybackMes) === (idx + 1);
                     return (
                       <tr key={row.mesLabel} className={`hover:bg-white/5 transition-colors ${isPayback ? 'bg-emerald-500/10' : ''}`}>
                         <td className={`px-6 py-3 font-semibold text-left ${isPayback ? 'text-emerald-500' : 'text-text-primary'}`}>

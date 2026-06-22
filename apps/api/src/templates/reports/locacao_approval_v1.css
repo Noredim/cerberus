@@ -228,3 +228,15 @@ h1, h2, h3, h4 {
     padding: 2px 3px !important;
 }
 
+/* Component sub-rows styles */
+.component-row td {
+    font-style: italic !important;
+    color: #64748b !important;
+    background-color: #f8fafc !important;
+}
+
+.component-row td.component-name {
+    padding-left: 12px !important;
+    text-align: left !important;
+}
+

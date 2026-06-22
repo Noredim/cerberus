@@ -1166,10 +1166,6 @@ export function SalesBudgetForm() {
   };
 
   const handleDownloadVendaApprovalReport = async () => {
-    if (opportunityPurchaseBudgets.length === 0) {
-      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
-      return;
-    }
     setDownloadingVendaReport(true);
     try {
       const response = await api.get(`/sales-budgets/${id}/reports/venda-approval`, {
@@ -1192,10 +1188,6 @@ export function SalesBudgetForm() {
   };
 
   const handleDownloadLocacaoApprovalReport = async () => {
-    if (opportunityPurchaseBudgets.length === 0) {
-      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
-      return;
-    }
     setDownloadingLocacaoReport(true);
     try {
       const response = await api.get(`/sales-budgets/${id}/reports/locacao-approval`, {
@@ -2347,7 +2339,7 @@ export function SalesBudgetForm() {
                       handleDownloadVendaApprovalReport();
                     }}
                     disabled={downloadingVendaReport}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2"
                   >
                     {downloadingVendaReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Approval de Venda
@@ -2359,7 +2351,7 @@ export function SalesBudgetForm() {
                         handleDownloadLocacaoApprovalReport();
                       }}
                       disabled={downloadingLocacaoReport}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2"
                     >
                       {downloadingLocacaoReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                       Approval de Locação
@@ -3326,30 +3318,73 @@ export function SalesBudgetForm() {
 
           const diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat);
 
-          // Evolutivo Chart Projector (Stacked Monthly) calculated FIRST to sync ROI
-          const chartData = [];
-
-          let saldoInvestimento = rentalTotals.investimento;
-          let paybackMes: number | null = null;
-          let lucroAcumuladoGeral = 0;
-
           const pCtr = prazoContratoMeses || 1;
           const pInst = prazoInstalacaoMeses || 0;
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
+          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
 
+          // 1. Calculate base_roi (dynamic payback without director commission)
+          let baseSaldoAcumulado = -capexTotal;
+          let basePaybackMes: number | null = null;
           for (let m = 1; m <= pCtr; m++) {
             let fatMes = 0;
+            let impMes = 0;
+            let opMesCur = 0;
+            let comMes = 0;
 
             if (m <= pInst) {
               fatMes = rentalTotals.totalInstalacao / (pInst || 1);
+              impMes = 0.0;
+              opMesCur = rentalTotals.custoOpInstalacaoTotal / (pInst || 1);
+              comMes = 0.0;
             } else {
               fatMes = rentalTotals.faturamentoMensal;
+              impMes = rentalTotals.impostosMensal;
+              opMesCur = opMes;
+              comMes = 0.0;
             }
 
-            const impMes = rentalTotals.impostosMensal;
-            const comMes = comissao_mensal_calc;
+            const receitaLivre = fatMes - (impMes + opMesCur + comMes);
+            baseSaldoAcumulado += receitaLivre;
 
-            const gastosMes = impMes + opMes + comMes;
+            if (baseSaldoAcumulado >= 0 && basePaybackMes === null) {
+              const prevSaldo = baseSaldoAcumulado - receitaLivre;
+              if (receitaLivre > 0) {
+                const fraction = -prevSaldo / receitaLivre;
+                basePaybackMes = (m - 1) + fraction;
+              } else {
+                basePaybackMes = m;
+              }
+            }
+          }
+          const base_roi = basePaybackMes !== null ? basePaybackMes : (pCtr + 1);
+
+          // 2. Calculate chartData and diretor_roi (dynamic payback with director commission)
+          const chartData = [];
+          let saldoInvestimento = capexTotal;
+          let paybackMes: number | null = null;
+          let lucroAcumuladoGeral = 0;
+          let saldoAcumuladoTemp = -capexTotal;
+
+          for (let m = 1; m <= pCtr; m++) {
+            let fatMes = 0;
+            let impMes = 0;
+            let opMesCur = 0;
+            let comMes = 0;
+
+            if (m <= pInst) {
+              fatMes = rentalTotals.totalInstalacao / (pInst || 1);
+              impMes = 0.0;
+              opMesCur = rentalTotals.custoOpInstalacaoTotal / (pInst || 1);
+              comMes = comissao_inst_calc / (pInst || 1);
+            } else {
+              fatMes = rentalTotals.faturamentoMensal;
+              impMes = rentalTotals.impostosMensal;
+              opMesCur = opMes;
+              comMes = comissao_mensal_calc;
+            }
+
+            const gastosMes = impMes + opMesCur + comMes;
             const receitaLivre = fatMes - gastosMes;
 
             let quitarMes = 0;
@@ -3360,10 +3395,16 @@ export function SalesBudgetForm() {
 
             const lucroLivreMes = Math.max(0, receitaLivre - quitarMes);
             lucroAcumuladoGeral += lucroLivreMes;
+            saldoAcumuladoTemp += receitaLivre;
 
-            if (saldoInvestimento <= 0 && paybackMes === null) {
-              paybackMes = m;
-
+            if (saldoAcumuladoTemp >= 0 && paybackMes === null) {
+              const prevSaldo = saldoAcumuladoTemp - receitaLivre;
+              if (receitaLivre > 0) {
+                const fraction = -prevSaldo / receitaLivre;
+                paybackMes = (m - 1) + fraction;
+              } else {
+                paybackMes = m;
+              }
             }
 
             chartData.push({
@@ -3376,22 +3417,10 @@ export function SalesBudgetForm() {
             });
           }
 
+          const diretor_roi = paybackMes !== null ? paybackMes : (pCtr + 1);
+
           const diretor_saldo = diretor_rec_liq - diretor_comissao;
           const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
-
-          // ROI Final = Custo Aquisição / (Mensal Locação - Custo Op. Mensal - Imposto Mensal)
-          // Fórmula direta conforme definição: 8565.67 / (580.03 - 150.00 - 94.72) = 25.54 m
-          const _roiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal;
-          const base_roi = _roiDenominador > 0
-            ? rentalTotals.investimento / _roiDenominador
-            : ((prazoContratoMeses || 1) + 1);
-
-          // O card do ROI final dentro do card de Consolidação Diretoria deve seguir a mesma lógica
-          // do Fechamento de Proposta, apenas incluindo nos custos o valor da Comissão rec/liq.
-          const _diretorRoiDenominador = rentalTotals.faturamentoMensal - opMes - rentalTotals.impostosMensal - comissao_mensal_calc;
-          const diretor_roi = _diretorRoiDenominador > 0
-            ? rentalTotals.investimento / _diretorRoiDenominador
-            : ((prazoContratoMeses || 1) + 1);
 
 
           return (
