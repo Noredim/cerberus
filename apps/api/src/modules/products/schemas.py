@@ -35,6 +35,7 @@ class ProductBase(BaseModel):
     unidade: Optional[str] = None
     categoria: Optional[str] = None
     marca: Optional[str] = None
+    fabricante: Optional[str] = None
     modelo: Optional[str] = None
     part_number: Optional[str] = None
     ncm_codigo: Optional[str] = None
@@ -82,6 +83,7 @@ class ProductUpdate(BaseModel):
     unidade: Optional[str] = None
     categoria: Optional[str] = None
     marca: Optional[str] = None
+    fabricante: Optional[str] = None
     modelo: Optional[str] = None
     part_number: Optional[str] = None
     ncm_codigo: Optional[str] = None

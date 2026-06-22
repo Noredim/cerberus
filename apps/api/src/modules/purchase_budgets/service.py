@@ -508,6 +508,14 @@ class PurchaseBudgetService:
         col_icms = headers.get("icms_percent") if "icms_percent" in headers else headers.get("icms_percentual") if "icms_percentual" in headers else headers.get("icms")
         col_difal = headers.get("difal_unitario") if "difal_unitario" in headers else headers.get("difal")
         col_st = headers.get("st_unitario") if "st_unitario" in headers else headers.get("st")
+
+        col_marca = headers.get("marca")
+        col_fabricante = headers.get("fabricante")
+        
+        col_part_number = headers.get("part_number")
+        if col_part_number is None: col_part_number = headers.get("part number")
+        if col_part_number is None: col_part_number = headers.get("partnumber")
+        if col_part_number is None: col_part_number = headers.get("pn")
         
         if col_codigo is None or col_valor is None:
             raise HTTPException(status_code=400, detail="Planilha deve conter as colunas 'codigo' e 'valor'")
@@ -520,7 +528,23 @@ class PurchaseBudgetService:
             Product.tenant_id == tenant_id
         ).all()
         
-        map_codigo_produto = {sp.ProductSupplier.codigo_externo: {"id": str(sp.Product.id), "nome": sp.Product.nome, "codigo": sp.Product.codigo, "ncm": sp.Product.ncm_codigo} for sp in supplier_prods}
+        map_codigo_produto = {
+            sp.ProductSupplier.codigo_externo: (
+                sp.Product,
+                {
+                    "id": str(sp.Product.id),
+                    "nome": sp.Product.nome,
+                    "codigo": sp.Product.codigo,
+                    "ncm": sp.Product.ncm_codigo,
+                    "marca": sp.Product.marca,
+                    "fabricante": getattr(sp.Product, "fabricante", None),
+                    "part_number": sp.Product.part_number
+                }
+            )
+            for sp in supplier_prods
+        }
+        
+        any_product_updated = False
         
         # Evitar loops vazios
         for row_raw in sheet.iter_rows(min_row=2, values_only=True):
@@ -538,6 +562,10 @@ class PurchaseBudgetService:
             c_icms = int(col_icms) if isinstance(col_icms, int) else -1
             c_difal = int(col_difal) if isinstance(col_difal, int) else -1
             c_st = int(col_st) if isinstance(col_st, int) else -1
+            
+            c_marca = int(col_marca) if isinstance(col_marca, int) else -1
+            c_fabricante = int(col_fabricante) if isinstance(col_fabricante, int) else -1
+            c_part_number = int(col_part_number) if isinstance(col_part_number, int) else -1
             
             codigo_raw = row[c_cod] if c_cod >= 0 and len(row) > c_cod else None
             if codigo_raw is None:
@@ -557,6 +585,19 @@ class PurchaseBudgetService:
             icms = row[c_icms] if c_icms >= 0 and len(row) > c_icms else 0
             difal = row[c_difal] if c_difal >= 0 and len(row) > c_difal else 0
             st = row[c_st] if c_st >= 0 and len(row) > c_st else 0
+            
+            marca_raw = row[c_marca] if c_marca >= 0 and len(row) > c_marca else None
+            fabricante_raw = row[c_fabricante] if c_fabricante >= 0 and len(row) > c_fabricante else None
+            part_number_raw = row[c_part_number] if c_part_number >= 0 and len(row) > c_part_number else None
+            
+            marca = str(marca_raw).strip() if marca_raw is not None else None
+            fabricante = str(fabricante_raw).strip() if fabricante_raw is not None else None
+            part_number = str(part_number_raw).strip() if part_number_raw is not None else None
+            
+            # Convert empty string to None
+            marca = marca if (marca and marca.strip() != "") else None
+            fabricante = fabricante if (fabricante and fabricante.strip() != "") else None
+            part_number = part_number if (part_number and part_number.strip() != "") else None
             
             try: val = float(val) if val else 0
             except: val = 0
@@ -589,16 +630,42 @@ class PurchaseBudgetService:
                 "ipi_percent": ipi,
                 "icms_percent": icms,
                 "difal_unitario": difal,
-                "st_unitario": st
+                "st_unitario": st,
+                "marca": marca,
+                "fabricante": fabricante,
+                "part_number": part_number
             }
             
-            prod = map_codigo_produto.get(codigo)
-            if prod:
-                item_data["product"] = prod
+            prod_info = map_codigo_produto.get(codigo)
+            if prod_info:
+                product_obj, prod_dict = prod_info
+                updated = False
+                
+                if marca is not None:
+                    product_obj.marca = marca
+                    updated = True
+                if fabricante is not None:
+                    product_obj.fabricante = fabricante
+                    updated = True
+                if part_number is not None:
+                    product_obj.part_number = part_number
+                    updated = True
+                
+                if updated:
+                    db.add(product_obj)
+                    any_product_updated = True
+                    prod_dict["marca"] = product_obj.marca
+                    prod_dict["fabricante"] = getattr(product_obj, "fabricante", None)
+                    prod_dict["part_number"] = product_obj.part_number
+                
+                item_data["product"] = prod_dict
                 encontrados.append(item_data)
             else:
                 nao_encontrados.append(item_data)
                 
+        if any_product_updated:
+            db.commit()
+            
         return {
             "encontrados": encontrados,
             "nao_encontrados": nao_encontrados

@@ -738,27 +738,25 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     }
   };
 
-  const handleAddProduct = (product: any) => {
+
+
+  const handleAddProducts = (products: any[]) => {
     setForm(prev => {
-      // Check if product already exists to simply increment QTY
-      const existingIdx = prev.items.findIndex(i => i.product_id === product.id);
-      if (existingIdx !== -1) {
-        const newItems = [...prev.items];
-        newItems[existingIdx].quantidade_no_kit += 1;
-        return { ...prev, items: newItems };
-      }
-      return {
-        ...prev,
-        items: [
-          ...prev.items,
-          {
+      const newItems = [...prev.items];
+      products.forEach(product => {
+        const existingIdx = newItems.findIndex(i => i.product_id === product.id);
+        if (existingIdx !== -1) {
+          newItems[existingIdx].quantidade_no_kit += 1;
+        } else {
+          newItems.push({
             product_id: product.id,
             descricao_item: product.nome,
             quantidade_no_kit: 1,
             product: { codigo: product.codigo }
-          }
-        ]
-      };
+          });
+        }
+      });
+      return { ...prev, items: newItems };
     });
     setShowProductSearch(false);
   };
@@ -2440,7 +2438,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             <ProductSearchModal
               isOpen={showProductSearch}
               onClose={() => setShowProductSearch(false)}
-              onSelect={handleAddProduct}
+              multiSelect={true}
+              onSelectMany={handleAddProducts}
               salesBudgetId={form.sales_budget_id}
             />
           </section>

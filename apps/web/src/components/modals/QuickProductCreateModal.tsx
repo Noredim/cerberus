@@ -15,6 +15,9 @@ interface QuickProductCreateModalProps {
     descricao?: string;
     supplier_id?: string;
     codigo_fornecedor?: string;
+    marca?: string;
+    fabricante?: string;
+    part_number?: string;
   };
 }
 
@@ -48,10 +51,10 @@ export function QuickProductCreateModal({
         ncm_codigo: initialData?.ncm || '',
         tipo: initialData?.ncm ? 'EQUIPAMENTO' : '',
         descricao: initialData?.descricao || '',
-        marca: '',
+        marca: initialData?.marca || '',
         modelo: '',
-        fabricante: '',
-        part_number: ''
+        fabricante: initialData?.fabricante || '',
+        part_number: initialData?.part_number || ''
       });
       setError('');
       fetchCompanies();

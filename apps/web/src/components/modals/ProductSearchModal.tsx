@@ -8,22 +8,26 @@ import type { Product } from '../../modules/products/types';
 interface ProductSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (product: Product) => void;
+  onSelect?: (product: Product) => void;
   title?: string;
   salesBudgetId?: string;
+  multiSelect?: boolean;
+  onSelectMany?: (products: Product[]) => void;
 }
 
-export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId }: ProductSearchModalProps) {
+export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId, multiSelect = false, onSelectMany }: ProductSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
       setResults([]);
+      setSelectedProducts([]);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -113,45 +117,74 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
               </div>
             )}
 
-            {results.map((product) => (
-              <div 
-                key={product.id}
-                onClick={() => {
-                  onSelect(product);
-                  onClose();
-                }}
-                className="flex items-center justify-between p-4 bg-white border border-border-subtle rounded-lg hover:border-brand-primary hover:shadow-sm cursor-pointer transition-all group"
-              >
-                <div className="flex flex-col overflow-hidden w-full pr-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-text-primary truncate">{product.nome}</span>
+            {results.map((product) => {
+              const isSelected = multiSelect && selectedProducts.some(p => p.id === product.id);
+              return (
+                <div 
+                  key={product.id}
+                  onClick={() => {
+                    if (multiSelect) {
+                      if (isSelected) {
+                        setSelectedProducts(prev => prev.filter(p => p.id !== product.id));
+                      } else {
+                        setSelectedProducts(prev => [...prev, product]);
+                      }
+                    } else {
+                      onSelect?.(product);
+                      onClose();
+                    }
+                  }}
+                  className={`flex items-center justify-between p-4 bg-white border rounded-lg cursor-pointer transition-all group ${
+                    isSelected 
+                      ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' 
+                      : 'border-border-subtle hover:border-brand-primary hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center overflow-hidden w-full pr-4">
+                    {multiSelect && (
+                      <div className="mr-3 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          readOnly
+                          className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-col overflow-hidden w-full">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-text-primary truncate">{product.nome}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+                        {product.codigo && (
+                          <span className="flex items-center gap-1">
+                            <span className="font-medium">Cód:</span> {product.codigo}
+                          </span>
+                        )}
+                        {product.ncm_codigo && (
+                          <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
+                            <span className="font-medium">NCM:</span> {product.ncm_codigo}
+                          </span>
+                        )}
+                        {product.categoria && (
+                          <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
+                            <span className="font-medium">Categoria:</span> {product.categoria}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
-                    {product.codigo && (
-                      <span className="flex items-center gap-1">
-                        <span className="font-medium">Cód:</span> {product.codigo}
-                      </span>
-                    )}
-                    {product.ncm_codigo && (
-                      <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
-                        <span className="font-medium">NCM:</span> {product.ncm_codigo}
-                      </span>
-                    )}
-                    {product.categoria && (
-                      <span className="flex items-center gap-1 border-l pl-4 border-border-subtle">
-                        <span className="font-medium">Categoria:</span> {product.categoria}
-                      </span>
-                    )}
-                  </div>
+                  
+                  {!multiSelect && (
+                    <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="outline" size="sm" className="pointer-events-none">
+                        Selecionar
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                
-                <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="outline" size="sm" className="pointer-events-none">
-                    Selecionar
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {results.length > 0 && (
               <div className="mt-4 pt-2 border-t border-border-subtle flex justify-center">
@@ -190,13 +223,44 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
           </div>
         </div>
 
+        {multiSelect && (
+          <div className="flex justify-between items-center p-4 border-t border-border-subtle bg-bg-subtle flex-none">
+            <span className="text-sm font-semibold text-text-secondary">
+              {selectedProducts.length} {selectedProducts.length === 1 ? 'produto selecionado' : 'produtos selecionados'}
+            </span>
+            <div className="flex items-center gap-3">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={selectedProducts.length === 0}
+                onClick={() => {
+                  onSelectMany?.(selectedProducts);
+                  onClose();
+                }}
+              >
+                Adicionar Selecionados ({selectedProducts.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
         <QuickProductCreateModal
           isOpen={isQuickCreateOpen}
           onClose={() => setIsQuickCreateOpen(false)}
           onSuccess={(newProduct) => {
             setIsQuickCreateOpen(false);
-            onSelect(newProduct);
-            onClose();
+            if (multiSelect) {
+              setSelectedProducts(prev => {
+                if (prev.some(p => p.id === newProduct.id)) return prev;
+                return [...prev, newProduct];
+              });
+            } else {
+              onSelect?.(newProduct);
+              onClose();
+            }
           }}
           initialData={{
             nome: searchTerm

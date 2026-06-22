@@ -261,7 +261,10 @@ export function BudgetReconciliationModal({
             descricao: currentItem.descricao,
             ncm: currentItem.ncm,
             supplier_id: supplierId,
-            codigo_fornecedor: currentItem.codigo_fornecedor
+            codigo_fornecedor: currentItem.codigo_fornecedor,
+            marca: currentItem.marca,
+            fabricante: currentItem.fabricante,
+            part_number: currentItem.part_number
           }}
         />
 

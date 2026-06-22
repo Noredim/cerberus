@@ -25,6 +25,7 @@ class Product(Base):
     unidade = Column(String(20))
     categoria = Column(String(100))
     marca = Column(String(100))
+    fabricante = Column(String(100))
     modelo = Column(String(100))
     part_number = Column(String(50))
     
