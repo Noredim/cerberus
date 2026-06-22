@@ -308,13 +308,13 @@
                             (+) Faturamento de Locação Mensal: R$ {{ kpis.locacao_mensal }}<br>
                             (-) Custo Operacional Mensal: R$ {{ kpis.custo_op_mensal_total }}<br>
                             (-) Imposto sobre Locação Mensal: R$ {{ kpis.impostos_mensal_total }}<br>
-                            <strong style="color: #0f172a;">(=) Retorno Mensal Líquido (Ebitda): R$ {{ kpis.lucro_mensal_total }}</strong>
+                            <strong style="color: #0f172a;">(=) Retorno Mensal Líquido: R$ {{ kpis.lucro_mensal_total }}</strong>
                         </div>
                         
                         <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif; line-height: 1.3;">
                             Fórmula do Payback:<br>
-                            Payback = 1m (Instalação) + (Saldo Capex ÷ Retorno Mensal)<br>
-                            Payback = 1m + (({{ kpis.investimento_capex }} - {{ total_instalacao_str or kpis.total_instalacao_str }}) ÷ {{ kpis.lucro_mensal_total }}) = <span style="font-size: 9.5pt; color: #166534;">{{ kpis.payback_meses }}</span>
+                            Payback = Saldo Capex ÷ Retorno Mensal Líquido<br>
+                            Payback = ({{ kpis.investimento_capex }} - {{ total_instalacao_str or kpis.total_instalacao_str }}) ÷ {{ kpis.lucro_mensal_total }} = <span style="font-size: 9.5pt; color: #166534;">{{ kpis.payback_meses }}</span>
                         </div>
                     </td>
                 </tr>

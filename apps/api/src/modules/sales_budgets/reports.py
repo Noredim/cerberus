@@ -1978,6 +1978,14 @@ class OpportunitiesReportService:
                 "SaldoAcumulado": saldo_acumulado
             })
 
+        # Override payback_mes with the simple division formula requested by user
+        retorno_mensal = faturamento_mensal - impostos_mensal - custo_op_mensal - comissao_mensal
+        saldo_capex = investimento - total_instalacao
+        if retorno_mensal > 0.0:
+            payback_mes = saldo_capex / retorno_mensal
+        else:
+            payback_mes = None
+
         # Chart configuration
         width, height = 750, 225
         pad_l, pad_r, pad_t, pad_b = 55, 20, 25, 50
@@ -2034,7 +2042,7 @@ class OpportunitiesReportService:
             """
 
         # Draw line for Payback
-        if payback_mes is not None:
+        if payback_mes is not None and payback_mes <= pCtr:
             px = get_x(payback_mes)
             bar_w_half = (plot_w / pCtr) / 2
             x1 = px - bar_w_half
@@ -2606,39 +2614,16 @@ class OpportunitiesReportService:
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total
         
-        # Payback in months (Dynamic payback calculation based on month-by-month cash flow)
+        # Payback in months (Simple division of Saldo Capex by Retorno Mensal Líquido as requested by user)
         has_instalacao = any(item.is_kit_instalacao for item in opportunity.rental_items)
         prazo_instalacao_cashflow = opportunity.prazo_instalacao_meses or (1 if has_instalacao else 0)
 
-        saldo_acumulado_temp = -investimento_total
-        payback_mes = None
-        
-        for m in range(1, prazo_contrato + 1):
-            if m <= prazo_instalacao_cashflow:
-                fat_mes = total_instalacao / prazo_instalacao_cashflow if prazo_instalacao_cashflow > 0 else 0.0
-                imp_mes = 0.0
-                op_mes = custo_op_instalacao_total / prazo_instalacao_cashflow if (prazo_instalacao_cashflow > 0 and total_instalacao > 0) else 0.0
-                com_mes = comissao_inst_calc / prazo_instalacao_cashflow if (prazo_instalacao_cashflow > 0 and total_instalacao > 0) else 0.0
-            else:
-                fat_mes = locacao_mensal
-                imp_mes = impostos_mensal_total
-                op_mes = custo_op_mensal_total
-                com_mes = comissao_mensal_calc
-                
-            receita_livre = fat_mes - (imp_mes + op_mes + com_mes)
-            saldo_acumulado_temp += receita_livre
-            
-            if saldo_acumulado_temp >= 0.0 and payback_mes is None:
-                prev_saldo = saldo_acumulado_temp - receita_livre
-                if receita_livre > 0:
-                    fraction = -prev_saldo / receita_livre
-                    payback_mes = (m - 1) + float(fraction)
-                else:
-                    payback_mes = float(m)
-
-        if payback_mes is not None:
+        saldo_capex = investimento_total - total_instalacao
+        if retorno_mensal_liquido > 0.0:
+            payback_mes = saldo_capex / retorno_mensal_liquido
             payback_meses_str = f"{payback_mes:.1f} meses"
         else:
+            payback_mes = 0.0
             payback_meses_str = "N/A"
             
         # Margem líquida = Lucro do Contrato / Faturamento Total

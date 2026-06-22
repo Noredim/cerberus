@@ -3324,48 +3324,15 @@ export function SalesBudgetForm() {
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
           const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
 
-          // 1. Calculate base_roi (dynamic payback without director commission)
-          let baseSaldoAcumulado = -capexTotal;
-          let basePaybackMes: number | null = null;
-          for (let m = 1; m <= pCtr; m++) {
-            let fatMes = 0;
-            let impMes = 0;
-            let opMesCur = 0;
-            let comMes = 0;
+          // 1. Calculate base_roi (simple division without director commission)
+          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes;
+          const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
+          const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
 
-            if (m <= pInst) {
-              fatMes = rentalTotals.totalInstalacao / (pInst || 1);
-              impMes = 0.0;
-              opMesCur = rentalTotals.custoOpInstalacaoTotal / (pInst || 1);
-              comMes = 0.0;
-            } else {
-              fatMes = rentalTotals.faturamentoMensal;
-              impMes = rentalTotals.impostosMensal;
-              opMesCur = opMes;
-              comMes = 0.0;
-            }
-
-            const receitaLivre = fatMes - (impMes + opMesCur + comMes);
-            baseSaldoAcumulado += receitaLivre;
-
-            if (baseSaldoAcumulado >= 0 && basePaybackMes === null) {
-              const prevSaldo = baseSaldoAcumulado - receitaLivre;
-              if (receitaLivre > 0) {
-                const fraction = -prevSaldo / receitaLivre;
-                basePaybackMes = (m - 1) + fraction;
-              } else {
-                basePaybackMes = m;
-              }
-            }
-          }
-          const base_roi = basePaybackMes !== null ? basePaybackMes : (pCtr + 1);
-
-          // 2. Calculate chartData and diretor_roi (dynamic payback with director commission)
+          // 2. Calculate chartData and director/payback ROI metrics
           const chartData = [];
           let saldoInvestimento = capexTotal;
-          let paybackMes: number | null = null;
           let lucroAcumuladoGeral = 0;
-          let saldoAcumuladoTemp = -capexTotal;
 
           for (let m = 1; m <= pCtr; m++) {
             let fatMes = 0;
@@ -3396,17 +3363,6 @@ export function SalesBudgetForm() {
 
             const lucroLivreMes = Math.max(0, receitaLivre - quitarMes);
             lucroAcumuladoGeral += lucroLivreMes;
-            saldoAcumuladoTemp += receitaLivre;
-
-            if (saldoAcumuladoTemp >= 0 && paybackMes === null) {
-              const prevSaldo = saldoAcumuladoTemp - receitaLivre;
-              if (receitaLivre > 0) {
-                const fraction = -prevSaldo / receitaLivre;
-                paybackMes = (m - 1) + fraction;
-              } else {
-                paybackMes = m;
-              }
-            }
 
             chartData.push({
               mesLabel: `M${m}`,
@@ -3418,7 +3374,9 @@ export function SalesBudgetForm() {
             });
           }
 
-          const diretor_roi = paybackMes !== null ? paybackMes : (pCtr + 1);
+          const divisorDiretor = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissao_mensal_calc;
+          const diretor_roi = divisorDiretor > 0 ? (saldoCapex / divisorDiretor) : (pCtr + 1);
+          const paybackMes = divisorDiretor > 0 ? (saldoCapex / divisorDiretor) : null;
 
           const diretor_saldo = diretor_rec_liq - diretor_comissao;
           const diretor_margem = rentalTotals.faturamentoTotal > 0 ? (diretor_saldo / rentalTotals.faturamentoTotal) * 100 : 0;
