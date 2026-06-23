@@ -20,30 +20,70 @@ class TipiService:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Falha ao ler o arquivo Excel: {str(e)}")
 
-        # Find columns by checking the first row headers
+        # Find columns by scanning the first 20 rows of the sheet
         col_ncm = None
         col_aliquota = None
-        
-        # Read the first row (headers)
-        headers = []
-        for cell in sheet[1]:
-            headers.append(str(cell.value or "").strip().lower())
+        header_row_idx = None
+
+        # 1. Try to find a row containing both NCM and Alíquota/IPI
+        for r_idx in range(1, 21):
+            row_cells = list(sheet[r_idx])
+            temp_ncm = None
+            temp_aliquota = None
             
-        for idx, header in enumerate(headers):
-            if "ncm" in header:
-                col_ncm = idx
-            elif "aliquota" in header or "alíquota" in header:
-                col_aliquota = idx
+            for c_idx, cell in enumerate(row_cells):
+                val = str(cell.value or "").strip().lower()
+                
+                # Check for NCM keyword
+                if "ncm" in val:
+                    temp_ncm = c_idx
+                elif val in ["codigo", "código", "código ncm", "codigo ncm", "nomenclatura"] and temp_ncm is None:
+                    temp_ncm = c_idx
+                
+                # Check for Alíquota/IPI keyword
+                if "aliquota" in val or "alíquota" in val or "ipi" in val:
+                    temp_aliquota = c_idx
+                elif val in ["aliq", "alíq"] and temp_aliquota is None:
+                    temp_aliquota = c_idx
+
+            if temp_ncm is not None and temp_aliquota is not None:
+                col_ncm = temp_ncm
+                col_aliquota = temp_aliquota
+                header_row_idx = r_idx
+                break
+
+        # 2. Fallback: Search separately across the first 20 rows if they are not in the same row
+        if col_ncm is None or col_aliquota is None:
+            for r_idx in range(1, 21):
+                row_cells = list(sheet[r_idx])
+                for c_idx, cell in enumerate(row_cells):
+                    val = str(cell.value or "").strip().lower()
+                    
+                    if col_ncm is None:
+                        if "ncm" in val:
+                            col_ncm = c_idx
+                            header_row_idx = max(header_row_idx or 1, r_idx)
+                        elif val in ["codigo", "código", "código ncm", "codigo ncm", "nomenclatura"]:
+                            col_ncm = c_idx
+                            header_row_idx = max(header_row_idx or 1, r_idx)
+                            
+                    if col_aliquota is None:
+                        if "aliquota" in val or "alíquota" in val or "ipi" in val:
+                            col_aliquota = c_idx
+                            header_row_idx = max(header_row_idx or 1, r_idx)
+                        elif val in ["aliq", "alíq"]:
+                            col_aliquota = c_idx
+                            header_row_idx = max(header_row_idx or 1, r_idx)
 
         if col_ncm is None:
             raise HTTPException(
                 status_code=400,
-                detail="A coluna contendo 'NCM' não foi identificada na planilha. Certifique-se de que o cabeçalho contenha 'NCM'."
+                detail="A coluna contendo 'NCM' nao foi identificada na planilha. Certifique-se de que o cabecalho contenha 'NCM'."
             )
         if col_aliquota is None:
             raise HTTPException(
                 status_code=400,
-                detail="A coluna contendo 'Alíquota' não foi identificada na planilha. Certifique-se de que o cabeçalho contenha 'Alíquota (%)' ou similar."
+                detail="A coluna contendo 'Aliquota' nao foi identificada na planilha. Certifique-se de que o cabecalho contenha 'Aliquota (%)', 'IPI' ou similar."
             )
 
         # Create import record in status PROCESSANDO
@@ -65,9 +105,10 @@ class TipiService:
         total_ignorados = 0
         total_erros = 0
 
+        min_row = (header_row_idx + 1) if header_row_idx is not None else 2
         try:
-            # We start from row 2 (index 2 onwards in iter_rows)
-            for row in sheet.iter_rows(min_row=2, values_only=True):
+            # We start from the row after the identified header row
+            for row in sheet.iter_rows(min_row=min_row, values_only=True):
                 # If row is empty, skip
                 if not any(cell is not None for cell in row):
                     continue
