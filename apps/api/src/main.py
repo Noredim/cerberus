@@ -20,6 +20,7 @@ from src.modules.utils.router import router as utils_router
 from src.modules.domains.cnae.router import router as cnae_domains_router
 from src.modules.ncm.router import router as ncm_router
 from src.modules.ncm_st.router import router as ncm_st_router
+from src.modules.ncm_tipi.router import router as ncm_tipi_router
 from src.modules.suppliers.router import router as suppliers_router
 from src.modules.products.router import router as products_router
 from src.modules.customers.router import router as customers_router
@@ -150,6 +151,7 @@ app.include_router(utils_router)
 app.include_router(cnae_domains_router)
 app.include_router(ncm_router)
 app.include_router(ncm_st_router)
+app.include_router(ncm_tipi_router)
 app.include_router(suppliers_router)
 app.include_router(products_router)
 app.include_router(customers_router)

@@ -75,6 +75,24 @@ def run():
             sql3 = f.read()
         cur.execute(sql3)
         print("V003__solution_analysis_budget_refs.sql executed successfully.")
+
+        # 4. Run V004
+        print("Running SQL migration V004__licitacao_item_quantity_fields.sql...")
+        v004_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V004__licitacao_item_quantity_fields.sql')
+        if os.path.exists(v004_path):
+            with open(v004_path, 'r', encoding='utf-8') as f:
+                sql4 = f.read()
+            cur.execute(sql4)
+            print("V004__licitacao_item_quantity_fields.sql executed successfully.")
+
+        # 5. Run V005
+        print("Running SQL migration V005__tipi_implementation.sql...")
+        v005_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V005__tipi_implementation.sql')
+        if os.path.exists(v005_path):
+            with open(v005_path, 'r', encoding='utf-8') as f:
+                sql5 = f.read()
+            cur.execute(sql5)
+            print("V005__tipi_implementation.sql executed successfully.")
         
         conn.close()
         print("All SQL migrations completed successfully! ✅")

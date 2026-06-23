@@ -14,6 +14,7 @@ import TaxBenefitForm from './modules/tax-benefits/TaxBenefitForm';
 import ProfileDashboard from './modules/profiles/ProfileDashboard';
 import NcmList from './modules/ncm/NcmList';
 import NcmForm from './modules/ncm/NcmForm';
+import { TipiList } from './modules/ncm-tipi/TipiList';
 import NcmStList from './modules/ncm-st/NcmStList';
 import NcmStForm from './modules/ncm-st/NcmStForm';
 import NcmStDetails from './modules/ncm-st/NcmStDetails';
@@ -168,6 +169,9 @@ function App() {
             <Route path="/ncms/novo" element={<NcmForm />} />
             <Route path="/ncms/editar/:id" element={<NcmForm />} />
             <Route path="/ncms/detalhes/:id" element={<NcmForm />} />
+
+            {/* Tabela TIPI */}
+            <Route path="/cadastros/tipi" element={<TipiList />} />
 
             {/* NCM ST */}
             <Route path="/cadastros/ncm-st" element={<NcmStList />} />
