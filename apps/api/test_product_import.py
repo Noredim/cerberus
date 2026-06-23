@@ -5,6 +5,7 @@ import openpyxl
 import io
 import uuid
 from src.core.database import SessionLocal
+from sqlalchemy import text
 from src.modules.tenants.models import Tenant
 from src.modules.catalog.models import State, City
 from src.modules.products.models import Product, ProductSupplier
@@ -27,9 +28,21 @@ def run_tests():
     # Start transaction block
     db.begin()
     try:
+        # Cleanup existing test tenants to avoid unique constraint and foreign key violations
+        tenants_to_clean = ["test-tenant-id"] + [t.id for t in db.query(Tenant).filter(Tenant.cnpj == "99999999000199").all()]
+        for t_id in tenants_to_clean:
+            db.execute(text(f"DELETE FROM product_suppliers WHERE product_id IN (SELECT id FROM products WHERE tenant_id = '{t_id}')"))
+            db.execute(text(f"DELETE FROM products WHERE tenant_id = '{t_id}'"))
+            db.execute(text(f"DELETE FROM suppliers WHERE tenant_id = '{t_id}'"))
+            db.execute(text(f"DELETE FROM companies WHERE tenant_id = '{t_id}'"))
+            db.execute(text(f"DELETE FROM cities WHERE tenant_id = '{t_id}'"))
+            db.execute(text(f"DELETE FROM states WHERE tenant_id = '{t_id}'"))
+            db.execute(text(f"DELETE FROM tenants WHERE id = '{t_id}'"))
+        db.flush()
+
         # Create test Tenant
         tenant = Tenant(
-            id="test-tenant-id",
+            id=f"test-tenant-{uuid.uuid4()}",
             cnpj="99999999000199",
             razao_social="Test Tenant for Product Import",
             nome_fantasia="Test Tenant"
@@ -173,6 +186,104 @@ def run_tests():
         db_prod1 = db.query(Product).filter(Product.id == product1.id).first()
         assert db_prod1.marca == "Some Brand" # preserved
         print("Scenario 3 passed!")
+
+        from fastapi import HTTPException
+
+        print("Testing Scenario 4: Empty codigo_fornecedor for a valid row")
+        headers4 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows4 = [
+            ['', 'Product with empty supplier code', 1, 'UN', '85176239', 100.0]
+        ]
+        excel_bytes4 = create_excel_bytes(headers4, rows4)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes4)
+            assert False, "Should have failed with empty supplier code"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "A coluna 'codigo_fornecedor' não pode conter valores vazios" in e.detail
+        print("Scenario 4 passed!")
+
+        print("Testing Scenario 5: Repeated codigo_fornecedor for valid rows")
+        headers5 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows5 = [
+            ['SUP-CODE-1', 'Product A', 1, 'UN', '85176239', 100.0],
+            ['SUP-CODE-1', 'Product B', 1, 'UN', '85176239', 100.0]
+        ]
+        excel_bytes5 = create_excel_bytes(headers5, rows5)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes5)
+            assert False, "Should have failed with repeated supplier code"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "A coluna 'codigo_fornecedor' não pode conter valores vazios" in e.detail
+        print("Scenario 5 passed!")
+
+        print("Testing Scenario 6: codigo_fornecedor = '0' for a valid row")
+        headers6 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows6 = [
+            ['0', 'Product with 0 code', 1, 'UN', '85176239', 100.0]
+        ]
+        excel_bytes6 = create_excel_bytes(headers6, rows6)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes6)
+            assert False, "Should have failed with supplier code = 0"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "A coluna 'codigo_fornecedor' não pode conter valores vazios" in e.detail
+        print("Scenario 6 passed!")
+
+        print("Testing Scenario 7: Invalid NCM (with dot or comma)")
+        headers7 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows7 = [
+            ['SUP-CODE-1', 'Product A', 1, 'UN', '8517.62.39', 100.0]
+        ]
+        excel_bytes7 = create_excel_bytes(headers7, rows7)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes7)
+            assert False, "Should have failed with dot in NCM"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "A coluna 'ncm' não aceita caracteres especiais" in e.detail
+        print("Scenario 7 passed!")
+
+        print("Testing Scenario 8: Valid empty NCM")
+        headers8 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows8 = [
+            ['SUP-CODE-1', 'Product A', 1, 'UN', '', 100.0]
+        ]
+        excel_bytes8 = create_excel_bytes(headers8, rows8)
+        res8 = PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes8)
+        assert len(res8["encontrados"]) == 1
+        print("Scenario 8 passed!")
+
+        print("Testing Scenario 9: Combo error (both failing)")
+        headers9 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows9 = [
+            ['', 'Product A', 1, 'UN', '8517.62.39', 100.0]
+        ]
+        excel_bytes9 = create_excel_bytes(headers9, rows9)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes9)
+            assert False, "Should have failed with both errors"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "A coluna 'codigo_fornecedor' não pode conter valores vazios" in e.detail
+            assert "A coluna 'ncm' não aceita caracteres especiais" in e.detail
+        print("Scenario 9 passed!")
+
+        print("Testing Scenario 10: Invalid NCM = 00000000")
+        headers10 = ['codigo_fornecedor', 'descricao', 'quantidade', 'unidade', 'ncm', 'valor_unitario']
+        rows10 = [
+            ['SUP-CODE-1', 'Product A', 1, 'UN', '00000000', 100.0]
+        ]
+        excel_bytes10 = create_excel_bytes(headers10, rows10)
+        try:
+            PurchaseBudgetService.parse_excel_items(db, tenant.id, supplier.id, excel_bytes10)
+            assert False, "Should have failed with NCM = 00000000"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert "não pode ser igual a '0' ou '00000000'" in e.detail
+        print("Scenario 10 passed!")
 
         print("All tests passed successfully!")
     finally:

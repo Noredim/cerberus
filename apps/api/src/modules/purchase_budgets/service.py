@@ -546,6 +546,62 @@ class PurchaseBudgetService:
         
         any_product_updated = False
         
+        # Pre-validation for codigo_fornecedor and ncm
+        has_codigo_error = False
+        has_ncm_error = False
+        seen_codigos = set()
+        
+        for row_raw in sheet.iter_rows(min_row=2, values_only=True):
+            if not isinstance(row_raw, tuple):
+                continue
+            row = list(row_raw)
+            
+            # Skip completely empty rows
+            if all(cell is None or str(cell).strip() == "" for cell in row):
+                continue
+                
+            c_cod = int(col_codigo) if isinstance(col_codigo, int) else -1
+            c_ncm = int(col_ncm) if isinstance(col_ncm, int) else -1
+            
+            codigo_raw = row[c_cod] if c_cod >= 0 and len(row) > c_cod else None
+            if codigo_raw is None:
+                has_codigo_error = True
+            else:
+                codigo_str = str(codigo_raw).strip()
+                if codigo_str == "" or codigo_str == "0":
+                    has_codigo_error = True
+                else:
+                    if codigo_str in seen_codigos:
+                        has_codigo_error = True
+                    seen_codigos.add(codigo_str)
+                    
+            if c_ncm >= 0 and len(row) > c_ncm:
+                ncm_val = row[c_ncm]
+                if ncm_val is not None:
+                    if isinstance(ncm_val, (int, float)):
+                        if isinstance(ncm_val, float) and ncm_val.is_integer():
+                            ncm_str = str(int(ncm_val))
+                        else:
+                            ncm_str = str(ncm_val)
+                    else:
+                        ncm_str = str(ncm_val).strip()
+                    
+                    if ncm_str != "":
+                        if "." in ncm_str or "," in ncm_str:
+                            has_ncm_error = True
+                        elif len(ncm_str) != 8 or not ncm_str.isdigit():
+                            has_ncm_error = True
+                        elif int(ncm_str) == 0:
+                            has_ncm_error = True
+                            
+        if has_codigo_error or has_ncm_error:
+            errors = []
+            if has_codigo_error:
+                errors.append("A coluna 'codigo_fornecedor' não pode conter valores vazios, iguais a '0', ou repetidos na planilha. Por favor, corrija e tente importar novamente.")
+            if has_ncm_error:
+                errors.append("A coluna 'ncm' não aceita caracteres especiais (como pontos ou vírgulas), não pode ser igual a '0' ou '00000000', e deve conter exatamente 8 dígitos numéricos (ex: 88888888). Por favor, corrija o valor e tente importar novamente.")
+            raise HTTPException(status_code=400, detail="\n\n".join(errors))
+            
         # Evitar loops vazios
         for row_raw in sheet.iter_rows(min_row=2, values_only=True):
             if not isinstance(row_raw, tuple):

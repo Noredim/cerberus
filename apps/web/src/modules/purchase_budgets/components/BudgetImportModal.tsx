@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { UploadCloud, X, Loader2, AlertCircle } from 'lucide-react';
+import { UploadCloud, X, Loader2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Button } from '../../../components/ui/Button';
 
@@ -16,6 +16,7 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -71,7 +72,12 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
       setFile(null); // reset state
     } catch (err: any) {
       console.error('Erro na importação', err);
-      setError(err.response?.data?.detail || 'Ocorreu um erro ao processar a planilha. Verifique o formato.');
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 400 && detail && (detail.includes("codigo_fornecedor") || detail.includes("ncm"))) {
+        setValidationWarning(detail);
+      } else {
+        setError(detail || 'Ocorreu um erro ao processar a planilha. Verifique o formato.');
+      }
     } finally {
       setLoading(false);
     }
@@ -165,6 +171,35 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
           </Button>
         </div>
       </div>
+
+      {validationWarning && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-border-subtle flex flex-col p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-brand-warning/10 text-brand-warning rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <h4 className="font-bold text-lg text-text-primary tracking-tight">
+                Inconsistências no Arquivo
+              </h4>
+            </div>
+            
+            <div className="text-sm text-text-muted space-y-3 pr-2 overflow-y-auto max-h-[250px] whitespace-pre-wrap leading-relaxed bg-bg-deep/50 p-4 rounded-xl border border-border-subtle">
+              {validationWarning}
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <Button 
+                variant="primary" 
+                className="bg-brand-warning text-yellow-950 hover:bg-brand-warning/90 font-bold px-6 py-2.5 rounded-lg transition-colors cursor-pointer"
+                onClick={() => setValidationWarning(null)}
+              >
+                Entendi, vou corrigir
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
