@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import List, Optional, Tuple
 from uuid import UUID
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from src.modules.ncm.models import Ncm
 from .models import TipiImportacao, NcmTipi
@@ -146,7 +147,8 @@ class TipiService:
                         continue
 
                     # Find existing NCMs with this code
-                    ncms = db.query(Ncm).filter(Ncm.codigo == ncm_clean, Ncm.deleted_at.is_(None)).all()
+                    normalized_db_code = func.replace(func.replace(func.replace(Ncm.codigo, '.', ''), '-', ''), ' ', '')
+                    ncms = db.query(Ncm).filter(normalized_db_code == ncm_clean, Ncm.deleted_at.is_(None)).all()
                     if not ncms:
                         total_ignorados += 1
                         continue
