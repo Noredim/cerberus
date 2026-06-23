@@ -202,14 +202,15 @@ class TipiService:
         if codigo_ncm:
             codigo_clean = re.sub(r"\D", "", codigo_ncm)
             if codigo_clean:
-                query = query.filter(Ncm.codigo.ilike(f"{codigo_clean}%"))
+                normalized_db_code = func.replace(func.replace(func.replace(Ncm.codigo, '.', ''), '-', ''), ' ', '')
+                query = query.filter(normalized_db_code.ilike(f"{codigo_clean}%"))
                 
         total = query.count()
         items = query.order_by(Ncm.codigo, NcmTipi.vigencia.desc()).offset(skip).limit(limit).all()
         
         # Explicitly set the fields that will be needed by the schema
         for item in items:
-            item.codigo_ncm = item.ncm.codigo
+            item.codigo_ncm = item.ncm.codigo.replace(".", "") if item.ncm and item.ncm.codigo else ""
             item.descricao_ncm = item.ncm.descricao
             
         return items, total

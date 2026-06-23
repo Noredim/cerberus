@@ -289,7 +289,7 @@ export const TipiList: React.FC = () => {
                                         <tr key={val.id} className="hover:bg-bg-deep/30 transition-colors">
                                             <td className="px-6 py-4">
                                                 <span className="font-mono text-sm font-semibold text-brand-primary bg-brand-primary/5 px-2.5 py-1 rounded">
-                                                    {val.codigo_ncm}
+                                                    {val.codigo_ncm?.replace(/\./g, '')}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-text-primary max-w-xl truncate" title={val.descricao_ncm}>
