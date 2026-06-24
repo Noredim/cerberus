@@ -2298,6 +2298,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         (item.own_service_id && s.own_service_id === item.own_service_id)
                       );
 
+                      const qty = item.quantidade_no_kit || 1;
+                      const icmsAbatido = summary?.icms_abatido_total != null 
+                        ? summary.icms_abatido_total 
+                        : ((summary?.icms_abatido || 0) * qty);
+                      const icmsStDeduction = isInterstate ? (summary?.icms_st_total || 0) : 0;
+                      const netTaxItem = (summary?.imposto_venda_item || 0) - icmsAbatido - icmsStDeduction;
+
                       return (
                         <tr key={idx} className="hover:bg-bg-deep/20 transition-colors group">
                           <td className="px-1.5 py-3 font-medium text-text-primary max-w-[200px] truncate" title={item.descricao_item}>
@@ -2380,23 +2387,29 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                         <div className="flex justify-between"><span>ISS ({(summary?.perc_iss || 0).toFixed(2)}%)</span><span>{fmtC(summary?.iss_unit || 0)}</span></div>
                                       ) : (
                                         <div className="flex justify-between">
-                                          <span>ICMS ({(summary?.perc_icms || 0).toFixed(2)}%){summary?.tem_st ? ' — ST isento' : ''}</span>
+                                          <span>{isInterstate ? 'icms 12% Venda' : `ICMS (${(summary?.perc_icms || 0).toFixed(2)}%)${summary?.tem_st ? ' — ST isento' : ''}`}</span>
                                           <span>{fmtC(summary?.icms_unit || 0)}</span>
                                         </div>
                                       )}
-                                      {((summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)) || 0) > 0 && (
+                                      {icmsAbatido > 0 && (
                                         <div className="flex justify-between text-emerald-600 font-semibold">
                                           <span>Créd. ICMS (Compra)</span>
-                                          <span>- {fmtC(summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit))}</span>
+                                          <span>- {fmtC(icmsAbatido)}</span>
+                                        </div>
+                                      )}
+                                      {isInterstate && (summary?.icms_st_total || 0) > 0 && (
+                                        <div className="flex justify-between text-emerald-600 font-semibold">
+                                          <span>icms st (compra)</span>
+                                          <span className="font-semibold text-emerald-600">- ({fmtC(summary?.icms_st_total)})</span>
                                         </div>
                                       )}
                                       <div className="border-t border-gray-300 mt-2 pt-2 flex justify-between font-bold text-text-primary">
-                                        <span>Total Impostos (Líquido)</span><span>{fmtC((summary?.imposto_venda_item || 0) - (summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)))}</span>
+                                        <span>Total Impostos (Líquido)</span><span>{fmtC(netTaxItem)}</span>
                                       </div>
                                     </div>
                                   </div>
                                 }>
-                                  <span className="cursor-help border-b border-dashed border-text-muted">{fmtC((summary?.imposto_venda_item || 0) - (summary?.icms_abatido_total || ((summary?.icms_abatido || 0) * item.quantidade_no_kit)))}</span>
+                                  <span className="cursor-help border-b border-dashed border-text-muted">{fmtC(netTaxItem)}</span>
                                 </Tooltip>
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
@@ -2504,7 +2517,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             const originalItem = form.items.find(i => (b.product_id && i.product_id === b.product_id) || (b.own_service_id && i.own_service_id === b.own_service_id)) || form.items[0]; // fallback if not found
                             const qty = originalItem?.quantidade_no_kit || 1;
                             const icmsAbatido = b.icms_abatido_total != null ? b.icms_abatido_total : ((b.icms_abatido || 0) * qty);
-                            return a + ((b.imposto_venda_item || 0) - icmsAbatido);
+                            const stDeduction = isInterstate ? (b.icms_st_total || 0) : 0;
+                            return a + ((b.imposto_venda_item || 0) - icmsAbatido - stDeduction);
                           }, 0) || 0)}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.desp_adm_item || 0), 0) || 0)}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.comissao_item || 0), 0) || 0)}</td>
