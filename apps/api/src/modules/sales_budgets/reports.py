@@ -1115,6 +1115,7 @@ class OpportunitiesReportService:
                             "components": [],
                             "_venda_total": 0.0,
                             "_custo_total": 0.0,
+                            "_custo_servicos_proprios_total": 0.0,
                             "_purchase_tax_total": 0.0,
                             "_sales_tax_total": 0.0,
                             "_despesas_adm_total": 0.0,
@@ -1219,8 +1220,9 @@ class OpportunitiesReportService:
                             despesas_adm_total = frete_total + desp_adm_total + comissao_total
                             
                             lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
-                            if is_same_cnpj:
-                                mkp_venda = (venda_unit / custo_unit) if custo_unit > 0 else 1.0
+                            
+                            if custo_unit > 0:
+                                mkp_venda = venda_unit / custo_unit
                             else:
                                 mkp_venda = float(summary.get("fator_item") or 1.0)
                             
@@ -1243,7 +1245,9 @@ class OpportunitiesReportService:
                                 "despesas_adm": format_currency(despesas_adm_total),
                                 "lucro_total": format_currency(lucro_total),
                                 "origem_imposto": origem_imposto,
-                                "components": []
+                                "components": [],
+                                "_custo_total": custo_total,
+                                "_ipi_total": ipi_total
                             }
                             components_list.append(comp_dict)
                             
@@ -1300,8 +1304,8 @@ class OpportunitiesReportService:
                                 "descricao": f"Serviço de Instalação - Kit: {kit.nome_kit}",
                                 "fornecedor": "Próprio",
                                 "quantidade": kit_qty,
-                                "custo_unitario": format_currency(vlr_instal_calc),
-                                "custo_total": format_currency(custo_total_inst),
+                                "custo_unitario": format_currency(0.0),
+                                "custo_total": format_currency(0.0),
                                 "imposto_compra_unit": format_currency(0.0),
                                 "markup": f"{fator_margem_inst:.2f}",
                                 "valor_venda": format_currency(valor_venda_instalacao),
@@ -1315,7 +1319,7 @@ class OpportunitiesReportService:
                             components_list.append(inst_dict)
                             
                             # Accumulate
-                            kit_details["_custo_total"] += custo_total_inst
+                            kit_details["_custo_servicos_proprios_total"] += custo_total_inst
                             kit_details["_venda_total"] += venda_total_inst
                             kit_details["_sales_tax_total"] += sales_tax_total
                             kit_details["_despesas_adm_total"] += despesas_adm_total
@@ -1362,8 +1366,8 @@ class OpportunitiesReportService:
                                 "descricao": f"Serviço de Manutenção - Kit: {kit.nome_kit}",
                                 "fornecedor": "Próprio",
                                 "quantidade": kit_qty,
-                                "custo_unitario": format_currency(vlt_manut),
-                                "custo_total": format_currency(custo_total_manut),
+                                "custo_unitario": format_currency(0.0),
+                                "custo_total": format_currency(0.0),
                                 "imposto_compra_unit": format_currency(0.0),
                                 "markup": f"{fator_margem_manut:.2f}",
                                 "valor_venda": format_currency(venda_manutencao_total),
@@ -1377,7 +1381,7 @@ class OpportunitiesReportService:
                             components_list.append(manut_dict)
                             
                             # Accumulate
-                            kit_details["_custo_total"] += custo_total_manut
+                            kit_details["_custo_servicos_proprios_total"] += custo_total_manut
                             kit_details["_venda_total"] += venda_total_manut
                             kit_details["_sales_tax_total"] += sales_tax_total
                             kit_details["_despesas_adm_total"] += despesas_adm_total
@@ -1415,6 +1419,7 @@ class OpportunitiesReportService:
         # 3. Calculate Consolidated proposal KPIs
         venda_consolidada = sum(x["_venda_total"] for x in items_details)
         custo_consolidado = sum(x["_custo_total"] for x in items_details)
+        custo_servicos_proprios_total = sum(x.get("_custo_servicos_proprios_total", 0.0) for x in items_details)
         
         # Obter totais de impostos de compra
         total_difal_all = sum(x["_difal_total"] for x in items_details)
@@ -1437,7 +1442,7 @@ class OpportunitiesReportService:
         else:
             impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
             despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
-            lucro_total = venda_consolidada - (custo_total_com_impostos + impostos_venda + despesas_totais)
+            lucro_total = venda_consolidada - (custo_total_com_impostos + impostos_venda + despesas_totais + custo_servicos_proprios_total)
             margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
             markup = (venda_consolidada / custo_total_com_impostos) if custo_total_com_impostos > 0 else 1.0
 
@@ -1454,58 +1459,56 @@ class OpportunitiesReportService:
         }
 
         # 4. Block 2: Supplier Summaries
+        # Group real products from items_details (flattened, filtering product_id is not None to exclude services)
+        real_products = []
+        for x in items_details:
+            if x.get("components"):
+                for c in x["components"]:
+                    if c.get("product_id") is not None:
+                        real_products.append(c)
+            else:
+                if x.get("product_id") is not None:
+                    real_products.append(x)
+                    
+        by_supplier = {}
+        for p in real_products:
+            sup_name = p.get("fornecedor") or "Não Cadastrado"
+            if sup_name not in by_supplier:
+                by_supplier[sup_name] = {
+                    "total_sem_imposto": 0.0,
+                    "total_imposto": 0.0,
+                }
+            by_supplier[sup_name]["total_sem_imposto"] += p["_custo_total"]
+            by_supplier[sup_name]["total_imposto"] += p["_ipi_total"]
+            
         supplier_summaries = []
-        for pb in purchase_budgets:
-            s_name = pb.supplier_nome_fantasia
+        for sup_name, data in by_supplier.items():
+            pb = next((b for b in purchase_budgets if b.supplier_nome_fantasia == sup_name), None)
             
-            s_items_base_cost = 0.0
-            s_items_tax = 0.0  # Representará apenas o IPI nesta grid conforme pedido
-            
-            # Create a flat list of all products in items_details (including kit components)
-            all_flat_items = []
-            for x in items_details:
-                if x.get("components"):
-                    all_flat_items.extend(x["components"])
-                else:
-                    all_flat_items.append(x)
-            
-            for pb_item in pb.items:
-                # Match items by product_id for 100% robust matching (scanning components too)
-                match_items = [x for x in all_flat_items if x.get("product_id") == pb_item.product_id]
-                qty_used = sum(float(x["quantidade"]) for x in match_items)
-                
-                # Only include items that are part of the opportunity
-                if qty_used <= 0:
-                    qty_used = 0.0
-                
-                val_unit = float(pb_item.valor_unitario)
-                
-                # IPI Unitário do item de compra
-                pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
-                ipi_unit = float(pb_item.ipi_valor or 0.0) / pb_qty
-                
-                s_items_base_cost += val_unit * qty_used
-                s_items_tax += ipi_unit * qty_used
-                
-            s_items_total_cost = s_items_base_cost + s_items_tax
-            
+            orcamento_num = "Não Informado"
             payment_desc = "Não informado"
-            if pb.forma_pagamento:
-                payment_desc = pb.forma_pagamento.descricao
-            elif pb.forma_pagamento_snapshot:
-                payment_desc = pb.forma_pagamento_snapshot.get("descricao", "Não informado")
-                
+            if pb:
+                orcamento_num = pb.numero_orcamento or str(pb.id)[:8]
+                if pb.forma_pagamento:
+                    payment_desc = pb.forma_pagamento.descricao
+                elif pb.forma_pagamento_snapshot:
+                    payment_desc = pb.forma_pagamento_snapshot.get("descricao", "Não informado")
+                    
+            total_sem_imposto = data["total_sem_imposto"]
+            total_imposto = data["total_imposto"]
+            total_custo = total_sem_imposto + total_imposto
+            
             supplier_summaries.append({
-                "orcamento": pb.numero_orcamento or str(pb.id)[:8],
-                "fornecedor": s_name,
-                "total_sem_imposto": format_currency(s_items_base_cost),
-                "total_imposto": format_currency(s_items_tax),
-                "total_custo": format_currency(s_items_total_cost),
+                "orcamento": orcamento_num,
+                "fornecedor": sup_name,
+                "total_sem_imposto": format_currency(total_sem_imposto),
+                "total_imposto": format_currency(total_imposto),
+                "total_custo": format_currency(total_custo),
                 "forma_pagamento": payment_desc,
                 # Numeric for totalizers
-                "_total_sem_imposto": s_items_base_cost,
-                "_total_imposto": s_items_tax,
-                "_total_custo": s_items_total_cost
+                "_total_sem_imposto": total_sem_imposto,
+                "_total_imposto": total_imposto,
+                "_total_custo": total_custo
             })
 
         # Calculate supplier summary totals
