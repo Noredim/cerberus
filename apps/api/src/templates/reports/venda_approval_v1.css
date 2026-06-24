@@ -199,3 +199,15 @@ h1, h2, h3, h4 {
     min-width: 0;
 }
 
+/* Component sub-rows styles */
+.component-row td {
+    font-style: italic !important;
+    color: #64748b !important;
+    background-color: #f8fafc !important;
+}
+
+.component-row td.component-name {
+    padding-left: 12px !important;
+    text-align: left !important;
+}
+

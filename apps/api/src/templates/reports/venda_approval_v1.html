@@ -102,7 +102,9 @@
             <tbody>
                 {% for item in items_details %}
                 <tr>
-                    <td>{{ item.descricao }}</td>
+                    <td>
+                        <div style="font-weight: 600;">{{ item.descricao }}</div>
+                    </td>
                     <td>{{ item.fornecedor }}</td>
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.custo_unitario }}</td>
@@ -120,6 +122,26 @@
                     <td class="text-right">R$ {{ item.despesas_adm }}</td>
                     <td class="text-right font-bold text-nowrap" style="color: #16a34a; white-space: nowrap;">R$ {{ item.lucro_total }}</td>
                 </tr>
+                {% if item.components %}
+                    {% for comp in item.components %}
+                    <tr class="component-row">
+                        <td class="component-name">
+                            ↳ {{ comp.descricao }}
+                        </td>
+                        <td>{{ comp.fornecedor }}</td>
+                        <td class="text-center">{{ comp.quantidade }}</td>
+                        <td class="text-right">R$ {{ comp.custo_unitario }}</td>
+                        <td class="text-right">R$ {{ comp.custo_total }}</td>
+                        <td class="text-right">R$ {{ comp.imposto_compra_unit }}</td>
+                        <td class="text-center">{{ comp.markup }}x</td>
+                        <td class="text-right">R$ {{ comp.valor_venda }}</td>
+                        <td class="text-right font-bold">R$ {{ comp.venda_total }}</td>
+                        <td class="text-right">R$ {{ comp.impostos_venda }}</td>
+                        <td class="text-right">R$ {{ comp.despesas_adm }}</td>
+                        <td class="text-right font-bold text-nowrap" style="color: #16a34a; white-space: nowrap;">R$ {{ comp.lucro_total }}</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
                 {% endfor %}
                 <tr class="total-row">
                     <td class="text-nowrap" colspan="2" style="white-space: nowrap;">TOTAL CONSOLIDADO</td>
@@ -147,9 +169,8 @@
                 <thead>
                     <tr>
                         <th>Imposto</th>
-                        <th class="text-right" style="width: 20%;">%</th>
-                        <th class="text-right" style="width: 25%;">Val. Unit.</th>
-                        <th class="text-right" style="width: 30%;">Val. Total</th>
+                        <th class="text-right" style="width: 30%;">%</th>
+                        <th class="text-right" style="width: 45%;">Val. Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -157,14 +178,12 @@
                     <tr>
                         <td>{{ t.name }}</td>
                         <td class="text-right">{{ t.percent }}</td>
-                        <td class="text-right">R$ {{ t.unit }}</td>
                         <td class="text-right font-bold">R$ {{ t.total }}</td>
                     </tr>
                     {% endfor %}
                     <tr class="total-row">
                         <td>TOTAL</td>
                         <td class="text-right">{{ sales_taxes_totals.percent }}</td>
-                        <td class="text-right">R$ {{ sales_taxes_totals.unit }}</td>
                         <td class="text-right" style="color: #0f172a;">R$ {{ sales_taxes_totals.total }}</td>
                     </tr>
                 </tbody>
@@ -203,9 +222,8 @@
                 <thead>
                     <tr>
                         <th>Despesa</th>
-                        <th class="text-right" style="width: 20%;">% Fat.</th>
-                        <th class="text-right" style="width: 25%;">Val. Unit.</th>
-                        <th class="text-right" style="width: 25%;">Val. Total</th>
+                        <th class="text-right" style="width: 30%;">% Fat.</th>
+                        <th class="text-right" style="width: 40%;">Val. Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -213,14 +231,12 @@
                     <tr>
                         <td>{{ e.name }}</td>
                         <td class="text-right">{{ e.percent }}</td>
-                        <td class="text-right">R$ {{ e.unit }}</td>
                         <td class="text-right font-bold">R$ {{ e.total }}</td>
                     </tr>
                     {% endfor %}
                     <tr class="total-row">
                         <td>TOTAL</td>
                         <td class="text-right">{{ expenses_totals.percent }}</td>
-                        <td class="text-right">R$ {{ expenses_totals.unit }}</td>
                         <td class="text-right" style="color: #0f172a;">R$ {{ expenses_totals.total }}</td>
                     </tr>
                 </tbody>
@@ -237,7 +253,7 @@
                     <th style="width: 15%;">Orçamento / Cotação</th>
                     <th style="width: 25%;">Fornecedor</th>
                     <th class="text-right" style="width: 18%;">Valor Sem Imposto</th>
-                    <th class="text-right" style="width: 15%;">Total de Imposto</th>
+                    <th class="text-right" style="width: 15%;">Total de Imposto IPI</th>
                     <th class="text-right" style="width: 17%;">Total com Impostos</th>
                     <th style="width: 20%;">Forma de Pagamento</th>
                 </tr>
