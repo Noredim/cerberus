@@ -463,7 +463,7 @@ class OpportunityKitService:
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + aliq_iss_val
                 else:
                     perfil_st_ativo = info.get("perfil_st_ativo", True)
-                    if info.get("tem_st") and perfil_st_ativo:
+                    if info.get("tem_st") and perfil_st_ativo and not force_12_icms:
                         perc_icms_aplicado = Decimal("0.0")
                     # If perfil_st_ativo is False, perc_icms_aplicado remains aliq_icms_val
                     
@@ -673,6 +673,8 @@ class OpportunityKitService:
             impostos_manutencao = valor_venda_manutencao * aliq_servicos
             
             valor_impostos = impostos_produtos_base + impostos_instalacao + impostos_manutencao
+            if force_12_icms:
+                valor_impostos -= total_st_kit
             valor_mensal_antes_impostos = valor_base_final
         else:
             # Locação / Comodato
@@ -763,6 +765,8 @@ class OpportunityKitService:
             venda_equipamentos_total = valor_venda_produtos + valor_venda_instalacao
             custo_equipamentos_total = custo_aquisicao_kit + vlr_instal_calc
             imposto_equipamentos_total = impostos_produtos_base + impostos_instalacao
+            if force_12_icms:
+                imposto_equipamentos_total -= total_st_kit
             lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao)) + credito_icms_compra_total
             if venda_equipamentos_total > 0:
                 margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)

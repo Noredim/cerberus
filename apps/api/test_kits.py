@@ -1,6 +1,7 @@
 import sys
 import json
 from src.core.database import SessionLocal
+import src.modules.licitacoes.models
 from src.modules.opportunity_kits.service import OpportunityKitService
 from src.modules.companies.models import Company
 

@@ -407,9 +407,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     fetchItemDetails();
   }, [form.licitacao_id, form.licitacao_item_id]);
 
+  const budgetIdToQuery = sourceBudgetId || form.sales_budget_id;
   useEffect(() => {
-    if (sourceBudgetId) {
-      api.get(`/sales-budgets/${sourceBudgetId}`).then(res => {
+    if (budgetIdToQuery) {
+      api.get(`/sales-budgets/${budgetIdToQuery}`).then(res => {
         if (res.data) {
           setOpportunityCustomerName(res.data.customer_nome || 'Cliente');
           const companyState = res.data.company_state_sigla;
@@ -420,7 +421,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         }
       }).catch(err => console.error("Error loading budget customer", err));
     }
-  }, [sourceBudgetId]);
+  }, [budgetIdToQuery]);
 
   useEffect(() => {
     if (isInterstate && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
@@ -1169,7 +1170,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   taxLabelB45[t].total += unit * qty;
                 });
               });
-              const impostosB45 = Object.values(taxLabelB45).reduce((a, b) => a + b.total, 0);
+              let impostosB45 = Object.values(taxLabelB45).reduce((a, b) => a + b.total, 0);
+              const icmsStCompraDeduction = isInterstate ? (financials?.summary?.total_st_kit || 0) : 0;
+              if (isInterstate) {
+                impostosB45 -= icmsStCompraDeduction;
+              }
 
               // ── Impostos B6 discriminados (mensal e total)
               const taxLabelB6: Record<string, { label: string; mensal: number; total: number }> = {};
@@ -1360,11 +1365,19 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         <Tooltip variant="light" content={
                           <div className="w-72 space-y-2 text-text-secondary p-1">
                             <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
-                            {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => (
-                              <div key={t.label} className="flex justify-between text-xs">
-                                <span>{t.label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                            {Object.values(taxLabelB45).filter(t => t.total > 0).map(t => {
+                              const label = t.label === 'ICMS' && isInterstate ? 'icms 12% Venda' : t.label;
+                              return (
+                                <div key={t.label} className="flex justify-between text-xs">
+                                  <span>{label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                </div>
+                              );
+                            })}
+                            {isInterstate && icmsStCompraDeduction > 0 && (
+                              <div className="flex justify-between text-xs text-emerald-600">
+                                <span>icms st (compra)</span><span className="font-medium">- ({fmtC(icmsStCompraDeduction)})</span>
                               </div>
-                            ))}
+                            )}
                             <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-xs">
                               <span>Total Impostos</span><span className="text-rose-700">{fmtC(impostosB45)}</span>
                             </div>
@@ -1446,13 +1459,21 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos de Venda (B4+B5)</div>
                               {taxFields.map(t => {
                                 const val = taxLabelB45[t]?.total || 0;
+                                const label = t === 'icms' && isInterstate ? 'icms 12% Venda' : t.toUpperCase();
+                                if (val === 0) return null;
                                 return (
                                   <div key={t} className="flex justify-between text-[11px] font-mono">
-                                    <span>{t.toUpperCase()}:</span>
+                                    <span>{label}:</span>
                                     <span className="text-rose-600 font-medium">{fmtC(val)}</span>
                                   </div>
                                 );
                               })}
+                              {isInterstate && icmsStCompraDeduction > 0 && (
+                                <div className="flex justify-between text-[11px] font-mono text-emerald-600">
+                                  <span>icms st (compra):</span>
+                                  <span>- ({fmtC(icmsStCompraDeduction)})</span>
+                                </div>
+                              )}
                               <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
                                 <span>Total:</span>
                                 <span className="text-rose-700">{fmtC(impostosB45)}</span>
