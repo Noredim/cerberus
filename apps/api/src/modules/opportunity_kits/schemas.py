@@ -278,6 +278,10 @@ class OpportunityKitFinancialSummary(BaseModel):
     credito_icms_compra_total: Optional[Decimal] = Field(default=Decimal(0))
     total_st_kit: Optional[Decimal] = Field(default=Decimal(0))
     total_ipi_kit: Optional[Decimal] = Field(default=Decimal(0))
+    total_base_cost_total: Optional[Decimal] = Field(default=Decimal(0))
+    total_ipi_total: Optional[Decimal] = Field(default=Decimal(0))
+    total_st_total: Optional[Decimal] = Field(default=Decimal(0))
+    total_difal_total: Optional[Decimal] = Field(default=Decimal(0))
     
     # Target Margin (Margem Alvo) fields
     fator_minimo_calculado: Optional[Decimal] = Field(default=None)

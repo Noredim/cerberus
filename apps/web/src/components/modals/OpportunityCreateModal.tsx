@@ -193,6 +193,33 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                 </select>
             </div>
 
+            {customerId && (() => {
+              const selectedCustomer = customers.find(c => c.id === customerId);
+              if (!selectedCustomer) return null;
+              return (
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-bold text-text-muted uppercase tracking-wider">Cidade</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={selectedCustomer.city_nome || 'Não informada'}
+                      className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-60 cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-bold text-text-muted uppercase tracking-wider">Estado</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={selectedCustomer.state_sigla || 'Não informado'}
+                      className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-60 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
                     <label className="text-sm font-bold text-text-muted uppercase tracking-wider">Vendedor *</label>

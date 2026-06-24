@@ -2185,6 +2185,13 @@ export function SalesBudgetForm() {
                     <span className="flex items-center gap-1 text-xs text-text-muted">
                       <Building2 className="w-3 h-3" />
                       {clienteLabel}
+                      {clienteName && (clienteName.city_nome || clienteName.state_sigla) && (
+                        <span className="text-text-muted opacity-75 font-normal">
+                          ({clienteName.city_nome || ''}
+                          {clienteName.city_nome && clienteName.state_sigla ? '/' : ''}
+                          {clienteName.state_sigla || ''})
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -2507,7 +2514,7 @@ export function SalesBudgetForm() {
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
                 <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
@@ -2518,6 +2525,14 @@ export function SalesBudgetForm() {
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1">Responsável</label>
                 <input value={users.find(u => responsavelIds.includes(u.id))?.name || 'Nenhum associado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Cidade</label>
+                <input value={customers.find(c => c.id === customerId)?.city_nome || 'Não informada'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Estado</label>
+                <input value={customers.find(c => c.id === customerId)?.state_sigla || 'Não informado'} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60" />
               </div>
             </div>
             <div>
@@ -4924,6 +4939,7 @@ export function SalesBudgetForm() {
       {showKitSearchModal && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchModal}
+          salesBudgetId={id}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
         />
@@ -4934,6 +4950,7 @@ export function SalesBudgetForm() {
         <OpportunityKitSearchModal
           isOpen={showKitSearchVenda}
           tipoContrato="VENDA_EQUIPAMENTOS"
+          salesBudgetId={id}
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
         />

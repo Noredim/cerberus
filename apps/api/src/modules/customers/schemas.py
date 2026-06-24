@@ -95,5 +95,7 @@ class CustomerOut(CustomerBase):
     active: bool
     created_at: datetime
     updated_at: datetime
+    city_nome: Optional[str] = None
+    state_sigla: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)

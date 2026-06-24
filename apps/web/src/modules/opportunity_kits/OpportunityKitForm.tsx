@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -336,6 +336,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   } | null>(null);
 
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
+  const [opportunityCustomerName, setOpportunityCustomerName] = useState<string | null>(null);
+  const [isInterstate, setIsInterstate] = useState<boolean>(false);
 
   const [form, setForm] = useState<KitFormValues>({
     sales_budget_id: sourceBudgetId || undefined,
@@ -404,6 +406,32 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     };
     fetchItemDetails();
   }, [form.licitacao_id, form.licitacao_item_id]);
+
+  useEffect(() => {
+    if (sourceBudgetId) {
+      api.get(`/sales-budgets/${sourceBudgetId}`).then(res => {
+        if (res.data) {
+          setOpportunityCustomerName(res.data.customer_nome || 'Cliente');
+          const companyState = res.data.company_state_sigla;
+          const customerState = res.data.customer_state_sigla;
+          if (companyState && customerState && companyState !== customerState) {
+            setIsInterstate(true);
+          }
+        }
+      }).catch(err => console.error("Error loading budget customer", err));
+    }
+  }, [sourceBudgetId]);
+
+  useEffect(() => {
+    if (isInterstate && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
+      setForm(prev => {
+        if (prev.aliq_icms !== 12) {
+          return { ...prev, aliq_icms: 12 };
+        }
+        return prev;
+      });
+    }
+  }, [isInterstate, form.tipo_contrato]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Tracks the previously applied tipo_contrato so we can detect user-initiated changes
@@ -1037,9 +1065,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               {kitId ? 'Editar Kit de Oportunidade' : 'Novo Kit de Oportunidade'}
             </h1>
             {(sourceBudgetId || form.sales_budget_id) && (
-              <span className="bg-primary-50 text-primary-600 border border-primary-200 px-3 py-1 rounded-full text-sm font-semibold">
-                Exclusivo do Orçamento
-              </span>
+              <div className="flex flex-col items-start gap-1">
+                <span className="bg-primary-50 text-primary-600 border border-primary-200 px-3 py-1 rounded-full text-sm font-semibold">
+                  Exclusivo do Orçamento
+                </span>
+                {opportunityCustomerName && (
+                  <span className="text-xs text-text-muted flex items-center gap-1 font-medium mt-1">
+                    <Building2 className="w-3.5 h-3.5 text-brand-primary" />
+                    Cliente: <strong className="text-text-secondary">{opportunityCustomerName}</strong>
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <p className="text-text-muted mt-2 text-lg">
@@ -1279,15 +1315,38 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {/* Row 1 — Custos e vendas por bloco */}
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     {/* Custo de Aquisição */}
-                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
-                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
-                      <div className="text-base font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
-                      <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
-                        <div className="flex justify-between" title="Bloco 4 – Itens"><span>B4 (Itens):</span><span>{fmtC(custoB4)}</span></div>
-                        <div className="flex justify-between" title="Bloco 5 – Instalação"><span>B5 (Inst.):</span><span>{fmtC(custoB5)}</span></div>
-                        <div className="flex justify-between" title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}><span>B6 (Manut.):</span><span>{fmtC(custoB6Total)}</span></div>
+                    <Tooltip variant="light" content={
+                      <div className="w-72 space-y-2 text-text-secondary p-1">
+                        <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Detalhamento dos Custos de Compra</div>
+                        <div className="flex justify-between text-xs">
+                          <span>Custo base:</span><span className="font-semibold text-text-primary">{fmtC(financials?.summary?.total_base_cost_total)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Valor IPI:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_ipi_total)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Valor ICMS ST:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_st_total)}</span>
+                        </div>
+                        {Number(financials?.summary?.total_difal_total || 0) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span>Valor DIFAL:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_difal_total)}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-xs text-text-primary">
+                          <span>Custo Total do Kit:</span><span>{fmtC(financials?.summary?.custo_aquisicao_total)}</span>
+                        </div>
                       </div>
-                    </div>
+                    }>
+                      <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center cursor-help">
+                        <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+                        <div className="text-base font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
+                        <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
+                          <div className="flex justify-between" title="Bloco 4 – Itens"><span>B4 (Itens):</span><span>{fmtC(custoB4)}</span></div>
+                          <div className="flex justify-between" title="Bloco 5 – Instalação"><span>B5 (Inst.):</span><span>{fmtC(custoB5)}</span></div>
+                          <div className="flex justify-between" title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}><span>B6 (Manut.):</span><span>{fmtC(custoB6Total)}</span></div>
+                        </div>
+                      </div>
+                    </Tooltip>
 
                     {/* Total da Venda (B4 + B5) */}
                     <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
@@ -1382,7 +1441,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         <div className="text-[9px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
                           <span className="truncate">Fat: {fmtC(totalVenda)}</span>
                           <span className="truncate">Aq: {fmtC(custoB4 + custoB5)}</span>
-                          <span className="truncate">Imp: {fmtC(impostosB45)}</span>
+                          <Tooltip variant="light" content={
+                            <div className="w-56 space-y-1.5 text-text-secondary p-1">
+                              <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos de Venda (B4+B5)</div>
+                              {taxFields.map(t => {
+                                const val = taxLabelB45[t]?.total || 0;
+                                return (
+                                  <div key={t} className="flex justify-between text-[11px] font-mono">
+                                    <span>{t.toUpperCase()}:</span>
+                                    <span className="text-rose-600 font-medium">{fmtC(val)}</span>
+                                  </div>
+                                );
+                              })}
+                              <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
+                                <span>Total:</span>
+                                <span className="text-rose-700">{fmtC(impostosB45)}</span>
+                              </div>
+                            </div>
+                          }>
+                            <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
+                              Imp: {fmtC(impostosB45)}
+                            </span>
+                          </Tooltip>
                           <span className="truncate">Desp: {fmtC(despVenda)}</span>
                         </div>
                       </div>

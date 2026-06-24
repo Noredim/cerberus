@@ -65,6 +65,8 @@ class Company(Base):
     qsa = relationship("CompanyQsa", back_populates="company", cascade="all, delete-orphan")
     sales_parameters = relationship("CompanySalesParameter", back_populates="company", uselist=False, cascade="all, delete-orphan")
     commercial_policies = relationship("CommercialPolicy", back_populates="company", cascade="all, delete-orphan")
+    city = relationship("City")
+    state = relationship("State")
 
 class CompanyCnae(Base):
     __tablename__ = "company_cnaes"
