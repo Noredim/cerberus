@@ -1235,10 +1235,7 @@ class OpportunitiesReportService:
                             
                             lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
                             
-                            if custo_unit > 0:
-                                mkp_venda = venda_unit / custo_unit
-                            else:
-                                mkp_venda = float(summary.get("fator_item") or 1.0)
+                            mkp_venda = float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
@@ -1456,7 +1453,7 @@ class OpportunitiesReportService:
         else:
             impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
             despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
-            lucro_total = venda_consolidada - (custo_total_com_impostos + impostos_venda + despesas_totais + custo_servicos_proprios_total)
+            lucro_total = venda_consolidada - custo_total_com_impostos - custo_impostos - impostos_venda - despesas_totais - custo_servicos_proprios_total
             margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
             markup = (venda_consolidada / custo_total_com_impostos) if custo_total_com_impostos > 0 else 1.0
 
@@ -1806,7 +1803,7 @@ class OpportunitiesReportService:
             story.append(Paragraph(f"Cliente: {opportunity_dict['customer_nome']} | Vendedor: {opportunity_dict['vendedor_nome']} | Tipo: {tipo_venda} | Forma Compra: {forma_compra}", sub_style))
 
             kpi_data = [
-                ["Venda Consolidada", "Custo de Aquisição", "Custo Impostos", "Imp. Venda", "Despesas Adm.", "Lucro Total", "Margem"],
+                ["Venda Consolidada", "Custo de Aquisição", "Custo Impostos", "Imp. Venda", "Despesas Venda", "Lucro Total", "Margem"],
                 [f"R$ {kpis['venda_consolidada']}", f"R$ {kpis['custo_total_com_impostos']}", f"R$ {kpis['custo_impostos']}", f"R$ {kpis['impostos_venda']}", f"R$ {kpis['despesas_totais']}", f"R$ {kpis['lucro_total']}", f"{kpis['margem_percentual']}%"]
             ]
             kpi_table = Table(kpi_data, colWidths=[100]*7)

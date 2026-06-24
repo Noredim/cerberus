@@ -262,7 +262,7 @@ def run_test():
         # Monkeypatch kit financials calculations to isolate tests
         from src.modules.opportunity_kits.service import OpportunityKitService
         original_calc = OpportunityKitService.calculate_financials
-        OpportunityKitService.calculate_financials = lambda self, kit, tenant_id: {
+        OpportunityKitService.calculate_financials = lambda self, kit, tenant_id, *args, **kwargs: {
             "item_summaries": [
                 {
                     "product_id": str(product_difal.id),
@@ -288,7 +288,8 @@ def run_test():
                     "venda_unitario_item": 100.00,
                     "imposto_venda_item": 0.00
                 }
-            ]
+            ],
+            "summary": {}
         }
 
         print(f"Testing report generation for Opportunity: {opp.titulo} ({opp.id})")

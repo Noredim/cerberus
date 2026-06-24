@@ -136,6 +136,8 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
     custo_impostos = 0.0
     impostos_venda = 0.0
     despesas_totais = 0.0
+    total_ipi_all = 0.0
+    custo_servicos_proprios_total = 0.0
 
     for item in items:
         qty = float(item.quantidade or 1.0)
@@ -157,6 +159,12 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                 st_unit = float(pb_item.st_unitario)
                 
             purchase_tax_unit = difal_unit + st_unit
+            
+            ipi_unit = 0.0
+            if pb_item and pb_item.ipi_valor is not None and float(pb_item.ipi_valor) > 0.0:
+                pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
+                ipi_unit = float(pb_item.ipi_valor) / pb_qty
+            total_ipi_all += ipi_unit * qty
             
             pis_unit = float(item.pis_unit or 0.0)
             cofins_unit = float(item.cofins_unit or 0.0)
@@ -192,6 +200,10 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
             if kit:
                 try:
                     kit_financials = kit_service.calculate_financials(kit, budget.tenant_id, sales_budget_id=str(budget.id))
+                    vlr_instal_calc = float(kit_financials["summary"].get("vlr_instal_calc", 0.0) or 0.0)
+                    vlt_manut = float(kit_financials["summary"].get("vlt_manut", 0.0) or 0.0)
+                    custo_servicos_proprios_total += (vlr_instal_calc + vlt_manut) * qty
+
                     for summary in kit_financials.get("item_summaries", []):
                         p_id = summary.get("product_id")
                         p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
@@ -202,6 +214,7 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                         if p_uuid:
                             difal_unit = float(summary.get("difal_unitario") or 0.0)
                             st_unit = float(summary.get("icms_st_unitario") or 0.0)
+                            ipi_unit = float(summary.get("ipi_unit") or 0.0)
                             base_forn = summary.get("base_fornecedor")
                             if base_forn is not None:
                                 custo_unit = float(base_forn)
@@ -210,9 +223,11 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                         else:
                             difal_unit = 0.0
                             st_unit = 0.0
+                            ipi_unit = 0.0
                             custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
                             
                         purchase_tax_unit = difal_unit + st_unit
+                        total_ipi_all += ipi_unit * component_qty
                         
                         sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                         
@@ -234,7 +249,6 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                         venda_consolidada += venda_total
                         custo_consolidado += custo_total
                         custo_impostos += purchase_tax_total
-                        sales_tax_total = sales_tax_total
                         impostos_venda += sales_tax_total
                         despesas_totais += despesas_adm_total
                 except Exception:
@@ -245,7 +259,7 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
             if ri.tipo_contrato_kit == 'VENDA_EQUIPAMENTOS':
                 venda_consolidada += float(ri.kit_valor_mensal or 0) * float(ri.quantidade or 1)
 
-    lucro_total = venda_consolidada - (custo_consolidado + custo_impostos + impostos_venda + despesas_totais)
+    lucro_total = venda_consolidada - (custo_consolidado + total_ipi_all) - custo_impostos - impostos_venda - despesas_totais - custo_servicos_proprios_total
     return (lucro_total, venda_consolidada)
 
 

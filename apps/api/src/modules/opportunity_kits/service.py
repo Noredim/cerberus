@@ -493,8 +493,8 @@ class OpportunityKitService:
                     
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + perc_icms_aplicado
                 
-                venda_unitario_item = custo_base_unitario_item * fator_item
-                venda_total_item = custo_total_item_no_kit * fator_item
+                venda_unitario_item = base_unitario * fator_item
+                venda_total_item = (base_unitario * Decimal(str(item.quantidade_no_kit or 1))) * fator_item
                 imposto_venda_item = venda_total_item * imposto_tax
                 total_imposto_itens_venda += imposto_venda_item
             
@@ -603,7 +603,10 @@ class OpportunityKitService:
             else:
                 fator_margem_serv_prod = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
                 
-            valor_venda_produtos = (custo_aquisicao_produtos * fator_margem) + (custo_aquisicao_servicos * fator_margem_serv_prod)
+            if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+                valor_venda_produtos = sum(Decimal(str(is_["venda_total_item"])) for is_ in item_summaries)
+            else:
+                valor_venda_produtos = (custo_aquisicao_produtos * fator_margem) + (custo_aquisicao_servicos * fator_margem_serv_prod)
             
             if kit.instalacao_inclusa:
                 vlr_instal_calc = vlr_instal_calc_base_manut
