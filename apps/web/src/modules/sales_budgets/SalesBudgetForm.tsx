@@ -478,6 +478,15 @@ export function SalesBudgetForm() {
   const [percIss, setPercIss] = useState(0);
   const [percIcmsInterno, setPercIcmsInterno] = useState(0);
   const [percIcmsExterno, setPercIcmsExterno] = useState(0);
+  const [companyStateSigla, setCompanyStateSigla] = useState<string | null>(null);
+
+  const isInterstate = useMemo(() => {
+    if (!companyStateSigla || !customerId) return false;
+    const selectedCustomerObj = customers.find(c => c.id === customerId);
+    const customerStateSigla = selectedCustomerObj?.state_sigla || null;
+    if (!customerStateSigla) return false;
+    return companyStateSigla.toUpperCase() !== customerStateSigla.toUpperCase();
+  }, [companyStateSigla, customerId, customers]);
   // Venda tab — 4 separate fator margem fields
   const [fatorMargemProdutos, setFatorMargemProdutos] = useState(1.35);
   const [fatorMargemServicos, setFatorMargemServicos] = useState(1.35);
@@ -746,8 +755,19 @@ export function SalesBudgetForm() {
         setPercIcmsExterno(pick('icms_externo'));
       }
     }).catch(err => console.error('Failed to load company sales parameters:', err));
-  }, [activeCompanyId, isEditing]);
 
+    api.get(`/companies/${activeCompanyId}`).then(async (companyRes) => {
+      const companyStateId = companyRes.data.state_id;
+      if (companyStateId) {
+        api.get('/catalog/states').then((statesRes) => {
+          const companyStateObj = statesRes.data.find((s: any) => s.id === companyStateId);
+          if (companyStateObj) {
+            setCompanyStateSigla(companyStateObj.sigla);
+          }
+        }).catch(err => console.error('Failed to fetch states for company UF resolution:', err));
+      }
+    }).catch(err => console.error('Failed to fetch company details:', err));
+  }, [activeCompanyId, isEditing]);
 
 
   useEffect(() => {
@@ -755,6 +775,9 @@ export function SalesBudgetForm() {
     setLoading(true);
     api.get(`/sales-budgets/${id}`).then(async (res) => {
       const d = res.data;
+      if (d.company_state_sigla) {
+        setCompanyStateSigla(d.company_state_sigla);
+      }
       setTitulo(d.titulo);
       setCustomerId(d.customer_id);
       setVendedorId(d.vendedor_id || '');
@@ -1560,10 +1583,11 @@ export function SalesBudgetForm() {
     const compraTaxes = t.total_ipi + t.total_icms_st + t.total_difal;
     const compraTaxesNet = Math.max(0, compraTaxes - t.total_credito_icms);
     const vendaTaxes = t.total_pis + t.total_cofins + t.total_csll + t.total_irpj + t.total_icms + t.total_iss;
-    t.impostos = compraTaxesNet + vendaTaxes;
+    const vendaTaxesNet = Math.max(0, vendaTaxes - (isInterstate ? t.total_icms_st : 0));
+    t.impostos = compraTaxesNet + vendaTaxesNet;
 
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
-  }, [items, vendaKits]);
+  }, [items, vendaKits, isInterstate]);
 
   // Rental totals
   const rentalTotals = useMemo(() => {
@@ -2741,11 +2765,14 @@ export function SalesBudgetForm() {
                         <div className="flex justify-between text-gray-300"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>
                         <div className="flex justify-between text-gray-300"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>
                         <div className="flex justify-between text-gray-300"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ICMS ({(isInterstate ? percIcmsExterno : percIcmsInterno).toFixed(2)}%):</span><span>{fmt(totals.total_icms)}</span></div>
                         <div className="flex justify-between text-gray-300"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>
+                        {isInterstate && totals.total_icms_st > 0 && (
+                          <div className="flex justify-between text-brand-success"><span>ICMS ST (Compra) (Dedução):</span><span>-{fmt(totals.total_icms_st)}</span></div>
+                        )}
                         <div className="flex justify-between font-semibold text-white border-t border-white/5 pt-0.5">
                           <span>Subtotal Venda:</span>
-                          <span>{fmt(totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss)}</span>
+                          <span>{fmt(Math.max(0, totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss - (isInterstate ? totals.total_icms_st : 0)))}</span>
                         </div>
                       </div>
 
@@ -2987,7 +3014,8 @@ export function SalesBudgetForm() {
 
           // Cálculos de Impostos = Impostos de Saída (B4+B5)
           const sumVendaTaxes = t.pis + t.cofins + t.csll + t.irpj + t.iss + t.icms;
-          const impostosConsolidadoGlobal = Math.max(0, sumVendaTaxes - t.credito_icms);
+          const vendaTaxesNet = Math.max(0, sumVendaTaxes - (isInterstate ? t.vLTSt : 0));
+          const impostosConsolidadoGlobal = Math.max(0, vendaTaxesNet - t.credito_icms);
 
           // Cálculos Despesas (Consolidadas dos kits)
           const vltDespAdmConsolidado = t.despAdm;
@@ -3048,8 +3076,11 @@ export function SalesBudgetForm() {
                       {t.csll > 0 && <div className="flex justify-between items-center"><span>CSLL <span className="opacity-60 ml-1 font-mono text-[9px]">({percCsll.toFixed(2)}%)</span></span><span className="font-semibold">{fmt(t.csll)}</span></div>}
                       {t.irpj > 0 && <div className="flex justify-between items-center"><span>IRPJ <span className="opacity-60 ml-1 font-mono text-[9px]">({percIrpj.toFixed(2)}%)</span></span><span className="font-semibold">{fmt(t.irpj)}</span></div>}
                       {t.iss > 0 && <div className="flex justify-between items-center"><span>ISS <span className="opacity-60 ml-1 font-mono text-[9px]">({percIss.toFixed(2)}%)</span></span><span className="font-semibold">{fmt(t.iss)}</span></div>}
-                      {t.icms > 0 && <div className="flex justify-between items-center"><span>ICMS <span className="opacity-60 ml-1 font-mono text-[9px]">({(percIcmsInterno || percIcmsExterno || 0).toFixed(2)}%)</span></span><span className="font-semibold">{fmt(t.icms)}</span></div>}
+                      {t.icms > 0 && <div className="flex justify-between items-center"><span>ICMS <span className="opacity-60 ml-1 font-mono text-[9px]">({(isInterstate ? percIcmsExterno : percIcmsInterno).toFixed(2)}%)</span></span><span className="font-semibold">{fmt(t.icms)}</span></div>}
                       {t.credito_icms > 0 && <div className="flex justify-between items-center text-brand-success"><span>Créd. ICMS (Compra) <span className="opacity-60 ml-1 font-mono text-[9px]">({t.custoAquisicaoLimpo > 0 ? ((t.credito_icms / t.custoAquisicaoLimpo) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">-{fmt(t.credito_icms)}</span></div>}
+                      {isInterstate && t.vLTSt > 0 && (
+                        <div className="flex justify-between items-center text-brand-success"><span>ICMS ST (Compra) (Dedução) <span className="opacity-60 ml-1 font-mono text-[9px]">({t.custoAquisicaoLimpo > 0 ? ((t.vLTSt / t.custoAquisicaoLimpo) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">-{fmt(t.vLTSt)}</span></div>
+                      )}
                       {impostosConsolidadoGlobal === 0 && <div className="text-rose-800/40 italic">Nenhum imposto calculado</div>}
                     </div>
                   </div>
