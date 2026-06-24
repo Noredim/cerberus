@@ -1,4 +1,4 @@
-const CACHE_VERSION = '1.0.6';
+const CACHE_VERSION = '1.0.7';
 const STATIC_CACHE_NAME = `cerberus-pwa-static-v${CACHE_VERSION}`;
 const DYNAMIC_CACHE_NAME = `cerberus-pwa-dynamic-v${CACHE_VERSION}`;
 
