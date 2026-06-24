@@ -113,27 +113,51 @@ class OpportunityKitService:
             "custo_unit_final": Decimal(comp.get("custo_unit_final", custo_base))
         }
 
-    def calculate_financials(self, kit: OpportunityKit, tenant_id: str, override_factor: Optional[Decimal] = None) -> dict:
+    def calculate_financials(
+        self, 
+        kit: OpportunityKit, 
+        tenant_id: str, 
+        override_factor: Optional[Decimal] = None,
+        sales_budget_id: Optional[str] = None,
+        sales_proposal_id: Optional[str] = None
+    ) -> dict:
         from src.modules.sales_budgets.models import SalesBudget
         from src.modules.licitacoes.models import Licitacao
+        
+        final_budget_id = sales_budget_id or (str(kit.sales_budget_id) if kit.sales_budget_id else None)
+        final_proposal_id = sales_proposal_id or (str(kit.sales_proposal_id) if kit.sales_proposal_id else None)
+        
         company_id = None
         sales_budget = None
-        if kit.sales_budget_id:
-            sales_budget = self.db.query(SalesBudget).filter(SalesBudget.id == kit.sales_budget_id).first()
+        sales_proposal = None
+        
+        if final_budget_id:
+            sales_budget = self.db.query(SalesBudget).filter(SalesBudget.id == final_budget_id).first()
             company_id = str(sales_budget.company_id) if sales_budget else None
+        elif final_proposal_id:
+            from src.modules.sales_proposals.models import SalesProposal
+            sales_proposal = self.db.query(SalesProposal).filter(SalesProposal.id == final_proposal_id).first()
+            company_id = str(sales_proposal.company_id) if sales_proposal else None
         elif kit.licitacao_id:
             licitacao = self.db.query(Licitacao).filter(Licitacao.id == kit.licitacao_id).first()
             company_id = str(licitacao.company_id) if licitacao else None
 
         # Determine if we should force 12% ICMS rate (Requirement 4)
         force_12_icms = False
-        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS" and sales_budget:
+        if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
             from src.modules.companies.models import Company
             from src.modules.customers.models import Customer
             from src.modules.catalog.models import State
 
-            company = self.db.query(Company).filter(Company.id == sales_budget.company_id).first()
-            customer = self.db.query(Customer).filter(Customer.id == sales_budget.customer_id).first()
+            company = None
+            customer = None
+            if sales_budget:
+                company = self.db.query(Company).filter(Company.id == sales_budget.company_id).first()
+                customer = self.db.query(Customer).filter(Customer.id == sales_budget.customer_id).first()
+            elif sales_proposal:
+                company = self.db.query(Company).filter(Company.id == sales_proposal.company_id).first()
+                customer = self.db.query(Customer).filter(Customer.id == sales_proposal.customer_id).first()
+
             if company and customer:
                 company_state = self.db.query(State).filter(State.id == company.state_id).first()
                 customer_state = self.db.query(State).filter(State.id == customer.state_id).first()
@@ -958,12 +982,12 @@ class OpportunityKitService:
         
         # Compute dynamic financials
         for kit in kits:
-            fin = self.calculate_financials(kit, tenant_id)
+            fin = self.calculate_financials(kit, tenant_id, sales_budget_id=sales_budget_id)
             kit.summary = fin["summary"]
             kit.item_summaries = fin["item_summaries"]
         return kits
 
-    def get_kit(self, kit_id: str, tenant_id: str, company_id: Optional[str] = None):
+    def get_kit(self, kit_id: str, tenant_id: str, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, sales_proposal_id: Optional[str] = None):
         query = self.db.query(OpportunityKit).filter(
             OpportunityKit.id == kit_id,
             OpportunityKit.tenant_id == tenant_id
@@ -972,7 +996,7 @@ class OpportunityKitService:
             query = query.filter(OpportunityKit.company_id == company_id)
         kit = query.first()
         if kit:
-            fin = self.calculate_financials(kit, tenant_id)
+            fin = self.calculate_financials(kit, tenant_id, sales_budget_id=sales_budget_id, sales_proposal_id=sales_proposal_id)
             kit.summary = fin["summary"]
             kit.item_summaries = fin["item_summaries"]
         return kit

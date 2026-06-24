@@ -282,7 +282,7 @@ class OpportunitiesReportService:
             kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
             if kit:
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
                         if p_id:
@@ -891,7 +891,7 @@ class OpportunitiesReportService:
             if kit:
                 kits_by_id[kit.id] = kit
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
                         if p_id:
@@ -1082,7 +1082,7 @@ class OpportunitiesReportService:
                 kit = kits_by_id.get(item.opportunity_kit_id)
                 if kit:
                     try:
-                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
                         for summary in kit_financials.get("item_summaries", []):
                             p_id = summary.get("product_id")
                             p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
@@ -2194,7 +2194,7 @@ class OpportunitiesReportService:
             if kit:
                 kits_by_id[kit.id] = kit
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id)
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
                     kits_financials[kit.id] = kit_financials
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")

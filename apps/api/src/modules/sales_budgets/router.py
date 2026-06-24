@@ -113,7 +113,7 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
         if kit:
             kits_by_id[kit.id] = kit
             try:
-                kit_financials = kit_service.calculate_financials(kit, budget.tenant_id)
+                kit_financials = kit_service.calculate_financials(kit, budget.tenant_id, sales_budget_id=str(budget.id))
                 for item_sum in kit_financials.get("item_summaries", []):
                     p_id = item_sum.get("product_id")
                     if p_id:
@@ -191,7 +191,7 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
             kit = kits_by_id.get(item.opportunity_kit_id)
             if kit:
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, budget.tenant_id)
+                    kit_financials = kit_service.calculate_financials(kit, budget.tenant_id, sales_budget_id=str(budget.id))
                     for summary in kit_financials.get("item_summaries", []):
                         p_id = summary.get("product_id")
                         p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id

@@ -27,7 +27,7 @@ class SalesProposalService:
         if proposal.kits:
             for pk in proposal.kits:
                 if pk.opportunity_kit:
-                    fin = kit_service.calculate_financials(pk.opportunity_kit, tenant_id)
+                    fin = kit_service.calculate_financials(pk.opportunity_kit, tenant_id, sales_proposal_id=str(proposal.id))
                     pk.opportunity_kit.summary = fin.get("summary")
                     pk.opportunity_kit.item_summaries = fin.get("item_summaries")
 
@@ -120,7 +120,7 @@ class SalesProposalService:
                 
                 # Flush changes to DB before recalculating
                 db.flush()
-                fin = kit_service.calculate_financials(kit, tenant_id)
+                fin = kit_service.calculate_financials(kit, tenant_id, sales_proposal_id=str(proposal.id))
                 # Ensure the summary on the JSON payload is updated
                 kit.summary = fin["summary"]
                 kit.item_summaries = fin["item_summaries"]

@@ -35,6 +35,8 @@ def list_kits_by_company(
 @router.get("/{kit_id}", response_model=OpportunityKitResponse)
 def get_kit(
     kit_id: UUID,
+    sales_budget_id: Optional[UUID] = None,
+    sales_proposal_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     active_company_id: str = Depends(get_active_company)
@@ -42,7 +44,13 @@ def get_kit(
     if not active_company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
     service = OpportunityKitService(db)
-    kit = service.get_kit(str(kit_id), current_user.tenant_id, active_company_id)
+    kit = service.get_kit(
+        str(kit_id), 
+        current_user.tenant_id, 
+        active_company_id,
+        sales_budget_id=str(sales_budget_id) if sales_budget_id else None,
+        sales_proposal_id=str(sales_proposal_id) if sales_proposal_id else None
+    )
     if not kit:
         raise HTTPException(status_code=404, detail="Kit não encontrado")
     return kit

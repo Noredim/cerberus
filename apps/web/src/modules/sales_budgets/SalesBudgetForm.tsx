@@ -812,7 +812,7 @@ export function SalesBudgetForm() {
       for (const item of loadedItems) {
         if (item.opportunity_kit_id) {
           try {
-            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true`);
+            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
             vKits.push({
               opportunity_kit_id: item.opportunity_kit_id,
@@ -892,7 +892,7 @@ export function SalesBudgetForm() {
             } catch { /* fallback */ }
           } else if (item.opportunity_kit_id) {
             try {
-              const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true`);
+              const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
               return {
                 ...item,
                 custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
@@ -1358,7 +1358,7 @@ export function SalesBudgetForm() {
           finalKitData = data;
         } else {
           await api.patch(`/opportunity-kits/${vk.opportunity_kit_id}`, payload);
-          const { data } = await api.get(`/opportunity-kits/${vk.opportunity_kit_id}?include_financials=true`);
+          const { data } = await api.get(`/opportunity-kits/${vk.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
           finalKitId = data.id;
           finalKitData = data;
         }
@@ -1539,7 +1539,8 @@ export function SalesBudgetForm() {
       t.lucro += Number(s.lucro_mensal_kit ?? vk.lucro_final ?? 0) * q;
 
       // Cost composition / purchase taxes for kits
-      t.base_fornecedor += Number(s.custo_aquisicao_produtos ?? 0) * q;
+      const baseFornecedorKit = Number(s.custo_aquisicao_kit ?? s.custo_aquisicao_produtos ?? 0) - Number(s.total_ipi_kit ?? 0) - Number(s.total_st_kit ?? 0) - Number(s.total_difal_kit ?? 0);
+      t.base_fornecedor += baseFornecedorKit * q;
       t.total_ipi += Number(s.total_ipi_kit ?? 0) * q;
       t.total_frete_compra += Number(s.total_frete_kit ?? 0) * q;
       t.total_icms_st += Number(s.total_st_kit ?? 0) * q;
@@ -2038,7 +2039,7 @@ export function SalesBudgetForm() {
       for (const item of loadedItems) {
         if (item.opportunity_kit_id) {
           try {
-            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true`);
+            const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
             vKits.push({
               opportunity_kit_id: item.opportunity_kit_id,
