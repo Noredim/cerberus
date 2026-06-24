@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
-import { X, Save, Loader2, Users, Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Save, Loader2, Users, Search, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '../../services/api';
 import { useCompanies } from '../../modules/companies/hooks/useCompanies';
+
+interface State {
+  id: string;
+  sigla: string;
+  nome: string;
+}
+
+interface Municipality {
+  id: string;
+  nome: string;
+}
 
 interface QuickCustomerCreateModalProps {
   isOpen: boolean;
@@ -18,6 +29,8 @@ export function QuickCustomerCreateModal({
   const [loading, setLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState('');
+  const [states, setStates] = useState<State[]>([]);
+  const [cities, setCities] = useState<Municipality[]>([]);
   
   const { lookupCNPJ } = useCompanies();
 
@@ -36,6 +49,27 @@ export function QuickCustomerCreateModal({
     state_id: '',
   });
 
+  // Fetch states on mount
+  useEffect(() => {
+    if (!isOpen) return;
+    api.get('/catalog/states').then(res => setStates(res.data)).catch(console.error);
+  }, [isOpen]);
+
+  const fetchCities = async (stateId: string) => {
+    if (!stateId) { setCities([]); return; }
+    try {
+      const res = await api.get(`/catalog/cities?state_id=${stateId}&page_size=1000`);
+      setCities(res.data.items || res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleStateChange = (stateId: string) => {
+    setFormData(prev => ({ ...prev, state_id: stateId, municipality_id: '' }));
+    fetchCities(stateId);
+  };
+
   const handleCnpjLookup = async () => {
     const cnpjStr = formData.cnpj?.replace(/\D/g, '') || '';
     if (cnpjStr.length < 14) return;
@@ -53,6 +87,45 @@ export function QuickCustomerCreateModal({
 
         const result = response.normalizedData;
 
+        // Resolve state and municipality IDs from lookup data
+        const state = states.find(s => s.sigla === result.endereco?.uf);
+        let cityId = '';
+
+        if (state) {
+          try {
+            const citiesRes = await api.get(`/catalog/cities?state_id=${state.id}&page_size=1000`);
+            const stateCities = citiesRes.data.items || citiesRes.data;
+            setCities(stateCities);
+
+            // 1. Try by CEP IBGE code
+            if (result.endereco?.cep) {
+              const cepClean = result.endereco.cep.replace(/\D/g, '');
+              try {
+                const cepRes = await api.get(`/utils/cep/${cepClean}`);
+                const ibge = cepRes.data.ibge;
+                if (ibge) {
+                  const cityByIbge = stateCities.find((c: any) => String(c.ibge_id) === String(ibge));
+                  if (cityByIbge) cityId = cityByIbge.id;
+                }
+              } catch (e) {
+                console.error('Falha na validação do CEP no lookup de CNPJ');
+              }
+            }
+
+            // 2. Fallback by municipality name
+            if (!cityId && result.endereco?.municipio) {
+              const normalize = (s: string) =>
+                s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+              const cityMatch = stateCities.find(
+                (c: any) => normalize(c.nome) === normalize(result.endereco.municipio)
+              );
+              if (cityMatch) cityId = cityMatch.id;
+            }
+          } catch (e) {
+            console.error('Erro ao buscar cidades para o estado selecionado');
+          }
+        }
+
         setFormData((prev) => ({
             ...prev,
             razao_social: result.razaoSocial || prev.razao_social,
@@ -64,6 +137,8 @@ export function QuickCustomerCreateModal({
             complemento: result.endereco?.complemento || prev.complemento,
             bairro: result.endereco?.bairro || prev.bairro,
             cep: result.endereco?.cep || prev.cep,
+            state_id: state?.id || prev.state_id,
+            municipality_id: cityId || prev.municipality_id,
         }));
 
     } catch (err: any) {
@@ -110,6 +185,7 @@ export function QuickCustomerCreateModal({
         municipality_id: '',
         state_id: '',
       });
+      setCities([]);
     } catch (err: any) {
       console.error('Save error:', err);
       setError('Falha ao salvar cliente: ' + (err.response?.data?.detail || err.message));
@@ -226,6 +302,44 @@ export function QuickCustomerCreateModal({
             </div>
           </div>
 
+          {/* Endereço divider */}
+          <div className="flex items-center gap-2 pt-1">
+            <MapPin className="w-3.5 h-3.5 text-text-muted" />
+            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Endereço (Opcional)</span>
+            <div className="flex-1 h-px bg-border-subtle" />
+          </div>
+
+          {/* Estado + Município */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Estado (UF)</label>
+              <select
+                value={formData.state_id}
+                onChange={e => handleStateChange(e.target.value)}
+                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 text-sm text-text-primary focus:border-brand-primary outline-none transition-colors h-11"
+              >
+                <option value="">Selecione...</option>
+                {states.map(s => (
+                  <option key={s.id} value={s.id}>{s.sigla} – {s.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Município</label>
+              <select
+                value={formData.municipality_id}
+                onChange={e => setFormData({ ...formData, municipality_id: e.target.value })}
+                disabled={!formData.state_id}
+                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 text-sm text-text-primary focus:border-brand-primary outline-none transition-colors h-11 disabled:opacity-50"
+              >
+                <option value="">{formData.state_id ? 'Selecione...' : 'Selecione o estado primeiro...'}</option>
+                {cities.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">
             <button
               type="button"
@@ -240,7 +354,7 @@ export function QuickCustomerCreateModal({
               className="flex items-center gap-2 bg-brand-primary text-white px-6 py-2.5 rounded-lg font-bold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 disabled:opacity-50 cursor-pointer text-sm"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Cadastrar 
+              Cadastrar
             </button>
           </div>
         </form>
