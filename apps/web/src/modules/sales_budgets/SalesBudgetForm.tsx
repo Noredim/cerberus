@@ -478,15 +478,6 @@ export function SalesBudgetForm() {
   const [percIss, setPercIss] = useState(0);
   const [percIcmsInterno, setPercIcmsInterno] = useState(0);
   const [percIcmsExterno, setPercIcmsExterno] = useState(0);
-  const [companyStateSigla, setCompanyStateSigla] = useState<string | null>(null);
-
-  const isInterstate = useMemo(() => {
-    if (!companyStateSigla || !customerId) return false;
-    const selectedCustomerObj = customers.find(c => c.id === customerId);
-    const customerStateSigla = selectedCustomerObj?.state_sigla || null;
-    if (!customerStateSigla) return false;
-    return companyStateSigla.toUpperCase() !== customerStateSigla.toUpperCase();
-  }, [companyStateSigla, customerId, customers]);
   // Venda tab — 4 separate fator margem fields
   const [fatorMargemProdutos, setFatorMargemProdutos] = useState(1.35);
   const [fatorMargemServicos, setFatorMargemServicos] = useState(1.35);
@@ -613,6 +604,16 @@ export function SalesBudgetForm() {
 
   // Lookups
   const [customers, setCustomers] = useState<any[]>([]);
+  const [companyStateSigla, setCompanyStateSigla] = useState<string | null>(null);
+
+  const isInterstate = useMemo(() => {
+    if (!companyStateSigla || !customerId) return false;
+    const selectedCustomerObj = customers.find(c => c.id === customerId);
+    const customerStateSigla = selectedCustomerObj?.state_sigla || null;
+    if (!customerStateSigla) return false;
+    return companyStateSigla.toUpperCase() !== customerStateSigla.toUpperCase();
+  }, [companyStateSigla, customerId, customers]);
+
   const [, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
