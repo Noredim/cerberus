@@ -855,6 +855,8 @@ class OpportunitiesReportService:
             PurchaseBudget.sales_budget_id == opportunity_id,
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
+        # Sort by created_at descending to prioritize the latest budgets when matching names/terms
+        purchase_budgets = sorted(purchase_budgets, key=lambda x: getattr(x, "created_at", None) or datetime.datetime.min, reverse=True)
 
         # Check if company CNPJ is same as customer CNPJ (Intercompany)
         is_same_cnpj = False
@@ -1162,13 +1164,25 @@ class OpportunitiesReportService:
                             
                             pb_info = product_suppliers.get(p_uuid) if p_uuid else None
                             supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
-                            pb_item = pb_info["pb_item"] if pb_info else None
                             
-                            difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(p_uuid, pb_item) if p_uuid else (0.0, 0.0, 0.0, "service")
+                            if p_uuid:
+                                difal_unit = float(summary.get("difal_unitario") or 0.0)
+                                st_unit = float(summary.get("icms_st_unitario") or 0.0)
+                                ipi_unit = float(summary.get("ipi_unit") or 0.0)
+                                base_forn = summary.get("base_fornecedor")
+                                if base_forn is not None:
+                                    custo_unit = float(base_forn)
+                                else:
+                                    custo_unit = float(summary.get("custo_base_unitario_item") or 0.0) - (difal_unit + st_unit)
+                                origem_imposto = "opportunity_kit"
+                            else:
+                                difal_unit = 0.0
+                                st_unit = 0.0
+                                ipi_unit = 0.0
+                                custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
+                                origem_imposto = "service"
+                                
                             purchase_tax_unit = difal_unit + st_unit + ipi_unit
-                            
-                            # Custo unitário deve ser o custo sem impostos de compra
-                            custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - (difal_unit + st_unit))
                             
                             # Sales tax from kit summary
                             if is_same_cnpj:

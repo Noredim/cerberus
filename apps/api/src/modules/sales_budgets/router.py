@@ -199,23 +199,20 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                         qty_in_kit = float(kit_item.quantidade_no_kit) if kit_item else 1.0
                         component_qty = qty * qty_in_kit
                         
-                        pb_item = product_suppliers.get(p_uuid)
-                        
-                        difal_unit = 0.0
-                        st_unit = 0.0
-                        
-                        tax_info = opp_product_taxes.get(p_uuid)
-                        if tax_info:
-                            difal_unit = tax_info["difal"]
-                            st_unit = tax_info["st"]
-                            
-                        if difal_unit == 0.0 and pb_item and pb_item.difal_unitario is not None:
-                            difal_unit = float(pb_item.difal_unitario)
-                        if st_unit == 0.0 and pb_item and pb_item.st_unitario is not None:
-                            st_unit = float(pb_item.st_unitario)
+                        if p_uuid:
+                            difal_unit = float(summary.get("difal_unitario") or 0.0)
+                            st_unit = float(summary.get("icms_st_unitario") or 0.0)
+                            base_forn = summary.get("base_fornecedor")
+                            if base_forn is not None:
+                                custo_unit = float(base_forn)
+                            else:
+                                custo_unit = float(summary.get("custo_base_unitario_item") or 0.0) - (difal_unit + st_unit)
+                        else:
+                            difal_unit = 0.0
+                            st_unit = 0.0
+                            custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
                             
                         purchase_tax_unit = difal_unit + st_unit
-                        custo_unit = float(pb_item.valor_unitario) if pb_item else (float(summary.get("custo_base_unitario_item") or 0.0) - purchase_tax_unit)
                         
                         sales_tax_unit = float(summary.get("imposto_venda_item") or 0.0) / qty_in_kit if qty_in_kit > 0 else 0.0
                         
