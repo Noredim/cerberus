@@ -493,8 +493,8 @@ class OpportunityKitService:
                     
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + perc_icms_aplicado
                 
-                venda_unitario_item = base_unitario * fator_item
-                venda_total_item = (base_unitario * Decimal(str(item.quantidade_no_kit or 1))) * fator_item
+                venda_unitario_item = custo_base_unitario_item * fator_item
+                venda_total_item = (custo_base_unitario_item * Decimal(str(item.quantidade_no_kit or 1))) * fator_item
                 imposto_venda_item = venda_total_item * imposto_tax
                 total_imposto_itens_venda += imposto_venda_item
             

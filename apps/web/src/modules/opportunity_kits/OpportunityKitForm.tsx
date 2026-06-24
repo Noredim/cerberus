@@ -1513,7 +1513,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <div>
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral (Média)</span>
                         <div className="text-base font-black text-text-primary">
-                          {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
+                          {(((Number(form.fator_margem_locacao) || 0) + 
+                            (Number(form.fator_margem_servicos_produtos) || 0) + 
+                            (Number(form.fator_margem_instalacao) || 0) + 
+                            (Number(form.fator_margem_manutencao) || 0)) / 4).toFixed(4)}
                         </div>
                       </div>
                     </div>
