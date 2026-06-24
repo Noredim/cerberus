@@ -2599,7 +2599,7 @@ export function SalesBudgetForm() {
         {/* Consolidação Diretoria — right after header */}
         {isApprover && (items.length > 0 || vendaKits.length > 0) && (() => {
           const venda_fat = totals.venda;
-          const venda_custo_total = totals.custo + (totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss) + totals.despAdm + totals.frete + totals.comissao;
+          const venda_custo_total = totals.custo + (totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss - (isInterstate ? totals.total_icms_st : 0)) + totals.despAdm + totals.frete + totals.comissao;
           const venda_rec_liq = venda_fat - venda_custo_total;
           const venda_comissao_diretoria = Math.max(0, venda_rec_liq * (percComissaoDiretoria / 100));
           const venda_saldo = venda_rec_liq - venda_comissao_diretoria;
