@@ -89,18 +89,17 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 18%;">Produto / Serviço</th>
+                    <th style="width: 22%;">Produto / Serviço</th>
                     <th style="width: 12%;">Fornecedor</th>
                     <th class="text-center" style="width: 4%;">Qtd</th>
-                    <th class="text-right" style="width: 7%;">Custo Unit.</th>
-                    <th class="text-right" style="width: 7%;">Custo Total</th>
-                    <th class="text-right" style="width: 8%;">Imp. Compra</th>
+                    <th class="text-right" style="width: 8%;">Custo Unit.</th>
+                    <th class="text-right" style="width: 8%;">Custo Total</th>
                     <th class="text-center" style="width: 4%;">MKP</th>
                     <th class="text-right" style="width: 8%;">Val. Venda</th>
                     <th class="text-right" style="width: 8%;">Venda Total</th>
                     <th class="text-right" style="width: 8%;">Imp. Venda</th>
-                    <th class="text-right" style="width: 8%;">Despesas adm.</th>
-                    <th class="text-right" style="width: 8%;">Lucro</th>
+                    <th class="text-right" style="width: 9%;">Despesas adm.</th>
+                    <th class="text-right" style="width: 9%;">Lucro</th>
                 </tr>
             </thead>
             <tbody>
@@ -113,12 +112,6 @@
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.custo_unitario }}</td>
                     <td class="text-right">R$ {{ item.custo_total }}</td>
-                    <td class="text-right">
-                        R$ {{ item.imposto_compra_unit }}
-                        {% if item.imposto_compra_unit != '0,00' and item.origem_imposto != 'fallback_zero' %}
-                            <span style="font-size: 5.5pt; color: #94a3b8; font-weight: normal;">({{ 'kit' if item.origem_imposto == 'opportunity_kit' else ('op' if item.origem_imposto == 'opportunity_item' else 'orc') }})</span>
-                        {% endif %}
-                    </td>
                     <td class="text-center">{{ item.markup }}x</td>
                     <td class="text-right">R$ {{ item.valor_venda }}</td>
                     <td class="text-right font-bold">R$ {{ item.venda_total }}</td>
@@ -136,7 +129,6 @@
                         <td class="text-center">{{ comp.quantidade }}</td>
                         <td class="text-right">R$ {{ comp.custo_unitario }}</td>
                         <td class="text-right">R$ {{ comp.custo_total }}</td>
-                        <td class="text-right">R$ {{ comp.imposto_compra_unit }}</td>
                         <td class="text-center">{{ comp.markup }}x</td>
                         <td class="text-right">R$ {{ comp.valor_venda }}</td>
                         <td class="text-right font-bold">R$ {{ comp.venda_total }}</td>
@@ -151,8 +143,7 @@
                     <td class="text-nowrap" colspan="2" style="white-space: nowrap;">TOTAL CONSOLIDADO</td>
                     <td class="text-center text-nowrap" style="white-space: nowrap;">-</td>
                     <td class="text-right text-nowrap" style="white-space: nowrap;">-</td>
-                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_consolidado }}</td>
-                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_impostos }}</td>
+                    <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_total_consolidado_relatorio }}</td>
                     <td class="text-center text-nowrap" style="white-space: nowrap;">{{ kpis.markup }}x</td>
                     <td class="text-right text-nowrap" style="white-space: nowrap;">-</td>
                     <td class="text-right text-nowrap" style="color: #0284c7; white-space: nowrap;">R$ {{ kpis.venda_consolidada }}</td>

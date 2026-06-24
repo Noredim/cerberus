@@ -991,6 +991,10 @@ class OpportunitiesReportService:
                 difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
                 purchase_tax_unit = difal_unit + st_unit + ipi_unit
                 
+                # Exibição de custos unificando base + IPI + ST
+                custo_unit_exibido = custo_unit + ipi_unit + st_unit
+                custo_total_exibido = custo_unit_exibido * qty
+                
                 # Sales tax unit
                 if is_same_cnpj and item.tipo_item == "MERCADORIA":
                     pis_unit = 0.0
@@ -1050,8 +1054,8 @@ class OpportunitiesReportService:
                     "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento"),
                     "fornecedor": supplier_name,
                     "quantidade": qty,
-                    "custo_unitario": format_currency(custo_unit),
-                    "custo_total": format_currency(custo_total),
+                    "custo_unitario": format_currency(custo_unit_exibido),
+                    "custo_total": format_currency(custo_total_exibido),
                     "imposto_compra_unit": format_currency(purchase_tax_unit),
                     "markup": f"{mkp_venda:.2f}",
                     "valor_venda": format_currency(venda_unit),
@@ -1064,6 +1068,7 @@ class OpportunitiesReportService:
                     # Numeric for summaries
                     "_venda_total": venda_total,
                     "_custo_total": custo_total,
+                    "_custo_total_exibido": custo_total_exibido,
                     "_purchase_tax_total": purchase_tax_total,
                     "_sales_tax_total": sales_tax_total,
                     "_despesas_adm_total": despesas_adm_total,
@@ -1117,6 +1122,7 @@ class OpportunitiesReportService:
                             "components": [],
                             "_venda_total": 0.0,
                             "_custo_total": 0.0,
+                            "_custo_total_exibido": 0.0,
                             "_custo_servicos_proprios_total": 0.0,
                             "_purchase_tax_total": 0.0,
                             "_sales_tax_total": 0.0,
@@ -1184,6 +1190,10 @@ class OpportunitiesReportService:
                                 
                             purchase_tax_unit = difal_unit + st_unit + ipi_unit
                             
+                            # Custo Unitário com impostos (IPI + ST) embutidos na exibição
+                            custo_unit_exibido = custo_unit + ipi_unit + st_unit
+                            custo_total_exibido = custo_unit_exibido * component_qty
+                            
                             # Sales tax from kit summary
                             if is_same_cnpj:
                                 sales_tax_unit = 0.0
@@ -1204,9 +1214,12 @@ class OpportunitiesReportService:
                             
                             if is_same_cnpj:
                                 venda_unit = custo_unit + purchase_tax_unit + ipi_unit
+                                venda_total = venda_unit * component_qty
                             else:
                                 venda_unit = float(summary.get("venda_unitario_item") or 0.0)
-                            venda_total = venda_unit * component_qty
+                                # Puxar venda total diretamente do kit para evitar discrepâncias de arredondamento
+                                venda_total = float(summary.get("venda_total_item") or 0.0) * kit_qty
+                                
                             custo_total = custo_unit * component_qty
                             purchase_tax_total = purchase_tax_unit * component_qty
                             difal_total = difal_unit * component_qty
@@ -1235,7 +1248,9 @@ class OpportunitiesReportService:
                             
                             lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
                             
-                            mkp_venda = float(summary.get("fator_item") or 1.0)
+                            # Usar markup referente ao do kit para todos os componentes produto
+                            markup_do_kit = float(kit.fator_margem_locacao or 1.0)
+                            mkp_venda = markup_do_kit if p_uuid else float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
@@ -1246,8 +1261,8 @@ class OpportunitiesReportService:
                                 "descricao": product_desc or "Componente do Kit",
                                 "fornecedor": supplier_name,
                                 "quantidade": component_qty,
-                                "custo_unitario": format_currency(custo_unit),
-                                "custo_total": format_currency(custo_total),
+                                "custo_unitario": format_currency(custo_unit_exibido),
+                                "custo_total": format_currency(custo_total_exibido),
                                 "imposto_compra_unit": format_currency(purchase_tax_unit),
                                 "markup": f"{mkp_venda:.2f}",
                                 "valor_venda": format_currency(venda_unit),
@@ -1258,12 +1273,14 @@ class OpportunitiesReportService:
                                 "origem_imposto": origem_imposto,
                                 "components": [],
                                 "_custo_total": custo_total,
+                                "_custo_total_exibido": custo_total_exibido,
                                 "_ipi_total": ipi_total
                             }
                             components_list.append(comp_dict)
                             
                             # Accumulate in kit details
                             kit_details["_custo_total"] += custo_total
+                            kit_details["_custo_total_exibido"] += custo_total_exibido
                             kit_details["_venda_total"] += venda_total
                             kit_details["_purchase_tax_total"] += purchase_tax_total
                             kit_details["_sales_tax_total"] += sales_tax_total
@@ -1325,7 +1342,8 @@ class OpportunitiesReportService:
                                 "despesas_adm": format_currency(despesas_adm_total),
                                 "lucro_total": format_currency(lucro_total),
                                 "origem_imposto": "n/a",
-                                "components": []
+                                "components": [],
+                                "_custo_total_exibido": 0.0
                             }
                             components_list.append(inst_dict)
                             
@@ -1387,7 +1405,8 @@ class OpportunitiesReportService:
                                 "despesas_adm": format_currency(despesas_adm_total),
                                 "lucro_total": format_currency(lucro_total),
                                 "origem_imposto": "n/a",
-                                "components": []
+                                "components": [],
+                                "_custo_total_exibido": 0.0
                             }
                             components_list.append(manut_dict)
                             
@@ -1407,12 +1426,12 @@ class OpportunitiesReportService:
                             kit_details["_comissao_total"] += comissao_total
                         
                         # Set formatted values for the Kit itself
-                        kit_details["custo_total"] = format_currency(kit_details["_custo_total"])
-                        kit_details["custo_unitario"] = format_currency(kit_details["_custo_total"] / kit_qty if kit_qty > 0 else 0.0)
+                        kit_details["custo_total"] = format_currency(kit_details["_custo_total_exibido"])
+                        kit_details["custo_unitario"] = format_currency(kit_details["_custo_total_exibido"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["imposto_compra_unit"] = format_currency(kit_details["_purchase_tax_total"] / kit_qty if kit_qty > 0 else 0.0)
                         
-                        mkp_kit = (kit_details["_venda_total"] / kit_details["_custo_total"]) if kit_details["_custo_total"] > 0 else 1.0
-                        kit_details["markup"] = f"{mkp_kit:.2f}"
+                        markup_do_kit = float(kit.fator_margem_locacao or 1.0)
+                        kit_details["markup"] = f"{markup_do_kit:.2f}"
                         
                         kit_details["valor_venda"] = format_currency(kit_details["_venda_total"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["venda_total"] = format_currency(kit_details["_venda_total"])
@@ -1420,6 +1439,11 @@ class OpportunitiesReportService:
                         kit_details["despesas_adm"] = format_currency(kit_details["_despesas_adm_total"])
                         kit_details["lucro_total"] = format_currency(kit_details["_lucro_total"])
                         kit_details["components"] = components_list
+                        
+                        # Ensure all components show the kit's base markup factor
+                        for comp in components_list:
+                            if comp.get("product_id") is not None:
+                                comp["markup"] = f"{markup_do_kit:.2f}"
                         
                         items_details.append(kit_details)
                     except Exception as e:
@@ -1466,7 +1490,8 @@ class OpportunitiesReportService:
             "lucro_total": format_currency(lucro_total),
             "margem_percentual": f"{margem_percentual:.2f}",
             "markup": f"{markup:.2f}",
-            "custo_total_com_impostos": format_currency(custo_total_com_impostos)
+            "custo_total_com_impostos": format_currency(custo_total_com_impostos),
+            "custo_total_consolidado_relatorio": format_currency(sum(x.get("_custo_total_exibido", 0.0) for x in items_details))
         }
 
         # 4. Block 2: Supplier Summaries
