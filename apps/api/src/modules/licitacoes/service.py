@@ -1773,7 +1773,7 @@ class LicitacaoService:
         supplier_map = {}
         for pb in purchase_budgets:
             sup_name = pb.supplier_nome_fantasia
-            val = pb.valor_total
+            val = sum(Decimal(str(item.valor_unitario)) * Decimal(str(item.quantidade)) for item in pb.items) if pb.items else Decimal("0.0")
             supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + Decimal(str(val))
             
         fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
