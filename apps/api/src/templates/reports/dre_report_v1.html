@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="description" content="Demonstrativo de Resultado de Venda (DRE) consolidado da oportunidade comercial do sistema Cerberus.">
+    <meta property="og:title" content="DRE - Demonstrativo de Resultado de Venda">
     <title>DRE - Demonstrativo de Resultado de Venda</title>
     <style>
         {{ css_content }}
@@ -136,17 +137,17 @@
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) IPI de Compra</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.ipi.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_compra.ipi.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.ipi.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) ICMS ST de Compra</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.icms_st.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_compra.icms_st.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.icms_st.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) DIFAL de Compra</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.difal.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_compra.difal.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.difal.valor) }}</td>
             </tr>
 
@@ -158,37 +159,37 @@
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) PIS Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.pis.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.pis.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.pis.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) COFINS Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.cofins.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.cofins.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.cofins.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) ICMS Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.icms.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.icms.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.icms.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) IPI Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.ipi.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.ipi.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.ipi.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) ISS Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.iss.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.iss.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.iss.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) IRPJ Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.irpj.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.irpj.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.irpj.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) CSLL Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.csll.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.impostos_venda.csll.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.csll.valor) }}</td>
             </tr>
 
@@ -200,17 +201,17 @@
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) Frete de Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.frete.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.despesas_venda.frete.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.frete.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) Comissão de Venda</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.comissao.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.despesas_venda.comissao.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.comissao.valor) }}</td>
             </tr>
             <tr class="row-item">
                 <td class="row-item-detail">(-) Despesas Administrativas</td>
-                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.despesas_administrativas.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">{{ format_percent(saidas.despesas_venda.despesas_administrativas.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.despesas_administrativas.valor) }}</td>
             </tr>
 

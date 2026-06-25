@@ -394,17 +394,17 @@ class OpportunitiesReportService:
             # Impostos compra
             add_row("2.2 Impostos de Compra (FPC)", (float(total_impostos_compra) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_compra, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, imp in dre_data["saidas"]["impostos_compra"].items():
-                add_row(f"(-) Imposto de Compra {k.upper()}", (float(imp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, imp['valor'], is_indent=True)
+                add_row(f"(-) Imposto de Compra {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
                 
             # Impostos venda
             add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, imp in dre_data["saidas"]["impostos_venda"].items():
-                add_row(f"(-) Imposto de Venda {k.upper()}", (float(imp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, imp['valor'], is_indent=True)
+                add_row(f"(-) Imposto de Venda {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
                 
             # Despesas venda
             add_row("2.4 Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, exp in dre_data["saidas"]["despesas_venda"].items():
-                add_row(f"(-) Despesa {k.capitalize()}", (float(exp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, exp['valor'], is_indent=True)
+                add_row(f"(-) Despesa {k.capitalize()}", float(exp.get('percent', 0.0) or 0.0), exp['valor'], is_indent=True)
                 
             # Resultado
             add_row("3. RESULTADO FINANCEIRO CONSOLIDADO", None, None, is_bold=True, bg_color='#f1f5f9')

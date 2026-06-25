@@ -1788,6 +1788,8 @@ class LicitacaoService:
             pis_venda_pct = Decimal(str(first_kit.aliq_pis or 0.0))
             cofins_venda_pct = Decimal(str(first_kit.aliq_cofins or 0.0))
             icms_venda_pct = Decimal(str(first_kit.aliq_icms or 0.0))
+            if is_interestadual and getattr(first_kit, "tipo_contrato", None) == "VENDA_EQUIPAMENTOS":
+                icms_venda_pct = Decimal("12.0")
             iss_venda_pct = Decimal(str(first_kit.aliq_iss or 0.0))
             irpj_venda_pct = Decimal(str(first_kit.aliq_irpj or 0.0))
             csll_venda_pct = Decimal(str(first_kit.aliq_csll or 0.0))
