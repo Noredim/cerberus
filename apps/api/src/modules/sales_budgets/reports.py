@@ -156,6 +156,286 @@ def parse_payment_condition(condition_str: str, total_value: float, base_date: d
 
 class OpportunitiesReportService:
     @staticmethod
+    def generate_dre_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
+        from src.modules.sales_budgets.service import get_opportunity_dre
+        
+        # 1. Fetch Opportunity
+        opportunity = db.query(SalesBudget).filter(
+            SalesBudget.id == opportunity_id,
+            SalesBudget.tenant_id == current_user.tenant_id
+        ).first()
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
+            
+        # 2. Get DRE dictionary
+        dre_data = get_opportunity_dre(db, current_user.tenant_id, opportunity_id, opportunity.company_id)
+        
+        # 3. Calculate helper totals
+        total_fornecedores = sum(f["valor"] for f in dre_data["saidas"]["fornecedores"])
+        total_impostos_compra = sum(
+            imp["valor"] for imp in dre_data["saidas"]["impostos_compra"].values()
+        )
+        total_impostos_venda = sum(
+            imp["valor"] for imp in dre_data["saidas"]["impostos_venda"].values()
+        )
+        total_despesas_venda = sum(
+            exp["valor"] for exp in dre_data["saidas"]["despesas_venda"].values()
+        )
+        
+        def format_currency_helper(val) -> str:
+            if val is None:
+                return "0,00"
+            return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        def format_percent_helper(val) -> str:
+            if val is None:
+                return "0,00"
+            return f"{float(val):.2f}".replace(".", ",")
+
+        def format_percent_ratio_helper(val, base) -> str:
+            if not base or not val:
+                return "0,00"
+            ratio = (float(val) / float(base)) * 100.0
+            return f"{ratio:.2f}".replace(".", ",")
+        
+        # Formatting close date
+        data_fechamento = dre_data["header"]["data_fechamento"]
+        if isinstance(data_fechamento, (datetime.datetime, datetime.date)):
+            data_fechamento_str = data_fechamento.strftime("%d/%m/%Y")
+        else:
+            data_fechamento_str = str(data_fechamento)
+            
+        dre_data["header"]["data_fechamento_str"] = data_fechamento_str
+        
+        now = datetime.datetime.now()
+        emissao_data_hora = now.strftime("%d/%m/%Y às %H:%M")
+        
+        auditoria = {
+            "usuario_emissor": current_user.name or current_user.email,
+            "data": now.strftime("%d/%m/%Y"),
+            "hora": now.strftime("%H:%M"),
+            "versao": "1.0.0"
+        }
+        
+        # Render Template
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        templates_dir = os.path.join(base_dir, "templates", "reports")
+        
+        # Company logo path
+        company_logo = None
+        if opportunity.company and opportunity.company.logo_url:
+            root_dir = os.path.dirname(os.path.dirname(base_dir))
+            clean_path = opportunity.company.logo_url.lstrip("/")
+            abs_logo_path = os.path.join(root_dir, clean_path)
+            if os.path.exists(abs_logo_path):
+                normalized_path = abs_logo_path.replace("\\", "/")
+                company_logo = f"file:///{normalized_path}"
+                
+        css_path = os.path.join(templates_dir, "dre_report_v1.css")
+        html_path = os.path.join(templates_dir, "dre_report_v1.html")
+        
+        css_content = ""
+        if os.path.exists(css_path):
+            with open(css_path, "r", encoding="utf-8") as f:
+                css_content = f.read()
+                
+        html_template = ""
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_template = f.read()
+        else:
+            raise HTTPException(status_code=500, detail="DRE Report HTML template file not found.")
+            
+        from jinja2 import Template
+        template = Template(html_template)
+        
+        rendered_html = template.render(
+            css_content=css_content,
+            opportunity_company_nome=opportunity.company.nome_fantasia or opportunity.company.razao_social if opportunity.company else "Empresa Não Informada",
+            company_logo=company_logo,
+            header=dre_data["header"],
+            entradas=dre_data["entradas"],
+            saidas=dre_data["saidas"],
+            total_fornecedores=total_fornecedores,
+            total_impostos_compra=total_impostos_compra,
+            total_impostos_venda=total_impostos_venda,
+            total_despesas_venda=total_despesas_venda,
+            lucro_ebitda=dre_data["lucro_ebitda"],
+            margem_liquida=dre_data["margem_liquida"],
+            emissao_data_hora=emissao_data_hora,
+            auditoria=auditoria,
+            format_currency=format_currency_helper,
+            format_percent=format_percent_helper,
+            format_percent_ratio=format_percent_ratio_helper
+        )
+        
+        try:
+            from weasyprint import HTML
+            pdf_bytes = HTML(string=rendered_html).write_pdf()
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=DRE_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
+                }
+            )
+        except Exception as weasy_err:
+            print(f"[Warning] WeasyPrint failed. Falling back to ReportLab. Error: {weasy_err}")
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            
+            pdf_buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buffer, 
+                pagesize=letter,
+                rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+            )
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Styles
+            title_style = ParagraphStyle(
+                'ReportTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                textColor=colors.HexColor('#0f172a'),
+                spaceAfter=10
+            )
+            sub_style = ParagraphStyle(
+                'SubStyle',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#475569'),
+                spaceAfter=15
+            )
+            th_style = ParagraphStyle(
+                'TableHeader',
+                parent=styles['Normal'],
+                fontSize=9,
+                fontName='Helvetica-Bold',
+                textColor=colors.white
+            )
+            td_style = ParagraphStyle(
+                'TableCell',
+                parent=styles['Normal'],
+                fontSize=8.5,
+                textColor=colors.HexColor('#1e293b')
+            )
+            td_bold_style = ParagraphStyle(
+                'TableCellBold',
+                parent=styles['Normal'],
+                fontSize=8.5,
+                fontName='Helvetica-Bold',
+                textColor=colors.HexColor('#0f172a')
+            )
+            
+            # Header
+            story.append(Paragraph("Demonstrativo de Resultado de Venda (DRE)", title_style))
+            story.append(Paragraph(
+                f"Oportunidade Comercial: #{dre_data['header']['numero_oportunidade']} | "
+                f"Cliente: {dre_data['header']['cliente_nome']} ({dre_data['header']['cidade']}-{dre_data['header']['estado']})<br/>"
+                f"Vendedor: {dre_data['header']['vendedor_nome']} | "
+                f"Responsável: {dre_data['header']['responsavel_nome']} | "
+                f"Fechamento: {data_fechamento_str}",
+                sub_style
+            ))
+            
+            # Build Table Data
+            table_data = [
+                [Paragraph("<b>Descrição da Conta (DRE)</b>", th_style), Paragraph("<b>%</b>", th_style), Paragraph("<b>Valor (R$)</b>", th_style)]
+            ]
+            
+            t_style = [
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('TOPPADDING', (0,0), (-1,0), 6),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+            ]
+            
+            # Helper to add row
+            def add_row(desc, pct_val, amount, is_bold=False, is_indent=False, bg_color=None):
+                p_desc = f"&nbsp;&nbsp;&nbsp;&nbsp;{desc}" if is_indent else desc
+                style = td_bold_style if is_bold else td_style
+                pct_str = format_percent_helper(pct_val) + "%" if pct_val is not None else "-"
+                
+                if amount is not None:
+                    val_str = f"R$ {format_currency_helper(amount)}"
+                else:
+                    val_str = "-"
+                    
+                table_data.append([
+                    Paragraph(p_desc, style),
+                    Paragraph(pct_str, style),
+                    Paragraph(val_str, style)
+                ])
+                if bg_color:
+                    row_idx = len(table_data) - 1
+                    t_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor(bg_color)))
+                
+            # Entradas
+            add_row("1. RECEITA OPERACIONAL BRUTA (ENTRADAS)", 100.0, dre_data["entradas"]["total_entradas"], is_bold=True, bg_color='#f1f5f9')
+            add_row("(+) Venda de Equipamentos", (float(dre_data["entradas"]["total_produtos"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["total_produtos"], is_indent=True)
+            add_row("(+) Faturamento de Serviços", (float(dre_data["entradas"]["total_servicos"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["total_servicos"], is_indent=True)
+            if dre_data["entradas"]["restituicao_icms_st"] > 0:
+                add_row("(+) Restituição ICMS ST", (float(dre_data["entradas"]["restituicao_icms_st"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["restituicao_icms_st"], is_indent=True)
+                
+            # Saidas
+            add_row("2. SAÍDAS (CUSTOS E DEDUÇÕES)", (float(dre_data["saidas"]["total_saidas"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["saidas"]["total_saidas"], is_bold=True, bg_color='#f1f5f9')
+            
+            # Fornecedores subheader
+            add_row("2.1 Custo de Aquisição (Fornecedores)", (float(total_fornecedores) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_fornecedores, is_bold=True, is_indent=True, bg_color='#f8fafc')
+            for f in dre_data["saidas"]["fornecedores"]:
+                add_row(f"(-) {f['nome']}", (float(f['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, f['valor'], is_indent=True)
+                
+            # Impostos compra
+            add_row("2.2 Impostos de Compra (FPC)", (float(total_impostos_compra) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_compra, is_bold=True, is_indent=True, bg_color='#f8fafc')
+            for k, imp in dre_data["saidas"]["impostos_compra"].items():
+                add_row(f"(-) Imposto de Compra {k.upper()}", (float(imp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, imp['valor'], is_indent=True)
+                
+            # Impostos venda
+            add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+            for k, imp in dre_data["saidas"]["impostos_venda"].items():
+                add_row(f"(-) Imposto de Venda {k.upper()}", (float(imp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, imp['valor'], is_indent=True)
+                
+            # Despesas venda
+            add_row("2.4 Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+            for k, exp in dre_data["saidas"]["despesas_venda"].items():
+                add_row(f"(-) Despesa {k.capitalize()}", (float(exp['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, exp['valor'], is_indent=True)
+                
+            # Resultado
+            add_row("3. RESULTADO FINANCEIRO CONSOLIDADO", None, None, is_bold=True, bg_color='#f1f5f9')
+            add_row("(=) LUCRO OPERACIONAL (EBITDA)", None, dre_data["lucro_ebitda"], is_bold=True, bg_color='#d1fae5')
+            add_row("(=) MARGEM LÍQUIDA DA OPERAÇÃO", dre_data["margem_liquida"], None, is_bold=True, bg_color='#d1fae5')
+            
+            # Render ReportLab Table
+            t = Table(table_data, colWidths=[300, 100, 150])
+            t.setStyle(TableStyle(t_style))
+            story.append(t)
+            
+            # Auditoria info
+            story.append(Spacer(1, 15))
+            story.append(Paragraph(
+                f"Emitido por: {auditoria['usuario_emissor']} | Data: {auditoria['data']} às {auditoria['hora']} | ID Oportunidade: {opportunity_id} | Versão DRE: {auditoria['versao']}",
+                ParagraphStyle('AuditStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#94a3b8'), alignment=1)
+            ))
+            
+            doc.build(story)
+            pdf_bytes = pdf_buffer.getvalue()
+            pdf_buffer.close()
+            
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=DRE_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
+                }
+            )
+
+    @staticmethod
     def generate_fechamento_fornecedores_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
         # 1. Fetch Opportunity
         opportunity = db.query(SalesBudget).filter(

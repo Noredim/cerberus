@@ -443,6 +443,21 @@ def run_test():
         else:
             print("FAILED: Locacao Approval PDF generated but header is invalid.")
             sys.exit(1)
+
+        # 8. Generate DRE PDF Report via service
+        print("Invoking OpportunitiesReportService (DRE PDF)...")
+        response_dre = OpportunitiesReportService.generate_dre_pdf(db, opp.id, user)  # type: ignore
+        pdf_bytes_dre = asyncio.run(read_stream(response_dre.body_iterator))
+
+        if pdf_bytes_dre.startswith(b"%PDF"):
+            print("SUCCESS: DRE PDF generated successfully! Header starts with %PDF")
+            print(f"PDF size: {len(pdf_bytes_dre)} bytes")
+            with open("test_dre_approval_output.pdf", "wb") as f:
+                f.write(pdf_bytes_dre)
+            print("Saved PDF to test_dre_approval_output.pdf")
+        else:
+            print("FAILED: DRE PDF generated but header is invalid.")
+            sys.exit(1)
             
     except Exception as e:
         print(f"FAILED: Exception raised during PDF generation: {e}")

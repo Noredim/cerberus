@@ -832,6 +832,32 @@ def download_locacao_approval_report(
     return OpportunitiesReportService.generate_locacao_approval_pdf(db, opportunity_id, current_user)
 
 
+@router.get("/{opportunity_id}/dre")
+def get_opportunity_dre(
+    opportunity_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        opportunity = service.get_budget(db, current_user.tenant_id, str(opportunity_id), user_id=current_user.id)
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
+        return service.get_opportunity_dre(db, current_user.tenant_id, opportunity_id, opportunity.company_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{opportunity_id}/reports/dre")
+def download_opportunity_dre_report(
+    opportunity_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from src.modules.sales_budgets.reports import OpportunitiesReportService
+    return OpportunitiesReportService.generate_dre_pdf(db, opportunity_id, current_user)
+
 
 @router.get("/{budget_id}/historico")
 def get_historico(

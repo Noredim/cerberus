@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Demonstrativo de Resultado de Venda (DRE) consolidado da oportunidade comercial do sistema Cerberus.">
+    <title>DRE - Demonstrativo de Resultado de Venda</title>
+    <style>
+        {{ css_content }}
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO DA PRIMEIRA PÁGINA -->
+    <div class="first-page-header">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 30%; vertical-align: middle; padding: 0;">
+                    {% if company_logo %}
+                        <img src="{{ company_logo }}" alt="Logo Empresa" style="max-height: 45px; max-width: 200px; display: block;" />
+                    {% else %}
+                        <div style="font-size: 13pt; font-weight: bold; color: #0f172a; text-transform: uppercase; font-family: 'Outfit', 'Inter', sans-serif;">
+                            {{ opportunity_company_nome }}
+                        </div>
+                    {% endif %}
+                </td>
+                <td style="width: 70%; text-align: right; vertical-align: middle; padding: 0; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <div class="report-title">Demonstrativo de Resultado de Venda (DRE)</div>
+                    <div style="font-size: 8pt; color: #64748b;">
+                        Oportunidade Comercial: <strong>#{{ header.numero_oportunidade }}</strong>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- METADADOS DA OPORTUNIDADE -->
+    <table class="metadata-table">
+        <tr>
+            <td style="width: 50%;">
+                <strong>Cliente:</strong> {{ header.cliente_nome }}<br/>
+                <strong>Cidade/UF:</strong> {{ header.cidade }} - {{ header.estado }}<br/>
+                <strong>Vendedor:</strong> {{ header.vendedor_nome }}
+            </td>
+            <td style="width: 50%;">
+                <strong>Responsáveis:</strong> {{ header.responsavel_nome }}<br/>
+                <strong>Data de Fechamento:</strong> {{ header.data_fechamento_str }}<br/>
+                <strong>Emissão do Relatório:</strong> {{ emissao_data_hora }}
+            </td>
+        </tr>
+    </table>
+
+    <!-- COMPACT KPI CARDS -->
+    <div class="dre-kpi-row">
+        <div class="dre-kpi-card">
+            <span class="kpi-label">Receita Bruta</span>
+            <span class="kpi-val">R$ {{ format_currency(entradas.total_entradas) }}</span>
+        </div>
+        <div class="dre-kpi-card">
+            <span class="kpi-label">Total de Saídas</span>
+            <span class="kpi-val">R$ {{ format_currency(saidas.total_saidas) }}</span>
+        </div>
+        <div class="dre-kpi-card success">
+            <span class="kpi-label">Lucro (EBITDA)</span>
+            <span class="kpi-val">R$ {{ format_currency(lucro_ebitda) }}</span>
+        </div>
+        <div class="dre-kpi-card success">
+            <span class="kpi-label">Margem Líquida</span>
+            <span class="kpi-val">{{ format_percent(margem_liquida) }}%</span>
+        </div>
+    </div>
+
+    <!-- DRE TABLE -->
+    <table class="dre-table">
+        <thead>
+            <tr>
+                <th style="width: 60%;">Descrição da Conta (DRE)</th>
+                <th class="text-right" style="width: 15%;">Percentual (%)</th>
+                <th class="text-right" style="width: 25%;">Valor (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            
+            <!-- ENTRADAS -->
+            <tr class="row-header">
+                <td>1. RECEITA OPERACIONAL BRUTA (ENTRADAS)</td>
+                <td class="text-right">100,00%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_entradas) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Venda de Equipamentos</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.total_produtos, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_produtos) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Faturamento de Serviços</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.total_servicos, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_servicos) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Restituição ICMS ST (Interestadual)</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.restituicao_icms_st, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.restituicao_icms_st) }}</td>
+            </tr>
+            <tr class="row-subheader">
+                <td style="padding-left: 15px;">(=) Total de Entradas Consolidadas</td>
+                <td class="text-right">100,00%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_entradas) }}</td>
+            </tr>
+
+            <!-- SAIDAS -->
+            <tr class="row-header">
+                <td>2. SAÍDAS (CUSTOS E DEDUÇÕES)</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.total_saidas, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.total_saidas) }}</td>
+            </tr>
+            
+            <!-- FORNECEDORES -->
+            <tr class="row-subheader">
+                <td style="padding-left: 15px;">2.1 Custo de Aquisição (Fornecedores)</td>
+                <td class="text-right">{{ format_percent_ratio(total_fornecedores, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(total_fornecedores) }}</td>
+            </tr>
+            {% for f in saidas.fornecedores %}
+            <tr class="row-item">
+                <td class="row-item-detail">(-) {{ f.nome }}</td>
+                <td class="text-right">{{ format_percent_ratio(f.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(f.valor) }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- IMPOSTOS DE COMPRA -->
+            <tr class="row-subheader">
+                <td style="padding-left: 15px;">2.2 Impostos de Compra (FPC)</td>
+                <td class="text-right">{{ format_percent_ratio(total_impostos_compra, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(total_impostos_compra) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) IPI de Compra</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.ipi.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.ipi.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) ICMS ST de Compra</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.icms_st.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.icms_st.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) DIFAL de Compra</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_compra.difal.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_compra.difal.valor) }}</td>
+            </tr>
+
+            <!-- IMPOSTOS DE VENDA -->
+            <tr class="row-subheader">
+                <td style="padding-left: 15px;">2.3 Impostos de Venda (FPV)</td>
+                <td class="text-right">{{ format_percent_ratio(total_impostos_venda, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(total_impostos_venda) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) PIS Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.pis.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.pis.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) COFINS Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.cofins.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.cofins.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) ICMS Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.icms.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.icms.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) IPI Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.ipi.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.ipi.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) ISS Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.iss.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.iss.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) IRPJ Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.irpj.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.irpj.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) CSLL Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.impostos_venda.csll.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.impostos_venda.csll.valor) }}</td>
+            </tr>
+
+            <!-- DESPESAS DE VENDA -->
+            <tr class="row-subheader">
+                <td style="padding-left: 15px;">2.4 Despesas de Venda</td>
+                <td class="text-right">{{ format_percent_ratio(total_despesas_venda, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(total_despesas_venda) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) Frete de Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.frete.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.frete.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) Comissão de Venda</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.comissao.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.comissao.valor) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(-) Despesas Administrativas</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.despesas_venda.despesas_administrativas.valor, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.despesas_administrativas.valor) }}</td>
+            </tr>
+
+            <!-- TOTAL SAIDAS -->
+            <tr class="row-total">
+                <td>(=) TOTAL DE SAÍDAS (CUSTOS E DEDUÇÕES)</td>
+                <td class="text-right">{{ format_percent_ratio(saidas.total_saidas, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.total_saidas) }}</td>
+            </tr>
+
+            <!-- RESULTADO OPERACIONAL -->
+            <tr class="row-header">
+                <td>3. RESULTADO FINANCEIRO CONSOLIDADO</td>
+                <td class="text-right">-</td>
+                <td class="text-right">-</td>
+            </tr>
+            <tr class="row-result">
+                <td>(=) LUCRO OPERACIONAL (EBITDA)</td>
+                <td class="text-right">-</td>
+                <td class="text-right">R$ {{ format_currency(lucro_ebitda) }}</td>
+            </tr>
+            <tr class="row-result">
+                <td>(=) MARGEM LÍQUIDA DA OPERAÇÃO</td>
+                <td class="text-right">{{ format_percent(margem_liquida) }}%</td>
+                <td class="text-right">-</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- INFORMAÇÕES DE AUDITORIA E ASSINATURA -->
+    <div class="audit-info">
+        Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ header.numero_oportunidade }} | Versão DRE: {{ auditoria.versao }}
+    </div>
+
+</body>
+</html>
