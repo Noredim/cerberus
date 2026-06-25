@@ -45,15 +45,16 @@ export function Tooltip({ children, content, variant = 'dark' }: TooltipProps) {
 
   useLayoutEffect(() => {
     if (show && tooltipRef.current) {
-      const rect = tooltipRef.current.getBoundingClientRect();
+      const tooltipWidth = tooltipRef.current.offsetWidth;
+      const halfWidth = tooltipWidth / 2;
 
-      // Calculate original bounds ignoring current offset transform
-      const unoffsetedLeft = rect.left - offset;
-      const unoffsetedRight = rect.right - offset;
+      // Calcular limites virtuais estáticos com base no centro do elemento-alvo (coords.x)
+      const leftEdge = coords.x - halfWidth;
+      const rightEdge = coords.x + halfWidth;
 
       const padding = 16;
-      const overflowRight = unoffsetedRight - (window.innerWidth - padding);
-      const overflowLeft = padding - unoffsetedLeft;
+      const overflowRight = rightEdge - (window.innerWidth - padding);
+      const overflowLeft = padding - leftEdge;
 
       if (overflowRight > 0) {
         setOffset(-overflowRight);
@@ -63,7 +64,7 @@ export function Tooltip({ children, content, variant = 'dark' }: TooltipProps) {
         setOffset(0);
       }
     }
-  }, [show, coords, offset]);
+  }, [show, coords]);
 
   return (
     <div
