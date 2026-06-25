@@ -290,7 +290,7 @@ class OpportunitiesReportService:
             doc = SimpleDocTemplate(
                 pdf_buffer, 
                 pagesize=letter,
-                rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+                rightMargin=30, leftMargin=30, topMargin=20, bottomMargin=20
             )
             story = []
             styles = getSampleStyleSheet()
@@ -299,34 +299,34 @@ class OpportunitiesReportService:
             title_style = ParagraphStyle(
                 'ReportTitle',
                 parent=styles['Heading1'],
-                fontSize=16,
+                fontSize=12,
                 textColor=colors.HexColor('#0f172a'),
-                spaceAfter=10
+                spaceAfter=5
             )
             sub_style = ParagraphStyle(
                 'SubStyle',
                 parent=styles['Normal'],
-                fontSize=9,
+                fontSize=7.5,
                 textColor=colors.HexColor('#475569'),
-                spaceAfter=15
+                spaceAfter=8
             )
             th_style = ParagraphStyle(
                 'TableHeader',
                 parent=styles['Normal'],
-                fontSize=9,
+                fontSize=8.0,
                 fontName='Helvetica-Bold',
                 textColor=colors.white
             )
             td_style = ParagraphStyle(
                 'TableCell',
                 parent=styles['Normal'],
-                fontSize=8.5,
+                fontSize=7.5,
                 textColor=colors.HexColor('#1e293b')
             )
             td_bold_style = ParagraphStyle(
                 'TableCellBold',
                 parent=styles['Normal'],
-                fontSize=8.5,
+                fontSize=7.5,
                 fontName='Helvetica-Bold',
                 textColor=colors.HexColor('#0f172a')
             )
@@ -351,8 +351,8 @@ class OpportunitiesReportService:
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0,0), (-1,0), 6),
-                ('TOPPADDING', (0,0), (-1,0), 6),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
                 ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
             ]
             
@@ -417,10 +417,10 @@ class OpportunitiesReportService:
             story.append(t)
             
             # Auditoria info
-            story.append(Spacer(1, 15))
+            story.append(Spacer(1, 6))
             story.append(Paragraph(
                 f"Emitido por: {auditoria['usuario_emissor']} | Data: {auditoria['data']} às {auditoria['hora']} | ID Oportunidade: {opportunity_id} | Versão DRE: {auditoria['versao']}",
-                ParagraphStyle('AuditStyle', parent=styles['Normal'], fontSize=7.5, textColor=colors.HexColor('#94a3b8'), alignment=1)
+                ParagraphStyle('AuditStyle', parent=styles['Normal'], fontSize=6.5, textColor=colors.HexColor('#94a3b8'), alignment=1)
             ))
             
             doc.build(story)
