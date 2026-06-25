@@ -1687,6 +1687,21 @@ class LicitacaoService:
             is_interestadual = str(company.state_id) != str(customer.state_id)
             
         # Iterate over kits to consolidate Entradas, Taxes and Despesas
+        import datetime
+        purchase_budgets = db.query(PurchaseBudget).filter(
+            PurchaseBudget.licitacao_id == licitacao_id,
+            PurchaseBudget.tenant_id == tenant_id
+        ).all()
+        purchase_budgets = sorted(purchase_budgets, key=lambda x: getattr(x, "created_at", None) or datetime.datetime.min, reverse=True)
+        
+        product_suppliers = {}
+        for pb in purchase_budgets:
+            for pb_item in pb.items:
+                if pb_item.product_id:
+                    product_suppliers[pb_item.product_id] = pb.supplier_nome_fantasia
+                    
+        supplier_map = {}
+        
         for kit in licitacao.kits:
             # Recalculate kit financials
             fin = kit_service.calculate_financials(kit, tenant_id)
@@ -1743,6 +1758,19 @@ class LicitacaoService:
             
             total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0))
 
+            # Accumulate supplier values from kit components
+            for item_sum in fin.get("item_summaries", []):
+                p_id = item_sum.get("product_id")
+                if p_id and item_sum.get("tipo_item") != "SERVICO":
+                    p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                    kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+                    qty_in_kit = Decimal(str(kit_item.quantidade_no_kit)) if kit_item else Decimal("1.0")
+                    component_qty = qty * qty_in_kit
+                    
+                    base_forn = Decimal(str(item_sum.get("base_fornecedor") or item_sum.get("custo_base_unitario_item") or 0.0))
+                    sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                    supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
+
         # Restitution ST
         restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
         
@@ -1781,14 +1809,6 @@ class LicitacaoService:
             
         ipi_venda_pct = Decimal("0.0")
         
-        # Query Suppliers and aggregate values
-        purchase_budgets = db.query(PurchaseBudget).filter(PurchaseBudget.licitacao_id == licitacao_id).all()
-        supplier_map = {}
-        for pb in purchase_budgets:
-            sup_name = pb.supplier_nome_fantasia
-            val = sum(Decimal(str(item.valor_unitario)) * Decimal(str(item.quantidade)) for item in pb.items) if pb.items else Decimal("0.0")
-            supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + Decimal(str(val))
-            
         fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
         total_fornecedores = sum(item["valor"] for item in fornecedores)
         

@@ -1964,6 +1964,21 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             
     kits = db.query(OpportunityKit).filter(OpportunityKit.id.in_(kit_ids)).all() if kit_ids else []
     
+    import datetime
+    purchase_budgets = db.query(PurchaseBudget).filter(
+        PurchaseBudget.sales_budget_id == opportunity_id,
+        PurchaseBudget.tenant_id == tenant_id
+    ).all()
+    purchase_budgets = sorted(purchase_budgets, key=lambda x: getattr(x, "created_at", None) or datetime.datetime.min, reverse=True)
+    
+    product_suppliers = {}
+    for pb in purchase_budgets:
+        for pb_item in pb.items:
+            if pb_item.product_id:
+                product_suppliers[pb_item.product_id] = pb.supplier_nome_fantasia
+                
+    supplier_map = {}
+    
     for kit in kits:
         fin = kit_service.calculate_financials(kit, tenant_id, sales_budget_id=str(opportunity_id))
         summary = fin["summary"]
@@ -2017,6 +2032,33 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         
         total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0))
 
+        # Accumulate supplier values from kit components
+        for item_sum in fin.get("item_summaries", []):
+            p_id = item_sum.get("product_id")
+            if p_id and item_sum.get("tipo_item") != "SERVICO":
+                p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+                qty_in_kit = Decimal(str(kit_item.quantidade_no_kit)) if kit_item else Decimal("1.0")
+                component_qty = qty * qty_in_kit
+                
+                base_forn = Decimal(str(item_sum.get("base_fornecedor") or item_sum.get("custo_base_unitario_item") or 0.0))
+                sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
+
+    for item in opportunity.items:
+        if not item.opportunity_kit_id and item.product_id:
+            p_uuid = item.product_id
+            item_qty = Decimal(str(item.quantidade or 1.0))
+            sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+            
+            pb_item = None
+            for pb in purchase_budgets:
+                pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
+                if pb_item:
+                    break
+            base_forn = Decimal(str(pb_item.valor_unitario)) if pb_item else Decimal(str(item.custo_unit_base or 0.0))
+            supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
+
     restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
     total_entradas = total_produtos + total_servicos + restituicao_icms_st
     
@@ -2050,13 +2092,6 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         
     ipi_venda_pct = Decimal("0.0")
     
-    purchase_budgets = db.query(PurchaseBudget).filter(PurchaseBudget.sales_budget_id == opportunity_id).all()
-    supplier_map = {}
-    for pb in purchase_budgets:
-        sup_name = pb.supplier_nome_fantasia
-        val = sum(Decimal(str(item.valor_unitario)) * Decimal(str(item.quantidade)) for item in pb.items) if pb.items else Decimal("0.0")
-        supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + Decimal(str(val))
-        
     fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
     total_fornecedores = sum(item["valor"] for item in fornecedores)
     
