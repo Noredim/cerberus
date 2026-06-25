@@ -356,10 +356,10 @@ export function LicitacaoForm() {
   const loadDre = async () => {
     setLoadingDre(true);
     try {
-      const res = await api.get(`/licitacoes/${id}/dre`);
+      const res = await api.get(`/licitacoes/${id}/drv`);
       setDreData(res.data);
     } catch (err) {
-      console.error('Failed to load DRE data:', err);
+      console.error('Failed to load DRV data:', err);
     } finally {
       setLoadingDre(false);
     }
@@ -1122,7 +1122,7 @@ export function LicitacaoForm() {
           { id: 'tarefas', label: 'Tarefas', icon: ListTodo },
           { id: 'lotes', label: 'Lotes / Itens / Kits', icon: Layers },
           { id: 'orcamentos', label: 'Orçamentos de Compra', icon: FileSpreadsheet },
-          { id: 'dre', label: 'DRE', icon: TrendingUp },
+          { id: 'dre', label: 'DRV', icon: TrendingUp },
           { id: 'relatorios', label: 'Relatórios', icon: FileText },
           { id: 'timeline', label: 'Linha do Tempo', icon: History }
         ].filter(tab => tab.id !== 'checklist' || isPOOrManager).map(tab => (
@@ -2573,7 +2573,7 @@ export function LicitacaoForm() {
               <div>
                 <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-brand-primary" />
-                  Demonstrativo de Resultado da Venda (DRE)
+                  Demonstrativo de Resultado da Venda (DRV)
                 </h3>
                 <p className="text-xs text-text-muted mt-0.5">
                   Análise consolidada de entradas, saídas, impostos e rentabilidade final da operação comercial.
@@ -2586,7 +2586,7 @@ export function LicitacaoForm() {
                 className="bg-bg-deep border border-border-subtle text-text-primary hover:bg-border-subtle/20 shrink-0"
               >
                 <RefreshCw className={`w-4 h-4 mr-1.5 ${loadingDre ? 'animate-spin' : ''}`} />
-                Atualizar DRE
+                Atualizar DRV
               </Button>
             </div>
 
@@ -2597,7 +2597,7 @@ export function LicitacaoForm() {
               </div>
             ) : !dreData ? (
               <div className="text-center py-20 text-text-muted bg-bg-deep/10 border border-border-subtle/30 rounded-xl">
-                Nenhum dado de DRE carregado. Clique em "Atualizar DRE" para calcular.
+                Nenhum dado de DRV carregado. Clique em "Atualizar DRV" para calcular.
               </div>
             ) : (
               <div className="space-y-6">

@@ -639,7 +639,7 @@ def get_envio_proposta_report(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     return LicitacoesReportService.generate_envio_proposta_pdf(db, licitacao_id, current_user)
 
-@router.get("/{licitacao_id}/dre", response_model=schemas.LicitacaoDreResponse)
+@router.get("/{licitacao_id}/drv", response_model=schemas.LicitacaoDreResponse)
 def get_licitacao_dre(
     licitacao_id: UUID,
     db: Session = Depends(get_db),

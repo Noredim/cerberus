@@ -276,7 +276,7 @@ class OpportunitiesReportService:
                 io.BytesIO(pdf_bytes),
                 media_type="application/pdf",
                 headers={
-                    "Content-Disposition": f"attachment; filename=DRE_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
+                    "Content-Disposition": f"attachment; filename=DRV_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
                 }
             )
         except Exception as weasy_err:
@@ -332,7 +332,7 @@ class OpportunitiesReportService:
             )
             
             # Header
-            story.append(Paragraph("Demonstrativo de Resultado de Venda (DRE)", title_style))
+            story.append(Paragraph("Demonstrativo de Resultado de Venda (DRV)", title_style))
             story.append(Paragraph(
                 f"Oportunidade Comercial: #{dre_data['header']['numero_oportunidade']} | "
                 f"Cliente: {dre_data['header']['cliente_nome']} ({dre_data['header']['cidade']}-{dre_data['header']['estado']})<br/>"
@@ -344,7 +344,7 @@ class OpportunitiesReportService:
             
             # Build Table Data
             table_data = [
-                [Paragraph("<b>Descrição da Conta (DRE)</b>", th_style), Paragraph("<b>%</b>", th_style), Paragraph("<b>Valor (R$)</b>", th_style)]
+                [Paragraph("<b>Descrição da Conta (DRV)</b>", th_style), Paragraph("<b>%</b>", th_style), Paragraph("<b>Valor (R$)</b>", th_style)]
             ]
             
             t_style = [
@@ -419,7 +419,7 @@ class OpportunitiesReportService:
             # Auditoria info
             story.append(Spacer(1, 6))
             story.append(Paragraph(
-                f"Emitido por: {auditoria['usuario_emissor']} | Data: {auditoria['data']} às {auditoria['hora']} | ID Oportunidade: {opportunity_id} | Versão DRE: {auditoria['versao']}",
+                f"Emitido por: {auditoria['usuario_emissor']} | Data: {auditoria['data']} às {auditoria['hora']} | ID Oportunidade: {opportunity_id} | Versão DRV: {auditoria['versao']}",
                 ParagraphStyle('AuditStyle', parent=styles['Normal'], fontSize=6.5, textColor=colors.HexColor('#94a3b8'), alignment=1)
             ))
             
@@ -431,7 +431,7 @@ class OpportunitiesReportService:
                 io.BytesIO(pdf_bytes),
                 media_type="application/pdf",
                 headers={
-                    "Content-Disposition": f"attachment; filename=DRE_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
+                    "Content-Disposition": f"attachment; filename=DRV_Oportunidade_{opportunity.numero_orcamento or opportunity_id}.pdf"
                 }
             )
 

@@ -2,9 +2,9 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="description" content="Demonstrativo de Resultado de Venda (DRE) consolidado da oportunidade comercial do sistema Cerberus.">
-    <meta property="og:title" content="DRE - Demonstrativo de Resultado de Venda">
-    <title>DRE - Demonstrativo de Resultado de Venda</title>
+    <meta name="description" content="Demonstrativo de Resultado de Venda (DRV) consolidado da oportunidade comercial do sistema Cerberus.">
+    <meta property="og:title" content="DRV - Demonstrativo de Resultado de Venda">
+    <title>DRV - Demonstrativo de Resultado de Venda</title>
     <style>
         {{ css_content }}
     </style>
@@ -25,7 +25,7 @@
                     {% endif %}
                 </td>
                 <td style="width: 70%; text-align: right; vertical-align: middle; padding: 0; font-family: 'Outfit', 'Inter', sans-serif;">
-                    <div class="report-title">Demonstrativo de Resultado de Venda (DRE)</div>
+                    <div class="report-title">Demonstrativo de Resultado de Venda (DRV)</div>
                     <div style="font-size: 8pt; color: #64748b;">
                         Oportunidade Comercial: <strong>#{{ header.numero_oportunidade }}</strong>
                     </div>
@@ -74,7 +74,7 @@
     <table class="dre-table">
         <thead>
             <tr>
-                <th style="width: 60%;">Descrição da Conta (DRE)</th>
+                <th style="width: 60%;">Descrição da Conta (DRV)</th>
                 <th class="text-right" style="width: 15%;">Percentual (%)</th>
                 <th class="text-right" style="width: 25%;">Valor (R$)</th>
             </tr>
@@ -243,7 +243,7 @@
 
     <!-- INFORMAÇÕES DE AUDITORIA E ASSINATURA -->
     <div class="audit-info">
-        Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ header.numero_oportunidade }} | Versão DRE: {{ auditoria.versao }}
+        Emitido por: {{ auditoria.usuario_emissor }} | Data: {{ auditoria.data }} às {{ auditoria.hora }} | ID Oportunidade: {{ header.numero_oportunidade }} | Versão DRV: {{ auditoria.versao }}
     </div>
 
 </body>

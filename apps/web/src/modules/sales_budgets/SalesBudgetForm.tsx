@@ -1239,20 +1239,20 @@ export function SalesBudgetForm() {
   const handleDownloadDreReport = async () => {
     setDownloadingDreReport(true);
     try {
-      const response = await api.get(`/sales-budgets/${id}/reports/dre`, {
+      const response = await api.get(`/sales-budgets/${id}/reports/drv`, {
         responseType: 'blob'
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `dre-venda-${numeroOrcamento || id}.pdf`);
+      link.setAttribute('download', `drv-venda-${numeroOrcamento || id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
     } catch (err) {
-      console.error("Erro ao gerar relatório DRE:", err);
-      alert("Falha ao gerar relatório DRE.");
+      console.error("Erro ao gerar relatório DRV:", err);
+      alert("Falha ao gerar relatório DRV.");
     } finally {
       setDownloadingDreReport(false);
     }
@@ -1261,10 +1261,10 @@ export function SalesBudgetForm() {
   const loadDre = async () => {
     setLoadingDre(true);
     try {
-      const res = await api.get(`/sales-budgets/${id}/dre`);
+      const res = await api.get(`/sales-budgets/${id}/drv`);
       setDreData(res.data);
     } catch (err) {
-      console.error('Failed to load DRE data:', err);
+      console.error('Failed to load DRV data:', err);
     } finally {
       setLoadingDre(false);
     }
@@ -2442,7 +2442,7 @@ export function SalesBudgetForm() {
                     className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2"
                   >
                     {downloadingDreReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    DRE da Venda
+                    DRV da Venda
                   </button>
                 </div>
               )}
@@ -2648,7 +2648,7 @@ export function SalesBudgetForm() {
         </button>
         <button onClick={() => setSearchParams({ tab: 'dre' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'dre' ? 'text-emerald-600 border-b-2 border-emerald-500' : 'text-text-muted hover:text-text-primary'}`}>
           <TrendingUp className="w-4 h-4" />
-          DRE da Venda
+          DRV da Venda
         </button>
       </div>
 
@@ -4952,7 +4952,7 @@ export function SalesBudgetForm() {
             <div>
               <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-emerald-500" />
-                Demonstrativo de Resultado de Venda (DRE)
+                Demonstrativo de Resultado de Venda (DRV)
               </h2>
               <p className="text-xs text-text-muted mt-1">
                 Visão financeira consolidada da oportunidade comercial com receitas, impostos, custos de fornecedores e despesas operacionais.
@@ -4966,7 +4966,7 @@ export function SalesBudgetForm() {
                 className="bg-bg-deep border border-border-subtle text-text-primary hover:bg-border-subtle/20 shrink-0"
               >
                 <RefreshCw className={`w-4 h-4 mr-1.5 ${loadingDre ? 'animate-spin' : ''}`} />
-                Atualizar DRE
+                Atualizar DRV
               </Button>
               {dreData && (
                 <Button
@@ -4989,7 +4989,7 @@ export function SalesBudgetForm() {
             </div>
           ) : !dreData ? (
             <div className="text-center py-20 text-text-muted bg-bg-deep/10 border border-border-subtle/30 rounded-xl">
-              Nenhum dado de DRE carregado. Clique em "Atualizar DRE" para calcular.
+              Nenhum dado de DRV carregado. Clique em "Atualizar DRV" para calcular.
             </div>
           ) : (
             <div className="space-y-6">
@@ -5017,7 +5017,7 @@ export function SalesBudgetForm() {
                 </div>
               </div>
 
-              {/* DRE Structure */}
+              {/* DRV Structure */}
               <div className="border border-border-subtle/60 rounded-xl overflow-hidden shadow-sm bg-surface">
                 <table className="w-full text-sm text-left border-collapse">
                   <thead>

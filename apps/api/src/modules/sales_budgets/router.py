@@ -832,7 +832,7 @@ def download_locacao_approval_report(
     return OpportunitiesReportService.generate_locacao_approval_pdf(db, opportunity_id, current_user)
 
 
-@router.get("/{opportunity_id}/dre")
+@router.get("/{opportunity_id}/drv")
 def get_opportunity_dre(
     opportunity_id: UUID,
     db: Session = Depends(get_db),
@@ -849,7 +849,7 @@ def get_opportunity_dre(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{opportunity_id}/reports/dre")
+@router.get("/{opportunity_id}/reports/drv")
 def download_opportunity_dre_report(
     opportunity_id: UUID,
     db: Session = Depends(get_db),
