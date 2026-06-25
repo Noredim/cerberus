@@ -1641,3 +1641,213 @@ class LicitacaoService:
             "alertas": alertas
         }
 
+    @staticmethod
+    def get_licitacao_dre(db: Session, tenant_id: str, licitacao_id: UUID, company_id: str) -> dict:
+        from src.modules.purchase_budgets.models import PurchaseBudget
+        from src.modules.opportunity_kits.service import OpportunityKitService
+        
+        # Fetch Licitacao
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if not licitacao:
+            raise HTTPException(status_code=404, detail="Licitação não encontrada")
+            
+        kit_service = OpportunityKitService(db)
+        
+        total_produtos = Decimal("0.0")
+        total_servicos = Decimal("0.0")
+        total_st_total = Decimal("0.0")
+        
+        # Purchase Taxes (IPI, ST, DIFAL)
+        purchase_ipi = Decimal("0.0")
+        purchase_st = Decimal("0.0")
+        purchase_difal = Decimal("0.0")
+        custo_base_produtos = Decimal("0.0")
+        
+        # Venda Taxes
+        vlt_pis = Decimal("0.0")
+        vlt_cofins = Decimal("0.0")
+        vlt_csll = Decimal("0.0")
+        vlt_irpj = Decimal("0.0")
+        vlt_icms = Decimal("0.0")
+        vlt_iss = Decimal("0.0")
+        vlt_ipi_venda = Decimal("0.0")
+        
+        # Despesas
+        vlt_frete = Decimal("0.0")
+        vlt_comissao = Decimal("0.0")
+        vlt_despesas_adm = Decimal("0.0")
+        
+        total_venda = Decimal("0.0")
+        
+        # Determine if interstate
+        is_interestadual = False
+        company = licitacao.company
+        customer = licitacao.customer
+        if company and customer:
+            is_interestadual = str(company.state_id) != str(customer.state_id)
+            
+        # Iterate over kits to consolidate Entradas, Taxes and Despesas
+        for kit in licitacao.kits:
+            # Recalculate kit financials
+            fin = kit_service.calculate_financials(kit, tenant_id)
+            summary = fin["summary"]
+            
+            qty = Decimal(str(kit.quantidade_kits or 1))
+            prazo = Decimal(str(summary.get("prazo_mensalidades") or 0))
+            
+            # --- ENTRADAS ---
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                # Sum items from summaries
+                prod_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") != "SERVICO")
+                serv_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") == "SERVICO")
+                
+                total_produtos += prod_sum * qty
+                
+                vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("valor_venda_manutencao", 0) or summary.get("vlt_manut", 0) or 0))
+                
+                total_servicos += (serv_sum + vlr_inst + vlr_manut) * qty
+            else: # LOCACAO or COMODATO
+                total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo * qty
+                
+                vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
+                vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
+                
+                total_servicos += (
+                    vlr_inst +
+                    (vlr_manut + vlr_monit) * prazo
+                ) * qty
+                
+            # Restituição ICMS ST (total ST from the products purchase)
+            total_st_total += Decimal(str(summary.get("total_st_total", 0) or 0))
+            
+            # --- SAÍDAS: Impostos de Compra ---
+            purchase_ipi += Decimal(str(summary.get("total_ipi_total", 0) or 0))
+            purchase_st += Decimal(str(summary.get("total_st_total", 0) or 0))
+            purchase_difal += Decimal(str(summary.get("total_difal_total", 0) or 0))
+            custo_base_produtos += Decimal(str(summary.get("custo_aquisicao_produtos", 0) or 0)) * qty
+            
+            # --- SAÍDAS: Impostos de Venda ---
+            vlt_pis += Decimal(str(summary.get("vlt_pis", 0) or 0))
+            vlt_cofins += Decimal(str(summary.get("vlt_cofins", 0) or 0))
+            vlt_csll += Decimal(str(summary.get("vlt_csll", 0) or 0))
+            vlt_irpj += Decimal(str(summary.get("vlt_irpj", 0) or 0))
+            vlt_icms += Decimal(str(summary.get("vlt_icms", 0) or 0))
+            vlt_iss += Decimal(str(summary.get("vlt_iss", 0) or 0))
+            
+            # --- SAÍDAS: Despesas de Venda ---
+            vlt_frete += Decimal(str(summary.get("vlt_frete_venda", 0) or 0))
+            vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0))
+            vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0))
+            
+            total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0))
+
+        # Restitution ST
+        restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
+        
+        # Calculate Total Entradas
+        total_entradas = total_produtos + total_servicos + restituicao_icms_st
+        
+        # Calculate Purchase Tax Percentages (weighted average over purchase cost of products)
+        ipi_compra_pct = (purchase_ipi / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
+        st_compra_pct = (purchase_st / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
+        difal_compra_pct = (purchase_difal / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
+        
+        # Calculate Venda Tax Percentages (weighted average over total venda)
+        pis_venda_pct = (vlt_pis / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        cofins_venda_pct = (vlt_cofins / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        icms_venda_pct = (vlt_icms / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        ipi_venda_pct = Decimal("0.0")
+        iss_venda_pct = (vlt_iss / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        irpj_venda_pct = (vlt_irpj / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        csll_venda_pct = (vlt_csll / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        
+        # Calculate Despesa Percentages
+        frete_pct = (vlt_frete / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        comissao_pct = (vlt_comissao / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        despesas_adm_pct = (vlt_despesas_adm / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        
+        # Query Suppliers and aggregate values
+        purchase_budgets = db.query(PurchaseBudget).filter(PurchaseBudget.licitacao_id == licitacao_id).all()
+        supplier_map = {}
+        for pb in purchase_budgets:
+            sup_name = pb.supplier_nome_fantasia
+            val = pb.valor_total
+            supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + Decimal(str(val))
+            
+        fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
+        total_fornecedores = sum(item["valor"] for item in fornecedores)
+        
+        # Total Saídas
+        total_saidas = (
+            total_fornecedores +
+            purchase_ipi + purchase_st + purchase_difal +
+            vlt_pis + vlt_cofins + vlt_icms + vlt_iss + vlt_irpj + vlt_csll +
+            vlt_frete + vlt_comissao + vlt_despesas_adm
+        )
+        
+        # EBITDA
+        lucro_ebitda = total_entradas - total_saidas
+        
+        # Net Margin
+        margem_liquida = (lucro_ebitda / total_entradas * 100) if total_entradas > 0 else Decimal("0.0")
+        
+        # Timeline closing date & vendedor/responsável names
+        history_creator = db.query(LicitacaoHistory).filter(
+            LicitacaoHistory.licitacao_id == licitacao_id,
+            LicitacaoHistory.descricao.like("%criou a Licitação%")
+        ).first()
+        vendedor_name = history_creator.usuario_nome if history_creator else (licitacao.po_nome or "Não atribuído")
+        
+        history_closing = db.query(LicitacaoHistory).filter(
+            LicitacaoHistory.licitacao_id == licitacao_id,
+            (LicitacaoHistory.descricao.like("%alterou o status para Ganha%") |
+             LicitacaoHistory.descricao.like("%alterou o status para Perdida%"))
+        ).order_by(LicitacaoHistory.data_movimentacao.desc()).first()
+        data_fechamento = history_closing.data_movimentacao if history_closing else licitacao.updated_at
+        
+        return {
+            "header": {
+                "cliente_nome": customer.nome_fantasia or customer.razao_social if customer else "Não informado",
+                "cidade": customer.city_nome if customer else "Não informado",
+                "estado": customer.state_sigla if customer else "Não informado",
+                "vendedor_nome": vendedor_name,
+                "responsavel_nome": licitacao.po_nome or "Não atribuído",
+                "numero_oportunidade": licitacao.numero_edital,
+                "data_fechamento": data_fechamento
+            },
+            "entradas": {
+                "total_produtos": round(total_produtos, 2),
+                "total_servicos": round(total_servicos, 2),
+                "restituicao_icms_st": round(restituicao_icms_st, 2),
+                "total_entradas": round(total_entradas, 2)
+            },
+            "saidas": {
+                "fornecedores": fornecedores,
+                "impostos_compra": {
+                    "ipi": {"percent": round(ipi_compra_pct, 2), "valor": round(purchase_ipi, 2)},
+                    "icms_st": {"percent": round(st_compra_pct, 2), "valor": round(purchase_st, 2)},
+                    "difal": {"percent": round(difal_compra_pct, 2), "valor": round(purchase_difal, 2)}
+                },
+                "impostos_venda": {
+                    "pis": {"percent": round(pis_venda_pct, 2), "valor": round(vlt_pis, 2)},
+                    "cofins": {"percent": round(cofins_venda_pct, 2), "valor": round(vlt_cofins, 2)},
+                    "icms": {"percent": round(icms_venda_pct, 2), "valor": round(vlt_icms, 2)},
+                    "ipi": {"percent": round(ipi_venda_pct, 2), "valor": round(vlt_ipi_venda, 2)},
+                    "iss": {"percent": round(iss_venda_pct, 2), "valor": round(vlt_iss, 2)},
+                    "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(vlt_irpj, 2)},
+                    "csll": {"percent": round(csll_venda_pct, 2), "valor": round(vlt_csll, 2)}
+                },
+                "despesas_venda": {
+                    "frete": {"percent": round(frete_pct, 2), "valor": round(vlt_frete, 2)},
+                    "comissao": {"percent": round(comissao_pct, 2), "valor": round(vlt_comissao, 2)},
+                    "despesas_administrativas": {"percent": round(despesas_adm_pct, 2), "valor": round(vlt_despesas_adm, 2)}
+                },
+                "total_saidas": round(total_saidas, 2)
+            },
+            "lucro_ebitda": round(lucro_ebitda, 2),
+            "margem_liquida": round(margem_liquida, 2)
+        }
+
+

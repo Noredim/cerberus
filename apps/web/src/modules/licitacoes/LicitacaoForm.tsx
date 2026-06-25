@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Save, Plus, Edit2, Trash2, FileText, Briefcase, 
   FileSpreadsheet, Package, ChevronRight, ChevronDown, 
-  Loader2, AlertCircle, ShieldAlert, Award, RefreshCw, Layers, History, Users, Search,
+  Loader2, AlertCircle, ShieldAlert, Award, RefreshCw, Layers, History, Users, Search, TrendingUp,
   CheckSquare, ListTodo, MessageSquare, UserCheck, Activity, Clock, Trash, Play,
   LayoutDashboard
 } from 'lucide-react';
@@ -210,6 +210,10 @@ export function LicitacaoForm() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [expandedLotes, setExpandedLotes] = useState<Record<string, boolean>>({});
 
+  // DRE state
+  const [dreData, setDreData] = useState<any>(null);
+  const [loadingDre, setLoadingDre] = useState(false);
+
   // CRUD Modals
   const [loteModal, setLoteModal] = useState<{ open: boolean; editId?: string; numero: string; nome: string; descricao: string } | null>(null);
   const [itemModal, setItemModal] = useState<{ open: boolean; editId?: string; loteId: string; codigo: string; nome: string; descricao: string; quantidade: number; tipo_fornecimento: string; total_meses: number | null } | null>(null);
@@ -280,6 +284,8 @@ export function LicitacaoForm() {
       loadPurchaseBudgets();
     } else if (tabName === 'timeline') {
       loadHistory();
+    } else if (tabName === 'dre') {
+      loadDre();
     }
   };
 
@@ -344,6 +350,18 @@ export function LicitacaoForm() {
       setHistoryList(res.data);
     } catch (err) {
       console.error('Failed to load history:', err);
+    }
+  };
+
+  const loadDre = async () => {
+    setLoadingDre(true);
+    try {
+      const res = await api.get(`/licitacoes/${id}/dre`);
+      setDreData(res.data);
+    } catch (err) {
+      console.error('Failed to load DRE data:', err);
+    } finally {
+      setLoadingDre(false);
     }
   };
 
@@ -1104,6 +1122,7 @@ export function LicitacaoForm() {
           { id: 'tarefas', label: 'Tarefas', icon: ListTodo },
           { id: 'lotes', label: 'Lotes / Itens / Kits', icon: Layers },
           { id: 'orcamentos', label: 'Orçamentos de Compra', icon: FileSpreadsheet },
+          { id: 'dre', label: 'DRE', icon: TrendingUp },
           { id: 'relatorios', label: 'Relatórios', icon: FileText },
           { id: 'timeline', label: 'Linha do Tempo', icon: History }
         ].filter(tab => tab.id !== 'checklist' || isPOOrManager).map(tab => (
@@ -2542,6 +2561,283 @@ export function LicitacaoForm() {
                     </p>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'dre' && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Header / Cabeçalho */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle/40 pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-brand-primary" />
+                  Demonstrativo de Resultado da Venda (DRE)
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Análise consolidada de entradas, saídas, impostos e rentabilidade final da operação comercial.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={loadDre}
+                disabled={loadingDre}
+                className="bg-bg-deep border border-border-subtle text-text-primary hover:bg-border-subtle/20 shrink-0"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${loadingDre ? 'animate-spin' : ''}`} />
+                Atualizar DRE
+              </Button>
+            </div>
+
+            {loadingDre ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="w-8 h-8 text-brand-primary animate-spin" />
+                <p className="text-sm text-text-muted font-medium">Processando e consolidando indicadores financeiro-tributários...</p>
+              </div>
+            ) : !dreData ? (
+              <div className="text-center py-20 text-text-muted bg-bg-deep/10 border border-border-subtle/30 rounded-xl">
+                Nenhum dado de DRE carregado. Clique em "Atualizar DRE" para calcular.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Header Info Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-bg-deep/10 border border-border-subtle/50 p-4 rounded-xl">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Cliente</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.cliente_nome}</span>
+                    <span className="text-xs text-text-muted block mt-0.5">{dreData.header.cidade} - {dreData.header.estado}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Vendedor / Comercial</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.vendedor_nome}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Responsável (Project Owner)</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.responsavel_nome}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Edital / Oportunidade</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.numero_oportunidade}</span>
+                    <span className="text-[10px] text-text-muted block mt-0.5">
+                      Fechamento: {dreData.header.data_fechamento ? new Date(dreData.header.data_fechamento).toLocaleDateString('pt-BR') : 'Pendente'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* DRE Structure */}
+                <div className="border border-border-subtle/60 rounded-xl overflow-hidden shadow-sm bg-surface">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead>
+                      <tr className="bg-bg-deep/20 border-b border-border-subtle/60">
+                        <th className="py-3 px-4 font-bold text-xs uppercase text-text-muted tracking-wider">Descrição do Item</th>
+                        <th className="py-3 px-4 text-right font-bold text-xs uppercase text-text-muted tracking-wider w-32">%</th>
+                        <th className="py-3 px-4 text-right font-bold text-xs uppercase text-text-muted tracking-wider w-48">Valor (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle/40">
+                      {/* ENTRADAS */}
+                      <tr className="bg-emerald-500/5 font-semibold text-emerald-800 dark:text-emerald-400">
+                        <td className="py-3 px-4">ENTRADAS</td>
+                        <td className="py-3 px-4 text-right"></td>
+                        <td className="py-3 px-4 text-right">(+) {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_entradas)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-6 flex items-center gap-2">
+                          <span className="text-xs text-emerald-600 font-bold">(+)</span>
+                          Valor Total Produtos
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_produtos)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-6 flex items-center gap-2">
+                          <span className="text-xs text-emerald-600 font-bold">(+)</span>
+                          Valor Total Serviços
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_servicos)}</td>
+                      </tr>
+                      {dreData.entradas.restituicao_icms_st > 0 && (
+                        <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors bg-emerald-500/5">
+                          <td className="py-2.5 px-6 flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400">
+                            <span className="text-xs text-emerald-600 font-bold">(+)</span>
+                            Restituição ICMS ST
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
+                          <td className="py-2.5 px-4 text-right text-emerald-700 dark:text-emerald-400 font-mono">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.restituicao_icms_st)}
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* SAÍDAS */}
+                      <tr className="bg-rose-500/5 font-semibold text-rose-800 dark:text-rose-400">
+                        <td className="py-3 px-4">SAÍDAS</td>
+                        <td className="py-3 px-4 text-right"></td>
+                        <td className="py-3 px-4 text-right">(-) {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.total_saidas)}</td>
+                      </tr>
+                      
+                      {/* Fornecedores */}
+                      {dreData.saidas.fornecedores.map((f: any, idx: number) => (
+                        <tr key={idx} className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                          <td className="py-2.5 px-6 flex items-center gap-2">
+                            <span className="text-xs text-rose-600 font-bold">(-)</span>
+                            Pagamento Fornecedor: {f.nome}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
+                          <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(f.valor)}</td>
+                        </tr>
+                      ))}
+
+                      {/* Impostos de Compra */}
+                      <tr className="text-text-muted bg-bg-deep/10 text-xs font-bold uppercase tracking-wider">
+                        <td className="py-1.5 px-6" colSpan={3}>Impostos de Compra (FPC)</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          IPI Compra
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_compra.ipi.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_compra.ipi.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          ICMS ST Compra
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_compra.icms_st.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_compra.icms_st.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          DIFAL Compra
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_compra.difal.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_compra.difal.valor)}</td>
+                      </tr>
+
+                      {/* Impostos de Venda */}
+                      <tr className="text-text-muted bg-bg-deep/10 text-xs font-bold uppercase tracking-wider">
+                        <td className="py-1.5 px-6" colSpan={3}>Impostos de Venda (FPV)</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          PIS
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.pis.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.pis.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          COFINS
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.cofins.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.cofins.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          ICMS
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.icms.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.icms.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          IPI
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.ipi.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.ipi.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          ISS
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.iss.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.iss.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          IRPJ
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.irpj.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.irpj.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          CSLL
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.impostos_venda.csll.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.impostos_venda.csll.valor)}</td>
+                      </tr>
+
+                      {/* Despesas de Venda */}
+                      <tr className="text-text-muted bg-bg-deep/10 text-xs font-bold uppercase tracking-wider">
+                        <td className="py-1.5 px-6" colSpan={3}>Despesas de Venda (FPV)</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          Frete
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.frete.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.frete.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          Comissão
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.comissao.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao.valor)}</td>
+                      </tr>
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          Despesas Administrativas
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.despesas_administrativas.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.despesas_administrativas.valor)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totais consolidado - Lucro / Margem */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                  <div className="bg-bg-deep/10 border border-border-subtle p-5 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Lucro Operacional (EBITDA)</span>
+                      <p className={`text-2xl font-extrabold mt-1 font-mono ${dreData.lucro_ebitda >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.lucro_ebitda)}
+                      </p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dreData.lucro_ebitda >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div className="bg-bg-deep/10 border border-border-subtle p-5 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Margem Líquida</span>
+                      <p className={`text-2xl font-extrabold mt-1 font-mono ${dreData.margem_liquida >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {dreData.margem_liquida.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %
+                      </p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dreData.margem_liquida >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                      <Activity className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

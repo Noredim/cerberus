@@ -360,3 +360,59 @@ class LicitacaoDashboardResponse(BaseModel):
     resumo_lotes: LicitacaoDashboardResumoLotes
     alertas: List[LicitacaoDashboardAlerta]
 
+
+class SupplierItem(BaseModel):
+    nome: str
+    valor: Decimal
+
+class ValuePercent(BaseModel):
+    percent: Decimal
+    valor: Decimal
+
+class LicitacaoDreHeader(BaseModel):
+    cliente_nome: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    vendedor_nome: Optional[str] = None
+    responsavel_nome: Optional[str] = None
+    numero_oportunidade: str
+    data_fechamento: Optional[datetime] = None
+
+class LicitacaoDreEntradas(BaseModel):
+    total_produtos: Decimal
+    total_servicos: Decimal
+    restituicao_icms_st: Decimal
+    total_entradas: Decimal
+
+class LicitacaoDreImpostosCompra(BaseModel):
+    ipi: ValuePercent
+    icms_st: ValuePercent
+    difal: ValuePercent
+
+class LicitacaoDreImpostosVenda(BaseModel):
+    pis: ValuePercent
+    cofins: ValuePercent
+    icms: ValuePercent
+    ipi: ValuePercent
+    iss: ValuePercent
+    irpj: ValuePercent
+    csll: ValuePercent
+
+class LicitacaoDreDespesasVenda(BaseModel):
+    frete: ValuePercent
+    comissao: ValuePercent
+    despesas_administrativas: ValuePercent
+
+class LicitacaoDreSaidas(BaseModel):
+    fornecedores: List[SupplierItem] = []
+    impostos_compra: LicitacaoDreImpostosCompra
+    impostos_venda: LicitacaoDreImpostosVenda
+    despesas_venda: LicitacaoDreDespesasVenda
+    total_saidas: Decimal
+
+class LicitacaoDreResponse(BaseModel):
+    header: LicitacaoDreHeader
+    entradas: LicitacaoDreEntradas
+    saidas: LicitacaoDreSaidas
+    lucro_ebitda: Decimal
+    margem_liquida: Decimal
