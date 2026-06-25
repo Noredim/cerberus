@@ -1754,19 +1754,32 @@ class LicitacaoService:
         st_compra_pct = (purchase_st / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
         difal_compra_pct = (purchase_difal / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
         
-        # Calculate Venda Tax Percentages (weighted average over total venda)
-        pis_venda_pct = (vlt_pis / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        cofins_venda_pct = (vlt_cofins / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        icms_venda_pct = (vlt_icms / total_venda * 100) if total_venda > 0 else Decimal("0.0")
+        # Calculate Venda Tax Percentages (read exact rates from the first kit if available)
+        first_kit = licitacao.kits[0] if licitacao.kits else None
+        if first_kit:
+            pis_venda_pct = Decimal(str(first_kit.aliq_pis or 0.0))
+            cofins_venda_pct = Decimal(str(first_kit.aliq_cofins or 0.0))
+            icms_venda_pct = Decimal(str(first_kit.aliq_icms or 0.0))
+            iss_venda_pct = Decimal(str(first_kit.aliq_iss or 0.0))
+            irpj_venda_pct = Decimal(str(first_kit.aliq_irpj or 0.0))
+            csll_venda_pct = Decimal(str(first_kit.aliq_csll or 0.0))
+            
+            frete_pct = Decimal(str(first_kit.perc_frete_venda or 0.0))
+            comissao_pct = Decimal(str(first_kit.perc_comissao or 0.0))
+            despesas_adm_pct = Decimal(str(first_kit.perc_despesas_adm or 0.0))
+        else:
+            pis_venda_pct = Decimal("0.0")
+            cofins_venda_pct = Decimal("0.0")
+            icms_venda_pct = Decimal("0.0")
+            iss_venda_pct = Decimal("0.0")
+            irpj_venda_pct = Decimal("0.0")
+            csll_venda_pct = Decimal("0.0")
+            
+            frete_pct = Decimal("0.0")
+            comissao_pct = Decimal("0.0")
+            despesas_adm_pct = Decimal("0.0")
+            
         ipi_venda_pct = Decimal("0.0")
-        iss_venda_pct = (vlt_iss / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        irpj_venda_pct = (vlt_irpj / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        csll_venda_pct = (vlt_csll / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        
-        # Calculate Despesa Percentages
-        frete_pct = (vlt_frete / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        comissao_pct = (vlt_comissao / total_venda * 100) if total_venda > 0 else Decimal("0.0")
-        despesas_adm_pct = (vlt_despesas_adm / total_venda * 100) if total_venda > 0 else Decimal("0.0")
         
         # Query Suppliers and aggregate values
         purchase_budgets = db.query(PurchaseBudget).filter(PurchaseBudget.licitacao_id == licitacao_id).all()
