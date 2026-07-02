@@ -566,7 +566,7 @@ class OpportunitiesReportService:
                     override_factor = None
                     sale_item = next((item for item in opportunity.items if item.opportunity_kit_id == kit_id), None)
                     if sale_item:
-                        override_factor = sale_item.markup
+                        override_factor = None
                     else:
                         rental_item = next((item for item in opportunity.rental_items if item.opportunity_kit_id == kit_id), None)
                         if rental_item:
@@ -1184,8 +1184,7 @@ class OpportunitiesReportService:
                 kits_by_id[kit.id] = kit
                 try:
                     budget_item = next((item for item in opportunity.items if item.opportunity_kit_id == kit_id), None)
-                    override_factor = budget_item.markup if budget_item else None
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity.id))
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=None, sales_budget_id=str(opportunity.id))
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
                         if p_id:
@@ -1392,7 +1391,7 @@ class OpportunitiesReportService:
                 kit = kits_by_id.get(item.opportunity_kit_id)
                 if kit:
                     try:
-                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=item.markup, sales_budget_id=str(opportunity.id))
+                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=None, sales_budget_id=str(opportunity.id))
                         
                         # Initialize kit details consolidator
                         kit_qty = float(item.quantidade)
