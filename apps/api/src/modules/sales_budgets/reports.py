@@ -562,7 +562,17 @@ class OpportunitiesReportService:
             kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
             if kit:
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
+                    # Find corresponding budget item or rental budget item to get override factor
+                    override_factor = None
+                    sale_item = next((item for item in opportunity.items if item.opportunity_kit_id == kit_id), None)
+                    if sale_item:
+                        override_factor = sale_item.markup
+                    else:
+                        rental_item = next((item for item in opportunity.rental_items if item.opportunity_kit_id == kit_id), None)
+                        if rental_item:
+                            override_factor = rental_item.fator_margem
+                    
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity.id))
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
                         if p_id:
@@ -1173,7 +1183,9 @@ class OpportunitiesReportService:
             if kit:
                 kits_by_id[kit.id] = kit
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
+                    budget_item = next((item for item in opportunity.items if item.opportunity_kit_id == kit_id), None)
+                    override_factor = budget_item.markup if budget_item else None
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity.id))
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
                         if p_id:
@@ -1380,7 +1392,7 @@ class OpportunitiesReportService:
                 kit = kits_by_id.get(item.opportunity_kit_id)
                 if kit:
                     try:
-                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
+                        kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=item.markup, sales_budget_id=str(opportunity.id))
                         
                         # Initialize kit details consolidator
                         kit_qty = float(item.quantidade)
@@ -1528,9 +1540,8 @@ class OpportunitiesReportService:
                             
                             lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
                             
-                            # Usar markup referente ao do kit para todos os componentes produto
-                            markup_do_kit = float(kit.fator_margem_locacao or 1.0)
-                            mkp_venda = markup_do_kit if p_uuid else float(summary.get("fator_item") or 1.0)
+                            # Usar o markup calculado de cada item dentro do kit lançado
+                            mkp_venda = float(summary.get("fator_item") or 1.0)
                             
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
@@ -2615,7 +2626,9 @@ class OpportunitiesReportService:
             if kit:
                 kits_by_id[kit.id] = kit
                 try:
-                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, sales_budget_id=str(opportunity.id))
+                    rental_item = next((item for item in opportunity.rental_items if item.opportunity_kit_id == kit_id), None)
+                    override_factor = rental_item.fator_margem if rental_item else None
+                    kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity.id))
                     kits_financials[kit.id] = kit_financials
                     for item_sum in kit_financials.get("item_summaries", []):
                         p_id = item_sum.get("product_id")
