@@ -3521,7 +3521,7 @@ export function SalesBudgetForm() {
           }
 
           const divisorDiretor = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissao_mensal_calc;
-          const diretor_roi = divisorDiretor > 0 ? (saldoCapex / divisorDiretor) : (pCtr + 1);
+          const diretor_roi = rentalTotals.faturamentoMensal > 0 ? ((rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal + diretor_comissao) / rentalTotals.faturamentoMensal) : (pCtr + 1);
           const paybackMes = divisorDiretor > 0 ? (saldoCapex / divisorDiretor) : null;
 
           const diretor_saldo = diretor_rec_liq - diretor_comissao;
@@ -3664,19 +3664,19 @@ export function SalesBudgetForm() {
                     <div className="w-80 space-y-2 text-gray-200">
                       <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback (Diretoria)</div>
                       <div className="text-[10.5px] space-y-1">
-                        <div className="flex justify-between"><span>Capex Líquido:</span> <span className="font-medium text-white">{fmt(saldoCapex)}</span></div>
-                        <div className="flex justify-between"><span>Faturamento Mensal:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoMensal)}</span></div>
-                        <div className="flex justify-between"><span>Imposto Mensal:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosMensal)}</span></div>
-                        <div className="flex justify-between"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(opMes)}</span></div>
-                        <div className="flex justify-between"><span>Comissão Diretoria Mensal:</span> <span className="font-medium text-green-400">{fmt(comissao_mensal_calc)}</span></div>
+                        <div className="flex justify-between"><span>Custo de Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                        <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
+                        <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
+                        <div className="flex justify-between"><span>Comissão Rec/Liq:</span> <span className="font-medium text-green-400">{fmt(diretor_comissao)}</span></div>
                         <div className="flex justify-between border-t border-gray-600 pt-1 mt-1 font-bold">
-                          <span>Retorno Mensal Líquido:</span>
-                          <span className="text-white">{fmt(divisorDiretor)}</span>
+                          <span>Soma Total do Custo:</span>
+                          <span className="text-white">{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal + diretor_comissao)}</span>
                         </div>
+                        <div className="flex justify-between"><span>Faturamento Mensal:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoMensal)}</span></div>
                       </div>
                       <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1 leading-relaxed">
-                        Payback = Capex Líquido ÷ Retorno Mensal Líquido<br />
-                        {fmt(saldoCapex)} ÷ {fmt(divisorDiretor)} = <span className="font-bold text-green-400">{diretor_roi.toFixed(1)} meses</span>
+                        Payback = (Aquisição + Impostos + Custo Op. + Comissão Rec/Liq) ÷ Faturamento Mensal<br />
+                        ({fmt(rentalTotals.investimento)} + {fmt(rentalTotals.impostosTotal)} + {fmt(rentalTotals.custoOpTotal)} + {fmt(diretor_comissao)}) ÷ {fmt(rentalTotals.faturamentoMensal)} = <span className="font-bold text-green-400">{diretor_roi.toFixed(1)} meses</span>
                       </div>
                     </div>
                   }>
