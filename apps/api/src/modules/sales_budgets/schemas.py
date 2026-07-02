@@ -150,6 +150,24 @@ class SalesBudgetItemBase(BaseModel):
     tem_st: bool = False
     icms_abatido_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
 
+    @model_validator(mode="before")
+    @classmethod
+    def round_decimals(cls, data):
+        if isinstance(data, dict):
+            decimal_fields_4 = [
+                "custo_unit_base", "markup", "quantidade", "perc_frete_venda",
+                "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_icms",
+                "perc_iss", "perc_despesa_adm", "perc_comissao", "icms_abatido_unit"
+            ]
+            for field in decimal_fields_4:
+                val = data.get(field)
+                if val is not None:
+                    try:
+                        data[field] = round(float(val), 4)
+                    except (ValueError, TypeError):
+                        pass
+        return data
+
 
 class SalesBudgetItemCreate(SalesBudgetItemBase):
     pass
@@ -227,6 +245,34 @@ class SalesBudgetBase(BaseModel):
     perc_irpj_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_iss_rental: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_comissao_diretoria: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+
+    @model_validator(mode="before")
+    @classmethod
+    def round_decimals(cls, data):
+        if isinstance(data, dict):
+            decimal_fields_4 = [
+                "markup_padrao", "perc_despesa_adm", "perc_comissao", "perc_frete_venda",
+                "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_iss",
+                "perc_icms_interno", "perc_icms_externo", "venda_markup_produtos",
+                "venda_markup_servicos", "venda_markup_instalacao", "venda_markup_manutencao",
+                "taxa_manutencao_anual", "fator_margem_padrao", "fator_manutencao_padrao",
+                "perc_instalacao_padrao", "perc_comissao_rental", "perc_pis_rental",
+                "perc_cofins_rental", "perc_csll_rental", "perc_irpj_rental",
+                "perc_iss_rental", "perc_comissao_diretoria"
+            ]
+            for field in decimal_fields_4:
+                val = data.get(field)
+                if val is not None:
+                    try:
+                        data[field] = round(float(val), 4)
+                    except (ValueError, TypeError):
+                        pass
+            if "taxa_juros_mensal" in data and data["taxa_juros_mensal"] is not None:
+                try:
+                    data["taxa_juros_mensal"] = round(float(data["taxa_juros_mensal"]), 6)
+                except (ValueError, TypeError):
+                    pass
+        return data
 
 
 class SalesBudgetCreate(SalesBudgetBase):
