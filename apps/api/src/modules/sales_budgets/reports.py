@@ -2724,42 +2724,67 @@ class OpportunitiesReportService:
             pb_info = product_suppliers.get(item.product_id) if item.product_id else None
             pb_item = pb_info["pb_item"] if pb_info else None
             
-            custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
+            # Recalculate kit metrics dynamically using kits_financials if available to align with frontend
+            kit_financials_summary = None
+            if item.opportunity_kit_id:
+                kf = kits_financials.get(item.opportunity_kit_id)
+                if kf and "summary" in kf:
+                    kit_financials_summary = kf["summary"]
+
+            if kit_financials_summary:
+                s = kit_financials_summary
+                custo_total = float(s.get("custo_aquisicao_total") or 0.0) * qty
+                comissao_val = float(s.get("valor_comissao_locacao") or 0.0)
+                instalacao_val = float(s.get("vlr_instal_calc") or 0.0)
+                manut_val = float(s.get("vlt_manut") or 0.0)
+                monitoramento_val = float(s.get("venda_unit_monitoramento") or 0.0)
+                fat_mensal_val = float(s.get("valor_mensal_antes_impostos") or s.get("valor_mensal_kit") or 0.0)
+                impostos_mensal_val = float(s.get("valor_impostos") or 0.0)
+                custo_op_mensal_val = float(s.get("custo_operacional_mensal_kit") or 0.0) + float(s.get("custo_mensal_bloco_7") or 0.0)
+                
+                comissao_item = comissao_val * qty
+                instalacao_item = instalacao_val * qty
+                manut_mes_item = manut_val * qty
+                monitoramento_item = monitoramento_val * qty
+                fat_mensal_total_item = fat_mensal_val * qty
+                impostos_mensal_item = impostos_mensal_val * qty
+                custo_op_mensal = custo_op_mensal_val * qty
+                
+                purchase_tax_unit = float(s.get("total_difal_kit") or 0.0) + float(s.get("total_st_kit") or 0.0) + float(s.get("total_ipi_kit") or 0.0)
+            else:
+                custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
+                comissao_item = float(item.kit_comissao or 0.0) * qty
+                instalacao_item = float(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0) * qty
+                manut_mes_item = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * qty
+                monitoramento_item = float(item.kit_venda_unit_monitoramento or 0.0) * qty
+                fat_mensal_total_item = float(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0) * qty
+                impostos_mensal_item = float(item.impostos_mensal or 0.0) * qty
+                
+                difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
+                purchase_tax_unit = difal_unit + st_unit + ipi_unit
+                
+                custo_monitoramento = 0.0
+                if item.opportunity_kit_id:
+                    kit = kits_by_id.get(item.opportunity_kit_id)
+                    if kit:
+                        custo_monitoramento = float(kit.custo_monitoramento_unitario or 0.0)
+
+                if item.opportunity_kit_id:
+                    custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + custo_monitoramento) * qty
+                else:
+                    custo_op_mensal = float(item.custo_manut_mensal or 0.0) * qty
+
             total_aquisicao_calc += custo_total
-            
-            difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
-            purchase_tax_unit = difal_unit + st_unit + ipi_unit
             total_st_difal += purchase_tax_unit * qty
-            
-            comissao_item = float(item.kit_comissao or 0.0) * qty
             total_comissao_calc += comissao_item
             comissao_total_aquisicao += comissao_item
             
-            instalacao_item = float(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0) * qty
-            manut_mes_item = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * qty
-            monitoramento_item = float(item.kit_venda_unit_monitoramento or 0.0) * qty
-            
-            fat_mensal_total_item = float(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0) * qty
             fat_mensal_unit = fat_mensal_total_item / qty if qty > 0 else 0.0
-
             loc_mensal_item = fat_mensal_total_item - manut_mes_item - monitoramento_item
             prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
             prazo_item = max(0, prazo_item_raw - prazo_instalacao)
             
             vlr_total_item = fat_mensal_total_item * prazo_item_raw
-            impostos_mensal_item = float(item.impostos_mensal or 0.0) * qty
-
-            # Custo Operacional (Support & Monitoring)
-            custo_monitoramento = 0.0
-            if item.opportunity_kit_id:
-                kit = kits_by_id.get(item.opportunity_kit_id)
-                if kit:
-                    custo_monitoramento = float(kit.custo_monitoramento_unitario or 0.0)
-
-            if item.opportunity_kit_id:
-                custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + custo_monitoramento) * qty
-            else:
-                custo_op_mensal = float(item.custo_manut_mensal or 0.0) * qty
 
             # Adjustment for kit installation - column redirection and sum fixing
             if item.is_kit_instalacao:
@@ -3030,7 +3055,7 @@ class OpportunitiesReportService:
         investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total
         
         # Project Total Cost (Capex + Impostos + Custos Operacionais)
-        custo_total_projeto = investimento_total + impostos_totais + custo_op_total
+        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + impostos_totais + custo_op_total
         
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total
@@ -3072,6 +3097,12 @@ class OpportunitiesReportService:
         csll_total_mensal = 0.0
         irpj_total_mensal = 0.0
         iss_total_mensal = 0.0
+        
+        pis_total_contrato = 0.0
+        cofins_total_contrato = 0.0
+        csll_total_contrato = 0.0
+        irpj_total_contrato = 0.0
+        iss_total_contrato = 0.0
         
         for item in opportunity.rental_items:
             q = float(item.quantidade)
@@ -3116,7 +3147,19 @@ class OpportunitiesReportService:
             c_iss = calc_tax(True, rate_iss)
             
             total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
-            impostos = float(item.impostos_mensal or 0.0) * q
+            
+            # Recalculate kit impostos_mensal dynamically if available to match loop overrides
+            kit_financials_summary = None
+            if item.opportunity_kit_id:
+                kf = kits_financials.get(item.opportunity_kit_id)
+                if kf and "summary" in kf:
+                    kit_financials_summary = kf["summary"]
+
+            if kit_financials_summary:
+                impostos = float(kit_financials_summary.get("valor_impostos") or 0.0) * q
+            else:
+                impostos = float(item.impostos_mensal or 0.0) * q
+
             ratio = impostos / total_calc if total_calc > 0 else 1.0
             
             pis_total_mensal += c_pis * ratio
@@ -3124,13 +3167,22 @@ class OpportunitiesReportService:
             csll_total_mensal += c_csll * ratio
             irpj_total_mensal += c_irpj * ratio
             iss_total_mensal += c_iss * ratio
+            
+            prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
+            prazo_item = max(0, prazo_item_raw - prazo_instalacao)
+            
+            pis_total_contrato += c_pis * ratio * prazo_item
+            cofins_total_contrato += c_cofins * ratio * prazo_item
+            csll_total_contrato += c_csll * ratio * prazo_item
+            irpj_total_contrato += c_irpj * ratio * prazo_item
+            iss_total_contrato += c_iss * ratio * prazo_item
 
         taxes_summary = [
-            {"name": "PIS", "percent": f"{aliq_pis:.2f}", "mensal": format_currency(pis_total_mensal), "total": format_currency(pis_total_mensal * prazo_fat)},
-            {"name": "COFINS", "percent": f"{aliq_cofins:.2f}", "mensal": format_currency(cofins_total_mensal), "total": format_currency(cofins_total_mensal * prazo_fat)},
-            {"name": "CSLL", "percent": f"{aliq_csll:.2f}", "mensal": format_currency(csll_total_mensal), "total": format_currency(csll_total_mensal * prazo_fat)},
-            {"name": "IRPJ", "percent": f"{aliq_irpj:.2f}", "mensal": format_currency(irpj_total_mensal), "total": format_currency(irpj_total_mensal * prazo_fat)},
-            {"name": "ISS", "percent": f"{aliq_iss:.2f}", "mensal": format_currency(iss_total_mensal), "total": format_currency(iss_total_mensal * prazo_fat)},
+            {"name": "PIS", "percent": f"{aliq_pis:.2f}", "mensal": format_currency(pis_total_mensal), "total": format_currency(pis_total_contrato)},
+            {"name": "COFINS", "percent": f"{aliq_cofins:.2f}", "mensal": format_currency(cofins_total_mensal), "total": format_currency(cofins_total_contrato)},
+            {"name": "CSLL", "percent": f"{aliq_csll:.2f}", "mensal": format_currency(csll_total_mensal), "total": format_currency(csll_total_contrato)},
+            {"name": "IRPJ", "percent": f"{aliq_irpj:.2f}", "mensal": format_currency(irpj_total_mensal), "total": format_currency(irpj_total_contrato)},
+            {"name": "ISS", "percent": f"{aliq_iss:.2f}", "mensal": format_currency(iss_total_mensal), "total": format_currency(iss_total_contrato)},
         ]
 
         # Detailed installation taxes recalculation
@@ -3218,6 +3270,7 @@ class OpportunitiesReportService:
             "receita_contratada": format_currency(receita_contratada),
             "investimento_total": format_currency(custo_total_projeto),
             "investimento_capex": format_currency(investimento_total),
+            "investimento_capex_grid": format_currency(total_aquisicao_calc + comissao_total_aquisicao),
             "locacao_mensal": format_currency(locacao_mensal),
             "custo_op_total": format_currency(custo_op_total),
             "impostos_totais": format_currency(impostos_totais),
@@ -3241,6 +3294,71 @@ class OpportunitiesReportService:
             "total_instalacao_str": format_currency(total_instalacao),
             "saldo_capex_amortizar_str": format_currency(investimento_total - total_instalacao),
         }
+
+        # Collect and consolidate Bloco 7 Monthly Costs from the kits
+        monthly_costs_list = []
+        total_monthly_costs_val = 0.0
+        total_monthly_costs_contrato_val = 0.0
+        
+        for item in opportunity.rental_items:
+            if item.is_kit_instalacao:
+                continue
+            if item.opportunity_kit_id:
+                qty = float(item.quantidade)
+                kit = kits_by_id.get(item.opportunity_kit_id)
+                if kit:
+                    licenses_unit_sum = 0.0
+                    if kit.monthly_costs:
+                        for mcost in kit.monthly_costs:
+                            m_qty = float(mcost.quantidade or 1.0) * qty
+                            m_val_unit = float(mcost.valor_unitario or 0.0)
+                            m_total = m_qty * m_val_unit
+                            total_monthly_costs_val += m_total
+                            
+                            prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
+                            prazo_item = max(0, prazo_item_raw - prazo_instalacao)
+                            m_total_contrato = m_total * prazo_item
+                            total_monthly_costs_contrato_val += m_total_contrato
+                            
+                            licenses_unit_sum += m_val_unit
+                            
+                            monthly_costs_list.append({
+                                "servico": mcost.servico,
+                                "tipo_custo": mcost.tipo_custo,
+                                "quantidade": int(m_qty) if m_qty.is_integer() else m_qty,
+                                "valor_unitario": format_currency(m_val_unit),
+                                "total": format_currency(m_total),
+                                "total_contrato": format_currency(m_total_contrato)
+                            })
+                            
+                    # Add kit maintenance operational cost row if any
+                    kf = kits_financials.get(item.opportunity_kit_id)
+                    custo_op_mensal_kit = 0.0
+                    if kf and "summary" in kf:
+                        s = kf["summary"]
+                        custo_op_mensal_kit = float(s.get("custo_operacional_mensal_kit") or 0.0) + float(s.get("custo_mensal_bloco_7") or 0.0)
+                    else:
+                        custo_op_mensal_kit = float(item.custo_op_mensal_kit or 0.0)
+                        
+                    maint_unit_cost = max(0.0, custo_op_mensal_kit - licenses_unit_sum)
+                    if maint_unit_cost > 0.0:
+                        m_qty = qty
+                        m_total = maint_unit_cost * qty
+                        total_monthly_costs_val += m_total
+                        
+                        prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
+                        prazo_item = max(0, prazo_item_raw - prazo_instalacao)
+                        m_total_contrato = m_total * prazo_item
+                        total_monthly_costs_contrato_val += m_total_contrato
+                        
+                        monthly_costs_list.append({
+                            "servico": f"MANUTENÇÃO E SUPORTE TÉCNICO - {kit.nome_kit}",
+                            "tipo_custo": "Manutenção",
+                            "quantidade": int(m_qty) if m_qty.is_integer() else m_qty,
+                            "valor_unitario": format_currency(maint_unit_cost),
+                            "total": format_currency(m_total),
+                            "total_contrato": format_currency(m_total_contrato)
+                        })
 
         # Determine modalidade de receita
         modalidade_label_map = {
@@ -3330,7 +3448,10 @@ class OpportunitiesReportService:
             taxes_instalacao_summary=taxes_instalacao_summary,
             cashflow_chart_svg=cashflow_chart_svg,
             auditoria=auditoria,
-            total_instalacao_str=format_currency(total_instalacao)
+            total_instalacao_str=format_currency(total_instalacao),
+            monthly_costs_details=monthly_costs_list,
+            total_monthly_costs_bloco_7=format_currency(total_monthly_costs_val),
+            total_monthly_costs_contrato_bloco_7=format_currency(total_monthly_costs_contrato_val)
         )
 
         # 9. PDF Generation with WeasyPrint & Fallback

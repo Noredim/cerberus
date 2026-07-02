@@ -171,14 +171,19 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
     
     # If it's a kit, uses its own tipo_contrato to define if it's Comodato
     tipo_contrato_kit = getattr(item_data, "tipo_contrato_kit", None)
+    is_instalacao = bool(getattr(item_data, "is_kit_instalacao", False)) or tipo_contrato_kit == "INSTALACAO"
+    
     if is_kit and tipo_contrato_kit:
         is_comodato = tipo_contrato_kit == "COMODATO"
     else:
         is_comodato = rental_defaults.get("tipo_receita_rental", "") == "COMODATO"
 
-    prazo = item_data.prazo_contrato or rental_defaults.get("prazo_contrato_meses", 36)
-    if prazo <= 0:
-        prazo = 36
+    if is_instalacao:
+        prazo = 1
+    else:
+        prazo = item_data.prazo_contrato or rental_defaults.get("prazo_contrato_meses", 36)
+        if prazo <= 0:
+            prazo = 36
 
     if is_kit:
         custo_aquisicao_unit = _d(item_data.custo_aquisicao_unit)
@@ -237,20 +242,16 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
         depreciacao_unit = _round(custo_aquisicao_unit / prazo) if (not is_instalacao and prazo > 0) else Decimal("0")
         custo_total_mensal_unit = depreciacao_unit + custo_manut_mensal_unit
 
-        if is_instalacao:
-            lucro_mensal_unit = rec_liq_unit - custo_aquisicao_unit - custo_op_mensal_unit
-        else:
-            lucro_mensal_unit = rec_liq_unit - custo_total_mensal_unit
-            
-        margem = Decimal("0")
-        if getattr(item_data, "kit_margem", None) is not None:
-            margem = _d(item_data.kit_margem)
-        elif is_comodato:
-            lucro_mensal_unit = Decimal("0")
-        else:
-            if rec_liq_unit > 0:
-                margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
-                
+        p_com = Decimal("0")
+        com_val = Decimal("0")
+        if getattr(item_data, "kit_perc_comissao", None) is not None:
+            p_com = _d(item_data.kit_perc_comissao)
+        if getattr(item_data, "kit_comissao", None) is not None:
+            com_val = _d(item_data.kit_comissao)
+
+        if is_instalacao and com_val == Decimal("0") and p_com > Decimal("0"):
+            com_val = _round(valor_mensal_unit * (p_com / Decimal("100")))
+
         # --- EXACT OVERRIDES ---
         if getattr(item_data, "kit_vlt_manut", None) is not None:
             manutencao_mensal_unit = _d(item_data.kit_vlt_manut)
@@ -265,9 +266,30 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             
         if getattr(item_data, "kit_receita_liquida", None) is not None:
             rec_liq_unit = _d(item_data.kit_receita_liquida)
-            
+
+        # Recalculate com_val if valor_mensal_unit changed due to overrides
+        if is_instalacao and com_val == Decimal("0") and p_com > Decimal("0"):
+            com_val = _round(valor_mensal_unit * (p_com / Decimal("100")))
+
+        # Recalculate profit using final overridden values
+        if is_instalacao:
+            perc_desp = _d(rental_defaults.get("perc_despesa_adm", 0))
+            desp_u = _round(valor_mensal_unit * (perc_desp / Decimal("100")))
+            lucro_mensal_unit = rec_liq_unit - custo_aquisicao_unit - custo_op_mensal_unit - com_val - desp_u
+        else:
+            lucro_mensal_unit = rec_liq_unit - custo_total_mensal_unit
+
         if getattr(item_data, "kit_lucro_mensal", None) is not None:
             lucro_mensal_unit = _d(item_data.kit_lucro_mensal)
+
+        margem = Decimal("0")
+        if getattr(item_data, "kit_margem", None) is not None:
+            margem = _d(item_data.kit_margem)
+        elif is_comodato:
+            lucro_mensal_unit = Decimal("0")
+        else:
+            if rec_liq_unit > 0:
+                margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
 
         return {
             "custo_aquisicao_unit": custo_aquisicao_unit,
@@ -283,8 +305,8 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             "perc_impostos_total": p_imp,
             "impostos_mensal": impostos_unit,
             "receita_liquida_mensal": rec_liq_unit,
-            "perc_comissao": Decimal("0"),
-            "comissao_mensal": Decimal("0"),
+            "perc_comissao": p_com,
+            "comissao_mensal": com_val,
             "lucro_mensal": lucro_mensal_unit,
             "margem": margem,
             "quantidade": _d(item_data.quantidade),
@@ -401,6 +423,7 @@ def _build_rental_defaults(budget: SalesBudget) -> dict:
         "perc_csll_rental": budget.perc_csll_rental,
         "perc_irpj_rental": budget.perc_irpj_rental,
         "perc_iss_rental": budget.perc_iss_rental,
+        "perc_despesa_adm": budget.perc_despesa_adm,
     }
 
 
@@ -506,6 +529,13 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
             kit_receita_liquida=getattr(item_data, "kit_receita_liquida", None),
             kit_lucro_mensal=getattr(item_data, "kit_lucro_mensal", None),
             kit_margem=getattr(item_data, "kit_margem", None),
+            kit_comissao=getattr(item_data, "kit_comissao", None),
+            kit_perc_comissao=getattr(item_data, "kit_perc_comissao", None),
+            kit_faturamento_separado=getattr(item_data, "kit_faturamento_separado", False),
+            kit_investimento_total=getattr(item_data, "kit_investimento_total", None),
+            kit_vlr_instal_calc=getattr(item_data, "kit_vlr_instal_calc", None),
+            kit_parcela_locacao=getattr(item_data, "kit_parcela_locacao", None),
+            kit_venda_unit_monitoramento=getattr(item_data, "kit_venda_unit_monitoramento", None),
             perc_instalacao_item=getattr(item_data, "perc_instalacao_item", None),
             valor_instalacao_item=getattr(item_data, "valor_instalacao_item", None),
             **calc

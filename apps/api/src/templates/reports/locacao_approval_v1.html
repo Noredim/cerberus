@@ -82,7 +82,7 @@
     </div>
 
     <!-- BLOCO 1: COMPOSIÇÃO DE PRODUTOS / KITS -->
-    <div class="avoid-break" style="margin-top: 10px;">
+    <div style="margin-top: 10px;">
         <div class="section-title">Composição de Itens e Margem Aplicada</div>
         <table class="data-table dense-table">
             <thead>
@@ -201,22 +201,52 @@
                         <td>À Vista / Faturamento</td>
                     </tr>
                     {% endif %}
-                    
-                    {% if impostos_instalacao_total > 0 %}
-                    <tr>
-                        <td colspan="3">Impostos s/ Receita de Instalação (Startup)</td>
-                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.impostos_instalacao_str }}</td>
-                        <td>Faturamento</td>
-                    </tr>
-                    {% endif %}
+
                     
                     <tr class="total-row">
                         <td>INVESTIMENTO TOTAL (Capex)</td>
                         <td class="text-right">R$ {{ kpis.total_fornecedores_produtos }}</td>
                         <td class="text-right">R$ {{ kpis.total_fornecedores_impostos }}</td>
-                        <td class="text-right" style="color: #b91c1c;">R$ {{ kpis.investimento_capex }}</td>
+                        <td class="text-right" style="color: #b91c1c;">R$ {{ kpis.investimento_capex_grid }}</td>
                         <td>-</td>
                     </tr>
+                </tbody>
+            </table>
+
+            <div class="section-title" style="margin-top: 8px;">Custos Mensais do Contrato (Bloco 7)</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Serviço / Descrição</th>
+                        <th>Tipo Custo</th>
+                        <th class="text-center">Qtd</th>
+                        <th class="text-right">Valor Unitário</th>
+                        <th class="text-right">Total Mensal</th>
+                        <th class="text-right">Total do Contrato</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in monthly_costs_details %}
+                    <tr>
+                        <td>{{ m.servico }}</td>
+                        <td>{{ m.tipo_custo }}</td>
+                        <td class="text-center">{{ m.quantidade }}</td>
+                        <td class="text-right">R$ {{ m.valor_unitario }}</td>
+                        <td class="text-right font-bold">R$ {{ m.total }}</td>
+                        <td class="text-right font-bold">R$ {{ m.total_contrato }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center" style="color: #94a3b8; font-style: italic; font-size: 7.5pt; padding: 6px;">Nenhum custo mensal lançado no Bloco 7.</td>
+                    </tr>
+                    {% endfor %}
+                    {% if monthly_costs_details %}
+                    <tr class="total-row">
+                        <td colspan="4">Total Custos Mensais:</td>
+                        <td class="text-right" style="color: #b91c1c;">R$ {{ total_monthly_costs_bloco_7 }}</td>
+                        <td class="text-right" style="color: #b91c1c;">R$ {{ total_monthly_costs_contrato_bloco_7 }}</td>
+                    </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>

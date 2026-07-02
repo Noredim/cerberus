@@ -1925,7 +1925,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             </h2>
             {/* GRUPO 1: Parâmetros Base */}
             <div className={`grid grid-cols-1 ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'md:grid-cols-4' : 'md:grid-cols-4'} gap-6 mb-8`}>
-              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && (
+              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1">Prazo Contrato (Meses)</label>
@@ -1941,7 +1941,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Fator Margem (Produtos)' : 'Fator Margem'}
+                  {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem'}
                 </label>
                 <Decimal4Input
                   value={form.fator_margem_locacao}
@@ -1994,7 +1994,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 </>
               )}
 
-              {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && (
+              {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') && (
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
@@ -2035,7 +2035,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 </>
               )}
 
-              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && (
+              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
                   <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />

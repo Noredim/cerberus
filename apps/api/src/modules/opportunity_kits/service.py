@@ -291,6 +291,7 @@ class OpportunityKitService:
                     "product_id": str(cost.product_id) if cost.product_id else None,
                     "own_service_id": str(cost.own_service_id) if cost.own_service_id else None,
                     "tipo_custo": cost_tipo_custo,
+                    "quantidade": float(cost.quantidade or 1.0),
                     "custo_base_unitario_item": round(vl_un, 2),  # type: ignore
                     "custo_total_item_no_kit": round(custo_total_final, 2),  # type: ignore
                     "fator_item": round(fator_cost, 2),  # type: ignore
@@ -513,6 +514,7 @@ class OpportunityKitService:
                 "product_id": str(item.product_id) if item.product_id else None,
                 "own_service_id": str(getattr(item, "own_service_id", None)) if getattr(item, "own_service_id", None) else None,
                 "tipo_item": tipo_produto,
+                "quantidade_no_kit": float(item.quantidade_no_kit or 1.0),
                 "custo_base_unitario_item": round(custo_base_unitario_item, 2),  # type: ignore
                 "custo_total_item_no_kit": round(custo_total_item_no_kit, 2),  # type: ignore
                 "difal_unitario": round(difal_unitario, 2),  # type: ignore
@@ -858,6 +860,9 @@ class OpportunityKitService:
         vlt_frete_venda = faturamento_total_venda * perc_frete_venda
         vlt_despesas_adm = faturamento_total_venda * perc_despesas_adm
         vlt_comissao = faturamento_total_venda * perc_comissao
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+            valor_comissao_locacao = vlt_comissao
+
 
         # Aggregate cost breakdown for Fechamento
         custo_equip_total_calc = custo_aquisicao_kit + vlr_instal_calc

@@ -286,7 +286,10 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
       custo_total_aquisicao: custoAquisicaoUnit,
       custo_manut_mensal: Number(item.kit_vlt_manut || 0) + cP,
       custo_total_mensal: Number(item.kit_vlt_manut || 0) + cP,
-      fator_margem: Number(item.fator_margem || 1)
+      fator_margem: Number(item.fator_margem || 1),
+      perc_comissao: Number(item.kit_perc_comissao || 0),
+      comissao_mensal: Number(item.kit_comissao || 0),
+      prazo_contrato: item.tipo_contrato_kit === 'INSTALACAO' ? 1 : item.prazo_contrato
     };
   }
 
@@ -1641,8 +1644,14 @@ export function SalesBudgetForm() {
       custoOpMensalTotal: 0, custoOpTotal: 0, totalInstalacao: 0,
       impostosInstalacaoTotal: 0, custoOpInstalacaoTotal: 0,
       comissaoTotal: 0,
+      comissaoUnit: 0,
       nominalPercComissao: 0,
+      despAdmTotal: 0,
+      despAdmInstalacaoTotal: 0,
+      despAdmMensalTotal: 0,
+      comissaoMensalTotal: 0,
       impostosDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
+      impostosContratoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
       impostosInstalacaoDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
       nominalTaxes: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 }
     };
@@ -1683,6 +1692,10 @@ export function SalesBudgetForm() {
         t.impostosInstalacaoTotal += impostos;
         t.custoOpInstalacaoTotal += custoOpMensal;
 
+        const despAdmInst = faturamentoMensalItem * (percDespesaAdm / 100);
+        t.despAdmInstalacaoTotal += despAdmInst;
+        t.despAdmTotal += despAdmInst;
+
         t.faturamentoTotal += faturamentoMensalItem;
         t.impostosTotal += impostos;
         t.custoOpTotal += custoOpMensal;
@@ -1694,6 +1707,10 @@ export function SalesBudgetForm() {
         t.lucroMensal += i.lucro_mensal * q;
         t.custoOpMensalTotal += custoOpMensal;
 
+        const despAdmMensal = faturamentoMensalItem * (percDespesaAdm / 100);
+        t.despAdmMensalTotal += despAdmMensal;
+        t.despAdmTotal += despAdmMensal * prazoItem;
+
         const vlrInstalItem = Number(i.kit_vlr_instal_calc || i.valor_instalacao_item || 0) * q;
         t.faturamentoTotal += (faturamentoMensalItem * prazoItem) + vlrInstalItem;
         t.impostosTotal += impostos * prazoItem;
@@ -1703,17 +1720,22 @@ export function SalesBudgetForm() {
       const difal_ipi_st = ((i.difal_unit || 0) + (i.ipi_unit || 0) + (i.icms_st_unit || 0)) * q;
       const frete = (i.frete_unit || 0) * q;
       const comissaoItem = Number(i.kit_comissao || 0) * q;
+      const comissaoUnitItem = Number(i.kit_comissao || 0);
       const impostoInstalacaoItem = Number(i.kit_imposto_instalacao || 0) * q;
 
       t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem;
 
       t.comissaoTotal += comissaoItem;
+      t.comissaoUnit += comissaoUnitItem;
+      if (!i.is_kit_instalacao) {
+        t.comissaoMensalTotal += comissaoItem;
+      }
       t.impostosCompraTotal += difal_ipi_st;
       t.impostoInstalacaoKitTotal += impostoInstalacaoItem;
       t.freteTotal += frete;
-      // Fornecedores = Total sem DIFAL = custo_aquisicao_total - total_difal
+      // Fornecedores = Total sem impostos de compra = custo_aquisicao_total - difal_ipi_st
       const custoAqTotal = (Number(i.kit_custo_produtos || 0) * q) + (Number(i.kit_custo_servicos || 0) * q) || (i.custo_total_aquisicao * q);
-      t.fornecedoresTotal += custoAqTotal - (Number(i.difal_unit || 0) * q);
+      t.fornecedoresTotal += custoAqTotal - difal_ipi_st;
 
       // Breakdown monthly taxes
       const isInstalacao = i.is_kit_instalacao;
@@ -1764,11 +1786,25 @@ export function SalesBudgetForm() {
       const ratio = totalCalc > 0 ? impostos / totalCalc : 1;
 
       if (totalCalc > 0 || impostos > 0) {
-        tTarget.pis += cPis * ratio;
-        tTarget.cofins += cCofins * ratio;
-        tTarget.csll += cCsll * ratio;
-        tTarget.irpj += cIrpj * ratio;
-        tTarget.iss += cIss * ratio;
+        const pisVal = cPis * ratio;
+        const cofinsVal = cCofins * ratio;
+        const csllVal = cCsll * ratio;
+        const irpjVal = cIrpj * ratio;
+        const issVal = cIss * ratio;
+
+        tTarget.pis += pisVal;
+        tTarget.cofins += cofinsVal;
+        tTarget.csll += csllVal;
+        tTarget.irpj += irpjVal;
+        tTarget.iss += issVal;
+
+        if (!isInstalacao) {
+          t.impostosContratoDetalhados.pis += pisVal * prazoItem;
+          t.impostosContratoDetalhados.cofins += cofinsVal * prazoItem;
+          t.impostosContratoDetalhados.csll += csllVal * prazoItem;
+          t.impostosContratoDetalhados.irpj += irpjVal * prazoItem;
+          t.impostosContratoDetalhados.iss += issVal * prazoItem;
+        }
       }
     });
 
@@ -2030,6 +2066,7 @@ export function SalesBudgetForm() {
           kit_investimento_total: i.kit_investimento_total != null ? +i.kit_investimento_total : null,
           kit_comissao: i.kit_comissao != null ? +i.kit_comissao : null,
           kit_perc_comissao: i.kit_perc_comissao != null ? +i.kit_perc_comissao : null,
+          kit_vlr_instal_calc: i.kit_vlr_instal_calc != null ? +i.kit_vlr_instal_calc : null,
           quantidade: +i.quantidade,
           perc_instalacao_item: i.perc_instalacao_item != null ? +i.perc_instalacao_item : null,
           valor_instalacao_item: i.valor_instalacao_item != null ? +i.valor_instalacao_item : null,
@@ -3428,10 +3465,12 @@ export function SalesBudgetForm() {
           const hasInstalacao = rentalItems.some(ri => ri.is_kit_instalacao);
           const pInst = prazoInstalacaoMeses || (hasInstalacao ? 1 : 0);
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
-          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
-
-          // 1. Calculate base_roi (simple division without director commission)
-          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes;
+          
+          // 1. Calculate base_roi (including despesas adm and kit commission)
+          const comissaoMensalTotal = rentalTotals.comissaoMensalTotal || 0;
+          const despAdmMensalTotal = rentalTotals.despAdmMensalTotal || 0;
+          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissaoMensalTotal - despAdmMensalTotal;
+          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal + (rentalTotals.despAdmInstalacaoTotal || 0);
           const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
           const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
 
@@ -3445,20 +3484,23 @@ export function SalesBudgetForm() {
             let impMes = 0;
             let opMesCur = 0;
             let comMes = 0;
+            let despAdmMesCur = 0;
 
             if (m <= pInst) {
               fatMes = rentalTotals.totalInstalacao / (pInst || 1);
               impMes = 0.0;
               opMesCur = rentalTotals.custoOpInstalacaoTotal / (pInst || 1);
               comMes = comissao_inst_calc / (pInst || 1);
+              despAdmMesCur = rentalTotals.despAdmInstalacaoTotal / (pInst || 1);
             } else {
               fatMes = rentalTotals.faturamentoMensal;
               impMes = rentalTotals.impostosMensal;
               opMesCur = opMes;
               comMes = comissao_mensal_calc;
+              despAdmMesCur = despAdmMensalTotal;
             }
 
-            const gastosMes = impMes + opMesCur + comMes;
+            const gastosMes = impMes + opMesCur + comMes + despAdmMesCur;
             const receitaLivre = fatMes - gastosMes;
 
             let quitarMes = 0;
@@ -3834,16 +3876,15 @@ export function SalesBudgetForm() {
                           </thead>
                           <tbody className="divide-y divide-gray-700/50">
                             {[
-                              { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis, nom: rentalTotals.nominalTaxes.pis },
-                              { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins, nom: rentalTotals.nominalTaxes.cofins },
-                              { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll, nom: rentalTotals.nominalTaxes.csll },
-                              { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj, nom: rentalTotals.nominalTaxes.irpj },
-                              { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss, nom: rentalTotals.nominalTaxes.iss }
+                              { label: 'PIS', valMen: rentalTotals.impostosDetalhados.pis, valInst: rentalTotals.impostosInstalacaoDetalhados.pis, nom: rentalTotals.nominalTaxes.pis, key: 'pis' },
+                              { label: 'COFINS', valMen: rentalTotals.impostosDetalhados.cofins, valInst: rentalTotals.impostosInstalacaoDetalhados.cofins, nom: rentalTotals.nominalTaxes.cofins, key: 'cofins' },
+                              { label: 'CSLL', valMen: rentalTotals.impostosDetalhados.csll, valInst: rentalTotals.impostosInstalacaoDetalhados.csll, nom: rentalTotals.nominalTaxes.csll, key: 'csll' },
+                              { label: 'IRPJ', valMen: rentalTotals.impostosDetalhados.irpj, valInst: rentalTotals.impostosInstalacaoDetalhados.irpj, nom: rentalTotals.nominalTaxes.irpj, key: 'irpj' },
+                              { label: 'ISS', valMen: rentalTotals.impostosDetalhados.iss, valInst: rentalTotals.impostosInstalacaoDetalhados.iss, nom: rentalTotals.nominalTaxes.iss, key: 'iss' }
                             ].map(imp => {
 
                               const pct = imp.nom;
-                              const totMensalPrazo = imp.valMen * prazoContratoMeses;
-                              const tot = totMensalPrazo + imp.valInst;
+                              const tot = rentalTotals.impostosContratoDetalhados[imp.key as keyof typeof rentalTotals.impostosContratoDetalhados] + imp.valInst;
                               if (pct === 0 && tot === 0) return null;
                               return (
                                 <tr key={imp.label} className="hover:bg-white/5 transition-colors">
@@ -3877,19 +3918,35 @@ export function SalesBudgetForm() {
                       </div>
                     </Tooltip>
 
-                    {/* Custo Operacional */}
                     <Tooltip content={
                       <div className="w-56 space-y-2 text-gray-200">
                         <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Operacional</div>
                         <div className="flex justify-between text-sm"><span>Custo Op. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpMensalTotal)}</span></div>
                       </div>
                     }>
-                      <div className="col-span-2 p-4 hover:bg-surface transition-colors cursor-help group border-t-0">
+                      <div className="p-4 hover:bg-surface transition-colors cursor-help group">
                         <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
                           Custos Operacionais
                           <HelpCircle className="w-3" />
                         </span>
                         <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.custoOpTotal)}</p>
+                      </div>
+                    </Tooltip>
+
+                    {/* Despesas Adm (Despesa Adm + Comissao) */}
+                    <Tooltip content={
+                      <div className="w-64 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Despesas</div>
+                        <div className="flex justify-between text-sm"><span>Despesas Adm.:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Comissão Comercial:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
+                      </div>
+                    }>
+                      <div className="p-4 hover:bg-surface transition-colors cursor-help group">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                          Despesas Adm.
+                          <HelpCircle className="w-3" />
+                        </span>
+                        <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.despAdmTotal + rentalTotals.comissaoTotal)}</p>
                       </div>
                     </Tooltip>
 
@@ -3899,7 +3956,7 @@ export function SalesBudgetForm() {
                       <Tooltip content={
                         <div className="w-72 space-y-1 text-gray-200">
                           <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
-                          <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera apenas Impostos + Custos Operacionais (sem comissões). Indica quando o faturamento cobre o investimento inicial.</div>
+                          <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera Impostos + Custos Operacionais + Despesas Administrativas + Comissão. Indica quando o faturamento cobre o custo total.</div>
                         </div>
                       }>
                         <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03]">
@@ -3951,6 +4008,7 @@ export function SalesBudgetForm() {
                             <Tooltip content={
                               <div className="w-64 space-y-2 text-gray-200">
                                 <div className="font-bold text-white border-b border-gray-600 pb-1">Comissão Comercial</div>
+                                <div className="flex justify-between text-sm"><span>Valor Unitário:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoUnit)}</span></div>
                                 <div className="flex justify-between text-sm"><span>Valor Total:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
                                 <div className="flex justify-between text-sm"><span>% sobre Fat.:</span> <span className="font-medium text-white">{pctComissao.toFixed(2)}%</span></div>
                               </div>
@@ -3962,7 +4020,7 @@ export function SalesBudgetForm() {
                                 </span>
                                 <div className="flex flex-col">
                                   <p className="text-lg font-black text-green-500">{pctComissao.toFixed(2)}%</p>
-                                  <p className="text-[10px] font-semibold text-green-500/80 -mt-1">{fmt(rentalTotals.comissaoTotal)}</p>
+                                  <p className="text-[10px] font-semibold text-green-500/80 -mt-1">{fmt(rentalTotals.comissaoUnit)}</p>
                                 </div>
                               </div>
                             </Tooltip>
@@ -4089,9 +4147,9 @@ export function SalesBudgetForm() {
                         <td className="px-1.5 py-2 whitespace-nowrap text-right font-medium text-teal-600/80">{fmt(ri.kit_valor_mensal || ri.valor_mensal || 0)}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade)}</td>
                         <td className="px-1.5 py-2 text-center">
-                          <input type="number" min="1" value={ri.prazo_contrato}
+                          <input type="number" min="1" value={ri.tipo_contrato_kit === 'INSTALACAO' ? 1 : ri.prazo_contrato}
                             onChange={e => updateRentalItem(idx, 'prazo_contrato', +e.target.value)}
-                            disabled={isReadonly}
+                            disabled={isReadonly || ri.tipo_contrato_kit === 'INSTALACAO'}
                             className="w-10 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-brand-primary/40 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-white/5 transition-colors" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right font-bold text-teal-600">{fmt((ri.kit_valor_mensal || ri.valor_mensal || 0) * ri.quantidade * (ri.prazo_contrato || 0))}</td>
@@ -5391,7 +5449,7 @@ export function SalesBudgetForm() {
                           kit_imposto_instalacao: Number(savedKit.summary?.imposto_instalacao || 0),
                           taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
                           fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
-                          prazo_contrato: Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
+                          prazo_contrato: savedKit.tipo_contrato === 'INSTALACAO' ? 1 : Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
                           kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
                           kit_custo_monitoramento_unit: Number(savedKit.summary?.custo_monitoramento_unitario || savedKit.custo_monitoramento_unitario || 0),
                           kit_valor_mensal: billingValue,
@@ -5400,6 +5458,14 @@ export function SalesBudgetForm() {
                           kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
                           kit_margem: Number(savedKit.summary?.margem_kit || 0),
                           kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
+                          kit_investimento_total: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.imposto_instalacao || 0),
+                          kit_vlr_instal_calc: Number(savedKit.summary?.vlr_instal_calc || 0),
+                          kit_parcela_locacao: Number(savedKit.summary?.valor_parcela_locacao || 0),
+                          kit_venda_unit_monitoramento: Number(savedKit.summary?.venda_unit_monitoramento || 0),
+                          kit_comissao: Number(savedKit.summary?.valor_comissao_locacao || 0),
+                          kit_perc_comissao: Number(savedKit.perc_comissao || 0),
+                          perc_comissao: Number(savedKit.perc_comissao || 0),
+                          comissao_mensal: Number(savedKit.summary?.valor_comissao_locacao || 0),
                           // Computed display fields
                           faturamento_mensal: billingValue,
                           valor_mensal: billingValue,
