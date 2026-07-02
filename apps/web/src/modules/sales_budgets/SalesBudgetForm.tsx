@@ -3470,7 +3470,8 @@ export function SalesBudgetForm() {
           const despAdmMensalTotal = rentalTotals.despAdmMensalTotal || 0;
           const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal + (rentalTotals.despAdmInstalacaoTotal || 0);
           const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
-          const base_roi = rentalTotals.faturamentoMensal > 0 ? ((rentalTotals.investimento + rentalTotals.custoOpTotal + rentalTotals.impostosTotal) / rentalTotals.faturamentoMensal) : (pCtr + 1);
+          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes;
+          const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
 
           // 2. Calculate chartData and director/payback ROI metrics
           const chartData = [];
@@ -3969,18 +3970,25 @@ export function SalesBudgetForm() {
                         <div className="w-80 space-y-2 text-gray-200">
                           <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback</div>
                           <div className="text-[10.5px] space-y-1">
-                            <div className="flex justify-between"><span>Custo de Aquisição:</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
-                            <div className="flex justify-between"><span>Impostos Totais:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostosTotal)}</span></div>
-                            <div className="flex justify-between"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
-                            <div className="flex justify-between border-t border-gray-600 pt-1 mt-1 font-bold">
-                              <span>Soma dos Custos:</span>
-                              <span className="text-white">{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal)}</span>
-                            </div>
-                            <div className="flex justify-between"><span>Mensal Locação:</span> <span className="font-medium text-teal-400">{fmt(rentalTotals.faturamentoMensal)}</span></div>
+                            <div className="font-bold text-brand-primary">Investimento Inicial (Capex):</div>
+                            <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(+) Impostos de Instalação:</span> <span>{fmt(rentalTotals.impostosInstalacaoTotal)}</span></div>
+                            {rentalTotals.despAdmInstalacaoTotal > 0 && (
+                              <div className="flex justify-between pl-2"><span>(+) Desp. Adm. Instalação:</span> <span>{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>
+                            )}
+                            <div className="flex justify-between pl-2 border-t border-gray-600/50"><span>(=) Investimento Total (Capex):</span> <span className="font-medium text-white">{fmt(capexTotal)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(-) Recebimento Instalação (M1):</span> <span className="text-red-400">-{fmt(rentalTotals.totalInstalacao)}</span></div>
+                            <div className="flex justify-between pl-2 border-t border-gray-600/50 font-bold"><span>(=) Saldo Capex a Amortizar:</span> <span className="text-white">{fmt(saldoCapex)}</span></div>
+                            
+                            <div className="font-bold text-brand-primary mt-2">Resultado Mensal Líquido:</div>
+                            <div className="flex justify-between pl-2"><span>(+) Faturamento Locação:</span> <span>{fmt(rentalTotals.faturamentoMensal)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(-) Custo Operacional Mensal:</span> <span className="text-red-400">-{fmt(opMes)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(-) Imposto sobre Locação:</span> <span className="text-red-400">-{fmt(rentalTotals.impostosMensal)}</span></div>
+                            <div className="flex justify-between pl-2 border-t border-gray-600/50 font-bold"><span>(=) Retorno Mensal Líquido:</span> <span className="text-white">{fmt(divisorBase)}</span></div>
                           </div>
                           <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1 leading-relaxed">
-                            Payback = (Aquisição + Impostos + Custo Op.) ÷ Mensal Locação<br />
-                            ({fmt(rentalTotals.investimento)} + {fmt(rentalTotals.impostosTotal)} + {fmt(rentalTotals.custoOpTotal)}) ÷ {fmt(rentalTotals.faturamentoMensal)} = <span className="font-bold text-green-400">{base_roi.toFixed(1)} meses</span>
+                            Payback = Saldo Capex ÷ Retorno Mensal Líquido<br />
+                            {fmt(saldoCapex)} ÷ {fmt(divisorBase)} = <span className="font-bold text-green-400">{base_roi.toFixed(1)} meses</span>
                           </div>
                         </div>
                       }>
