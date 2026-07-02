@@ -3466,13 +3466,11 @@ export function SalesBudgetForm() {
           const pInst = prazoInstalacaoMeses || (hasInstalacao ? 1 : 0);
           const opMes = rentalTotals.custoOpMensalTotal || (rentalTotals.custoOpTotal / pCtr);
           
-          // 1. Calculate base_roi (including despesas adm and kit commission)
-          const comissaoMensalTotal = rentalTotals.comissaoMensalTotal || 0;
+          // 1. Calculate base_roi as requested: (custo de aquisição + custos operacionais + impostos totais) / mensal locação
           const despAdmMensalTotal = rentalTotals.despAdmMensalTotal || 0;
-          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissaoMensalTotal - despAdmMensalTotal;
           const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal + (rentalTotals.despAdmInstalacaoTotal || 0);
           const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
-          const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
+          const base_roi = rentalTotals.faturamentoMensal > 0 ? ((rentalTotals.investimento + rentalTotals.custoOpTotal + rentalTotals.impostosTotal) / rentalTotals.faturamentoMensal) : (pCtr + 1);
 
           // 2. Calculate chartData and director/payback ROI metrics
           const chartData = [];
@@ -3664,13 +3662,13 @@ export function SalesBudgetForm() {
 
                   <Tooltip content={
                     <div className="w-72 space-y-1 text-gray-200">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
+                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">PAYBACK</div>
                       <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês calculando quando o fluxo de "Faturamento - Impostos - Custos Operacionais - Comissões" amortiza o Investimento inicial.</div>
                     </div>
                   }>
                     <div className="p-4 sm:p-5 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03] col-span-2 lg:col-span-1 border-t lg:border-t-0 border-border-subtle">
                       <span className="text-[10px] font-semibold text-brand-primary/80 uppercase tracking-wider mb-2 flex items-center gap-1.5 group-hover:text-brand-primary transition-colors">
-                        ROI Final
+                        PAYBACK
                         <HelpCircle className="w-3 h-3 opacity-60" />
                       </span>
                       <p className="text-xl font-black text-brand-secondary">{diretor_roi.toFixed(1)} <span className="text-xs font-semibold text-brand-primary/60 ml-0.5">meses</span></p>
@@ -3952,16 +3950,16 @@ export function SalesBudgetForm() {
 
                     {/* 3 Metrics Row: ROI Final, MKP Geral, Comissão */}
                     <div className="col-span-2 grid grid-cols-3 divide-x divide-border-subtle border-t border-border-subtle bg-surface/20">
-                      {/* ROI Final */}
+                      {/* PAYBACK */}
                       <Tooltip content={
                         <div className="w-72 space-y-1 text-gray-200">
-                          <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Módulo de Retorno (Iterativo)</div>
-                          <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Simulação iterativa mês a mês. Considera Impostos + Custos Operacionais + Despesas Administrativas + Comissão. Indica quando o faturamento cobre o custo total.</div>
+                          <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">PAYBACK</div>
+                          <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded">Amortização simples: (Custo de aquisição + Custos operacionais + Impostos totais) ÷ Faturamento mensal de locação.</div>
                         </div>
                       }>
                         <div className="p-4 hover:bg-brand-primary/5 transition-colors cursor-help group bg-brand-primary/[0.03]">
                           <span className="text-[9px] font-bold uppercase tracking-wider text-brand-primary/80 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                            ROI Final
+                            PAYBACK
                             <HelpCircle className="w-3" />
                           </span>
                           <p className="text-lg font-black text-brand-secondary">
