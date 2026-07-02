@@ -3051,14 +3051,26 @@ class OpportunitiesReportService:
         # Capex & Payback
         receita_contratada = total_vlr_total_calc
         
-        # Capex (investimento total de aquisição + comissão + impostos de instalação)
-        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total
+        # Sum of Administrative Expenses for kits
+        desp_adm_instalacao_total = sum(
+            float(item.despesa_adm_unit or 0.0) * float(item.quantidade)
+            for item in opportunity.rental_items
+            if item.is_kit_instalacao
+        )
+        desp_adm_mensal_total = sum(
+            float(item.despesa_adm_unit or 0.0) * float(item.quantidade)
+            for item in opportunity.rental_items
+            if not item.is_kit_instalacao
+        )
+
+        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação)
+        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total
         
-        # Project Total Cost (Capex + Impostos + Custos Operacionais)
-        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + impostos_totais + custo_op_total
+        # Project Total Cost (Capex + Impostos + Custos Operacionais + Despesas Adm)
+        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + impostos_totais + custo_op_total + desp_adm_mensal_total
         
-        # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal
-        retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total
+        # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal - Despesas Adm Mensais
+        retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total - desp_adm_mensal_total
         
         # Payback in months (Simple division of Saldo Capex by Retorno Mensal Líquido as requested by user)
         has_instalacao = any(item.is_kit_instalacao for item in opportunity.rental_items)
@@ -3285,6 +3297,10 @@ class OpportunitiesReportService:
             
             "comissao_total_str": format_currency(comissao_total_aquisicao),
             "impostos_instalacao_str": format_currency(impostos_instalacao_total),
+            "desp_adm_instalacao_str": format_currency(desp_adm_instalacao_total),
+            "desp_adm_instalacao_val": desp_adm_instalacao_total,
+            "desp_adm_mensal_str": format_currency(desp_adm_mensal_total),
+            "desp_adm_mensal_val": desp_adm_mensal_total,
             "total_fornecedores_produtos": format_currency(total_fornecedores_produtos),
             "total_fornecedores_impostos": format_currency(total_fornecedores_impostos),
             "custo_total_aquisicao_bruto": format_currency(total_aquisicao_sem_comissao - total_st_difal),

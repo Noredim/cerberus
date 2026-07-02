@@ -325,6 +325,9 @@
                             (+) Investimento com Serviços Próprios (Stelmat): R$ {{ kpis.custo_servicos_proprios_str }}<br>
                             (+) Comissão Comercial Locação: R$ {{ kpis.comissao_total_str }}<br>
                             (+) Impostos de Instalação/Startup: R$ {{ kpis.impostos_instalacao_str }}<br>
+                            {% if kpis.desp_adm_instalacao_val > 0 %}
+                            (+) Despesas Adm. Instalação: R$ {{ kpis.desp_adm_instalacao_str }}<br>
+                            {% endif %}
                             <strong style="color: #0f172a;">(=) Investimento Total (Capex): R$ {{ kpis.investimento_capex }}</strong><br>
                             (-) Recebimento de Instalação (M1): R$ {{ total_instalacao_str or kpis.total_instalacao_str }}<br>
                             <strong style="color: #0f766e;">(=) Saldo Capex a Amortizar: R$ {{ kpis.saldo_capex_amortizar_str }}</strong>
@@ -338,6 +341,9 @@
                             (+) Faturamento de Locação Mensal: R$ {{ kpis.locacao_mensal }}<br>
                             (-) Custo Operacional Mensal: R$ {{ kpis.custo_op_mensal_total }}<br>
                             (-) Imposto sobre Locação Mensal: R$ {{ kpis.impostos_mensal_total }}<br>
+                            {% if kpis.desp_adm_mensal_val > 0 %}
+                            (-) Despesas Adm. Mensais: R$ {{ kpis.desp_adm_mensal_str }}<br>
+                            {% endif %}
                             <strong style="color: #0f172a;">(=) Retorno Mensal Líquido: R$ {{ kpis.lucro_mensal_total }}</strong>
                         </div>
                         
