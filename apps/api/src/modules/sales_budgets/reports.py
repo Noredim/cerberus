@@ -1721,7 +1721,7 @@ class OpportunitiesReportService:
                         kit_details["custo_unitario"] = format_currency(kit_details["_custo_total_exibido"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["imposto_compra_unit"] = format_currency(kit_details["_purchase_tax_total"] / kit_qty if kit_qty > 0 else 0.0)
                         
-                        markup_do_kit = float(kit.fator_margem_locacao or 1.0)
+                        markup_do_kit = float(item.markup or 1.0)
                         kit_details["markup"] = f"{markup_do_kit:.2f}"
                         
                         kit_details["valor_venda"] = format_currency(kit_details["_venda_total"] / kit_qty if kit_qty > 0 else 0.0)
@@ -1730,11 +1730,6 @@ class OpportunitiesReportService:
                         kit_details["despesas_adm"] = format_currency(kit_details["_despesas_adm_total"])
                         kit_details["lucro_total"] = format_currency(kit_details["_lucro_total"])
                         kit_details["components"] = components_list
-                        
-                        # Ensure all components show the kit's base markup factor
-                        for comp in components_list:
-                            if comp.get("product_id") is not None:
-                                comp["markup"] = f"{markup_do_kit:.2f}"
                         
                         items_details.append(kit_details)
                     except Exception as e:
