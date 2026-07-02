@@ -2697,6 +2697,8 @@ class OpportunitiesReportService:
         investimento_instalacao = 0.0
         custo_op_instalacao_total = 0.0
         investimento_rental = 0.0
+        desp_adm_instalacao_total = 0.0
+        desp_adm_mensal_total = 0.0
 
         # Detailed item metrics for totals row
         total_aquisicao_calc = 0.0
@@ -2805,11 +2807,13 @@ class OpportunitiesReportService:
             total_impostos_mensal_calc += impostos_mensal_item
 
             # Installation vs Rental separation for Capex/Totals
+            perc_desp_adm = float(opportunity.perc_despesa_adm or 0.0) / 100.0
             if item.is_kit_instalacao:
                 total_instalacao += instalacao_item
                 impostos_instalacao_total += impostos_mensal_item
                 custo_op_instalacao_total += custo_op_mensal
                 investimento_instalacao += custo_total
+                desp_adm_instalacao_total += instalacao_item * perc_desp_adm
                 
                 faturamento_total_rental += instalacao_item
                 impostos_totais += impostos_mensal_item
@@ -2819,6 +2823,7 @@ class OpportunitiesReportService:
                 impostos_mensal_total += impostos_mensal_item
                 custo_op_mensal_total += custo_op_mensal
                 investimento_rental += custo_total
+                desp_adm_mensal_total += fat_mensal_total_item * perc_desp_adm
                 
                 faturamento_total_rental += (fat_mensal_total_item * prazo_item) + instalacao_item
                 impostos_totais += impostos_mensal_item * prazo_item
@@ -3051,17 +3056,7 @@ class OpportunitiesReportService:
         # Capex & Payback
         receita_contratada = total_vlr_total_calc
         
-        # Sum of Administrative Expenses for kits
-        desp_adm_instalacao_total = sum(
-            float(item.despesa_adm_unit or 0.0) * float(item.quantidade)
-            for item in opportunity.rental_items
-            if item.is_kit_instalacao
-        )
-        desp_adm_mensal_total = sum(
-            float(item.despesa_adm_unit or 0.0) * float(item.quantidade)
-            for item in opportunity.rental_items
-            if not item.is_kit_instalacao
-        )
+        # desp_adm_instalacao_total and desp_adm_mensal_total are already computed dynamically in the loop above.
 
         # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação)
         investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total
