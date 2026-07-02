@@ -89,12 +89,12 @@ class RentalBudgetItemBase(BaseModel):
                 val = data.get(field)
                 if val is not None:
                     try:
-                        data[field] = round(float(val), 4)
+                        data[field] = Decimal(f"{float(val):.4f}")
                     except (ValueError, TypeError):
                         pass
             if "kit_taxa_juros_mensal" in data and data["kit_taxa_juros_mensal"] is not None:
                 try:
-                    data["kit_taxa_juros_mensal"] = round(float(data["kit_taxa_juros_mensal"]), 6)
+                    data["kit_taxa_juros_mensal"] = Decimal(f"{float(data['kit_taxa_juros_mensal']):.6f}")
                 except (ValueError, TypeError):
                     pass
         return data
@@ -163,7 +163,7 @@ class SalesBudgetItemBase(BaseModel):
                 val = data.get(field)
                 if val is not None:
                     try:
-                        data[field] = round(float(val), 4)
+                        data[field] = Decimal(f"{float(val):.4f}")
                     except (ValueError, TypeError):
                         pass
         return data
@@ -264,12 +264,12 @@ class SalesBudgetBase(BaseModel):
                 val = data.get(field)
                 if val is not None:
                     try:
-                        data[field] = round(float(val), 4)
+                        data[field] = Decimal(f"{float(val):.4f}")
                     except (ValueError, TypeError):
                         pass
             if "taxa_juros_mensal" in data and data["taxa_juros_mensal"] is not None:
                 try:
-                    data["taxa_juros_mensal"] = round(float(data["taxa_juros_mensal"]), 6)
+                    data["taxa_juros_mensal"] = Decimal(f"{float(data['taxa_juros_mensal']):.6f}")
                 except (ValueError, TypeError):
                     pass
         return data

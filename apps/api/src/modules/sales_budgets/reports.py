@@ -1283,8 +1283,8 @@ class OpportunitiesReportService:
                 difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
                 purchase_tax_unit = difal_unit + st_unit + ipi_unit
                 
-                # Exibição de custos unificando base + IPI + ST
-                custo_unit_exibido = custo_unit + ipi_unit + st_unit
+                # Exibição de custos unificando base + IPI + ST + DIFAL
+                custo_unit_exibido = custo_unit + ipi_unit + st_unit + difal_unit
                 custo_total_exibido = custo_unit_exibido * qty
                 
                 # Sales tax unit
@@ -1335,7 +1335,7 @@ class OpportunitiesReportService:
                 comissao_total = comissao_unit * qty
                 despesas_adm_total = frete_total + desp_adm_total + comissao_total
                 
-                lucro_total = 0.0 if (is_same_cnpj and item.tipo_item == "MERCADORIA") else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
+                lucro_total = 0.0 if (is_same_cnpj and item.tipo_item == "MERCADORIA") else (venda_total - custo_total - ipi_total - st_total - difal_total - sales_tax_total - despesas_adm_total)
                 if is_same_cnpj and item.tipo_item == "MERCADORIA":
                     mkp_venda = (venda_unit / custo_unit) if custo_unit > 0 else 1.0
                 else:
@@ -1482,8 +1482,8 @@ class OpportunitiesReportService:
                                 
                             purchase_tax_unit = difal_unit + st_unit + ipi_unit
                             
-                            # Custo Unitário com impostos (IPI + ST) embutidos na exibição
-                            custo_unit_exibido = custo_unit + ipi_unit + st_unit
+                            # Custo Unitário com impostos (IPI + ST + DIFAL) embutidos na exibição
+                            custo_unit_exibido = custo_unit + ipi_unit + st_unit + difal_unit
                             custo_total_exibido = custo_unit_exibido * component_qty
                             
                             # Sales tax from kit summary
@@ -1538,7 +1538,7 @@ class OpportunitiesReportService:
                             comissao_total = comissao_unit * component_qty
                             despesas_adm_total = frete_total + desp_adm_total + comissao_total
                             
-                            lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - sales_tax_total - despesas_adm_total)
+                            lucro_total = 0.0 if is_same_cnpj else (venda_total - custo_total - ipi_total - st_total - difal_total - sales_tax_total - despesas_adm_total)
                             
                             # Usar o markup calculado de cada item dentro do kit lançado
                             mkp_venda = float(summary.get("fator_item") or 1.0)
