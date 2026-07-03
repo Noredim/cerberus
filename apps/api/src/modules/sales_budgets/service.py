@@ -2065,29 +2065,53 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         # Accumulate supplier values from kit components
         for item_sum in fin.get("item_summaries", []):
             p_id = item_sum.get("product_id")
-            if p_id and item_sum.get("tipo_item") != "SERVICO":
-                p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
-                kit_item = next((ki for ki in kit.items if ki.product_id == p_uuid), None)
+            o_id = item_sum.get("own_service_id")
+            ref_id = p_id or o_id
+            if ref_id:
+                ref_uuid = UUID(ref_id) if isinstance(ref_id, str) else ref_id
+                kit_item = next((ki for ki in kit.items if (ki.product_id == ref_uuid or ki.own_service_id == ref_uuid)), None)
                 qty_in_kit = Decimal(str(kit_item.quantidade_no_kit)) if kit_item else Decimal("1.0")
                 component_qty = qty * qty_in_kit
                 
-                base_forn = Decimal(str(item_sum.get("base_fornecedor") or item_sum.get("custo_base_unitario_item") or 0.0))
-                sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                frete_unit = Decimal(str(item_sum.get("frete_cif_unit") or 0.0))
+                
+                if item_sum.get("tipo_item") == "SERVICO":
+                    sup_name = "Serviços Próprios"
+                    base_forn = Decimal(str(item_sum.get("custo_base_unitario_item") or 0.0))
+                else:
+                    p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                    sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                    base_forn_val = item_sum.get("base_fornecedor")
+                    if base_forn_val is not None:
+                        base_forn = Decimal(str(base_forn_val)) + frete_unit
+                    else:
+                        difal_unit = Decimal(str(item_sum.get("difal_unitario") or 0.0))
+                        st_unit = Decimal(str(item_sum.get("icms_st_unitario") or 0.0))
+                        ipi_unit = Decimal(str(item_sum.get("ipi_unit") or 0.0))
+                        base_forn = Decimal(str(item_sum.get("custo_base_unitario_item") or 0.0)) - (difal_unit + st_unit + ipi_unit)
+                
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
 
     for item in opportunity.items:
-        if not item.opportunity_kit_id and item.product_id:
-            p_uuid = item.product_id
-            item_qty = Decimal(str(item.quantidade or 1.0))
-            sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
-            
-            pb_item = None
-            for pb in purchase_budgets:
-                pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
-                if pb_item:
-                    break
-            base_forn = Decimal(str(pb_item.valor_unitario)) if pb_item else Decimal(str(item.custo_unit_base or 0.0))
-            supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
+        if not item.opportunity_kit_id:
+            if item.product_id:
+                p_uuid = item.product_id
+                item_qty = Decimal(str(item.quantidade or 1.0))
+                sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                
+                pb_item = None
+                for pb in purchase_budgets:
+                    pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
+                    if pb_item:
+                        break
+                frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
+                base_forn = (Decimal(str(pb_item.valor_unitario)) if pb_item else Decimal(str(item.custo_unit_base or 0.0))) + frete_compra_unit
+                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
+            elif item.own_service_id:
+                item_qty = Decimal(str(item.quantidade or 1.0))
+                sup_name = "Serviços Próprios"
+                base_forn = Decimal(str(item.custo_unit_base or 0.0))
+                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
 
     restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
     total_entradas = total_produtos + total_servicos + restituicao_icms_st

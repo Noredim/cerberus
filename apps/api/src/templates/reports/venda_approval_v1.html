@@ -80,6 +80,10 @@
                 <span class="kpi-label">Margem</span>
                 <span class="kpi-val">{{ kpis.margem_percentual }}%</span>
             </div>
+            <div class="compact-kpi-card">
+                <span class="kpi-label">MKP de Venda</span>
+                <span class="kpi-val">{{ kpis.mkp_venda_relatorio }}x</span>
+            </div>
         </div>
     </div>
 
@@ -112,7 +116,7 @@
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.custo_unitario }}</td>
                     <td class="text-right">R$ {{ item.custo_total }}</td>
-                    <td class="text-center">{{ item.markup }}x</td>
+                    <td class="text-center">{% if item.markup == "-" or not item.markup %}-{% else %}{{ item.markup }}x{% endif %}</td>
                     <td class="text-right">R$ {{ item.valor_venda }}</td>
                     <td class="text-right font-bold">R$ {{ item.venda_total }}</td>
                     <td class="text-right">R$ {{ item.impostos_venda }}</td>

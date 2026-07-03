@@ -1159,6 +1159,28 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               const lucroManutencao12m = form.havera_manutencao ? (lucroManutMensal * 12) : 0;
               const margemManut12m = Number(financials?.summary?.margem_manutencao || 0);
 
+              // ── Fator Geral Média Dinâmico
+              const activeVendaFactors: number[] = [];
+              const hasProducts = form.items?.some((i: any) => i.product_id) || (financials?.summary?.custo_aquisicao_produtos > 0);
+              const hasServices = form.items?.some((i: any) => i.own_service_id) || (financials?.summary?.custo_aquisicao_servicos > 0);
+
+              if (hasProducts) {
+                activeVendaFactors.push(Number(form.fator_margem_locacao) || 0);
+              }
+              if (hasServices) {
+                activeVendaFactors.push(Number(form.fator_margem_servicos_produtos) || 0);
+              }
+              if (custoB5 > 0 || vendaB5 > 0 || !!form.instalacao_inclusa) {
+                activeVendaFactors.push(Number(form.fator_margem_instalacao) || 0);
+              }
+              if (!!form.havera_manutencao) {
+                activeVendaFactors.push(Number(form.fator_margem_manutencao) || 0);
+              }
+
+              const averageVendaFactor = activeVendaFactors.length > 0
+                ? activeVendaFactors.reduce((a, b) => a + b, 0) / activeVendaFactors.length
+                : (Number(form.fator_margem_locacao) || 0);
+
               // ── Impostos B4 + B5 discriminados
               const taxFields = ['pis', 'cofins', 'csll', 'irpj', 'icms', 'iss'] as const;
               const taxLabelB45: Record<string, { label: string; mensal: number; total: number }> = {};
@@ -1508,15 +1530,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       </div>
                     </div>
 
-                    {/* Fator Geral Média */}
-                    <div className="rounded-xl p-3 flex items-center justify-between border bg-bg-subtle border-border-subtle font-medium">
-                      <div>
-                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral (Média)</span>
-                        <div className="text-base font-black text-text-primary">
-                          {(((Number(form.fator_margem_locacao) || 0) + 
-                            (Number(form.fator_margem_servicos_produtos) || 0) + 
-                            (Number(form.fator_margem_instalacao) || 0) + 
-                            (Number(form.fator_margem_manutencao) || 0)) / 4).toFixed(4)}
+                    {/* Fator Geral Média & MKP de Venda */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl p-3 flex items-center justify-between border bg-bg-subtle border-border-subtle font-medium">
+                        <div>
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Fator Geral (Média)</span>
+                          <div className="text-base font-black text-text-primary">
+                            {averageVendaFactor.toFixed(4)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-xl p-3 flex items-center justify-between border bg-bg-subtle border-border-subtle font-medium">
+                        <div>
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">MKP de Venda</span>
+                          <div className="text-base font-black text-text-primary">
+                            {(custoAquisicao > 0 ? (totalVenda / custoAquisicao) : 0).toFixed(4)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1567,6 +1596,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
             const faturamentoMensal = locacaoMensal + manutencaoMensal + vendaUnitMonitoramento;
             const mesesFaturados = financials?.summary?.prazo_mensalidades || 0;
+
+            // ── Fator Geral Média Dinâmico (Locação/Comodato)
+            const activeLocFactors: number[] = [];
+            activeLocFactors.push(Number(form.fator_margem_locacao) || 0);
+
+            const hasLocMaintenance = !!form.manutencao_inclusa || (custoOpMensal > 0);
+            if (hasLocMaintenance) {
+              activeLocFactors.push(Number(form.fator_manutencao) || 0);
+            }
+
+            const averageLocFactor = activeLocFactors.reduce((a, b) => a + b, 0) / activeLocFactors.length;
 
             const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
             // const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
@@ -1811,7 +1851,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <div className="border rounded-xl p-3 flex flex-col justify-center bg-bg-subtle border-border-subtle shadow-sm relative overflow-hidden">
                     <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Fator Geral</span>
                     <div className="text-base font-black text-text-primary tabular-nums">
-                      {(((Number(form.fator_margem_locacao) || 0) + (Number(form.fator_manutencao) || 0)) / 2).toFixed(4)}
+                      {averageLocFactor.toFixed(4)}
                     </div>
                   </div>
 

@@ -1232,6 +1232,7 @@ class OpportunitiesReportService:
 
         # Now consolidate items_details (Block 1)
         items_details = []
+        total_frete_compra_all = 0.0
 
         # Helper to retrieve purchase tax unit breakdown for a product
         def get_purchase_tax_breakdown(prod_id, pb_item):
@@ -1278,9 +1279,13 @@ class OpportunitiesReportService:
                 supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
                 pb_item = pb_info["pb_item"] if pb_info else None
                 
-                custo_unit = float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)
                 difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
+                frete_compra_unit = float(pb_item.frete_valor) / float(pb_item.quantidade) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else 0.0
+                custo_unit = (float(pb_item.valor_unitario) if pb_item else float(item.custo_unit_base or 0.0)) + frete_compra_unit
                 purchase_tax_unit = difal_unit + st_unit + ipi_unit
+                
+                # Accumulate freight
+                total_frete_compra_all += frete_compra_unit * qty
                 
                 # Exibição de custos unificando base + IPI + ST + DIFAL
                 custo_unit_exibido = custo_unit + ipi_unit + st_unit + difal_unit
@@ -1466,18 +1471,22 @@ class OpportunitiesReportService:
                                 difal_unit = float(summary.get("difal_unitario") or 0.0)
                                 st_unit = float(summary.get("icms_st_unitario") or 0.0)
                                 ipi_unit = float(summary.get("ipi_unit") or 0.0)
+                                frete_compra_unit = float(summary.get("frete_cif_unit") or 0.0)
                                 base_forn = summary.get("base_fornecedor")
                                 if base_forn is not None:
-                                    custo_unit = float(base_forn)
+                                    custo_unit = float(base_forn) + frete_compra_unit
                                 else:
-                                    custo_unit = float(summary.get("custo_base_unitario_item") or 0.0) - (difal_unit + st_unit)
+                                    custo_unit = float(summary.get("custo_base_unitario_item") or 0.0) - (difal_unit + st_unit + ipi_unit)
                                 origem_imposto = "opportunity_kit"
                             else:
                                 difal_unit = 0.0
                                 st_unit = 0.0
                                 ipi_unit = 0.0
+                                frete_compra_unit = 0.0
                                 custo_unit = float(summary.get("custo_base_unitario_item") or 0.0)
                                 origem_imposto = "service"
+                                
+                            total_frete_compra_all += frete_compra_unit * component_qty
                                 
                             purchase_tax_unit = difal_unit + st_unit + ipi_unit
                             
@@ -1720,8 +1729,35 @@ class OpportunitiesReportService:
                         kit_details["custo_unitario"] = format_currency(kit_details["_custo_total_exibido"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["imposto_compra_unit"] = format_currency(kit_details["_purchase_tax_total"] / kit_qty if kit_qty > 0 else 0.0)
                         
-                        markup_do_kit = float(item.markup or 1.0)
-                        kit_details["markup"] = f"{markup_do_kit:.2f}"
+                        # Calculate kit average factor dynamically based on active factors
+                        summary_dct = kit_financials.get("summary", {})
+                        items_list = kit.items or []
+                        cost_summaries = kit_financials.get("cost_summaries", [])
+                        
+                        inst_sums = [cs for cs in cost_summaries if cs.get("tipo_custo") == "INSTALACAO"]
+                        custo_b5 = sum(float(cs.get("custo_total_item_no_kit") or 0.0) for cs in inst_sums)
+                        venda_b5 = sum(float(cs.get("venda_total_item") or 0.0) for cs in inst_sums)
+                        
+                        has_products = any(ki.product_id for ki in items_list) or float(summary_dct.get("custo_aquisicao_produtos") or 0.0) > 0
+                        has_services = any(ki.own_service_id for ki in items_list) or float(summary_dct.get("custo_aquisicao_servicos") or 0.0) > 0
+                        
+                        active_factors = []
+                        if has_products:
+                            active_factors.append(float(kit.fator_margem_locacao or 0.0))
+                        if has_services:
+                            active_factors.append(float(kit.fator_margem_servicos_produtos or 0.0))
+                        if custo_b5 > 0 or venda_b5 > 0 or getattr(kit, "instalacao_inclusa", False):
+                            active_factors.append(float(kit.fator_margem_instalacao or 0.0))
+                        if getattr(kit, "havera_manutencao", False):
+                            active_factors.append(float(kit.fator_margem_manutencao or 0.0))
+                            
+                        if active_factors:
+                            avg_fator = sum(active_factors) / len(active_factors)
+                        else:
+                            avg_fator = float(kit.fator_margem_locacao or 1.0)
+                            
+                        # Set markup to dash for parent kit row per user request
+                        kit_details["markup"] = "-"
                         
                         kit_details["valor_venda"] = format_currency(kit_details["_venda_total"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["venda_total"] = format_currency(kit_details["_venda_total"])
@@ -1764,7 +1800,8 @@ class OpportunitiesReportService:
             despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
             lucro_total = venda_consolidada - custo_total_com_impostos - custo_impostos - impostos_venda - despesas_totais - custo_servicos_proprios_total
             margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
-            markup = (venda_consolidada / custo_total_com_impostos) if custo_total_com_impostos > 0 else 1.0
+            total_custo_aquisicao = custo_total_com_impostos + custo_impostos
+            markup = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else 1.0
 
         kpis = {
             "venda_consolidada": format_currency(venda_consolidada),
@@ -1775,6 +1812,7 @@ class OpportunitiesReportService:
             "lucro_total": format_currency(lucro_total),
             "margem_percentual": f"{margem_percentual:.2f}",
             "markup": f"{markup:.2f}",
+            "mkp_venda_relatorio": f"{(venda_consolidada / total_custo_aquisicao):.4f}" if total_custo_aquisicao > 0 else "0.0000",
             "custo_total_com_impostos": format_currency(custo_total_com_impostos),
             "custo_total_consolidado_relatorio": format_currency(sum(x.get("_custo_total_exibido", 0.0) for x in items_details))
         }

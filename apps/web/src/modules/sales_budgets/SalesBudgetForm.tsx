@@ -3312,7 +3312,34 @@ export function SalesBudgetForm() {
                 </thead>
                 <tbody className="divide-y divide-border-subtle bg-surface text-[11px]">
                   {vendaKits.map((item, idx) => {
-                    const avgFator = (item.fator_margem_locacao + item.fator_margem_servicos_produtos + item.fator_margem_instalacao + item.fator_margem_manutencao) / 4;
+                    const kit = item.kit_raw || {};
+                    const summary = item.summary || {};
+                    const itemsList = kit.items || [];
+                    const instSums = (summary.cost_summaries || []).filter((cs: any) => cs.tipo_custo === 'INSTALACAO');
+                    const custoB5 = instSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0);
+                    const vendaB5 = instSums.reduce((a: number, s: any) => a + (s.venda_total_item || 0), 0);
+
+                    const activeFactors: number[] = [];
+                    const hasProducts = itemsList.some((i: any) => i.product_id) || (summary.custo_aquisicao_produtos > 0);
+                    const hasServices = itemsList.some((i: any) => i.own_service_id) || (summary.custo_aquisicao_servicos > 0);
+
+                    if (hasProducts) {
+                      activeFactors.push(Number(item.fator_margem_locacao) || 0);
+                    }
+                    if (hasServices) {
+                      activeFactors.push(Number(item.fator_margem_servicos_produtos) || 0);
+                    }
+                    if (custoB5 > 0 || vendaB5 > 0 || !!kit.instalacao_inclusa) {
+                      activeFactors.push(Number(item.fator_margem_instalacao) || 0);
+                    }
+                    if (!!kit.havera_manutencao) {
+                      activeFactors.push(Number(item.fator_margem_manutencao) || 0);
+                    }
+
+                    const avgFator = activeFactors.length > 0
+                      ? activeFactors.reduce((a, b) => a + b, 0) / activeFactors.length
+                      : (Number(item.fator_margem_locacao) || 0);
+
                     const q = item.quantidade;
 
                     const margemColor = item.margem_geral >= 15 ? 'text-emerald-600' : item.margem_geral >= 5 ? 'text-amber-600' : 'text-rose-600';
