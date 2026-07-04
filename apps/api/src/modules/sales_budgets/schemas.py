@@ -59,6 +59,8 @@ class RentalBudgetItemBase(BaseModel):
     kit_investimento_total: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_comissao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_perc_comissao: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
+    kit_despesas_adm: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_perc_despesas_adm: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     kit_vlr_instal_calc: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_parcela_locacao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_venda_unit_monitoramento: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
@@ -81,7 +83,8 @@ class RentalBudgetItemBase(BaseModel):
                 "icms_st_unit", "difal_unit", "kit_vlt_manut", "kit_valor_mensal",
                 "kit_valor_impostos", "kit_receita_liquida", "kit_lucro_mensal",
                 "kit_margem", "kit_investimento_total", "kit_comissao",
-                "kit_perc_comissao", "kit_vlr_instal_calc", "kit_parcela_locacao",
+                "kit_perc_comissao", "kit_despesas_adm", "kit_perc_despesas_adm",
+                "kit_vlr_instal_calc", "kit_parcela_locacao",
                 "kit_venda_unit_monitoramento", "taxa_manutencao_anual_item",
                 "perc_instalacao_item", "valor_instalacao_item", "fator_margem"
             ]

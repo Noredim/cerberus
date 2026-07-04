@@ -243,6 +243,7 @@ class OpportunityKitFinancialSummary(BaseModel):
     # New granular fields
     imposto_instalacao: Optional[Decimal] = Field(default=Decimal(0))
     valor_comissao_locacao: Optional[Decimal] = Field(default=Decimal(0))
+    valor_despesas_adm_locacao: Optional[Decimal] = Field(default=Decimal(0))
     venda_equipamentos_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
     margem_equipamentos: Optional[Decimal] = Field(default=Decimal(0))

@@ -649,6 +649,9 @@ class OpportunityKitService:
             
             perc_comissao_locacao = Decimal(getattr(kit, 'perc_comissao', 0) or 0) / Decimal(100.0)
             valor_comissao_locacao = valor_base_venda * perc_comissao_locacao
+
+            perc_despesas_adm_locacao = Decimal(getattr(kit, 'perc_despesas_adm', 0) or 0) / Decimal(100.0)
+            valor_despesas_adm_locacao = valor_base_venda * perc_despesas_adm_locacao
             
             # Monitoramento
             custo_monitoramento_unitario = Decimal(getattr(kit, 'custo_monitoramento_unitario', 0) or 0)
@@ -824,16 +827,17 @@ class OpportunityKitService:
         custo_monit = locals().get("custo_monitoramento_unitario", Decimal("0.0"))
         roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
         valor_com_loc = locals().get("valor_comissao_locacao", Decimal("0.0"))
+        valor_desp_adm_loc = locals().get("valor_despesas_adm_locacao", Decimal("0.0"))
         imposto_inst = locals().get("imposto_instalacao_upfront", Decimal("0.0"))
-        investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc
+        investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc + valor_desp_adm_loc
         roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
 
-        # ROI Equipamento = (Custo de Aquisição + Comissão) / (Locação Mensal - Imposto de Locação)
+        # ROI Equipamento = (Custo de Aquisição + Comissão + Despesa Adm) / (Locação Mensal - Imposto de Locação)
         roi_equipamento_meses = 0.0
         if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
             locacao_liquida = venda_equipamentos_total - locals().get("imposto_equip_loc", Decimal("0.0"))
             if locacao_liquida > 0:
-                roi_equipamento_meses = float((custo_aquisicao_kit + valor_com_loc) / locacao_liquida)
+                roi_equipamento_meses = float((custo_aquisicao_kit + valor_com_loc + valor_desp_adm_loc) / locacao_liquida)
 
         # 19. Aggregate granular tax fields for the frontend Fechamento de Venda
         faturamento_total_venda = valor_mensal_kit
@@ -862,6 +866,7 @@ class OpportunityKitService:
         vlt_comissao = faturamento_total_venda * perc_comissao
         if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
             valor_comissao_locacao = vlt_comissao
+            valor_despesas_adm_locacao = vlt_despesas_adm
 
 
         # Aggregate cost breakdown for Fechamento
@@ -926,6 +931,7 @@ class OpportunityKitService:
                 "valor_base_venda": round(valor_base_venda, 2),  # type: ignore
                 "imposto_instalacao": round(locals().get("imposto_instalacao_upfront", Decimal("0.0")), 2),  # type: ignore
                 "valor_comissao_locacao": round(locals().get("valor_comissao_locacao", Decimal("0.0")), 2),  # type: ignore
+                "valor_despesas_adm_locacao": round(locals().get("valor_despesas_adm_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_parcela_locacao": round(valor_parcela_locacao, 2),  # type: ignore
                 "manutencao_mensal": round(manutencao_mensal, 2),  # type: ignore
                 "valor_mensal_antes_impostos": round(valor_mensal_antes_impostos, 2),  # type: ignore

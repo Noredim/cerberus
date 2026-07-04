@@ -202,6 +202,8 @@ class RentalBudgetItem(Base):
     kit_investimento_total = Column(Numeric(15, 4), nullable=True)
     kit_comissao = Column(Numeric(15, 4), nullable=True)
     kit_perc_comissao = Column(Numeric(6, 4), nullable=True)
+    kit_despesas_adm = Column(Numeric(15, 4), nullable=True)
+    kit_perc_despesas_adm = Column(Numeric(6, 4), nullable=True)
     kit_vlr_instal_calc = Column(Numeric(15, 4), nullable=True)
     kit_parcela_locacao = Column(Numeric(15, 4), nullable=True)
     kit_venda_unit_monitoramento = Column(Numeric(15, 4), nullable=True)

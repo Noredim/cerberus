@@ -240,6 +240,8 @@ interface RentalBudgetItem {
   kit_imposto_instalacao?: number;
   kit_comissao?: number;
   kit_perc_comissao?: number;
+  kit_despesas_adm?: number;
+  kit_perc_despesas_adm?: number;
   kit_vlr_instal_calc?: number;
   kit_parcela_locacao?: number;
   kit_venda_unit_monitoramento?: number;
@@ -944,6 +946,8 @@ export function SalesBudgetForm() {
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
                 kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
                 kit_perc_comissao: Number(kit.perc_comissao || 0),
+                kit_despesas_adm: Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: Number(kit.perc_despesas_adm || 0),
                 kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
                 kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
@@ -1073,6 +1077,8 @@ export function SalesBudgetForm() {
         kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
         kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
         kit_perc_comissao: Number(kit.perc_comissao || 0),
+        kit_despesas_adm: Number(kit.summary?.valor_despesas_adm_locacao || 0),
+        kit_perc_despesas_adm: Number(kit.perc_despesas_adm || 0),
         kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
         kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
         kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
@@ -1692,9 +1698,13 @@ export function SalesBudgetForm() {
         t.impostosInstalacaoTotal += impostos;
         t.custoOpInstalacaoTotal += custoOpMensal;
 
-        const despAdmInst = faturamentoMensalItem * (percDespesaAdm / 100);
+        const itemPercDesp = (i.opportunity_kit_id && i.kit_perc_despesas_adm !== undefined && i.kit_perc_despesas_adm !== null)
+          ? Number(i.kit_perc_despesas_adm)
+          : percDespesaAdm;
+        const despAdmInst = (i.opportunity_kit_id && i.kit_despesas_adm !== undefined && i.kit_despesas_adm !== null)
+          ? Number(i.kit_despesas_adm) * q
+          : faturamentoMensalItem * (itemPercDesp / 100);
         t.despAdmInstalacaoTotal += despAdmInst;
-        t.despAdmTotal += despAdmInst;
 
         t.faturamentoTotal += faturamentoMensalItem;
         t.impostosTotal += impostos;
@@ -1707,9 +1717,14 @@ export function SalesBudgetForm() {
         t.lucroMensal += i.lucro_mensal * q;
         t.custoOpMensalTotal += custoOpMensal;
 
-        const despAdmMensal = faturamentoMensalItem * (percDespesaAdm / 100);
+        const itemPercDesp = (i.opportunity_kit_id && i.kit_perc_despesas_adm !== undefined && i.kit_perc_despesas_adm !== null)
+          ? Number(i.kit_perc_despesas_adm)
+          : percDespesaAdm;
+        const despAdmMensal = (i.opportunity_kit_id && i.kit_despesas_adm !== undefined && i.kit_despesas_adm !== null)
+          ? Number(i.kit_despesas_adm) * q
+          : faturamentoMensalItem * (itemPercDesp / 100);
         t.despAdmMensalTotal += despAdmMensal;
-        t.despAdmTotal += despAdmMensal * prazoItem;
+        t.despAdmTotal += despAdmMensal * (prazoContratoMeses || 1);
 
         const vlrInstalItem = Number(i.kit_vlr_instal_calc || i.valor_instalacao_item || 0) * q;
         t.faturamentoTotal += (faturamentoMensalItem * prazoItem) + vlrInstalItem;
@@ -1723,7 +1738,8 @@ export function SalesBudgetForm() {
       const comissaoUnitItem = Number(i.kit_comissao || 0);
       const impostoInstalacaoItem = Number(i.kit_imposto_instalacao || 0) * q;
 
-      t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem;
+      const despAdmItem = (i.is_kit_instalacao) ? Number(i.kit_despesas_adm || 0) * q : 0;
+      t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem + despAdmItem;
 
       t.comissaoTotal += comissaoItem;
       t.comissaoUnit += comissaoUnitItem;
@@ -2066,6 +2082,8 @@ export function SalesBudgetForm() {
           kit_investimento_total: i.kit_investimento_total != null ? +i.kit_investimento_total : null,
           kit_comissao: i.kit_comissao != null ? +i.kit_comissao : null,
           kit_perc_comissao: i.kit_perc_comissao != null ? +i.kit_perc_comissao : null,
+          kit_despesas_adm: i.kit_despesas_adm != null ? +i.kit_despesas_adm : null,
+          kit_perc_despesas_adm: i.kit_perc_despesas_adm != null ? +i.kit_perc_despesas_adm : null,
           kit_vlr_instal_calc: i.kit_vlr_instal_calc != null ? +i.kit_vlr_instal_calc : null,
           quantidade: +i.quantidade,
           perc_instalacao_item: i.perc_instalacao_item != null ? +i.perc_instalacao_item : null,
@@ -3495,9 +3513,9 @@ export function SalesBudgetForm() {
           
           // 1. Calculate base_roi as requested: (custo de aquisição + custos operacionais + impostos totais) / mensal locação
           const despAdmMensalTotal = rentalTotals.despAdmMensalTotal || 0;
-          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal + (rentalTotals.despAdmInstalacaoTotal || 0);
+          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
           const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
-          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes;
+          const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - despAdmMensalTotal;
           const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
 
           // 2. Calculate chartData and director/payback ROI metrics
@@ -3548,7 +3566,7 @@ export function SalesBudgetForm() {
             });
           }
 
-          const divisorDiretor = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissao_mensal_calc;
+          const divisorDiretor = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - comissao_mensal_calc - despAdmMensalTotal;
           const diretor_roi = divisorDiretor > 0 ? ((saldoCapex + comissao_inst_calc) / divisorDiretor) : (pCtr + 1);
           const paybackMes = divisorDiretor > 0 ? (saldoCapex / divisorDiretor) : null;
 
@@ -3618,15 +3636,36 @@ export function SalesBudgetForm() {
                   </div>
 
                   <div className="lg:col-span-8 flex flex-wrap gap-6 items-end lg:justify-end">
-                    <div>
-                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Faturamento</span>
-                      <span className="text-xl font-bold text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span>
-                    </div>
+                    <Tooltip content={
+                      <div className="w-64 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Faturamento</div>
+                        <div className="flex justify-between text-sm"><span>Instalação / Setup:</span> <span className="font-medium text-white">{fmt(rentalTotals.totalInstalacao)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Locação Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.faturamentoMensal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Locação Total Contrato:</span> <span className="font-medium text-white">{fmt(rentalTotals.faturamentoTotal - rentalTotals.totalInstalacao)}</span></div>
+                        <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 text-white"><span>Faturamento Total:</span> <span>{fmt(rentalTotals.faturamentoTotal)}</span></div>
+                      </div>
+                    }>
+                      <div className="cursor-help">
+                        <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Faturamento</span>
+                        <span className="text-xl font-bold text-teal-400">{fmt(rentalTotals.faturamentoTotal)}</span>
+                      </div>
+                    </Tooltip>
                     <div className="hidden sm:block h-8 w-px bg-border-subtle mx-2"></div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp + Op)</span></span>
-                      <span className="text-xl font-bold text-rose-400">{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal)}</span>
-                    </div>
+                    <Tooltip content={
+                      <div className="w-64 space-y-2 text-gray-200">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Custos</div>
+                        <div className="flex justify-between text-sm"><span>Aquisição (Capex + Setup):</span> <span className="font-medium text-white">{fmt(rentalTotals.investimento)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Impostos Totais:</span> <span className="font-medium text-white">{fmt(rentalTotals.impostosTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Custos Operacionais:</span> <span className="font-medium text-white">{fmt(rentalTotals.custoOpTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Desp. Administrativas:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmTotal)}</span></div>
+                        <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 text-white"><span>Custo Total:</span> <span>{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal + rentalTotals.despAdmTotal)}</span></div>
+                      </div>
+                    }>
+                      <div className="cursor-help">
+                        <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Total de Custo <span className="opacity-60 font-medium normal-case ml-1 pt-0.5 inline-block">(Aq + Imp + Op + Desp. Adm)</span></span>
+                        <span className="text-xl font-bold text-rose-400">{fmt(rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal + rentalTotals.despAdmTotal)}</span>
+                      </div>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -3708,6 +3747,7 @@ export function SalesBudgetForm() {
                         <div className="flex justify-between pl-2"><span>(-) Custo Operacional Mensal:</span> <span className="text-red-400">-{fmt(opMes)}</span></div>
                         <div className="flex justify-between pl-2"><span>(-) Imposto sobre Locação:</span> <span className="text-red-400">-{fmt(rentalTotals.impostosMensal)}</span></div>
                         <div className="flex justify-between pl-2"><span>(-) Comissão Mensal Rec/Liq:</span> <span className="text-red-400">-{fmt(comissao_mensal_calc)}</span></div>
+                        <div className="flex justify-between pl-2"><span>(-) Despesas Adm. Mensais:</span> <span className="text-red-400">-{fmt(despAdmMensalTotal)}</span></div>
                         <div className="flex justify-between pl-2 border-t border-gray-600/50 font-bold"><span>(=) Retorno Mensal Líquido:</span> <span className="text-white">{fmt(divisorDiretor)}</span></div>
                       </div>
                       <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1 leading-relaxed">
@@ -3887,7 +3927,6 @@ export function SalesBudgetForm() {
 
                   {/* Right Costs Breakdown Grid (4 cols) */}
                   <div className="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-border-subtle grid grid-cols-2 divide-x divide-y divide-border-subtle bg-surface/20">
-
                     {/* Custo Aq */}
                     <Tooltip content={
                       <div className="w-64 space-y-2 text-gray-200">
@@ -3897,6 +3936,7 @@ export function SalesBudgetForm() {
                         {rentalTotals.impostoInstalacaoKitTotal > 0 && <div className="flex justify-between text-sm"><span>Imp. Instalação:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostoInstalacaoKitTotal)}</span></div>}
                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Comissão:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
+                        {rentalTotals.despAdmInstalacaoTotal > 0 && <div className="flex justify-between text-sm"><span>Desp. Adm. Instalação:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>}
                       </div>
                     }>
                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
@@ -3981,12 +4021,12 @@ export function SalesBudgetForm() {
                       </div>
                     </Tooltip>
 
-                    {/* Despesas Adm (Despesa Adm + Comissao) */}
+                    {/* Despesas Adm */}
                     <Tooltip content={
                       <div className="w-64 space-y-2 text-gray-200">
                         <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Despesas</div>
-                        <div className="flex justify-between text-sm"><span>Despesas Adm.:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmTotal)}</span></div>
-                        <div className="flex justify-between text-sm"><span>Comissão Comercial:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Despesa Adm. Mensal:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmMensalTotal)}</span></div>
+                        <div className="flex justify-between text-sm"><span>Despesa Adm. Total:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmTotal)}</span></div>
                       </div>
                     }>
                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
@@ -3994,7 +4034,7 @@ export function SalesBudgetForm() {
                           Despesas Adm.
                           <HelpCircle className="w-3" />
                         </span>
-                        <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.despAdmTotal + rentalTotals.comissaoTotal)}</p>
+                        <p className="text-lg font-bold text-text-primary">{fmt(rentalTotals.despAdmTotal)}</p>
                       </div>
                     </Tooltip>
 
@@ -4019,6 +4059,7 @@ export function SalesBudgetForm() {
                             <div className="flex justify-between pl-2"><span>(+) Faturamento Locação:</span> <span>{fmt(rentalTotals.faturamentoMensal)}</span></div>
                             <div className="flex justify-between pl-2"><span>(-) Custo Operacional Mensal:</span> <span className="text-red-400">-{fmt(opMes)}</span></div>
                             <div className="flex justify-between pl-2"><span>(-) Imposto sobre Locação:</span> <span className="text-red-400">-{fmt(rentalTotals.impostosMensal)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(-) Despesas Adm. Mensais:</span> <span className="text-red-400">-{fmt(despAdmMensalTotal)}</span></div>
                             <div className="flex justify-between pl-2 border-t border-gray-600/50 font-bold"><span>(=) Retorno Mensal Líquido:</span> <span className="text-white">{fmt(divisorBase)}</span></div>
                           </div>
                           <div className="text-[10px] text-brand-primary font-mono bg-black/40 p-2 rounded mt-1 leading-relaxed">
@@ -5532,6 +5573,8 @@ export function SalesBudgetForm() {
                           kit_venda_unit_monitoramento: Number(savedKit.summary?.venda_unit_monitoramento || 0),
                           kit_comissao: Number(savedKit.summary?.valor_comissao_locacao || 0),
                           kit_perc_comissao: Number(savedKit.perc_comissao || 0),
+                          kit_despesas_adm: Number(savedKit.summary?.valor_despesas_adm_locacao || 0),
+                          kit_perc_despesas_adm: Number(savedKit.perc_despesas_adm || 0),
                           perc_comissao: Number(savedKit.perc_comissao || 0),
                           comissao_mensal: Number(savedKit.summary?.valor_comissao_locacao || 0),
                           // Computed display fields

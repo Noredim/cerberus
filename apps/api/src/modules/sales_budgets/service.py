@@ -531,6 +531,8 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
             kit_margem=getattr(item_data, "kit_margem", None),
             kit_comissao=getattr(item_data, "kit_comissao", None),
             kit_perc_comissao=getattr(item_data, "kit_perc_comissao", None),
+            kit_despesas_adm=getattr(item_data, "kit_despesas_adm", None),
+            kit_perc_despesas_adm=getattr(item_data, "kit_perc_despesas_adm", None),
             kit_faturamento_separado=getattr(item_data, "kit_faturamento_separado", False),
             kit_investimento_total=getattr(item_data, "kit_investimento_total", None),
             kit_vlr_instal_calc=getattr(item_data, "kit_vlr_instal_calc", None),
@@ -843,6 +845,8 @@ def _only_comissao_diretoria_changed(budget: SalesBudget, data: SalesBudgetUpdat
         if _float(r_db.kit_investimento_total) != _float(r_in.kit_investimento_total): return False
         if _float(r_db.kit_comissao) != _float(r_in.kit_comissao): return False
         if _float(r_db.kit_perc_comissao) != _float(r_in.kit_perc_comissao): return False
+        if _float(r_db.kit_despesas_adm) != _float(r_in.kit_despesas_adm): return False
+        if _float(r_db.kit_perc_despesas_adm) != _float(r_in.kit_perc_despesas_adm): return False
         if _float(r_db.kit_vlr_instal_calc) != _float(r_in.kit_vlr_instal_calc): return False
         if _float(r_db.kit_parcela_locacao) != _float(r_in.kit_parcela_locacao): return False
         if _float(r_db.kit_venda_unit_monitoramento) != _float(r_in.kit_venda_unit_monitoramento): return False

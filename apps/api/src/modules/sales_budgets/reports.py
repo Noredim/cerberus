@@ -587,6 +587,115 @@ class OpportunitiesReportService:
                 except Exception as e:
                     print(f"[Warning] Failed to calculate financials for kit {kit_id}: {e}")
 
+        # Helper to retrieve purchase tax unit breakdown for a product
+        def get_purchase_tax_breakdown(prod_id, pb_item):
+            tax_info = opp_product_taxes.get(prod_id)
+            origem = None
+            difal = 0.0
+            st = 0.0
+            ipi = 0.0
+            
+            if tax_info:
+                difal = tax_info["difal"]
+                st = tax_info["st"]
+                origem = tax_info["source"]
+            
+            if difal == 0.0 and pb_item and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
+                difal = float(pb_item.difal_unitario)
+                origem = "purchase_budget"
+            if st == 0.0 and pb_item and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
+                st = float(pb_item.st_unitario)
+                origem = "purchase_budget"
+                
+            if pb_item and pb_item.ipi_valor is not None and float(pb_item.ipi_valor) > 0.0:
+                pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
+                ipi = float(pb_item.ipi_valor) / pb_qty
+            
+            if origem is None:
+                origem = "fallback_zero"
+                
+            return difal, st, ipi, origem
+
+        # Build product suppliers map for lookups
+        product_suppliers = {}
+        for pb in purchase_budgets:
+            for pb_item in pb.items:
+                if pb_item.product_id:
+                    product_suppliers[pb_item.product_id] = {
+                        "pb_item": pb_item,
+                        "pb": pb
+                    }
+
+        # Compile product calculations from opportunity items & kits exactly as in Approval report
+        product_totals = {}
+        
+        def process_opp_items(items_list):
+            for item in items_list:
+                qty = float(item.quantidade)
+                if item.opportunity_kit_id:
+                    kit = db.query(OpportunityKit).filter(OpportunityKit.id == item.opportunity_kit_id).first()
+                    if kit:
+                        try:
+                            override_factor = getattr(item, "fator_margem", None)
+                            kit_financials = kit_service.calculate_financials(kit, opportunity.tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity.id))
+                            for c in kit_financials.get("item_summaries", []):
+                                c_prod_id = c.get("product_id")
+                                if c_prod_id:
+                                    c_uuid = UUID(c_prod_id) if isinstance(c_prod_id, str) else c_prod_id
+                                    c_qty = float(c.get("quantidade_no_kit") or 1.0) * qty
+                                    c_cost_total = float(c.get("custo_total_item_no_kit") or 0.0) * qty
+                                    
+                                    pb_info = product_suppliers.get(c_uuid)
+                                    pb_item = pb_info["pb_item"] if pb_info else None
+                                    difal, st, ipi, source = get_purchase_tax_breakdown(c_uuid, pb_item)
+                                    tax_total = (difal + st + ipi) * c_qty
+                                    
+                                    if c_uuid not in product_totals:
+                                        product_totals[c_uuid] = {
+                                            "qty": 0.0,
+                                            "cost_total": 0.0,
+                                            "tax_total": 0.0,
+                                            "difal_total": 0.0,
+                                            "st_total": 0.0,
+                                            "ipi_total": 0.0,
+                                            "source": source
+                                        }
+                                    product_totals[c_uuid]["qty"] += c_qty
+                                    product_totals[c_uuid]["cost_total"] += c_cost_total
+                                    product_totals[c_uuid]["tax_total"] += tax_total
+                                    product_totals[c_uuid]["difal_total"] += difal * c_qty
+                                    product_totals[c_uuid]["st_total"] += st * c_qty
+                                    product_totals[c_uuid]["ipi_total"] += ipi * c_qty
+                        except Exception as e:
+                            print(f"[Warning] Failed to calculate financials for kit in fechamento: {e}")
+                else:
+                    if item.product_id:
+                        pb_info = product_suppliers.get(item.product_id)
+                        pb_item = pb_info["pb_item"] if pb_info else None
+                        difal, st, ipi, source = get_purchase_tax_breakdown(item.product_id, pb_item)
+                        tax_total = (difal + st + ipi) * qty
+                        cost_total = float(item.custo_total_aquisicao or 0.0) * qty
+                        
+                        if item.product_id not in product_totals:
+                            product_totals[item.product_id] = {
+                                "qty": 0.0,
+                                "cost_total": 0.0,
+                                "tax_total": 0.0,
+                                "difal_total": 0.0,
+                                "st_total": 0.0,
+                                "ipi_total": 0.0,
+                                "source": source
+                            }
+                        product_totals[item.product_id]["qty"] += qty
+                        product_totals[item.product_id]["cost_total"] += cost_total
+                        product_totals[item.product_id]["tax_total"] += tax_total
+                        product_totals[item.product_id]["difal_total"] += difal * qty
+                        product_totals[item.product_id]["st_total"] += st * qty
+                        product_totals[item.product_id]["ipi_total"] += ipi * qty
+
+        process_opp_items(opportunity.items)
+        process_opp_items(opportunity.rental_items)
+
         # Map unpacked items to purchase budget items
         mapped_by_supplier = {}
         for pb in purchase_budgets:
@@ -626,39 +735,22 @@ class OpportunitiesReportService:
 
             # Map items for this supplier budget
             for pb_item in pb.items:
-                opp_qty = sum(item["quantidade"] for item in unpacked_items if item["product_id"] == pb_item.product_id)
-                if opp_qty <= 0:
+                prod_calc = product_totals.get(pb_item.product_id)
+                if not prod_calc:
                     continue # Skip items that are not in the opportunity
 
+                opp_qty = prod_calc["qty"]
+                val_final = prod_calc["cost_total"]
+                difal_total = prod_calc["difal_total"]
+                st_total = prod_calc["st_total"]
+                ipi_total = prod_calc["ipi_total"]
+                val_total = val_final - difal_total - st_total - ipi_total
 
-                # Prioritized Tax Lookup
-                tax_info = opp_product_taxes.get(pb_item.product_id)
-                if tax_info:
-                    difal_unit = tax_info["difal"]
-                    st_unit = tax_info["st"]
-                    origem_imposto = tax_info["source"]
-                else:
-                    difal_unit = 0.0
-                    st_unit = 0.0
-                    origem_imposto = None
-
-                # Fallback to PurchaseBudgetItem values if they are zero/missing from opportunity/kits
-                if difal_unit == 0.0 and pb_item.difal_unitario is not None and float(pb_item.difal_unitario) > 0.0:
-                    difal_unit = float(pb_item.difal_unitario)
-                    origem_imposto = "purchase_budget"
-                if st_unit == 0.0 and pb_item.st_unitario is not None and float(pb_item.st_unitario) > 0.0:
-                    st_unit = float(pb_item.st_unitario)
-                    origem_imposto = "purchase_budget"
-                    
-                if origem_imposto is None:
-                    origem_imposto = "fallback_zero"
-
-                val_unit = float(pb_item.valor_unitario)
-
-                val_total = val_unit * opp_qty
-                difal_total = difal_unit * opp_qty
-                st_total = st_unit * opp_qty
-                val_final = val_total + difal_total + st_total
+                val_unit = val_total / opp_qty if opp_qty > 0 else 0.0
+                difal_unit = difal_total / opp_qty if opp_qty > 0 else 0.0
+                st_unit = st_total / opp_qty if opp_qty > 0 else 0.0
+                ipi_unit = ipi_total / opp_qty if opp_qty > 0 else 0.0
+                origem_imposto = prod_calc["source"]
 
                 product_desc = pb_item.product_nome or (pb_item.product.nome if pb_item.product else "Produto")
 
@@ -672,15 +764,19 @@ class OpportunitiesReportService:
                     "difal_total": format_currency(difal_total),
                     "st_unitario": format_currency(st_unit),
                     "st_total": format_currency(st_total),
+                    "ipi_unitario": format_currency(ipi_unit),
+                    "ipi_total": format_currency(ipi_total),
                     "valor_final": format_currency(val_final),
                     "origem_imposto": origem_imposto,
                     # Numeric versions for backend summation
                     "_val_total": val_total,
                     "_difal_total": difal_total,
                     "_st_total": st_total,
+                    "_ipi_total": ipi_total,
                     "_val_final": val_final,
                     "_difal_unit": difal_unit,
-                    "_st_unit": st_unit
+                    "_st_unit": st_unit,
+                    "_ipi_unit": ipi_unit
                 })
 
         # Calculate supplier totals and fetch financial planning installments
@@ -692,19 +788,22 @@ class OpportunitiesReportService:
             total_prod = sum(item["_val_total"] for item in data["items"])
             total_difal = sum(item["_difal_total"] for item in data["items"])
             total_st = sum(item["_st_total"] for item in data["items"])
-            total_imp = total_difal + total_st
+            total_ipi = sum(item["_ipi_total"] for item in data["items"])
+            total_imp = total_difal + total_st + total_ipi
             total_geral = total_prod + total_imp
 
             data["totais"] = {
                 "total_produtos": format_currency(total_prod),
                 "total_difal": format_currency(total_difal),
                 "total_st": format_currency(total_st),
+                "total_ipi": format_currency(total_ipi),
                 "total_impostos": format_currency(total_imp),
                 "total_geral": format_currency(total_geral),
                 # Numeric
                 "_total_produtos": total_prod,
                 "_total_difal": total_difal,
                 "_total_st": total_st,
+                "_total_ipi": total_ipi,
                 "_total_impostos": total_imp,
                 "_total_geral": total_geral
             }
@@ -724,9 +823,10 @@ class OpportunitiesReportService:
         if not mapped_by_supplier:
             raise HTTPException(status_code=400, detail="Nenhum item válido com fornecedor pôde ser extraído da oportunidade.")
 
-        # 5. Build Fiscal Summary Lists (Filtered: only DIFAL > 0 or ST > 0)
+        # 5. Build Fiscal Summary Lists (Filtered: only DIFAL > 0 or ST > 0 or IPI > 0)
         fiscal_difal_items = []
         fiscal_st_items = []
+        fiscal_ipi_items = []
         for supplier_id, data in mapped_by_supplier.items():
             for item in data["items"]:
                 if item["_difal_unit"] > 0:
@@ -742,6 +842,13 @@ class OpportunitiesReportService:
                         "quantidade": item["quantidade"],
                         "st_unitario": item["st_unitario"],
                         "st_total": item["st_total"]
+                    })
+                if item["_ipi_unit"] > 0:
+                    fiscal_ipi_items.append({
+                        "descricao": item["descricao"],
+                        "quantidade": item["quantidade"],
+                        "ipi_unitario": item["ipi_unitario"],
+                        "ipi_total": item["ipi_total"]
                     })
 
         # 6. Calculate Consolidated Opportunity KPIs
@@ -801,13 +908,15 @@ class OpportunitiesReportService:
         total_prod_all = sum(float(item["_val_total"]) for data in mapped_by_supplier.values() for item in data["items"])
         total_difal_all = sum(float(item["_difal_total"]) for data in mapped_by_supplier.values() for item in data["items"])
         total_st_all = sum(float(item["_st_total"]) for data in mapped_by_supplier.values() for item in data["items"])
-        total_imp_all = total_difal_all + total_st_all
+        total_ipi_all = sum(float(item["_ipi_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_imp_all = total_difal_all + total_st_all + total_ipi_all
         total_geral_all = total_prod_all + total_imp_all
 
         consolidado_geral = {
             "total_produtos": format_currency(total_prod_all),
             "total_difal": format_currency(total_difal_all),
             "total_st": format_currency(total_st_all),
+            "total_ipi": format_currency(total_ipi_all),
             "total_impostos": format_currency(total_imp_all),
             "total_geral_aquisicao": format_currency(total_geral_all)
         }
@@ -925,6 +1034,7 @@ class OpportunitiesReportService:
             suppliers_data=list(mapped_by_supplier.values()),
             fiscal_difal_items=fiscal_difal_items,
             fiscal_st_items=fiscal_st_items,
+            fiscal_ipi_items=fiscal_ipi_items,
             consolidado_geral=consolidado_geral,
             auditoria=auditoria,
             fechamento_fornecedores=fechamento_fornecedores,
@@ -1026,6 +1136,7 @@ class OpportunitiesReportService:
                     Paragraph("Total", table_header_style), 
                     Paragraph("ST Total", table_header_style), 
                     Paragraph("DIFAL Total", table_header_style), 
+                    Paragraph("IPI Total", table_header_style), 
                     Paragraph("Valor Final", table_header_style)
                 ]]
                 for item in supplier["items"]:
@@ -1037,6 +1148,7 @@ class OpportunitiesReportService:
                         Paragraph(f"R$ {item['valor_total']}", table_cell_style),
                         Paragraph(f"R$ {item['st_total']}", table_cell_style),
                         Paragraph(f"R$ {item['difal_total']}", table_cell_style),
+                        Paragraph(f"R$ {item['ipi_total']}", table_cell_style),
                         Paragraph(f"R$ {item['valor_final']}", table_cell_style)
                     ])
 
@@ -1048,10 +1160,11 @@ class OpportunitiesReportService:
                     Paragraph(f"R$ {supplier['totais']['total_produtos']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_st']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_difal']}", table_cell_style),
+                    Paragraph(f"R$ {supplier['totais']['total_ipi']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_geral']}", table_cell_style)
                 ])
 
-                supplier_table = Table(table_data, colWidths=[180, 80, 40, 70, 70, 70, 70, 80])
+                supplier_table = Table(table_data, colWidths=[180, 80, 40, 60, 60, 60, 60, 60, 80])
                 supplier_table.setStyle(TableStyle([
                     ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
                     ('BOTTOMPADDING', (0,0), (-1,-1), 4),
@@ -2387,7 +2500,9 @@ class OpportunitiesReportService:
         total_instalacao: float,
         impostos_instalacao: float,
         custo_op_instalacao: float,
-        comissao_instalacao: float
+        comissao_instalacao: float,
+        despesas_adm_mensal: float = 0.0,
+        despesas_adm_instalacao: float = 0.0
     ) -> str:
         """Generate a raw vector SVG stacked bar and line chart for rendering in WeasyPrint."""
         chart_data = []
@@ -2405,13 +2520,15 @@ class OpportunitiesReportService:
                 imp_mes = 0.0
                 op_mes = custo_op_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else 0.0
                 com_mes = comissao_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else 0.0
+                desp_adm_mes = despesas_adm_instalacao / (pInst if pInst > 0 else 1) if total_instalacao > 0 else 0.0
             else:
                 fat_mes = faturamento_mensal
                 imp_mes = impostos_mensal
                 op_mes = custo_op_mensal
                 com_mes = comissao_mensal
+                desp_adm_mes = despesas_adm_mensal
                 
-            gastos_mes = imp_mes + op_mes + com_mes
+            gastos_mes = imp_mes + op_mes + com_mes + desp_adm_mes
             receita_livre = fat_mes - gastos_mes
             
             saldo_acumulado += receita_livre
@@ -2443,7 +2560,7 @@ class OpportunitiesReportService:
             })
 
         # Override payback_mes with the simple division formula requested by user
-        retorno_mensal = faturamento_mensal - impostos_mensal - custo_op_mensal - comissao_mensal
+        retorno_mensal = faturamento_mensal - impostos_mensal - custo_op_mensal - comissao_mensal - despesas_adm_mensal
         saldo_capex = investimento - total_instalacao
         if retorno_mensal > 0.0:
             payback_mes = saldo_capex / retorno_mensal
@@ -2852,13 +2969,29 @@ class OpportunitiesReportService:
             total_impostos_mensal_calc += impostos_mensal_item
 
             # Installation vs Rental separation for Capex/Totals
-            perc_desp_adm = float(opportunity.perc_despesa_adm or 0.0) / 100.0
+            if item.opportunity_kit_id and getattr(item, "kit_perc_despesas_adm", None) is not None:
+                perc_desp_adm = float(item.kit_perc_despesas_adm) / 100.0
+            else:
+                perc_desp_adm = float(opportunity.perc_despesa_adm or 0.0) / 100.0
+
+            kit_desp_adm_val = None
+            if item.opportunity_kit_id:
+                if getattr(item, "kit_despesas_adm", None) is not None:
+                    kit_desp_adm_val = float(item.kit_despesas_adm)
+                elif kit_financials_summary:
+                    kit_desp_adm_val = float(kit_financials_summary.get("valor_despesas_adm_locacao") or 0.0)
+
             if item.is_kit_instalacao:
                 total_instalacao += instalacao_item
                 impostos_instalacao_total += impostos_mensal_item
                 custo_op_instalacao_total += custo_op_mensal
                 investimento_instalacao += custo_total
-                desp_adm_instalacao_total += instalacao_item * perc_desp_adm
+                
+                if kit_desp_adm_val is not None:
+                    desp_adm_inst = kit_desp_adm_val * qty
+                else:
+                    desp_adm_inst = instalacao_item * perc_desp_adm
+                desp_adm_instalacao_total += desp_adm_inst
                 
                 faturamento_total_rental += instalacao_item
                 impostos_totais += impostos_mensal_item
@@ -2868,7 +3001,11 @@ class OpportunitiesReportService:
                 impostos_mensal_total += impostos_mensal_item
                 custo_op_mensal_total += custo_op_mensal
                 investimento_rental += custo_total
-                desp_adm_mensal_total += fat_mensal_total_item * perc_desp_adm
+                if kit_desp_adm_val is not None:
+                    desp_adm_mensal = kit_desp_adm_val * qty
+                else:
+                    desp_adm_mensal = fat_mensal_total_item * perc_desp_adm
+                desp_adm_mensal_total += desp_adm_mensal
                 
                 faturamento_total_rental += (fat_mensal_total_item * prazo_item) + instalacao_item
                 impostos_totais += impostos_mensal_item * prazo_item
@@ -3107,7 +3244,7 @@ class OpportunitiesReportService:
         investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total
         
         # Project Total Cost (Capex + Impostos + Custos Operacionais + Despesas Adm)
-        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + impostos_totais + custo_op_total + desp_adm_mensal_total
+        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato)
         
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal - Despesas Adm Mensais
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total - desp_adm_mensal_total
@@ -3451,7 +3588,9 @@ class OpportunitiesReportService:
             total_instalacao=total_instalacao,
             impostos_instalacao=impostos_instalacao_total,
             custo_op_instalacao=custo_op_instalacao_total,
-            comissao_instalacao=comissao_inst_calc
+            comissao_instalacao=comissao_inst_calc,
+            despesas_adm_mensal=desp_adm_mensal_total,
+            despesas_adm_instalacao=desp_adm_instalacao_total
         )
 
         # 8. Render HTML Template

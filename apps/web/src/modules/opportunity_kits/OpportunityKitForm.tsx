@@ -545,10 +545,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         ...(shouldOverwriteTaxes ? {
           fator_margem_locacao: pick('mkp_padrao') || 1,
           fator_margem_manutencao: pick('mkp_padrao') || 1,
+          perc_despesas_adm: pick('despesa_administrativa'),
           ...(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? {
             fator_margem_servicos_produtos: pick('mkp_padrao') || 1,
             fator_margem_instalacao: pick('mkp_padrao') || 1,
-            perc_despesas_adm: pick('despesa_administrativa'),
           } : {}),
         } : {}),
       }));
@@ -1609,6 +1609,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             const averageLocFactor = activeLocFactors.reduce((a, b) => a + b, 0) / activeLocFactors.length;
 
             const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
+            const valorDespesasAdmLocacao = financials?.summary?.valor_despesas_adm_locacao || 0;
+            const totalComissaoDespAdm = valorComissaoLocacao + valorDespesasAdmLocacao;
             // const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
             // const totalInvestimento = custoAq + valorComissaoLocacao + impostoInstalacao;
             // const impostosMensais = financials?.summary?.valor_impostos || 0;
@@ -1737,14 +1739,37 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     </div>
                   </div>
 
-                  {/* Card 1.5: Comissão */}
-                  <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center">
-                    <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">Comissão (%)</span>
-                    <div className="text-base font-bold text-brand-primary tabular-nums">{fmtC(valorComissaoLocacao)}</div>
-                    <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
-                      {Number(form.perc_comissao || 0).toFixed(2)}% s/ base
+                  {/* Card 1.5: Despesas Administrativas e Comissão */}
+                  <Tooltip
+                    variant="light"
+                    content={
+                      <div className="w-64 space-y-2 text-text-secondary p-1 text-xs">
+                        <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                          Detalhamento de Comissão e Despesa Adm.
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
+                          <span className="font-semibold text-text-primary">{fmtC(valorComissaoLocacao)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Desp. Adm ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
+                          <span className="font-semibold text-text-primary">{fmtC(valorDespesasAdmLocacao)}</span>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center cursor-pointer">
+                      <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">
+                        Desp. Adm
+                      </span>
+                      <div className="text-base font-bold text-brand-primary tabular-nums">
+                        {fmtC(totalComissaoDespAdm)}
+                      </div>
+                      <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
+                        Comissão: {Number(form.perc_comissao || 0).toFixed(2)}% | Desp. Adm: {Number(form.perc_despesas_adm || 0).toFixed(2)}%
+                      </div>
                     </div>
-                  </div>
+                  </Tooltip>
 
                   {/* Card 2: Instalação */}
                   <div className={`border rounded-xl p-3 flex flex-col justify-center ${instalacaoEmbutida > 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
@@ -2011,6 +2036,16 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       onChange={(val: number) => handleInputChange('fator_monitoramento', val)}
                       onBlur={(val: number) => handleFactorBlur('fator_monitoramento', val)}
                       placeholder="Ex: 1.0000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      value={form.perc_despesas_adm} 
+                      onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} 
+                      className="w-full" 
                     />
                   </div>
                   <div>

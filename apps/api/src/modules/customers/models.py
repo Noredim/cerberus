@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from src.core.base import Base
 from datetime import datetime
@@ -8,6 +8,9 @@ from typing import Optional
 
 class Customer(Base):
     __tablename__ = "customers"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'cnpj', name='uq_customer_tenant_cnpj'),
+    )
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String, index=True, nullable=False)

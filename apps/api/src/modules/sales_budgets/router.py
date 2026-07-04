@@ -569,6 +569,8 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
             "kit_parcela_locacao": float(ri.kit_parcela_locacao) if ri.kit_parcela_locacao is not None else None,
             "kit_faturamento_separado": ri.kit_faturamento_separado if hasattr(ri, 'kit_faturamento_separado') else False,
             "kit_perc_comissao": float(ri.kit_perc_comissao) if getattr(ri, 'kit_perc_comissao', None) is not None else None,
+            "kit_despesas_adm": float(ri.kit_despesas_adm) if getattr(ri, 'kit_despesas_adm', None) is not None else None,
+            "kit_perc_despesas_adm": float(ri.kit_perc_despesas_adm) if getattr(ri, 'kit_perc_despesas_adm', None) is not None else None,
             "kit_imposto_instalacao": float(ri.kit_imposto_instalacao) if getattr(ri, 'kit_imposto_instalacao', None) is not None else None,
             "kit_comissao": float(ri.kit_comissao) if getattr(ri, 'kit_comissao', None) is not None else None,
             "kit_vlr_instal_calc": float(ri.kit_vlr_instal_calc) if getattr(ri, 'kit_vlr_instal_calc', None) is not None else None,

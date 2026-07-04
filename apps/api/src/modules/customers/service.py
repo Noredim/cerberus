@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from fastapi import HTTPException
 from src.core.search import unaccent_ilike
 from .models import Customer
 from .schemas import CustomerCreate, CustomerUpdate
@@ -11,6 +12,18 @@ class CustomerService:
         self.db = db
 
     def create_customer(self, tenant_id: str, payload: CustomerCreate) -> Customer:
+        # Prevent registration of duplicate CNPJs for the same tenant
+        existing = self.db.query(Customer).filter(
+            Customer.tenant_id == tenant_id,
+            Customer.cnpj == payload.cnpj
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Já existe um cliente cadastrado com este CNPJ."
+            )
+
         customer = Customer(
             tenant_id=tenant_id,
             **payload.model_dump()
