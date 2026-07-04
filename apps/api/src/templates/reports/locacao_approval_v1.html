@@ -352,6 +352,16 @@
                             Payback = Saldo Capex ÷ Retorno Mensal Líquido<br>
                             Payback = ({{ kpis.investimento_capex }} - {{ total_instalacao_str or kpis.total_instalacao_str }}) ÷ {{ kpis.lucro_mensal_total }} = <span style="font-size: 9.5pt; color: #166534;">{{ kpis.payback_meses }}</span>
                         </div>
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif; line-height: 1.3;">
+                            ROI da Oportunidade:<br>
+                            ROI = Total de Faturamento - Total de Custos<br>
+                            ROI = R$ {{ kpis.total_faturamento_str }} - R$ {{ kpis.total_custos_str }} = <span style="font-size: 9.5pt; color: #166534;">R$ {{ kpis.roi_oportunidade }}</span>
+                        </div>
+                        <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px; font-size: 8pt; font-weight: bold; color: #0f766e; font-family: sans-serif; line-height: 1.3;">
+                            Margem de Lucro:<br>
+                            Margem = ROI ÷ Total de Faturamento<br>
+                            Margem = R$ {{ kpis.roi_oportunidade }} ÷ R$ {{ kpis.total_faturamento_str }} = <span style="font-size: 9.5pt; color: #166534;">{{ kpis.margem_lucro }}</span>
+                        </div>
                     </td>
                 </tr>
             </table>

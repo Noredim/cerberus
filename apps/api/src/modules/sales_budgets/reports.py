@@ -2586,19 +2586,21 @@ class OpportunitiesReportService:
 
         # Draw grid lines and Y-axis labels
         grid_lines = [0.0]
-        step = 5000.0
-        if ymax < 15000.0:
-            step = 2000.0
-        if ymax < 5000.0:
-            step = 1000.0
-        if ymax < 2000.0:
-            step = 500.0
-        if ymax < 1000.0:
-            step = 200.0
-        if ymax < 500.0:
-            step = 100.0
-        if ymax < 200.0:
-            step = 50.0
+        # Determine a nice step dynamically to avoid overlapping labels
+        rough_step = ymax / 5
+        if rough_step >= 100000:
+            step = round(rough_step / 50000) * 50000
+        elif rough_step >= 50000:
+            step = round(rough_step / 10000) * 10000
+        elif rough_step >= 10000:
+            step = round(rough_step / 5000) * 5000
+        elif rough_step >= 5000:
+            step = round(rough_step / 1000) * 1000
+        elif rough_step >= 1000:
+            step = round(rough_step / 200) * 200
+        else:
+            step = round(rough_step / 50) * 50
+        step = max(50.0, step)
             
         val = step
         while val <= ymax:
@@ -2612,14 +2614,9 @@ class OpportunitiesReportService:
         """
         for g_val in grid_lines:
             gy = get_y(g_val)
-            if g_val == 0.0:
-                label_str = "R$ 0"
-            else:
-                label_str = f"R$ {int(g_val/1000)}k" if g_val >= 1000 else f"R$ {int(g_val)}"
-                
+            # Draw grid lines, but omit the text labels (descrição) since they overlap/become illegible
             svg_content += f"""
             <line x1="{pad_l}" y1="{gy}" x2="{width - pad_r}" y2="{gy}" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="2 2" />
-            <text x="{pad_l - 8}" y="{gy + 3}" font-family="sans-serif" font-size="7pt" fill="#64748b" text-anchor="end">{label_str}</text>
             """
 
         # Draw line for Payback
@@ -3465,6 +3462,10 @@ class OpportunitiesReportService:
             "impostos_totais": format_currency(impostos_totais),
             "margem_liquida": f"{margem_liquida_val:.2f}",
             "payback_meses": payback_meses_str,
+            "roi_oportunidade": format_currency(lucro_contrato),
+            "margem_lucro": f"{margem_liquida_val:.2f}%",
+            "total_faturamento_str": format_currency(receita_contratada),
+            "total_custos_str": format_currency(custo_total_projeto),
             
             "total_st_difal": format_currency(total_st_difal),
             "total_aquisicao_sem_comissao": format_currency(total_aquisicao_sem_comissao),
