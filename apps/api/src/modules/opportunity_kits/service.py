@@ -166,6 +166,8 @@ class OpportunityKitService:
 
         effective_aliq_icms = Decimal("12.0") if force_12_icms else Decimal(str(kit.aliq_icms or 0))
         
+        faturamento_separado = getattr(kit, 'faturamento_servico_separado', False)
+        
         # 2. Prazos do Contrato
         prazo_mensalidades = max(0, kit.prazo_contrato_meses - kit.prazo_instalacao_meses)
         if kit.prazo_instalacao_meses >= kit.prazo_contrato_meses:
@@ -859,7 +861,10 @@ class OpportunityKitService:
             vlt_csll = faturamento_total_venda * (Decimal(str(kit.aliq_csll or 0)) / Decimal(100))
             vlt_irpj = faturamento_total_venda * (Decimal(str(kit.aliq_irpj or 0)) / Decimal(100))
             vlt_icms = Decimal("0")  # Locação doesn't apply ICMS on revenue
-            vlt_iss = faturamento_total_venda * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100))
+            if faturamento_separado:
+                vlt_iss = (manutencao_mensal + venda_unit_monitoramento) * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100))
+            else:
+                vlt_iss = faturamento_total_venda * (Decimal(str(kit.aliq_iss or 0)) / Decimal(100))
 
         vlt_frete_venda = faturamento_total_venda * perc_frete_venda
         vlt_despesas_adm = faturamento_total_venda * perc_despesas_adm

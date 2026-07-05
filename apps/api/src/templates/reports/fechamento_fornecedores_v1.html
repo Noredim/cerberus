@@ -49,34 +49,68 @@
         
         <div class="compact-kpi-row">
             <div class="compact-kpi-card">
-                <span class="kpi-label">Venda Total</span>
-                <span class="kpi-val">R$ {{ kpis.venda_consolidada }}</span>
+                <span class="kpi-label">Custo Total (Custo Base + IPI)</span>
+                <span class="kpi-val">R$ {{ kpis.custo_total_base_ipi }}</span>
             </div>
             <div class="compact-kpi-card">
-                <span class="kpi-label">Custo Total</span>
-                <span class="kpi-val">R$ {{ kpis.custo_consolidado }}</span>
+                <span class="kpi-label">Custo de Impostos de Compra (DIFAL + ST)</span>
+                <span class="kpi-val">R$ {{ kpis.custo_impostos_compra }}</span>
             </div>
             <div class="compact-kpi-card">
-                <span class="kpi-label">Custo Impostos</span>
-                <span class="kpi-val">R$ {{ kpis.custo_impostos }}</span>
-            </div>
-            <div class="compact-kpi-card">
-                <span class="kpi-label">MKP</span>
-                <span class="kpi-val">{{ kpis.markup }}x</span>
-            </div>
-            <div class="compact-kpi-card">
-                <span class="kpi-label">Fornecedores</span>
+                <span class="kpi-label">Total de Fornecedores</span>
                 <span class="kpi-val">{{ kpis.qtd_fornecedores }}</span>
             </div>
-            <div class="compact-kpi-card">
-                <span class="kpi-label">Produtos</span>
-                <span class="kpi-val">{{ kpis.qtd_produtos }}</span>
+        </div>
+
+        <!-- GRID DE RESUMO DOS FORNECEDORES -->
+        <div style="margin-top: 15px; margin-bottom: 15px;">
+            <div style="font-size: 9.5pt; font-weight: bold; color: #1e293b; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 2px;">
+                Resumo Consolidado de Fornecedores
             </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Fornecedor</th>
+                        <th class="text-right" style="width: 11%;">Total Produtos</th>
+                        <th class="text-right" style="width: 10%;">Total IPI</th>
+                        <th class="text-right" style="width: 13%;">Custo Base (Prod + IPI)</th>
+                        <th class="text-right" style="width: 10%;">Total DIFAL</th>
+                        <th class="text-right" style="width: 10%;">Total ICMS ST</th>
+                        <th class="text-right" style="width: 10%;">Total Frete</th>
+                        <th class="text-right" style="width: 11%;">Total do Fornecedor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for supplier in suppliers_data %}
+                    <tr>
+                        <td class="font-bold">{{ supplier.nome }}</td>
+                        <td class="text-right">R$ {{ supplier.totais.total_produtos }}</td>
+                        <td class="text-right">R$ {{ supplier.totais.total_ipi }}</td>
+                        <td class="text-right font-bold">R$ {{ supplier.totais.total_custo_base }}</td>
+                        <td class="text-right">R$ {{ supplier.totais.total_difal }}</td>
+                        <td class="text-right">R$ {{ supplier.totais.total_st }}</td>
+                        <td class="text-right">R$ {{ supplier.totais.total_frete }}</td>
+                        <td class="text-right font-bold" style="color: #0284c7;">R$ {{ supplier.totais.total_geral }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td>TOTAL GERAL ACUMULADO</td>
+                        <td class="text-right">R$ {{ consolidado_geral.total_produtos }}</td>
+                        <td class="text-right">R$ {{ consolidado_geral.total_ipi }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ kpis.custo_total_base_ipi }}</td>
+                        <td class="text-right">R$ {{ consolidado_geral.total_difal }}</td>
+                        <td class="text-right">R$ {{ consolidado_geral.total_st }}</td>
+                        <td class="text-right">R$ {{ consolidado_geral.total_frete }}</td>
+                        <td class="text-right font-bold" style="color: #ea580c;">R$ {{ consolidado_geral.total_geral_aquisicao }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
     <!-- AGRUPAMENTO POR FORNECEDOR -->
     {% for supplier in suppliers_data %}
+    <div class="page-break"></div>
     <div class="avoid-break supplier-block" style="margin-bottom: 12px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
         <div class="section-title">Fornecedor: {{ supplier.nome }}</div>
         <div class="supplier-info">
@@ -203,6 +237,7 @@
     </div>
     {% endfor %}
 
+    <div class="page-break"></div>
     <!-- SEÇÃO: DEMONSTRATIVO FISCAL (DIFAL E ST DETALHADOS) -->
     <div class="avoid-break" style="margin-top: 12px;">
         <h2 style="margin-top: 6px; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 3px; color: #1e293b; font-size: 10.5pt;">

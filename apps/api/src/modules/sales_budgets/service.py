@@ -1961,6 +1961,14 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     total_produtos = Decimal("0.0")
     total_servicos = Decimal("0.0")
     total_st_total = Decimal("0.0")
+    is_interestadual = False
+    company = opportunity.company
+    customer = opportunity.customer
+    if company and customer:
+        is_interestadual = str(company.state_id) != str(customer.state_id)
+        
+    is_rental_opp = len(opportunity.rental_items) > 0
+    prazo_contrato = Decimal(str(opportunity.prazo_contrato_meses or 36))
     
     # Purchase Taxes (IPI, ST, DIFAL)
     purchase_ipi = Decimal("0.0")
@@ -1976,11 +1984,29 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     vlt_icms = Decimal("0.0")
     vlt_iss = Decimal("0.0")
     vlt_ipi_venda = Decimal("0.0")
+
+    # Segregated Venda Taxes (Locação vs Instalação)
+    impostos_instalacao_pis = Decimal("0.0")
+    impostos_instalacao_cofins = Decimal("0.0")
+    impostos_instalacao_csll = Decimal("0.0")
+    impostos_instalacao_irpj = Decimal("0.0")
+    impostos_instalacao_iss = Decimal("0.0")
+    impostos_instalacao_icms = Decimal("0.0")
+    
+    impostos_locacao_pis = Decimal("0.0")
+    impostos_locacao_cofins = Decimal("0.0")
+    impostos_locacao_csll = Decimal("0.0")
+    impostos_locacao_irpj = Decimal("0.0")
+    impostos_locacao_iss = Decimal("0.0")
     
     # Despesas
     vlt_frete = Decimal("0.0")
     vlt_comissao = Decimal("0.0")
     vlt_despesas_adm = Decimal("0.0")
+    
+    # Custos Operacionais
+    vlt_custo_op_monitoramento = Decimal("0.0")
+    vlt_custo_op_manutencao = Decimal("0.0")
     
     total_venda = Decimal("0.0")
     
@@ -1990,9 +2016,15 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     if company and customer:
         is_interestadual = str(company.state_id) != str(customer.state_id)
         
-    # Get kits from the items of SalesBudget (SalesBudgetItem)
+    is_rental_opp = len(opportunity.rental_items) > 0
+    prazo_contrato = Decimal(str(opportunity.prazo_contrato_meses or 36))
+
+    # Get kits from the items of SalesBudget (SalesBudgetItem & RentalBudgetItem)
     kit_ids = set()
     for item in opportunity.items:
+        if item.opportunity_kit_id:
+            kit_ids.add(item.opportunity_kit_id)
+    for item in opportunity.rental_items:
         if item.opportunity_kit_id:
             kit_ids.add(item.opportunity_kit_id)
             
@@ -2012,59 +2044,205 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 product_suppliers[pb_item.product_id] = pb.supplier_nome_fantasia
                 
     supplier_map = {}
+
+    # Build purchase tax details exactly as in reports.py to match calculations and roundings
+    opp_product_taxes = {}
     
+    # 1. Populate from direct items in opportunity.items
+    for item in opportunity.items:
+        if not item.opportunity_kit_id and item.product_id:
+            difal = Decimal(str(getattr(item, "difal_unit", None) or 0.0))
+            st = Decimal(str(getattr(item, "icms_st_unit", None) or 0.0))
+            opp_product_taxes[item.product_id] = {
+                "difal": difal,
+                "st": st,
+                "source": "opportunity_item"
+            }
+            
+    # 2. Populate from direct items in opportunity.rental_items
+    for item in opportunity.rental_items:
+        if not item.opportunity_kit_id and item.product_id:
+            difal = Decimal(str(getattr(item, "difal_unit", None) or 0.0))
+            st = Decimal(str(getattr(item, "icms_st_unit", None) or 0.0))
+            opp_product_taxes[item.product_id] = {
+                "difal": difal,
+                "st": st,
+                "source": "opportunity_item"
+            }
+
+    def get_purchase_tax_breakdown(prod_id, pb_item):
+        tax_info = opp_product_taxes.get(prod_id)
+        difal = Decimal("0.0")
+        st = Decimal("0.0")
+        ipi = Decimal("0.0")
+        
+        if tax_info:
+            difal = tax_info["difal"]
+            st = tax_info["st"]
+        
+        if difal == Decimal("0.0") and pb_item and pb_item.difal_unitario is not None and Decimal(str(pb_item.difal_unitario)) > Decimal("0.0"):
+            difal = Decimal(str(pb_item.difal_unitario))
+        if st == Decimal("0.0") and pb_item and pb_item.st_unitario is not None and Decimal(str(pb_item.st_unitario)) > Decimal("0.0"):
+            st = Decimal(str(pb_item.st_unitario))
+            
+        if pb_item and pb_item.ipi_valor is not None and Decimal(str(pb_item.ipi_valor)) > Decimal("0.0"):
+            pb_qty = Decimal(str(pb_item.quantidade)) if Decimal(str(pb_item.quantidade)) > Decimal("0.0") else Decimal("1.0")
+            ipi = Decimal(str(pb_item.ipi_valor)) / pb_qty
+            
+        return difal, st, ipi
+
+    kits_financials = {}
     for kit in kits:
         fin = kit_service.calculate_financials(kit, tenant_id, sales_budget_id=str(opportunity_id))
+        kits_financials[kit.id] = fin
         summary = fin["summary"]
         
-        qty = Decimal(str(kit.quantidade_kits or 1))
-        prazo = Decimal(str(summary.get("prazo_mensalidades") or 0))
+        # Populate kit items taxes into opp_product_taxes
+        for item_sum in fin.get("item_summaries", []):
+            p_id = item_sum.get("product_id")
+            if p_id:
+                p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                difal_val = Decimal(str(item_sum.get("difal_unitario") or 0.0))
+                st_val = Decimal(str(item_sum.get("icms_st_unitario") or 0.0))
+                opp_product_taxes[p_uuid] = {
+                    "difal": difal_val,
+                    "st": st_val,
+                    "source": "opportunity_kit"
+                }
+        
+        # Scale values by the actual quantity of this kit inside this opportunity
+        qty = Decimal("0.0")
+        for item in opportunity.items:
+            if item.opportunity_kit_id == kit.id:
+                qty += Decimal(str(item.quantidade or 0))
+        for ri in opportunity.rental_items:
+            if ri.opportunity_kit_id == kit.id:
+                qty += Decimal(str(ri.quantidade or 0))
+        if qty == Decimal("0.0"):
+            qty = Decimal("1.0")
         
         # --- ENTRADAS ---
-        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-            prod_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") != "SERVICO")
-            serv_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") == "SERVICO")
+        if is_rental_opp:
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                prod_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") != "SERVICO")
+                serv_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") == "SERVICO")
+                vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("valor_venda_manutencao", 0) or summary.get("vlt_manut", 0) or 0))
+                
+                total_servicos += (prod_sum + serv_sum + vlr_inst + vlr_manut) * qty
+                
+                # Custos operacionais do kit de instalação (não multiplicados pelo prazo do contrato)
+                vlt_custo_op_manutencao += (Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0)) + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * qty
+                vlt_custo_op_monitoramento += Decimal(str(summary.get("custo_monitoramento_unitario") or 0.0)) * qty
+            else: # LOCACAO or COMODATO
+                total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo_contrato * qty
+                
+                vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
+                vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
+                
+                total_servicos += (
+                    vlr_inst +
+                    (vlr_manut + vlr_monit) * prazo_contrato
+                ) * qty
+                
+                # Custos operacionais do kit de locação/comodato (multiplicados pelo prazo do contrato)
+                vlt_custo_op_manutencao += (Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0)) + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * prazo_contrato * qty
+                vlt_custo_op_monitoramento += Decimal(str(summary.get("custo_monitoramento_unitario") or 0.0)) * prazo_contrato * qty
+        else: # Standard sales/venda opportunity
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                prod_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") != "SERVICO")
+                serv_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") == "SERVICO")
+                
+                total_produtos += prod_sum * qty
+                
+                vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("valor_venda_manutencao", 0) or summary.get("vlt_manut", 0) or 0))
+                
+                total_servicos += (serv_sum + vlr_inst + vlr_manut) * qty
+            else: # LOCACAO or COMODATO
+                prazo_mensalidades = Decimal(str(summary.get("prazo_mensalidades") or 0))
+                total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo_mensalidades * qty
+                
+                vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
+                vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
+                vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
+                
+                total_servicos += (
+                    vlr_inst +
+                    (vlr_manut + vlr_monit) * prazo_mensalidades
+                ) * qty
             
-            total_produtos += prod_sum * qty
-            
-            vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
-            vlr_manut = Decimal(str(summary.get("valor_venda_manutencao", 0) or summary.get("vlt_manut", 0) or 0))
-            
-            total_servicos += (serv_sum + vlr_inst + vlr_manut) * qty
-        else: # LOCACAO or COMODATO
-            total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo * qty
-            
-            vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
-            vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
-            vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
-            
-            total_servicos += (
-                vlr_inst +
-                (vlr_manut + vlr_monit) * prazo
-            ) * qty
-            
-        total_st_total += Decimal(str(summary.get("total_st_total", 0) or 0))
+        total_st_total += Decimal(str(summary.get("total_st_total", 0) or 0)) * qty
         
         # --- SAÍDAS: Impostos de Compra ---
-        purchase_ipi += Decimal(str(summary.get("total_ipi_total", 0) or 0))
-        purchase_st += Decimal(str(summary.get("total_st_total", 0) or 0))
-        purchase_difal += Decimal(str(summary.get("total_difal_total", 0) or 0))
+        # Accumulated precisely from components inside the loop below
         custo_base_produtos += Decimal(str(summary.get("custo_aquisicao_produtos", 0) or 0)) * qty
         
         # --- SAÍDAS: Impostos de Venda ---
-        vlt_pis += Decimal(str(summary.get("vlt_pis", 0) or 0))
-        vlt_cofins += Decimal(str(summary.get("vlt_cofins", 0) or 0))
-        vlt_csll += Decimal(str(summary.get("vlt_csll", 0) or 0))
-        vlt_irpj += Decimal(str(summary.get("vlt_irpj", 0) or 0))
-        vlt_icms += Decimal(str(summary.get("vlt_icms", 0) or 0))
-        vlt_iss += Decimal(str(summary.get("vlt_iss", 0) or 0))
+        if is_rental_opp:
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                vlt_pis_val = Decimal(str(summary.get("vlt_pis", 0) or 0)) * qty
+                vlt_cofins_val = Decimal(str(summary.get("vlt_cofins", 0) or 0)) * qty
+                vlt_csll_val = Decimal(str(summary.get("vlt_csll", 0) or 0)) * qty
+                vlt_irpj_val = Decimal(str(summary.get("vlt_irpj", 0) or 0)) * qty
+                vlt_icms_val = Decimal(str(summary.get("vlt_icms", 0) or 0)) * qty
+                vlt_iss_val = Decimal(str(summary.get("vlt_iss", 0) or 0)) * qty
+                
+                vlt_pis += vlt_pis_val
+                vlt_cofins += vlt_cofins_val
+                vlt_csll += vlt_csll_val
+                vlt_irpj += vlt_irpj_val
+                vlt_icms += vlt_icms_val
+                vlt_iss += vlt_iss_val
+                
+                impostos_instalacao_pis += vlt_pis_val
+                impostos_instalacao_cofins += vlt_cofins_val
+                impostos_instalacao_csll += vlt_csll_val
+                impostos_instalacao_irpj += vlt_irpj_val
+                impostos_instalacao_icms += vlt_icms_val
+                impostos_instalacao_iss += vlt_iss_val
+            else: # LOCACAO or COMODATO
+                # Skip rental taxes here; calculated precisely at the end of the DRE function
+                pass
+        else: # Standard sales/venda opportunity
+            vlt_pis_val = Decimal(str(summary.get("vlt_pis", 0) or 0)) * qty
+            vlt_cofins_val = Decimal(str(summary.get("vlt_cofins", 0) or 0)) * qty
+            vlt_csll_val = Decimal(str(summary.get("vlt_csll", 0) or 0)) * qty
+            vlt_irpj_val = Decimal(str(summary.get("vlt_irpj", 0) or 0)) * qty
+            vlt_icms_val = Decimal(str(summary.get("vlt_icms", 0) or 0)) * qty
+            vlt_iss_val = Decimal(str(summary.get("vlt_iss", 0) or 0)) * qty
+            
+            vlt_pis += vlt_pis_val
+            vlt_cofins += vlt_cofins_val
+            vlt_csll += vlt_csll_val
+            vlt_irpj += vlt_irpj_val
+            vlt_icms += vlt_icms_val
+            vlt_iss += vlt_iss_val
+            
+            impostos_instalacao_pis += vlt_pis_val
+            impostos_instalacao_cofins += vlt_cofins_val
+            impostos_instalacao_csll += vlt_csll_val
+            impostos_instalacao_irpj += vlt_irpj_val
+            impostos_instalacao_icms += vlt_icms_val
+            impostos_instalacao_iss += vlt_iss_val
         
         # --- SAÍDAS: Despesas de Venda ---
-        vlt_frete += Decimal(str(summary.get("vlt_frete_venda", 0) or 0))
-        vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0))
-        vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0))
+        vlt_frete += Decimal(str(summary.get("vlt_frete_venda", 0) or 0)) * qty
+        if is_rental_opp:
+            if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+                vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * qty
+                vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * qty
+            else:
+                vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * prazo_contrato * qty
+                vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * prazo_contrato * qty
+        else:
+            vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * qty
+            vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * qty
         
-        total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0))
+        total_venda += (Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0)) *
+                        (prazo_contrato if (is_rental_opp and kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]) else Decimal("1.0")) *
+                        qty)
 
         # Accumulate supplier values from kit components
         for item_sum in fin.get("item_summaries", []):
@@ -2077,30 +2255,43 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 qty_in_kit = Decimal(str(kit_item.quantidade_no_kit)) if kit_item else Decimal("1.0")
                 component_qty = qty * qty_in_kit
                 
-                frete_unit = Decimal(str(item_sum.get("frete_cif_unit") or 0.0))
-                
                 if item_sum.get("tipo_item") == "SERVICO":
                     sup_name = "Serviços Próprios"
                     base_forn = Decimal(str(item_sum.get("custo_base_unitario_item") or 0.0))
+                    supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
                 else:
                     p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
                     sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
-                    base_forn_val = item_sum.get("base_fornecedor")
-                    if base_forn_val is not None:
-                        base_forn = Decimal(str(base_forn_val)) + frete_unit
-                    else:
-                        difal_unit = Decimal(str(item_sum.get("difal_unitario") or 0.0))
-                        st_unit = Decimal(str(item_sum.get("icms_st_unitario") or 0.0))
-                        ipi_unit = Decimal(str(item_sum.get("ipi_unit") or 0.0))
-                        base_forn = Decimal(str(item_sum.get("custo_base_unitario_item") or 0.0)) - (difal_unit + st_unit + ipi_unit)
-                
-                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
+                    
+                    pb_item = None
+                    for pb in purchase_budgets:
+                        pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
+                        if pb_item:
+                            break
+                    
+                    difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
+                    c_cost_total = Decimal(str(item_sum.get("custo_total_item_no_kit") or 0.0)) * qty
+                    c_tax_total = (difal_val + st_val + ipi_val) * component_qty
+                    base_forn_total = c_cost_total - c_tax_total
+                    
+                    # Add purchase freight
+                    frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
+                    frete_total = frete_compra_unit * component_qty
+                    base_forn_total += frete_total
+                    
+                    supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
+                    
+                    # Accumulate purchase taxes precisely matching reports.py
+                    purchase_ipi += ipi_val * component_qty
+                    purchase_st += st_val * component_qty
+                    purchase_difal += difal_val * component_qty
 
+    # Process direct sales items (without kit)
     for item in opportunity.items:
         if not item.opportunity_kit_id:
+            item_qty = Decimal(str(item.quantidade or 1.0))
             if item.product_id:
                 p_uuid = item.product_id
-                item_qty = Decimal(str(item.quantidade or 1.0))
                 sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
                 
                 pb_item = None
@@ -2108,14 +2299,271 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                     pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
                     if pb_item:
                         break
+                        
+                difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
+                cost_total = Decimal(str(getattr(item, 'custo_total_aquisicao', None) or getattr(item, 'custo_unit_base', Decimal("0.0")))) * item_qty
+                tax_total = (difal_val + st_val + ipi_val) * item_qty
+                base_forn_total = cost_total - tax_total
+                
                 frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
-                base_forn = (Decimal(str(pb_item.valor_unitario)) if pb_item else Decimal(str(item.custo_unit_base or 0.0))) + frete_compra_unit
-                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
+                frete_total = frete_compra_unit * item_qty
+                base_forn_total += frete_total
+                
+                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
+                
+                total_produtos += Decimal(str(item.total_venda or 0.0))
+                custo_base_produtos += Decimal(str(item.custo_unit_base or 0.0)) * item_qty
+                
+                # Purchase Taxes
+                purchase_ipi += ipi_val * item_qty
+                purchase_st += st_val * item_qty
+                purchase_difal += difal_val * item_qty
             elif item.own_service_id:
-                item_qty = Decimal(str(item.quantidade or 1.0))
                 sup_name = "Serviços Próprios"
                 base_forn = Decimal(str(item.custo_unit_base or 0.0))
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
+                total_servicos += Decimal(str(item.total_venda or 0.0))
+
+            total_venda += Decimal(str(item.total_venda or 0.0))
+            
+            # Sell-side Taxes
+            pis_direct = Decimal(str(item.pis_unit or 0.0)) * item_qty
+            cofins_direct = Decimal(str(item.cofins_unit or 0.0)) * item_qty
+            csll_direct = Decimal(str(item.csll_unit or 0.0)) * item_qty
+            irpj_direct = Decimal(str(item.irpj_unit or 0.0)) * item_qty
+            icms_direct = Decimal(str(item.icms_unit or 0.0)) * item_qty
+            iss_direct = Decimal(str(item.iss_unit or 0.0)) * item_qty
+
+            vlt_pis += pis_direct
+            vlt_cofins += cofins_direct
+            vlt_csll += csll_direct
+            vlt_irpj += irpj_direct
+            vlt_icms += icms_direct
+            vlt_iss += iss_direct
+
+            impostos_instalacao_pis += pis_direct
+            impostos_instalacao_cofins += cofins_direct
+            impostos_instalacao_csll += csll_direct
+            impostos_instalacao_irpj += irpj_direct
+            impostos_instalacao_icms += icms_direct
+            impostos_instalacao_iss += iss_direct
+            
+            # Expenses
+            vlt_frete += Decimal(str(item.frete_venda_unit or 0.0)) * item_qty
+            vlt_comissao += Decimal(str(item.comissao_unit or 0.0)) * item_qty
+            vlt_despesas_adm += Decimal(str(item.despesa_adm_unit or 0.0)) * item_qty
+
+    # Process direct rental/locação items (without kit)
+    for ri in opportunity.rental_items:
+        if not ri.opportunity_kit_id:
+            qty = Decimal(str(ri.quantidade or 1.0))
+            prazo = Decimal(str(ri.prazo_contrato or 36))
+            valor_mensal = Decimal(str(ri.valor_mensal or 0.0))
+            valor_instalacao = Decimal(str(ri.valor_instalacao_item or 0.0))
+            
+            # Revenues (Entradas)
+            receita_locacao = valor_mensal * prazo * qty
+            receita_instalacao = valor_instalacao * qty
+            
+            total_produtos += receita_locacao
+            total_servicos += receita_instalacao
+            total_venda += receita_locacao + receita_instalacao
+            
+            # Suppliers & Costs
+            if ri.product_id:
+                p_uuid = ri.product_id
+                sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                
+                pb_item = None
+                for pb in purchase_budgets:
+                    pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
+                    if pb_item:
+                        break
+                        
+                difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
+                cost_total = Decimal(str(getattr(ri, 'custo_total_aquisicao', None) or getattr(ri, 'custo_aquisicao_unit', Decimal("0.0")))) * qty
+                tax_total = (difal_val + st_val + ipi_val) * qty
+                base_forn_total = cost_total - tax_total
+                
+                frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
+                frete_total = frete_compra_unit * qty
+                base_forn_total += frete_total
+                
+                supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
+                
+                custo_base_produtos += Decimal(str(ri.custo_aquisicao_unit or 0.0)) * qty
+                
+                # Purchase Taxes
+                purchase_ipi += ipi_val * qty
+                purchase_st += st_val * qty
+                purchase_difal += difal_val * qty
+
+            if ri.valor_instalacao_item and float(ri.valor_instalacao_item) > 0.0:
+                supplier_map["Serviços Próprios"] = supplier_map.get("Serviços Próprios", Decimal("0.0")) + (Decimal(str(ri.valor_instalacao_item)) * qty)
+
+            # Sell-side Taxes: calculated precisely at the end of the DRE function
+            pass
+            
+            # Expenses (comissão e despesas adm)
+            vlt_comissao += (receita_locacao + receita_instalacao) * Decimal(str(opportunity.perc_comissao_rental or opportunity.perc_comissao or 0.0)) / 100
+            vlt_despesas_adm += (receita_locacao + receita_instalacao) * Decimal(str(opportunity.perc_despesa_adm or 0.0)) / 100
+            
+            # Custos operacionais do item direto de locação/comodato
+            if ri.is_kit_instalacao:
+                vlt_custo_op_manutencao += Decimal(str(ri.custo_manut_mensal or 0.0)) * qty
+            else:
+                vlt_custo_op_manutencao += Decimal(str(ri.custo_manut_mensal or 0.0)) * prazo * qty
+
+    if is_rental_opp:
+        # Determine tax rates based on the first item
+        first_rental_item = opportunity.rental_items[0] if opportunity.rental_items else None
+        if first_rental_item and first_rental_item.opportunity_kit_id:
+            aliq_pis_rental = Decimal(str(first_rental_item.kit_pis or 0.0))
+            aliq_cofins_rental = Decimal(str(first_rental_item.kit_cofins or 0.0))
+            aliq_csll_rental = Decimal(str(first_rental_item.kit_csll or 0.0))
+            aliq_irpj_rental = Decimal(str(first_rental_item.kit_irpj or 0.0))
+            aliq_iss_rental = Decimal(str(first_rental_item.kit_iss or 0.0))
+        else:
+            aliq_pis_rental = Decimal(str(opportunity.perc_pis_rental or 0.0))
+            aliq_cofins_rental = Decimal(str(opportunity.perc_cofins_rental or 0.0))
+            aliq_csll_rental = Decimal(str(opportunity.perc_csll_rental or 0.0))
+            aliq_irpj_rental = Decimal(str(opportunity.perc_irpj_rental or 0.0))
+            aliq_iss_rental = Decimal(str(opportunity.perc_iss_rental or 0.0))
+
+        # Reset and calculate rental & installation taxes dynamically matching reports.py
+        impostos_locacao_pis = Decimal("0.0")
+        impostos_locacao_cofins = Decimal("0.0")
+        impostos_locacao_csll = Decimal("0.0")
+        impostos_locacao_irpj = Decimal("0.0")
+        impostos_locacao_iss = Decimal("0.0")
+
+        impostos_instalacao_pis = Decimal("0.0")
+        impostos_instalacao_cofins = Decimal("0.0")
+        impostos_instalacao_csll = Decimal("0.0")
+        impostos_instalacao_irpj = Decimal("0.0")
+        impostos_instalacao_iss = Decimal("0.0")
+        impostos_instalacao_icms = Decimal("0.0")
+
+        prazo_instalacao = opportunity.prazo_instalacao_meses or 0
+
+        # Loop 1: Locacao Taxes (skips is_kit_instalacao)
+        for item in opportunity.rental_items:
+            q = Decimal(str(item.quantidade or 1.0))
+            if item.is_kit_instalacao:
+                continue
+                
+            faturamento = Decimal(str(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0)) * q
+            if item.opportunity_kit_id:
+                mon = Decimal(str(item.kit_venda_unit_monitoramento or 0.0)) * q
+                man = Decimal(str(item.kit_vlt_manut or item.manutencao_locacao or 0.0)) * q
+                loc = faturamento - man - mon
+                rate_pis = Decimal(str(item.kit_pis or 0.0))
+                rate_cofins = Decimal(str(item.kit_cofins or 0.0))
+                rate_csll = Decimal(str(item.kit_csll or 0.0))
+                rate_irpj = Decimal(str(item.kit_irpj or 0.0))
+                rate_iss = Decimal(str(item.kit_iss or 0.0))
+                is_sep = bool(item.kit_faturamento_separado)
+            else:
+                mon = Decimal("0.0")
+                man = Decimal("0.0")
+                loc = faturamento
+                rate_pis = aliq_pis_rental
+                rate_cofins = aliq_cofins_rental
+                rate_csll = aliq_csll_rental
+                rate_irpj = aliq_irpj_rental
+                rate_iss = aliq_iss_rental
+                is_sep = False
+                
+            is_com = item.tipo_contrato_kit == 'COMODATO' or (not item.opportunity_kit_id and opportunity.tipo_receita_rental == 'COMODATO')
+            
+            def calc_tax(is_iss: bool, rate: Decimal):
+                if rate <= 0: return Decimal("0.0")
+                if is_iss and not is_com: return Decimal("0.0")
+                if not is_sep: return (loc + man + mon) * (rate / Decimal("100.0"))
+                if is_iss: return (man + mon) * (rate / Decimal("100.0"))
+                return (loc + man + mon) * (rate / Decimal("100.0"))
+                
+            c_pis = calc_tax(False, rate_pis)
+            c_cofins = calc_tax(False, rate_cofins)
+            c_csll = calc_tax(False, rate_csll)
+            c_irpj = calc_tax(False, rate_irpj)
+            c_iss = calc_tax(True, rate_iss)
+            
+            total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
+            
+            kit_financials_summary = None
+            if item.opportunity_kit_id:
+                kf = kits_financials.get(item.opportunity_kit_id)
+                if kf and "summary" in kf:
+                    kit_financials_summary = kf["summary"]
+                    
+            if kit_financials_summary:
+                impostos = Decimal(str(kit_financials_summary.get("valor_impostos") or 0.0)) * q
+            else:
+                impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
+                
+            ratio = impostos / total_calc if total_calc > 0 else Decimal("1.0")
+            
+            prazo_item_raw = int(item.prazo_contrato or prazo_contrato)
+            prazo_item = max(0, prazo_item_raw - prazo_instalacao)
+            
+            impostos_locacao_pis += c_pis * ratio * prazo_item
+            impostos_locacao_cofins += c_cofins * ratio * prazo_item
+            impostos_locacao_csll += c_csll * ratio * prazo_item
+            impostos_locacao_irpj += c_irpj * ratio * prazo_item
+            impostos_locacao_iss += c_iss * ratio * prazo_item
+
+        # Loop 2: Installation Taxes (only is_kit_instalacao)
+        for item in opportunity.rental_items:
+            q = Decimal(str(item.quantidade or 1.0))
+            if not item.is_kit_instalacao:
+                continue
+                
+            faturamento = Decimal(str(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0)) * q
+            if item.opportunity_kit_id:
+                rate_pis = Decimal(str(item.kit_pis or 0.0))
+                rate_cofins = Decimal(str(item.kit_cofins or 0.0))
+                rate_csll = Decimal(str(item.kit_csll or 0.0))
+                rate_irpj = Decimal(str(item.kit_irpj or 0.0))
+                rate_iss = Decimal(str(item.kit_iss or 0.0))
+            else:
+                rate_pis = aliq_pis_rental
+                rate_cofins = aliq_cofins_rental
+                rate_csll = aliq_csll_rental
+                rate_irpj = aliq_irpj_rental
+                rate_iss = aliq_iss_rental
+                
+            c_pis = faturamento * (rate_pis / Decimal("100.0"))
+            c_cofins = faturamento * (rate_cofins / Decimal("100.0"))
+            c_csll = faturamento * (rate_csll / Decimal("100.0"))
+            c_irpj = faturamento * (rate_irpj / Decimal("100.0"))
+            c_iss = faturamento * (rate_iss / Decimal("100.0"))
+            
+            total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
+            impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
+            ratio = impostos / total_calc if total_calc > 0 else Decimal("1.0")
+            
+            impostos_instalacao_pis += c_pis * ratio
+            impostos_instalacao_cofins += c_cofins * ratio
+            impostos_instalacao_csll += c_csll * ratio
+            impostos_instalacao_irpj += c_irpj * ratio
+            impostos_instalacao_iss += c_iss * ratio
+            impostos_instalacao_icms += Decimal(str(getattr(item, "icms_abatido_unit", 0.0) or getattr(item, "icms_unit", 0.0) or 0.0)) * q
+
+        # Apply to master DRE variables
+        vlt_pis = impostos_instalacao_pis + impostos_locacao_pis
+        vlt_cofins = impostos_instalacao_cofins + impostos_locacao_cofins
+        vlt_csll = impostos_instalacao_csll + impostos_locacao_csll
+        vlt_irpj = impostos_instalacao_irpj + impostos_locacao_irpj
+        vlt_iss = impostos_instalacao_iss + impostos_locacao_iss
+        vlt_icms = impostos_instalacao_icms
+    else:
+        # For non-rental opportunities, define default rental percentage variables as zero
+        aliq_pis_rental = Decimal("0.0")
+        aliq_cofins_rental = Decimal("0.0")
+        aliq_csll_rental = Decimal("0.0")
+        aliq_irpj_rental = Decimal("0.0")
+        aliq_iss_rental = Decimal("0.0")
 
     restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
     total_entradas = total_produtos + total_servicos + restituicao_icms_st
@@ -2155,11 +2603,31 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
     total_fornecedores = sum(item["valor"] for item in fornecedores)
     
+    total_custos_operacionais = vlt_custo_op_monitoramento + vlt_custo_op_manutencao
+    
     total_saidas = (
         total_fornecedores +
         purchase_ipi + purchase_st + purchase_difal +
         vlt_pis + vlt_cofins + vlt_icms + vlt_iss + vlt_irpj + vlt_csll +
-        vlt_frete + vlt_comissao + vlt_despesas_adm
+        vlt_frete + vlt_comissao + vlt_despesas_adm +
+        total_custos_operacionais
+    )
+    
+    total_impostos_instalacao = (
+        impostos_instalacao_pis +
+        impostos_instalacao_cofins +
+        impostos_instalacao_csll +
+        impostos_instalacao_irpj +
+        impostos_instalacao_iss +
+        impostos_instalacao_icms
+    )
+    
+    total_impostos_locacao = (
+        impostos_locacao_pis +
+        impostos_locacao_cofins +
+        impostos_locacao_csll +
+        impostos_locacao_irpj +
+        impostos_locacao_iss
     )
     
     lucro_ebitda = total_entradas - total_saidas
@@ -2184,6 +2652,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         cidade = customer.city_nome or cidade
         estado = customer.state_sigla or estado
         
+    is_rental = len(opportunity.rental_items) > 0
+        
     return {
         "header": {
             "cliente_nome": customer.nome_fantasia or customer.razao_social if customer else "Não informado",
@@ -2192,7 +2662,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             "vendedor_nome": vendedor_nome,
             "responsavel_nome": responsavel_nome,
             "numero_oportunidade": opportunity.numero_orcamento or "Sem número",
-            "data_fechamento": data_fechamento
+            "data_fechamento": data_fechamento,
+            "is_rental": is_rental
         },
         "entradas": {
             "total_produtos": round(total_produtos, 2),
@@ -2216,10 +2687,38 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(vlt_irpj, 2)},
                 "csll": {"percent": round(csll_venda_pct, 2), "valor": round(vlt_csll, 2)}
             },
+            "impostos_instalacao": {
+                "pis": {"percent": round(pis_venda_pct, 2), "valor": round(impostos_instalacao_pis, 2)},
+                "cofins": {"percent": round(cofins_venda_pct, 2), "valor": round(impostos_instalacao_cofins, 2)},
+                "icms": {"percent": round(icms_venda_pct, 2), "valor": round(impostos_instalacao_icms, 2)},
+                "iss": {"percent": round(iss_venda_pct, 2), "valor": round(impostos_instalacao_iss, 2)},
+                "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(impostos_instalacao_irpj, 2)},
+                "csll": {"percent": round(csll_venda_pct, 2), "valor": round(impostos_instalacao_csll, 2)},
+                "total": round(total_impostos_instalacao, 2)
+            },
+            "impostos_locacao": {
+                "pis": {"percent": round(aliq_pis_rental, 2), "valor": round(impostos_locacao_pis, 2)},
+                "cofins": {"percent": round(aliq_cofins_rental, 2), "valor": round(impostos_locacao_cofins, 2)},
+                "irpj": {"percent": round(aliq_irpj_rental, 2), "valor": round(impostos_locacao_irpj, 2)},
+                "csll": {"percent": round(aliq_csll_rental, 2), "valor": round(impostos_locacao_csll, 2)},
+                "iss": {"percent": round(aliq_iss_rental, 2), "valor": round(impostos_locacao_iss, 2)},
+                "total": round(total_impostos_locacao, 2)
+            },
             "despesas_venda": {
                 "frete": {"percent": round(frete_pct, 2), "valor": round(vlt_frete, 2)},
                 "comissao": {"percent": round(comissao_pct, 2), "valor": round(vlt_comissao, 2)},
                 "despesas_administrativas": {"percent": round(despesas_adm_pct, 2), "valor": round(vlt_despesas_adm, 2)}
+            },
+            "custos_operacionais": {
+                "monitoramento": {
+                    "percent": round((vlt_custo_op_monitoramento / total_entradas * 100) if total_entradas > 0 else Decimal("0.0"), 2),
+                    "valor": round(vlt_custo_op_monitoramento, 2)
+                },
+                "manutencao": {
+                    "percent": round((vlt_custo_op_manutencao / total_entradas * 100) if total_entradas > 0 else Decimal("0.0"), 2),
+                    "valor": round(vlt_custo_op_manutencao, 2)
+                },
+                "total": round(vlt_custo_op_monitoramento + vlt_custo_op_manutencao, 2)
             },
             "total_saidas": round(total_saidas, 2)
         },

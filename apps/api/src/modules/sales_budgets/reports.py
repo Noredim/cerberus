@@ -182,6 +182,9 @@ class OpportunitiesReportService:
             exp["valor"] for exp in dre_data["saidas"]["despesas_venda"].values()
         )
         
+        total_impostos_instalacao = dre_data["saidas"]["impostos_instalacao"]["total"]
+        total_impostos_locacao = dre_data["saidas"]["impostos_locacao"]["total"]
+        
         def format_currency_helper(val) -> str:
             if val is None:
                 return "0,00"
@@ -260,6 +263,8 @@ class OpportunitiesReportService:
             total_impostos_compra=total_impostos_compra,
             total_impostos_venda=total_impostos_venda,
             total_despesas_venda=total_despesas_venda,
+            total_impostos_instalacao=total_impostos_instalacao,
+            total_impostos_locacao=total_impostos_locacao,
             lucro_ebitda=dre_data["lucro_ebitda"],
             margem_liquida=dre_data["margem_liquida"],
             emissao_data_hora=emissao_data_hora,
@@ -390,21 +395,51 @@ class OpportunitiesReportService:
             add_row("2.1 Custo de Aquisição (Fornecedores)", (float(total_fornecedores) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_fornecedores, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for f in dre_data["saidas"]["fornecedores"]:
                 add_row(f"(-) {f['nome']}", (float(f['valor']) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, f['valor'], is_indent=True)
+            add_row("(=) Total Pagamento a fornecedores", (float(total_fornecedores) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_fornecedores, is_bold=True, bg_color='#f1f5f9')
                 
             # Impostos compra
             add_row("2.2 Impostos de Compra (FPC)", (float(total_impostos_compra) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_compra, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, imp in dre_data["saidas"]["impostos_compra"].items():
                 add_row(f"(-) Imposto de Compra {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+            add_row("(=) Total Impostos de Compra", (float(total_impostos_compra) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_compra, is_bold=True, bg_color='#f1f5f9')
                 
             # Impostos venda
-            add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
-            for k, imp in dre_data["saidas"]["impostos_venda"].items():
-                add_row(f"(-) Imposto de Venda {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+            if dre_data["header"]["is_rental"]:
+                add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                
+                # Impostos Instalacao
+                add_row("2.3.1 Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                for k, imp in dre_data["saidas"]["impostos_instalacao"].items():
+                    if k != "total":
+                        add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                add_row("(=) Total Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, bg_color='#f1f5f9')
+                
+                # Impostos Locacao
+                add_row("2.3.2 Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                for k, imp in dre_data["saidas"]["impostos_locacao"].items():
+                    if k != "total":
+                        add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                add_row("(=) Total Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, bg_color='#f1f5f9')
+            else:
+                add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                for k, imp in dre_data["saidas"]["impostos_venda"].items():
+                    add_row(f"(-) Imposto de Venda {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                add_row("(=) Total Impostos de Venda", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, bg_color='#f1f5f9')
                 
             # Despesas venda
             add_row("2.4 Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, exp in dre_data["saidas"]["despesas_venda"].items():
                 add_row(f"(-) Despesa {k.capitalize()}", float(exp.get('percent', 0.0) or 0.0), exp['valor'], is_indent=True)
+            add_row("(=) Total Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, bg_color='#f1f5f9')
+            
+            # Custos Operacionais (Rental only)
+            if dre_data["header"]["is_rental"] and "custos_operacionais" in dre_data["saidas"]:
+                co_data = dre_data["saidas"]["custos_operacionais"]
+                total_custos_operacionais = co_data["total"]
+                add_row("2.5 Custos Operacionais", (float(total_custos_operacionais) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_custos_operacionais, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                add_row("(-) Monitoramento", float(co_data["monitoramento"].get("percent", 0.0) or 0.0), co_data["monitoramento"]["valor"], is_indent=True)
+                add_row("(-) Manutenção", float(co_data["manutencao"].get("percent", 0.0) or 0.0), co_data["manutencao"]["valor"], is_indent=True)
+                add_row("(=) Total Custos Operacionais", (float(total_custos_operacionais) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_custos_operacionais, is_bold=True, bg_color='#f1f5f9')
                 
             # Resultado
             add_row("3. RESULTADO FINANCEIRO CONSOLIDADO", None, None, is_bold=True, bg_color='#f1f5f9')
@@ -746,6 +781,16 @@ class OpportunitiesReportService:
                 ipi_total = prod_calc["ipi_total"]
                 val_total = val_final - difal_total - st_total - ipi_total
 
+                # Proportional Freight Calculation
+                frete_unit = 0.0
+                if pb_item.frete_valor is not None and float(pb_item.frete_valor) > 0.0:
+                    pb_qty = float(pb_item.quantidade) if float(pb_item.quantidade) > 0 else 1.0
+                    frete_unit = float(pb_item.frete_valor) / pb_qty
+                frete_total = frete_unit * opp_qty
+
+                # Add freight to val_final
+                val_final = val_final + frete_total
+
                 val_unit = val_total / opp_qty if opp_qty > 0 else 0.0
                 difal_unit = difal_total / opp_qty if opp_qty > 0 else 0.0
                 st_unit = st_total / opp_qty if opp_qty > 0 else 0.0
@@ -766,6 +811,8 @@ class OpportunitiesReportService:
                     "st_total": format_currency(st_total),
                     "ipi_unitario": format_currency(ipi_unit),
                     "ipi_total": format_currency(ipi_total),
+                    "frete_unitario": format_currency(frete_unit),
+                    "frete_total": format_currency(frete_total),
                     "valor_final": format_currency(val_final),
                     "origem_imposto": origem_imposto,
                     # Numeric versions for backend summation
@@ -773,6 +820,7 @@ class OpportunitiesReportService:
                     "_difal_total": difal_total,
                     "_st_total": st_total,
                     "_ipi_total": ipi_total,
+                    "_frete_total": frete_total,
                     "_val_final": val_final,
                     "_difal_unit": difal_unit,
                     "_st_unit": st_unit,
@@ -789,14 +837,18 @@ class OpportunitiesReportService:
             total_difal = sum(item["_difal_total"] for item in data["items"])
             total_st = sum(item["_st_total"] for item in data["items"])
             total_ipi = sum(item["_ipi_total"] for item in data["items"])
+            total_frete = sum(item["_frete_total"] for item in data["items"])
             total_imp = total_difal + total_st + total_ipi
-            total_geral = total_prod + total_imp
+            total_geral = total_prod + total_imp + total_frete
+            total_custo_base = total_prod + total_ipi
 
             data["totais"] = {
                 "total_produtos": format_currency(total_prod),
                 "total_difal": format_currency(total_difal),
                 "total_st": format_currency(total_st),
                 "total_ipi": format_currency(total_ipi),
+                "total_frete": format_currency(total_frete),
+                "total_custo_base": format_currency(total_custo_base),
                 "total_impostos": format_currency(total_imp),
                 "total_geral": format_currency(total_geral),
                 # Numeric
@@ -804,6 +856,8 @@ class OpportunitiesReportService:
                 "_total_difal": total_difal,
                 "_total_st": total_st,
                 "_total_ipi": total_ipi,
+                "_total_frete": total_frete,
+                "_total_custo_base": total_custo_base,
                 "_total_impostos": total_imp,
                 "_total_geral": total_geral
             }
@@ -853,9 +907,19 @@ class OpportunitiesReportService:
 
         # 6. Calculate Consolidated Opportunity KPIs
         venda_consolidada = float(opportunity.valor_total or 0.0)
-        custo_consolidado = sum(data["totais"]["_total_geral"] for data in mapped_by_supplier.values())
+        
+        # 8. Build Consolidated General Section
+        total_prod_all = sum(float(item["_val_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_difal_all = sum(float(item["_difal_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_st_all = sum(float(item["_st_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_ipi_all = sum(float(item["_ipi_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_frete_all = sum(float(item["_frete_total"]) for data in mapped_by_supplier.values() for item in data["items"])
+        total_imp_all = total_difal_all + total_st_all + total_ipi_all
+        total_geral_all = total_prod_all + total_imp_all + total_frete_all
+
+        custo_consolidado = total_geral_all
         lucro_bruto = venda_consolidada - custo_consolidado
-        custo_impostos = sum(data["totais"]["_total_impostos"] for data in mapped_by_supplier.values())
+        custo_impostos = total_imp_all
         markup = (venda_consolidada / custo_consolidado) if custo_consolidado > 0 else 1.0
         
         qtd_fornecedores = len(mapped_by_supplier)
@@ -873,7 +937,9 @@ class OpportunitiesReportService:
             "custo_impostos": format_currency(custo_impostos),
             "markup": f"{markup:.2f}",
             "qtd_fornecedores": str(qtd_fornecedores),
-            "qtd_produtos": qtd_produtos_str
+            "qtd_produtos": qtd_produtos_str,
+            "custo_total_base_ipi": format_currency(total_prod_all + total_ipi_all),
+            "custo_impostos_compra": format_currency(total_difal_all + total_st_all)
         }
 
         # 7. Build Fechamento por Fornecedor Section
@@ -904,19 +970,12 @@ class OpportunitiesReportService:
             "total_geral": format_currency(total_geral_f)
         }
 
-        # 8. Build Consolidated General Section
-        total_prod_all = sum(float(item["_val_total"]) for data in mapped_by_supplier.values() for item in data["items"])
-        total_difal_all = sum(float(item["_difal_total"]) for data in mapped_by_supplier.values() for item in data["items"])
-        total_st_all = sum(float(item["_st_total"]) for data in mapped_by_supplier.values() for item in data["items"])
-        total_ipi_all = sum(float(item["_ipi_total"]) for data in mapped_by_supplier.values() for item in data["items"])
-        total_imp_all = total_difal_all + total_st_all + total_ipi_all
-        total_geral_all = total_prod_all + total_imp_all
-
         consolidado_geral = {
             "total_produtos": format_currency(total_prod_all),
             "total_difal": format_currency(total_difal_all),
             "total_st": format_currency(total_st_all),
             "total_ipi": format_currency(total_ipi_all),
+            "total_frete": format_currency(total_frete_all),
             "total_impostos": format_currency(total_imp_all),
             "total_geral_aquisicao": format_currency(total_geral_all)
         }
@@ -929,10 +988,11 @@ class OpportunitiesReportService:
             s_nome = data["nome"]
             s_total_prod = data["totais"]["_total_produtos"]
             s_total_imp = data["totais"]["_total_impostos"]
+            s_total_frete = data["totais"]["_total_frete"]
             s_total_geral = data["totais"]["_total_geral"]
 
-            # Validação 1: Σ Equipamentos + Σ Impostos = Custo Total
-            diff1 = abs((s_total_prod + s_total_imp) - s_total_geral)
+            # Validação 1: Σ Equipamentos + Σ Impostos + Σ Frete = Custo Total
+            diff1 = abs((s_total_prod + s_total_imp + s_total_frete) - s_total_geral)
             if diff1 > 0.005:
                 logger.warning(
                     f"SupplierClosingReportWarning\n\n"
@@ -1901,6 +1961,8 @@ class OpportunitiesReportService:
         # Custo de Aquisição no card superior = Custo Base + IPI
         custo_total_com_impostos = custo_consolidado + total_ipi_all
         
+        total_custo_aquisicao = custo_total_com_impostos + custo_impostos
+        
         if is_same_cnpj:
             impostos_venda = 0.0
             despesas_totais = 0.0
@@ -1908,12 +1970,12 @@ class OpportunitiesReportService:
             margem_percentual = 0.0
             markup = 1.0
             custo_total_com_impostos = venda_consolidada
+            total_custo_aquisicao = venda_consolidada
         else:
             impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
             despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
             lucro_total = venda_consolidada - custo_total_com_impostos - custo_impostos - impostos_venda - despesas_totais - custo_servicos_proprios_total
             margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
-            total_custo_aquisicao = custo_total_com_impostos + custo_impostos
             markup = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else 1.0
 
         kpis = {
