@@ -3139,7 +3139,7 @@ export function SalesBudgetForm() {
           const despesasAdmComFrete = vltDespAdmConsolidado + vltFreteVendaConsolidado;
           const despesasVendaTotal = despesasAdmComFrete + vltComissaoConsolidado;
 
-          const lucroVendaConsolidado = t.totalVenda - (impostosConsolidadoGlobal + despesasVendaTotal + t.custoAquisicaoLimpo);
+          const lucroVendaConsolidado = t.totalVenda - (impostosConsolidadoGlobal + despesasVendaTotal + t.custoAquisicaoLimpo + t.freteCompra);
           const margemVenda = t.totalVenda > 0 ? (lucroVendaConsolidado / t.totalVenda) * 100 : 0;
 
           const margemManutencao = t.totalManutencao > 0 ? (t.lucroManutencao / t.totalManutencao) * 100 : 0;
@@ -3162,10 +3162,26 @@ export function SalesBudgetForm() {
 
                 {/* 1. Custo de Aquisição */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisição</div>
-                  <div className="text-2xl font-bold text-text-primary mb-4">{fmt(t.custoAquisicaoLimpo)}</div>
+                  <div>
+                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Custo de Aquisição</div>
+                    <div className="text-2xl font-bold text-text-primary mb-4">{fmt(t.custoAquisicaoLimpo + t.freteCompra)}</div>
+                    
+                    <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-text-muted">
+                      <div className="flex justify-between items-center">
+                        <span>Equipamentos e Impostos</span>
+                        <span className="font-semibold">{fmt(t.custoAquisicaoLimpo)}</span>
+                      </div>
+                      {t.freteCompra > 0 && (
+                        <div className="flex justify-between items-center text-amber-600 font-medium">
+                          <span>(+) Frete de Compra</span>
+                          <span className="font-semibold">{fmt(t.freteCompra)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
                   <div className="flex justify-between items-center text-xs text-text-muted mt-auto pt-3 border-t border-border-subtle">
-                    <span>Custo base com impostos de entrada</span>
+                    <span>Custo base com impostos e frete de entrada</span>
                   </div>
                 </div>
 
