@@ -2582,10 +2582,6 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         iss_venda_pct = Decimal(str(first_kit.aliq_iss or 0.0))
         irpj_venda_pct = Decimal(str(first_kit.aliq_irpj or 0.0))
         csll_venda_pct = Decimal(str(first_kit.aliq_csll or 0.0))
-        
-        frete_pct = Decimal(str(first_kit.perc_frete_venda or 0.0))
-        comissao_pct = Decimal(str(first_kit.perc_comissao or 0.0))
-        despesas_adm_pct = Decimal(str(first_kit.perc_despesas_adm or 0.0))
     else:
         pis_venda_pct = Decimal("0.0")
         cofins_venda_pct = Decimal("0.0")
@@ -2593,10 +2589,14 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         iss_venda_pct = Decimal("0.0")
         irpj_venda_pct = Decimal("0.0")
         csll_venda_pct = Decimal("0.0")
-        
-        frete_pct = Decimal("0.0")
-        comissao_pct = Decimal("0.0")
-        despesas_adm_pct = Decimal("0.0")
+
+    frete_pct = Decimal(str(opportunity.perc_frete_venda or 0.0))
+    comissao_pct = Decimal(str(opportunity.perc_comissao_rental or opportunity.perc_comissao or 0.0))
+    despesas_adm_pct = Decimal(str(opportunity.perc_despesa_adm or 0.0))
+
+    vlt_frete = (total_produtos + total_servicos) * frete_pct / 100
+    vlt_comissao = (total_produtos + total_servicos) * comissao_pct / 100
+    vlt_despesas_adm = (total_produtos + total_servicos) * despesas_adm_pct / 100
         
     ipi_venda_pct = Decimal("0.0")
     
