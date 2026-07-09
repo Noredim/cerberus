@@ -125,18 +125,20 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 20%;">Produto</th>
+                    <th style="width: 18%;">Produto</th>
                     <th style="width: 10%;">Part Number</th>
-                    <th class="text-center" style="width: 4%;">Qtd</th>
-                    <th class="text-right" style="width: 8%;">Valor Unit.</th>
-                    <th class="text-right" style="width: 8%;">Valor Total</th>
-                    <th class="text-right" style="width: 7%;">DIFAL Unit.</th>
-                    <th class="text-right" style="width: 7%;">DIFAL Total</th>
-                    <th class="text-right" style="width: 7%;">ST Unit.</th>
-                    <th class="text-right" style="width: 7%;">ST Total</th>
-                    <th class="text-right" style="width: 7%;">IPI Unit.</th>
-                    <th class="text-right" style="width: 7%;">IPI Total</th>
-                    <th class="text-right" style="width: 8%;">Valor Final</th>
+                    <th class="text-center" style="width: 3%;">Qtd</th>
+                    <th class="text-right" style="width: 7%;">Valor Unit.</th>
+                    <th class="text-right" style="width: 7%;">Valor Total</th>
+                    <th class="text-right" style="width: 6%;">DIFAL Unit.</th>
+                    <th class="text-right" style="width: 6%;">DIFAL Total</th>
+                    <th class="text-right" style="width: 6%;">ST Unit.</th>
+                    <th class="text-right" style="width: 6%;">ST Total</th>
+                    <th class="text-right" style="width: 6%;">IPI Unit.</th>
+                    <th class="text-right" style="width: 6%;">IPI Total</th>
+                    <th class="text-right" style="width: 6%;">Frete Unit.</th>
+                    <th class="text-right" style="width: 6%;">Frete Total</th>
+                    <th class="text-right" style="width: 7%;">Valor Final</th>
                 </tr>
             </thead>
             <tbody>
@@ -177,6 +179,12 @@
                     <td class="text-right">
                         R$ {{ item.ipi_total }}
                     </td>
+                    <td class="text-right">
+                        R$ {{ item.frete_unitario }}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ item.frete_total }}
+                    </td>
                     <td class="text-right font-bold">R$ {{ item.valor_final }}</td>
                 </tr>
                 {% endfor %}
@@ -191,6 +199,8 @@
                     <td class="text-right">R$ {{ supplier.totais.total_st }}</td>
                     <td class="text-right">-</td>
                     <td class="text-right">R$ {{ supplier.totais.total_ipi }}</td>
+                    <td class="text-right">-</td>
+                    <td class="text-right">R$ {{ supplier.totais.total_frete }}</td>
                     <td class="text-right font-bold" style="color: #0f172a;">R$ {{ supplier.totais.total_geral }}</td>
                 </tr>
             </tbody>
@@ -374,6 +384,7 @@
                             <th>Fornecedor</th>
                             <th class="text-right">Custo Equipamentos</th>
                             <th class="text-right">Custo Impostos</th>
+                            <th class="text-right">Custo Frete</th>
                             <th class="text-right">Total</th>
                         </tr>
                     </thead>
@@ -383,6 +394,7 @@
                             <td>{{ f.nome }}</td>
                             <td class="text-right">R$ {{ f.equipamentos }}</td>
                             <td class="text-right">R$ {{ f.impostos }}</td>
+                            <td class="text-right">R$ {{ f.frete }}</td>
                             <td class="text-right font-bold">R$ {{ f.total }}</td>
                         </tr>
                         {% endfor %}
@@ -390,6 +402,7 @@
                             <td>TOTAL GERAL</td>
                             <td class="text-right">R$ {{ fechamento_totals.total_equipamentos }}</td>
                             <td class="text-right">R$ {{ fechamento_totals.total_impostos }}</td>
+                            <td class="text-right">R$ {{ fechamento_totals.total_frete }}</td>
                             <td class="text-right font-bold" style="color: #0284c7;">R$ {{ fechamento_totals.total_geral }}</td>
                         </tr>
                     </tbody>
@@ -428,6 +441,10 @@
                         <tr style="background-color: #f8fafc;">
                             <td><strong>Total Impostos</strong></td>
                             <td class="text-right" style="font-size: 8pt; font-weight: bold;">R$ {{ consolidado_geral.total_impostos }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total Frete</strong></td>
+                            <td class="text-right" style="font-size: 8pt; color: #475569;">+ R$ {{ consolidado_geral.total_frete }}</td>
                         </tr>
                         <tr class="total-row" style="font-size: 9.5pt;">
                             <td style="padding: 6px 6px;">Total Geral Aquisição</td>

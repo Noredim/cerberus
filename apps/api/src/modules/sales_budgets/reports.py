@@ -946,27 +946,32 @@ class OpportunitiesReportService:
         fechamento_fornecedores = []
         total_equipamentos_f = 0.0
         total_impostos_f = 0.0
+        total_frete_f = 0.0
         
         for data in mapped_by_supplier.values():
             e_val = data["totais"]["_total_produtos"]
             i_val = data["totais"]["_total_impostos"]
+            f_val = data["totais"]["_total_frete"]
             t_val = data["totais"]["_total_geral"]
             
             total_equipamentos_f += e_val
             total_impostos_f += i_val
+            total_frete_f += f_val
             
             fechamento_fornecedores.append({
                 "nome": data["nome"],
                 "equipamentos": format_currency(e_val),
                 "impostos": format_currency(i_val),
+                "frete": format_currency(f_val),
                 "total": format_currency(t_val)
             })
             
-        total_geral_f = total_equipamentos_f + total_impostos_f
+        total_geral_f = total_equipamentos_f + total_impostos_f + total_frete_f
         
         fechamento_totals = {
             "total_equipamentos": format_currency(total_equipamentos_f),
             "total_impostos": format_currency(total_impostos_f),
+            "total_frete": format_currency(total_frete_f),
             "total_geral": format_currency(total_geral_f)
         }
 
@@ -1197,6 +1202,7 @@ class OpportunitiesReportService:
                     Paragraph("ST Total", table_header_style), 
                     Paragraph("DIFAL Total", table_header_style), 
                     Paragraph("IPI Total", table_header_style), 
+                    Paragraph("Frete Total", table_header_style), 
                     Paragraph("Valor Final", table_header_style)
                 ]]
                 for item in supplier["items"]:
@@ -1209,6 +1215,7 @@ class OpportunitiesReportService:
                         Paragraph(f"R$ {item['st_total']}", table_cell_style),
                         Paragraph(f"R$ {item['difal_total']}", table_cell_style),
                         Paragraph(f"R$ {item['ipi_total']}", table_cell_style),
+                        Paragraph(f"R$ {item['frete_total']}", table_cell_style),
                         Paragraph(f"R$ {item['valor_final']}", table_cell_style)
                     ])
 
@@ -1221,10 +1228,11 @@ class OpportunitiesReportService:
                     Paragraph(f"R$ {supplier['totais']['total_st']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_difal']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_ipi']}", table_cell_style),
+                    Paragraph(f"R$ {supplier['totais']['total_frete']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_geral']}", table_cell_style)
                 ])
 
-                supplier_table = Table(table_data, colWidths=[180, 80, 40, 60, 60, 60, 60, 60, 80])
+                supplier_table = Table(table_data, colWidths=[150, 70, 30, 55, 55, 55, 55, 55, 55, 70])
                 supplier_table.setStyle(TableStyle([
                     ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
                     ('BOTTOMPADDING', (0,0), (-1,-1), 4),
@@ -1265,6 +1273,7 @@ class OpportunitiesReportService:
                 Paragraph("Fornecedor", table_header_style),
                 Paragraph("Equipamentos", table_header_style),
                 Paragraph("Impostos", table_header_style),
+                Paragraph("Frete", table_header_style),
                 Paragraph("Total", table_header_style)
             ]]
             for f in fechamento_fornecedores:
@@ -1272,15 +1281,17 @@ class OpportunitiesReportService:
                     Paragraph(f["nome"], table_cell_style),
                     Paragraph(f"R$ {f['equipamentos']}", table_cell_style),
                     Paragraph(f"R$ {f['impostos']}", table_cell_style),
+                    Paragraph(f"R$ {f['frete']}", table_cell_style),
                     Paragraph(f"R$ {f['total']}", table_cell_style)
                 ])
             fech_data.append([
                 Paragraph("TOTAL GERAL", table_cell_style),
                 Paragraph(f"R$ {fechamento_totals['total_equipamentos']}", table_cell_style),
                 Paragraph(f"R$ {fechamento_totals['total_impostos']}", table_cell_style),
+                Paragraph(f"R$ {fechamento_totals['total_frete']}", table_cell_style),
                 Paragraph(f"R$ {fechamento_totals['total_geral']}", table_cell_style)
             ])
-            fech_table = Table(fech_data, colWidths=[200, 100, 100, 100])
+            fech_table = Table(fech_data, colWidths=[200, 100, 100, 100, 100])
             fech_table.setStyle(TableStyle([
                 ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
                 ('BOTTOMPADDING', (0,0), (-1,-1), 4),
