@@ -2784,14 +2784,16 @@ export function LicitacaoForm() {
                       <tr className="text-text-muted bg-bg-deep/10 text-xs font-bold uppercase tracking-wider">
                         <td className="py-1.5 px-6" colSpan={3}>Despesas de Venda (FPV)</td>
                       </tr>
-                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
-                        <td className="py-2.5 px-8 flex items-center gap-2">
-                          <span className="text-xs text-rose-600 font-bold">(-)</span>
-                          Frete
-                        </td>
-                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.frete.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
-                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.frete.valor)}</td>
-                      </tr>
+                      {dreData.saidas.despesas_venda.frete && dreData.saidas.despesas_venda.frete.valor > 0 && (
+                        <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                          <td className="py-2.5 px-8 flex items-center gap-2">
+                            <span className="text-xs text-rose-600 font-bold">(-)</span>
+                            Frete
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.frete.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                          <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.frete.valor)}</td>
+                        </tr>
+                      )}
                       <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
                         <td className="py-2.5 px-8 flex items-center gap-2">
                           <span className="text-xs text-rose-600 font-bold">(-)</span>

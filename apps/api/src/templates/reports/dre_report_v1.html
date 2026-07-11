@@ -316,11 +316,13 @@
                 <td class="text-right">{{ format_percent_ratio(total_despesas_venda, entradas.total_entradas) }}%</td>
                 <td class="text-right">R$ {{ format_currency(total_despesas_venda) }}</td>
             </tr>
+            {% if saidas.despesas_venda.frete and saidas.despesas_venda.frete.valor > 0 %}
             <tr class="row-item">
                 <td class="row-item-detail">(-) Frete de Venda</td>
                 <td class="text-right">{{ format_percent(saidas.despesas_venda.frete.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.frete.valor) }}</td>
             </tr>
+            {% endif %}
             <tr class="row-item">
                 <td class="row-item-detail">(-) Comissão de Venda</td>
                 <td class="text-right">{{ format_percent(saidas.despesas_venda.comissao.percent) }}%</td>

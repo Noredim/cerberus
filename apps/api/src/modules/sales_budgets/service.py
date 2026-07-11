@@ -2003,6 +2003,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     vlt_frete = Decimal("0.0")
     vlt_comissao = Decimal("0.0")
     vlt_despesas_adm = Decimal("0.0")
+    total_frete_compra = Decimal("0.0")
     
     # Custos Operacionais
     vlt_custo_op_monitoramento = Decimal("0.0")
@@ -2272,12 +2273,12 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                     difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
                     c_cost_total = Decimal(str(item_sum.get("custo_total_item_no_kit") or 0.0)) * qty
                     c_tax_total = (difal_val + st_val + ipi_val) * component_qty
-                    base_forn_total = c_cost_total - c_tax_total
                     
-                    # Add purchase freight
+                    # Subtrair frete de compra de base_forn_total para não duplicar, pois c_cost_total já engloba o frete
                     frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
                     frete_total = frete_compra_unit * component_qty
-                    base_forn_total += frete_total
+                    base_forn_total = c_cost_total - c_tax_total - frete_total
+                    total_frete_compra += frete_total
                     
                     supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
                     
@@ -2303,11 +2304,12 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
                 cost_total = Decimal(str(getattr(item, 'custo_total_aquisicao', None) or getattr(item, 'custo_unit_base', Decimal("0.0")))) * item_qty
                 tax_total = (difal_val + st_val + ipi_val) * item_qty
-                base_forn_total = cost_total - tax_total
                 
+                # Subtrair frete de compra de base_forn_total para não duplicar, pois cost_total já engloba o frete
                 frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
                 frete_total = frete_compra_unit * item_qty
-                base_forn_total += frete_total
+                base_forn_total = cost_total - tax_total - frete_total
+                total_frete_compra += frete_total
                 
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
                 
@@ -2383,11 +2385,12 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
                 cost_total = Decimal(str(getattr(ri, 'custo_total_aquisicao', None) or getattr(ri, 'custo_aquisicao_unit', Decimal("0.0")))) * qty
                 tax_total = (difal_val + st_val + ipi_val) * qty
-                base_forn_total = cost_total - tax_total
                 
+                # Subtrair frete de compra de base_forn_total para não duplicar, pois cost_total já engloba o frete
                 frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
                 frete_total = frete_compra_unit * qty
-                base_forn_total += frete_total
+                base_forn_total = cost_total - tax_total - frete_total
+                total_frete_compra += frete_total
                 
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
                 
@@ -2590,15 +2593,16 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         irpj_venda_pct = Decimal("0.0")
         csll_venda_pct = Decimal("0.0")
 
-    frete_pct = Decimal(str(opportunity.perc_frete_venda or 0.0))
-    comissao_pct = Decimal(str(opportunity.perc_comissao_rental or opportunity.perc_comissao or 0.0))
-    despesas_adm_pct = Decimal(str(opportunity.perc_despesa_adm or 0.0))
-
-    vlt_frete = (total_produtos + total_servicos) * frete_pct / 100
-    vlt_comissao = (total_produtos + total_servicos) * comissao_pct / 100
-    vlt_despesas_adm = (total_produtos + total_servicos) * despesas_adm_pct / 100
+    total_receita_venda = total_produtos + total_servicos
+    frete_pct = (vlt_frete / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    comissao_pct = (vlt_comissao / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    despesas_adm_pct = (vlt_despesas_adm / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
         
     ipi_venda_pct = Decimal("0.0")
+
+    # Adicionar o frete de compra (Frete CIF) consolidado aos fornecedores
+    if total_frete_compra > 0:
+        supplier_map["Frete"] = supplier_map.get("Frete", Decimal("0.0")) + total_frete_compra
     
     fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
     total_fornecedores = sum(item["valor"] for item in fornecedores)

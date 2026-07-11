@@ -429,6 +429,8 @@ class OpportunitiesReportService:
             # Despesas venda
             add_row("2.4 Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
             for k, exp in dre_data["saidas"]["despesas_venda"].items():
+                if k == "frete" and float(exp.get("valor") or 0.0) == 0:
+                    continue
                 add_row(f"(-) Despesa {k.capitalize()}", float(exp.get('percent', 0.0) or 0.0), exp['valor'], is_indent=True)
             add_row("(=) Total Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, bg_color='#f1f5f9')
             

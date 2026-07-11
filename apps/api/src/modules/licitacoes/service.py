@@ -1701,6 +1701,7 @@ class LicitacaoService:
                     product_suppliers[pb_item.product_id] = pb.supplier_nome_fantasia
                     
         supplier_map = {}
+        total_frete_compra = Decimal("0.0")
         
         for kit in licitacao.kits:
             # Recalculate kit financials
@@ -1770,6 +1771,10 @@ class LicitacaoService:
                     base_forn = Decimal(str(item_sum.get("base_fornecedor") or item_sum.get("custo_base_unitario_item") or 0.0))
                     sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
                     supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
+                    
+                    # Acumular frete de compra (Frete CIF) proporcional do componente
+                    frete_cif_unit = Decimal(str(item_sum.get("frete_cif_unit") or 0.0))
+                    total_frete_compra += frete_cif_unit * component_qty
 
         # Restitution ST
         restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
@@ -1783,6 +1788,13 @@ class LicitacaoService:
         difal_compra_pct = (purchase_difal / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
         
         # Calculate Venda Tax Percentages (read exact rates from the first kit if available)
+        pis_venda_pct = Decimal("0.0")
+        cofins_venda_pct = Decimal("0.0")
+        icms_venda_pct = Decimal("0.0")
+        iss_venda_pct = Decimal("0.0")
+        irpj_venda_pct = Decimal("0.0")
+        csll_venda_pct = Decimal("0.0")
+        
         first_kit = licitacao.kits[0] if licitacao.kits else None
         if first_kit:
             pis_venda_pct = Decimal(str(first_kit.aliq_pis or 0.0))
@@ -1794,22 +1806,16 @@ class LicitacaoService:
             irpj_venda_pct = Decimal(str(first_kit.aliq_irpj or 0.0))
             csll_venda_pct = Decimal(str(first_kit.aliq_csll or 0.0))
             
-            frete_pct = Decimal(str(first_kit.perc_frete_venda or 0.0))
-            comissao_pct = Decimal(str(first_kit.perc_comissao or 0.0))
-            despesas_adm_pct = Decimal(str(first_kit.perc_despesas_adm or 0.0))
-        else:
-            pis_venda_pct = Decimal("0.0")
-            cofins_venda_pct = Decimal("0.0")
-            icms_venda_pct = Decimal("0.0")
-            iss_venda_pct = Decimal("0.0")
-            irpj_venda_pct = Decimal("0.0")
-            csll_venda_pct = Decimal("0.0")
-            
-            frete_pct = Decimal("0.0")
-            comissao_pct = Decimal("0.0")
-            despesas_adm_pct = Decimal("0.0")
+        total_receita_venda = total_produtos + total_servicos
+        frete_pct = (vlt_frete / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+        comissao_pct = (vlt_comissao / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+        despesas_adm_pct = (vlt_despesas_adm / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
             
         ipi_venda_pct = Decimal("0.0")
+        
+        # Adicionar o frete de compra (Frete CIF) consolidado aos fornecedores
+        if total_frete_compra > 0:
+            supplier_map["Frete"] = supplier_map.get("Frete", Decimal("0.0")) + total_frete_compra
         
         fornecedores = [{"nome": name, "valor": round(val, 2)} for name, val in supplier_map.items()]
         total_fornecedores = sum(item["valor"] for item in fornecedores)
