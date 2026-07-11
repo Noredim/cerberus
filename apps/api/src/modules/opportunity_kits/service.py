@@ -506,8 +506,15 @@ class OpportunityKitService:
             desp_adm_item = venda_total_item * perc_despesas_adm
             comissao_item = venda_total_item * perc_comissao
             
-            lucro_total_item = venda_total_item - custo_total_item_no_kit - imposto_venda_item - frete_venda_item - desp_adm_item - comissao_item + (icms_abatido_unit * Decimal(str(item.quantidade_no_kit or 1)))
-            lucro_unitario_item = (lucro_total_item / Decimal(str(item.quantidade_no_kit or 1))) if Decimal(str(item.quantidade_no_kit or 1)) > 0 else Decimal("0.0")
+            # Calcular impostos líquidos para o lucro
+            qty_dec = Decimal(str(item.quantidade_no_kit or 1))
+            icms_abatido_total = icms_abatido_unit * qty_dec
+            icms_st_deduction = icms_st_total if not info.get("is_intrastate", True) else Decimal("0.0")
+            net_impostos = imposto_venda_item - icms_abatido_total - icms_st_deduction
+
+            # Lucro utilizando impostos líquidos
+            lucro_total_item = venda_total_item - custo_total_item_no_kit - net_impostos - frete_venda_item - desp_adm_item - comissao_item
+            lucro_unitario_item = (lucro_total_item / qty_dec) if qty_dec > 0 else Decimal("0.0")
             margem_item = (lucro_total_item / venda_total_item * Decimal(100.0)) if venda_total_item > 0 else Decimal("0.0")
 
             item_summaries.append({

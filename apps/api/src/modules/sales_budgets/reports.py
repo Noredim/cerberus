@@ -775,11 +775,6 @@ class OpportunitiesReportService:
                     continue # Skip items that are not in the opportunity
 
                 opp_qty = prod_calc["qty"]
-                val_final = prod_calc["cost_total"]
-                difal_total = prod_calc["difal_total"]
-                st_total = prod_calc["st_total"]
-                ipi_total = prod_calc["ipi_total"]
-                val_total = val_final - difal_total - st_total - ipi_total
 
                 # Proportional Freight Calculation
                 frete_unit = 0.0
@@ -788,8 +783,11 @@ class OpportunitiesReportService:
                     frete_unit = float(pb_item.frete_valor) / pb_qty
                 frete_total = frete_unit * opp_qty
 
-                # Add freight to val_final
-                val_final = val_final + frete_total
+                val_final = prod_calc["cost_total"]
+                difal_total = prod_calc["difal_total"]
+                st_total = prod_calc["st_total"]
+                ipi_total = prod_calc["ipi_total"]
+                val_total = val_final - difal_total - st_total - ipi_total - frete_total
 
                 val_unit = val_total / opp_qty if opp_qty > 0 else 0.0
                 difal_unit = difal_total / opp_qty if opp_qty > 0 else 0.0
