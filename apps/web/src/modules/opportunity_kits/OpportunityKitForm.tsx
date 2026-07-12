@@ -1218,6 +1218,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               const despVendaB5 = instSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
               const despVenda = despVendaB4 + despVendaB5;
 
+              const totalDespAdmB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.desp_adm_item || 0), 0);
+              const totalFreteVendaB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.frete_venda_item || 0), 0);
+              const totalComissaoB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.comissao_item || 0), 0);
+
               if (!isCalcExpanded) {
                 return (
                   <>
@@ -1506,7 +1510,35 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               Imp: {fmtC(impostosB45)}
                             </span>
                           </Tooltip>
-                          <span className="truncate">Desp: {fmtC(despVenda)}</span>
+                          <Tooltip variant="light" content={
+                            <div className="w-64 space-y-1.5 text-text-secondary p-1">
+                              <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">
+                                Despesas de Venda (B4+B5)
+                              </div>
+                              <div className="flex justify-between text-[11px] font-mono">
+                                <span>Desp. Adm ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
+                                <span className="text-rose-600 font-medium">{fmtC(totalDespAdmB45)}</span>
+                              </div>
+                              <div className="flex justify-between text-[11px] font-mono">
+                                <span>Frete Venda ({Number(form.perc_frete_venda || 0).toFixed(2)}%):</span>
+                                <span className="text-rose-600 font-medium">{fmtC(totalFreteVendaB45)}</span>
+                              </div>
+                              {totalComissaoB45 > 0 && (
+                                <div className="flex justify-between text-[11px] font-mono">
+                                  <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
+                                  <span className="text-rose-600 font-medium">{fmtC(totalComissaoB45)}</span>
+                                </div>
+                              )}
+                              <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
+                                <span>Total:</span>
+                                <span className="text-rose-700">{fmtC(despVenda)}</span>
+                              </div>
+                            </div>
+                          }>
+                            <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
+                              Desp: {fmtC(despVenda)}
+                            </span>
+                          </Tooltip>
                         </div>
                       </div>
                       <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>

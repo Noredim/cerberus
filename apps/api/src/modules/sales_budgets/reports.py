@@ -2002,6 +2002,7 @@ class OpportunitiesReportService:
             "custo_total_com_impostos": format_currency(custo_total_com_impostos),
             "custo_total_consolidado_relatorio": format_currency(sum(x.get("_custo_total_exibido", 0.0) for x in items_details))
         }
+        print("PDF REPORT KPIS:", kpis)
 
         # 4. Block 2: Supplier Summaries
         # Group real products from items_details (flattened, filtering product_id is not None to exclude services)
@@ -2930,6 +2931,7 @@ class OpportunitiesReportService:
         custo_op_instalacao_total = 0.0
         investimento_rental = 0.0
         desp_adm_instalacao_total = 0.0
+        frete_instalacao_total = 0.0
         desp_adm_mensal_total = 0.0
 
         # Detailed item metrics for totals row
@@ -3056,6 +3058,10 @@ class OpportunitiesReportService:
                 impostos_instalacao_total += impostos_mensal_item
                 custo_op_instalacao_total += custo_op_mensal
                 investimento_instalacao += custo_total
+                
+                frete_val = float(kit_financials_summary.get("vlt_frete_venda") or 0.0) if kit_financials_summary else float(getattr(item, "frete_venda_unit", None) or 0.0)
+                frete_total = frete_val * qty
+                frete_instalacao_total += frete_total
                 
                 if kit_desp_adm_val is not None:
                     desp_adm_inst = kit_desp_adm_val * qty
@@ -3310,11 +3316,11 @@ class OpportunitiesReportService:
         
         # desp_adm_instalacao_total and desp_adm_mensal_total are already computed dynamically in the loop above.
 
-        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação)
-        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total
+        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação + frete instalação)
+        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total + frete_instalacao_total
         
         # Project Total Cost (Capex + Impostos + Custos Operacionais + Despesas Adm)
-        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato)
+        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + frete_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato)
         
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal - Despesas Adm Mensais
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total - desp_adm_mensal_total
@@ -3550,6 +3556,8 @@ class OpportunitiesReportService:
             "impostos_instalacao_str": format_currency(impostos_instalacao_total),
             "desp_adm_instalacao_str": format_currency(desp_adm_instalacao_total),
             "desp_adm_instalacao_val": desp_adm_instalacao_total,
+            "frete_instalacao_str": format_currency(frete_instalacao_total),
+            "frete_instalacao_val": frete_instalacao_total,
             "desp_adm_mensal_str": format_currency(desp_adm_mensal_total),
             "desp_adm_mensal_val": desp_adm_mensal_total,
             "total_fornecedores_produtos": format_currency(total_fornecedores_produtos),

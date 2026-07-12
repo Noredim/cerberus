@@ -2258,6 +2258,10 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 
                 if item_sum.get("tipo_item") == "SERVICO":
                     sup_name = "Serviços Próprios"
+                    if p_id:
+                        p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
+                        if p_uuid in product_suppliers:
+                            sup_name = product_suppliers[p_uuid]
                     base_forn = Decimal(str(item_sum.get("custo_base_unitario_item") or 0.0))
                     supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
                 else:
@@ -2569,6 +2573,36 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         aliq_iss_rental = Decimal("0.0")
 
     restituicao_icms_st = total_st_total if is_interestadual else Decimal("0.0")
+    
+    # Net the ST refund from sales taxes for sales opportunities
+    if not is_rental_opp and is_interestadual and restituicao_icms_st > 0:
+        deduction = restituicao_icms_st
+        if vlt_icms >= deduction:
+            vlt_icms -= deduction
+            deduction = Decimal("0.0")
+        else:
+            deduction -= vlt_icms
+            vlt_icms = Decimal("0.0")
+            
+        if deduction > 0:
+            if vlt_cofins >= deduction:
+                vlt_cofins -= deduction
+                deduction = Decimal("0.0")
+            else:
+                deduction -= vlt_cofins
+                vlt_cofins = Decimal("0.0")
+                
+        if deduction > 0:
+            if vlt_pis >= deduction:
+                vlt_pis -= deduction
+                deduction = Decimal("0.0")
+            else:
+                deduction -= vlt_pis
+                vlt_pis = Decimal("0.0")
+        
+        # Zero out the entries field since it has been neted against sales taxes
+        restituicao_icms_st = Decimal("0.0")
+        
     total_entradas = total_produtos + total_servicos + restituicao_icms_st
     
     ipi_compra_pct = (purchase_ipi / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")

@@ -326,7 +326,10 @@
                             (+) Comissão Comercial Locação: R$ {{ kpis.comissao_total_str }}<br>
                             (+) Impostos de Instalação/Startup: R$ {{ kpis.impostos_instalacao_str }}<br>
                             {% if kpis.desp_adm_instalacao_val > 0 %}
-                            (+) Despesas Adm. Instalação: R$ {{ kpis.desp_adm_instalacao_str }}<br>
+                            (+) Desp. Adm. Instalação: R$ {{ kpis.desp_adm_instalacao_str }}<br>
+                            {% endif %}
+                            {% if kpis.frete_instalacao_val > 0 %}
+                            (+) Frete de Instalação: R$ {{ kpis.frete_instalacao_str }}<br>
                             {% endif %}
                             <strong style="color: #0f172a;">(=) Investimento Total (Capex): R$ {{ kpis.investimento_capex }}</strong><br>
                             (-) Recebimento de Instalação (M1): R$ {{ total_instalacao_str or kpis.total_instalacao_str }}<br>

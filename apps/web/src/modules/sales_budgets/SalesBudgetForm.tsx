@@ -202,6 +202,7 @@ interface RentalBudgetItem {
   custo_aquisicao_unit: number;
   ipi_unit: number;
   frete_unit: number;
+  frete_venda_unit?: number;
   icms_st_unit: number;
   difal_unit: number;
   instalacao_unit: number;
@@ -933,26 +934,27 @@ export function SalesBudgetForm() {
                 custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
                 ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
                 frete_unit: Number(kit.summary?.total_frete_kit || 0),
+                frete_venda_unit: Number(kit.summary?.vlt_frete_venda || 0),
                 icms_st_unit: Number(kit.summary?.total_st_kit || 0),
                 difal_unit: Number(kit.summary?.total_difal_kit || 0),
                 taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
-                kit_vlt_manut: Number(kit.summary?.vlt_manut || 0),
-                kit_valor_mensal: kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0),
-                kit_valor_impostos: Number(kit.summary?.valor_impostos ?? 0),
-                kit_receita_liquida: Number(kit.summary?.receita_liquida_mensal_kit || 0),
-                kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
+                kit_vlt_manut: item.kit_vlt_manut !== null && item.kit_vlt_manut !== undefined ? Number(item.kit_vlt_manut) : Number(kit.summary?.vlt_manut || 0),
+                kit_valor_mensal: item.kit_valor_mensal !== null && item.kit_valor_mensal !== undefined ? Number(item.kit_valor_mensal) : (kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0)),
+                kit_valor_impostos: item.kit_valor_impostos !== null && item.kit_valor_impostos !== undefined ? Number(item.kit_valor_impostos) : Number(kit.summary?.valor_impostos ?? 0),
+                kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
+                kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
                 kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
                 kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
-                kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
-                kit_perc_comissao: Number(kit.perc_comissao || 0),
-                kit_despesas_adm: Number(kit.summary?.valor_despesas_adm_locacao || 0),
-                kit_perc_despesas_adm: Number(kit.perc_despesas_adm || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
                 kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
-                kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
+                kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
                 kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
-                kit_margem: Number(kit.summary?.margem_kit || 0),
+                kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
               };
             } catch { /* fallback */ }
           }
@@ -1056,6 +1058,7 @@ export function SalesBudgetForm() {
         custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
         ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
         frete_unit: Number(kit.summary?.total_frete_kit || 0),
+        frete_venda_unit: Number(kit.summary?.vlt_frete_venda || 0),
         icms_st_unit: Number(kit.summary?.total_st_kit || 0),
         difal_unit: Number(kit.summary?.total_difal_kit || 0),
         instalacao_unit: 0,
@@ -1654,6 +1657,7 @@ export function SalesBudgetForm() {
       nominalPercComissao: 0,
       despAdmTotal: 0,
       despAdmInstalacaoTotal: 0,
+      freteInstalacaoTotal: 0,
       despAdmMensalTotal: 0,
       comissaoMensalTotal: 0,
       impostosDetalhados: { pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0 },
@@ -1704,7 +1708,9 @@ export function SalesBudgetForm() {
         const despAdmInst = (i.opportunity_kit_id && i.kit_despesas_adm !== undefined && i.kit_despesas_adm !== null)
           ? Number(i.kit_despesas_adm) * q
           : faturamentoMensalItem * (itemPercDesp / 100);
+        const freteInst = (i.frete_venda_unit || 0) * q;
         t.despAdmInstalacaoTotal += despAdmInst;
+        t.freteInstalacaoTotal += freteInst;
 
         t.faturamentoTotal += faturamentoMensalItem;
         t.impostosTotal += impostos;
@@ -1738,7 +1744,15 @@ export function SalesBudgetForm() {
       const comissaoUnitItem = Number(i.kit_comissao || 0);
       const impostoInstalacaoItem = Number(i.kit_imposto_instalacao || 0) * q;
 
-      const despAdmItem = (i.is_kit_instalacao) ? Number(i.kit_despesas_adm || 0) * q : 0;
+      const freteInstVal = i.is_kit_instalacao ? (i.frete_venda_unit || 0) * q : 0;
+      const itemPercDesp = (i.opportunity_kit_id && i.kit_perc_despesas_adm !== undefined && i.kit_perc_despesas_adm !== null)
+        ? Number(i.kit_perc_despesas_adm)
+        : percDespesaAdm;
+      const despAdmItem = (i.is_kit_instalacao)
+        ? ((i.opportunity_kit_id && i.kit_despesas_adm !== undefined && i.kit_despesas_adm !== null)
+          ? Number(i.kit_despesas_adm) * q
+          : faturamentoMensalItem * (itemPercDesp / 100)) + freteInstVal
+        : 0;
       t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem + despAdmItem;
 
       t.comissaoTotal += comissaoItem;
@@ -2227,6 +2241,40 @@ export function SalesBudgetForm() {
             try {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO&sales_budget_id=${id}`);
               return { ...item, cost_composition: cc };
+            } catch { /* fallback */ }
+          } else if (item.opportunity_kit_id) {
+            try {
+              const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true&sales_budget_id=${id}`);
+              return {
+                ...item,
+                custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
+                kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
+                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0),
+                custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
+                ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
+                frete_unit: Number(kit.summary?.total_frete_kit || 0),
+                frete_venda_unit: Number(kit.summary?.vlt_frete_venda || 0),
+                icms_st_unit: Number(kit.summary?.total_st_kit || 0),
+                difal_unit: Number(kit.summary?.total_difal_kit || 0),
+                taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
+                kit_vlt_manut: item.kit_vlt_manut !== null && item.kit_vlt_manut !== undefined ? Number(item.kit_vlt_manut) : Number(kit.summary?.vlt_manut || 0),
+                kit_valor_mensal: item.kit_valor_mensal !== null && item.kit_valor_mensal !== undefined ? Number(item.kit_valor_mensal) : (kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0)),
+                kit_valor_impostos: item.kit_valor_impostos !== null && item.kit_valor_impostos !== undefined ? Number(item.kit_valor_impostos) : Number(kit.summary?.valor_impostos ?? 0),
+                kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
+                kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
+                kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+                kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+                kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
+                kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
+                kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
+                kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
+              };
             } catch { /* fallback */ }
           }
           return item;
@@ -3749,10 +3797,13 @@ export function SalesBudgetForm() {
                       <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback (Diretoria)</div>
                       <div className="text-[10.5px] space-y-1">
                         <div className="font-bold text-brand-primary">Investimento Inicial (Capex):</div>
-                        <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento)}</span></div>
+                        <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento - rentalTotals.impostosInstalacaoTotal - rentalTotals.despAdmInstalacaoTotal - rentalTotals.freteInstalacaoTotal)}</span></div>
                         <div className="flex justify-between pl-2"><span>(+) Impostos de Instalação:</span> <span>{fmt(rentalTotals.impostosInstalacaoTotal)}</span></div>
                         {rentalTotals.despAdmInstalacaoTotal > 0 && (
                           <div className="flex justify-between pl-2"><span>(+) Desp. Adm. Instalação:</span> <span>{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>
+                        )}
+                        {rentalTotals.freteInstalacaoTotal > 0 && (
+                          <div className="flex justify-between pl-2"><span>(+) Frete de Instalação:</span> <span>{fmt(rentalTotals.freteInstalacaoTotal)}</span></div>
                         )}
                         <div className="flex justify-between pl-2"><span>(+) Comissão Instalação Rec/Liq:</span> <span className="text-green-400">{fmt(comissao_inst_calc)}</span></div>
                         <div className="flex justify-between pl-2 border-t border-gray-600/50"><span>(=) Investimento Total (Capex):</span> <span className="font-medium text-white">{fmt(capexTotal + comissao_inst_calc)}</span></div>
@@ -3954,6 +4005,7 @@ export function SalesBudgetForm() {
                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Comissão:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
                         {rentalTotals.despAdmInstalacaoTotal > 0 && <div className="flex justify-between text-sm"><span>Desp. Adm. Instalação:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>}
+                        {rentalTotals.freteInstalacaoTotal > 0 && <div className="flex justify-between text-sm"><span>Frete de Instalação:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteInstalacaoTotal)}</span></div>}
                       </div>
                     }>
                       <div className="p-4 hover:bg-surface transition-colors cursor-help group">
@@ -4063,10 +4115,13 @@ export function SalesBudgetForm() {
                           <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback</div>
                           <div className="text-[10.5px] space-y-1">
                             <div className="font-bold text-brand-primary">Investimento Inicial (Capex):</div>
-                            <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento - rentalTotals.impostosInstalacaoTotal - rentalTotals.despAdmInstalacaoTotal - rentalTotals.freteInstalacaoTotal)}</span></div>
                             <div className="flex justify-between pl-2"><span>(+) Impostos de Instalação:</span> <span>{fmt(rentalTotals.impostosInstalacaoTotal)}</span></div>
                             {rentalTotals.despAdmInstalacaoTotal > 0 && (
                               <div className="flex justify-between pl-2"><span>(+) Desp. Adm. Instalação:</span> <span>{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>
+                            )}
+                            {rentalTotals.freteInstalacaoTotal > 0 && (
+                              <div className="flex justify-between pl-2"><span>(+) Frete de Instalação:</span> <span>{fmt(rentalTotals.freteInstalacaoTotal)}</span></div>
                             )}
                             <div className="flex justify-between pl-2 border-t border-gray-600/50"><span>(=) Investimento Total (Capex):</span> <span className="font-medium text-white">{fmt(capexTotal)}</span></div>
                             <div className="flex justify-between pl-2"><span>(-) Recebimento Instalação (M1):</span> <span className="text-red-400">-{fmt(rentalTotals.totalInstalacao)}</span></div>
@@ -5826,6 +5881,7 @@ export function SalesBudgetForm() {
                           kit_perc_comissao: Number(savedKit.perc_comissao || 0),
                           kit_despesas_adm: Number(savedKit.summary?.valor_despesas_adm_locacao || 0),
                           kit_perc_despesas_adm: Number(savedKit.perc_despesas_adm || 0),
+                          frete_venda_unit: Number(savedKit.summary?.vlt_frete_venda || 0),
                           perc_comissao: Number(savedKit.perc_comissao || 0),
                           comissao_mensal: Number(savedKit.summary?.valor_comissao_locacao || 0),
                           // Computed display fields
