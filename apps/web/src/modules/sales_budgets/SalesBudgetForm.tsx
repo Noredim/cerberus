@@ -839,47 +839,49 @@ export function SalesBudgetForm() {
 
       // Load sale items and separate kits from regular items
       const loadedItems: SalesBudgetItem[] = d.items || [];
-      const vKits: VendaKitItem[] = [];
-      const regularItems: SalesBudgetItem[] = [];
 
-      for (const item of loadedItems) {
+      const enrichedItemsPromises = loadedItems.map(async (item) => {
         if (item.opportunity_kit_id) {
           try {
             const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
-            vKits.push({
-              opportunity_kit_id: item.opportunity_kit_id,
-              nome_kit: kit.nome_kit || 'Kit Venda',
-              quantidade: q,
-              fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
-              fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
-              fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
-              fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+            return {
+              type: 'kit',
+              data: {
+                opportunity_kit_id: item.opportunity_kit_id,
+                nome_kit: kit.nome_kit || 'Kit Venda',
+                quantidade: q,
+                fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+                fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+                fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+                fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
 
-              custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
-              custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+                custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
 
-              venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
-              venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+                venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+                venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
 
-              faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+                faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
 
-              lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
-              margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+                lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+                margem_venda: Number(kit.summary?.margem_equipamentos || 0),
 
-              lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
-              margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+                lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+                margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
 
-              lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
-              margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+                lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
+                margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
 
-              havera_manutencao: kit.havera_manutencao,
-              qtd_meses_manutencao: kit.qtd_meses_manutencao,
-              summary: kit.summary,
-              kit_raw: kit
-            });
+                havera_manutencao: kit.havera_manutencao,
+                qtd_meses_manutencao: kit.qtd_meses_manutencao,
+                summary: kit.summary,
+                kit_raw: kit
+              }
+            };
           } catch (err) {
             console.error('Error loading kit in Venda:', err);
+            return null;
           }
         } else {
           try {
@@ -887,19 +889,31 @@ export function SalesBudgetForm() {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}${id ? `?sales_budget_id=${id}` : ''}`);
               // When company does NOT adhere to ST (perfil_st_ativo=false),
               // override the saved ST flag and recalculate ICMS on the sale.
-              // Items saved before this fix have icms_unit=0 (ST zeroed it out).
               if (cc.perfil_st_ativo === false && item.tem_st) {
                 const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
-                regularItems.push({ ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit });
+                return { type: 'regular', data: { ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit } };
               } else {
-                regularItems.push({ ...item, cost_composition: cc });
+                return { type: 'regular', data: { ...item, cost_composition: cc } };
               }
             } else {
-              regularItems.push(item);
+              return { type: 'regular', data: item };
             }
           } catch {
-            regularItems.push(item);
+            return { type: 'regular', data: item };
           }
+        }
+      });
+
+      const enrichedResults = await Promise.all(enrichedItemsPromises);
+      const vKits: VendaKitItem[] = [];
+      const regularItems: SalesBudgetItem[] = [];
+
+      for (const res of enrichedResults) {
+        if (!res) continue;
+        if (res.type === 'kit') {
+          vKits.push(res.data as VendaKitItem);
+        } else {
+          regularItems.push(res.data as SalesBudgetItem);
         }
       }
 
@@ -2171,47 +2185,49 @@ export function SalesBudgetForm() {
       
       // Load sale items and separate kits from regular items
       const loadedItems: SalesBudgetItem[] = d.items || [];
-      const vKits: VendaKitItem[] = [];
-      const regularItems: SalesBudgetItem[] = [];
 
-      for (const item of loadedItems) {
+      const enrichedItemsPromises = loadedItems.map(async (item) => {
         if (item.opportunity_kit_id) {
           try {
             const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
-            vKits.push({
-              opportunity_kit_id: item.opportunity_kit_id,
-              nome_kit: kit.nome_kit || 'Kit Venda',
-              quantidade: q,
-              fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
-              fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
-              fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
-              fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+            return {
+              type: 'kit',
+              data: {
+                opportunity_kit_id: item.opportunity_kit_id,
+                nome_kit: kit.nome_kit || 'Kit Venda',
+                quantidade: q,
+                fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+                fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+                fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+                fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
 
-              custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
-              custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+                custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
 
-              venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
-              venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+                venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+                venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
 
-              faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+                faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
 
-              lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
-              margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+                lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+                margem_venda: Number(kit.summary?.margem_equipamentos || 0),
 
-              lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
-              margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+                lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+                margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
 
-              lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
-              margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+                lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
+                margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
 
-              havera_manutencao: kit.havera_manutencao,
-              qtd_meses_manutencao: kit.qtd_meses_manutencao,
-              summary: kit.summary,
-              kit_raw: kit
-            });
+                havera_manutencao: kit.havera_manutencao,
+                qtd_meses_manutencao: kit.qtd_meses_manutencao,
+                summary: kit.summary,
+                kit_raw: kit
+              }
+            };
           } catch (err) {
             console.error('Error loading kit in Venda:', err);
+            return null;
           }
         } else {
           try {
@@ -2219,16 +2235,29 @@ export function SalesBudgetForm() {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?sales_budget_id=${id}`);
               if (cc.perfil_st_ativo === false && item.tem_st) {
                 const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
-                regularItems.push({ ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit });
+                return { type: 'regular', data: { ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit } };
               } else {
-                regularItems.push({ ...item, cost_composition: cc });
+                return { type: 'regular', data: { ...item, cost_composition: cc } };
               }
             } else {
-              regularItems.push(item);
+              return { type: 'regular', data: item };
             }
           } catch {
-            regularItems.push(item);
+            return { type: 'regular', data: item };
           }
+        }
+      });
+
+      const enrichedResults = await Promise.all(enrichedItemsPromises);
+      const vKits: VendaKitItem[] = [];
+      const regularItems: SalesBudgetItem[] = [];
+
+      for (const res of enrichedResults) {
+        if (!res) continue;
+        if (res.type === 'kit') {
+          vKits.push(res.data as VendaKitItem);
+        } else {
+          regularItems.push(res.data as SalesBudgetItem);
         }
       }
 
