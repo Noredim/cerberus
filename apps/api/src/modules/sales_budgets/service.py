@@ -2094,7 +2094,13 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
 
     kits_financials = {}
     for kit in kits:
-        fin = kit_service.calculate_financials(kit, tenant_id, sales_budget_id=str(opportunity_id))
+        override_factor = None
+        if is_rental_opp:
+            rental_item = next((ri for ri in opportunity.rental_items if ri.opportunity_kit_id == kit.id), None)
+            if rental_item:
+                override_factor = rental_item.fator_margem
+                
+        fin = kit_service.calculate_financials(kit, tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity_id))
         kits_financials[kit.id] = fin
         summary = fin["summary"]
         
@@ -2125,12 +2131,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         # --- ENTRADAS ---
         if is_rental_opp:
             if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-                prod_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") != "SERVICO")
-                serv_sum = sum(Decimal(str(item.get("venda_total_item", 0))) for item in fin["item_summaries"] if item.get("tipo_item") == "SERVICO")
-                vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
-                vlr_manut = Decimal(str(summary.get("valor_venda_manutencao", 0) or summary.get("vlt_manut", 0) or 0))
-                
-                total_servicos += (prod_sum + serv_sum + vlr_inst + vlr_manut) * qty
+                vlr_instal_base = Decimal(str(summary.get("valor_mensal_locacao_base", 0) or summary.get("valor_mensal_kit", 0) or 0.0))
+                total_servicos += vlr_instal_base * qty
                 
                 # Custos operacionais do kit de instalação (não multiplicados pelo prazo do contrato)
                 vlt_custo_op_manutencao += (Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0)) + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * qty
@@ -2504,10 +2506,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 if kf and "summary" in kf:
                     kit_financials_summary = kf["summary"]
                     
-            if kit_financials_summary:
-                impostos = Decimal(str(kit_financials_summary.get("valor_impostos") or 0.0)) * q
-            else:
-                impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
+            impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
                 
             ratio = impostos / total_calc if total_calc > 0 else Decimal("1.0")
             

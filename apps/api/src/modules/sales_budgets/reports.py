@@ -2975,7 +2975,7 @@ class OpportunitiesReportService:
                 manut_val = float(s.get("vlt_manut") or 0.0)
                 monitoramento_val = float(s.get("venda_unit_monitoramento") or 0.0)
                 fat_mensal_val = float(s.get("valor_mensal_antes_impostos") or s.get("valor_mensal_kit") or 0.0)
-                impostos_mensal_val = float(s.get("valor_impostos") or 0.0)
+                impostos_mensal_val = float(item.impostos_mensal or 0.0)
                 custo_op_mensal_val = float(s.get("custo_operacional_mensal_kit") or 0.0) + float(s.get("custo_mensal_bloco_7") or 0.0)
                 
                 comissao_item = comissao_val * qty
@@ -3420,10 +3420,7 @@ class OpportunitiesReportService:
                 if kf and "summary" in kf:
                     kit_financials_summary = kf["summary"]
 
-            if kit_financials_summary:
-                impostos = float(kit_financials_summary.get("valor_impostos") or 0.0) * q
-            else:
-                impostos = float(item.impostos_mensal or 0.0) * q
+            impostos = float(item.impostos_mensal or 0.0) * q
 
             ratio = impostos / total_calc if total_calc > 0 else 1.0
             
