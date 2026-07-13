@@ -22,6 +22,16 @@ def format_currency(val) -> str:
         return "0,00"
     return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def format_usd(val) -> str:
+    if val is None:
+        return "0,00"
+    return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def format_rate(val) -> str:
+    if val is None:
+        return "0,0000"
+    return f"{float(val):,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 def parse_payment_condition(condition_str: str, total_value: float, base_date: datetime.date) -> tuple[List[dict], Optional[str]]:
     import re
     from datetime import timedelta
@@ -740,6 +750,8 @@ class OpportunitiesReportService:
         for pb in purchase_budgets:
             supplier_id = pb.supplier_id
             supplier_name = pb.supplier_nome_fantasia
+            if pb.dolar_orcamento and pb.valor_conversao:
+                supplier_name = f"{supplier_name} (Cotação Dólar: R$ {format_rate(pb.valor_conversao)})"
             supplier_cnpj = pb.supplier_cnpj
 
             if supplier_id not in mapped_by_supplier:
@@ -800,6 +812,8 @@ class OpportunitiesReportService:
                 origem_imposto = prod_calc["source"]
 
                 product_desc = pb_item.product_nome or (pb_item.product.nome if pb_item.product else "Produto")
+                if pb.dolar_orcamento and pb.valor_conversao and pb_item.valor_unitario_dolar is not None:
+                    product_desc = f"{product_desc} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
 
                 mapped_by_supplier[supplier_id]["items"].append({
                     "descricao": product_desc,
@@ -1531,9 +1545,16 @@ class OpportunitiesReportService:
                 else:
                     mkp_venda = float(item.markup or 1.0)
                 
+                item_desc = item.product_nome or (item.product.nome if item.product else "Equipamento")
+                if pb_info and pb_info.get("pb") and pb_info["pb"].dolar_orcamento:
+                    pb = pb_info["pb"]
+                    pb_item = pb_info["pb_item"]
+                    if pb.valor_conversao and pb_item.valor_unitario_dolar is not None:
+                        item_desc = f"{item_desc} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
+
                 items_details.append({
                     "product_id": item.product_id,
-                    "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento"),
+                    "descricao": item_desc,
                     "fornecedor": supplier_name,
                     "quantidade": qty,
                     "custo_unitario": format_currency(custo_unit_exibido),
@@ -1740,10 +1761,17 @@ class OpportunitiesReportService:
                             product_desc = summary.get("descricao")
                             if not product_desc and kit_item:
                                 product_desc = kit_item.descricao_item or (kit_item.product.nome if kit_item.product else "Componente")
+                            if not product_desc:
+                                product_desc = "Componente do Kit"
+                            if pb_info and pb_info.get("pb") and pb_info["pb"].dolar_orcamento:
+                                pb = pb_info["pb"]
+                                pb_item = pb_info["pb_item"]
+                                if pb.valor_conversao and pb_item.valor_unitario_dolar is not None:
+                                    product_desc = f"{product_desc} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
                                 
                             comp_dict = {
                                 "product_id": p_uuid,
-                                "descricao": product_desc or "Componente do Kit",
+                                "descricao": product_desc,
                                 "fornecedor": supplier_name,
                                 "quantidade": component_qty,
                                 "custo_unitario": format_currency(custo_unit_exibido),
@@ -3109,6 +3137,13 @@ class OpportunitiesReportService:
                             if p_obj:
                                 p_name = p_obj.nome
                                 p_code = p_obj.codigo
+                            
+                            c_pb_info = product_suppliers.get(p_uuid) if p_uuid else None
+                            if c_pb_info and c_pb_info.get("pb") and c_pb_info["pb"].dolar_orcamento:
+                                pb = c_pb_info["pb"]
+                                pb_item = c_pb_info["pb_item"]
+                                if pb.valor_conversao and pb_item.valor_unitario_dolar is not None:
+                                    p_name = f"{p_name} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
                         elif c.get("own_service_id"):
                             p_uuid = UUID(c["own_service_id"]) if isinstance(c["own_service_id"], str) else c["own_service_id"]
                             os_obj = db.query(OwnService).filter(OwnService.id == p_uuid).first()
@@ -3165,8 +3200,15 @@ class OpportunitiesReportService:
                                 "impostos_mensal": format_currency(impostos_mensal_item * ratio)
                             })
 
+            item_desc = item.product_nome or (item.product.nome if item.product else "Equipamento de Locação")
+            if pb_info and pb_info.get("pb") and pb_info["pb"].dolar_orcamento:
+                pb = pb_info["pb"]
+                pb_item = pb_info["pb_item"]
+                if pb.valor_conversao and pb_item.valor_unitario_dolar is not None:
+                    item_desc = f"{item_desc} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
+
             items_details.append({
-                "descricao": item.product_nome or (item.product.nome if item.product else "Equipamento de Locação"),
+                "descricao": item_desc,
                 "part_number": item.product_codigo or (item.product.codigo if item.product else None),
                 "quantidade": int(qty) if qty.is_integer() else qty,
                 "custo_aquisicao": format_currency(custo_total),

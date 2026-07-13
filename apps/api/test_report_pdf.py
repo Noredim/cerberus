@@ -232,7 +232,7 @@ def run_test():
         db.add_all([pb_item_a1, pb_item_a2])
         db.flush()
 
-        # Supplier B (INGRAM MICRO) - with À Vista
+        # Supplier B (INGRAM MICRO) - with À Vista, dollar budget
         pb_b = PurchaseBudget(
             tenant_id=opp.tenant_id,
             company_id=opp.company_id,
@@ -242,7 +242,9 @@ def run_test():
             frete_tipo='CIF',
             data_orcamento=opp.data_orcamento,
             ipi_calculado=False,
-            forma_pagamento_snapshot={"descricao": "À Vista"}
+            forma_pagamento_snapshot={"descricao": "À Vista"},
+            dolar_orcamento=True,
+            valor_conversao=Decimal("5.5000")
         )
         db.add(pb_b)
         db.flush()
@@ -252,6 +254,7 @@ def run_test():
             product_id=product_st.id,
             quantidade=2.0,
             valor_unitario=220.00,
+            valor_unitario_dolar=Decimal("40.0000"),
             total_item=440.00,
             difal_unitario=0.00,
             st_unitario=0.00  # will be overridden by kit financials
