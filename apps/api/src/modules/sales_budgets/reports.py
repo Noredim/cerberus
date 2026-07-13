@@ -441,6 +441,8 @@ class OpportunitiesReportService:
                 add_row("2.5 Custos Operacionais", (float(total_custos_operacionais) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_custos_operacionais, is_bold=True, is_indent=True, bg_color='#f8fafc')
                 add_row("(-) Monitoramento", float(co_data["monitoramento"].get("percent", 0.0) or 0.0), co_data["monitoramento"]["valor"], is_indent=True)
                 add_row("(-) Manutenção", float(co_data["manutencao"].get("percent", 0.0) or 0.0), co_data["manutencao"]["valor"], is_indent=True)
+                for d in co_data["manutencao"].get("detalhes", []):
+                    add_row(f"  (-) Manut. - {d['tipo']}", float(d.get("percent", 0.0) or 0.0), d["valor"], is_indent=True)
                 add_row("(=) Total Custos Operacionais", (float(total_custos_operacionais) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_custos_operacionais, is_bold=True, bg_color='#f1f5f9')
                 
             # Resultado

@@ -356,6 +356,15 @@
                 <td class="text-right">{{ format_percent(saidas.custos_operacionais.manutencao.percent) }}%</td>
                 <td class="text-right">R$ {{ format_currency(saidas.custos_operacionais.manutencao.valor) }}</td>
             </tr>
+            {% if saidas.custos_operacionais.manutencao.detalhes %}
+                {% for d in saidas.custos_operacionais.manutencao.detalhes %}
+                <tr class="row-item">
+                    <td class="row-item-detail" style="padding-left: 25px; font-size: 8pt; color: #64748b;">(-) Manut. - {{ d.tipo }}</td>
+                    <td class="text-right" style="font-size: 8pt; color: #64748b;">{{ format_percent(d.percent) }}%</td>
+                    <td class="text-right" style="font-size: 8pt; color: #64748b;">R$ {{ format_currency(d.valor) }}</td>
+                </tr>
+                {% endfor %}
+            {% endif %}
             <tr class="row-subheader" style="background-color: #f1f5f9; font-weight: bold;">
                 <td style="padding-left: 15px;">(=) Total Custos Operacionais</td>
                 <td class="text-right">{{ format_percent_ratio(saidas.custos_operacionais.total, entradas.total_entradas) }}%</td>

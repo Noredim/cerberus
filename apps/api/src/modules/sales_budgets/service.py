@@ -2008,6 +2008,12 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     # Custos Operacionais
     vlt_custo_op_monitoramento = Decimal("0.0")
     vlt_custo_op_manutencao = Decimal("0.0")
+    maint_details = {
+        "Operacional": Decimal("0.0"),
+        "Suporte": Decimal("0.0"),
+        "Infraestrutura": Decimal("0.0"),
+        "Manutenção": Decimal("0.0")
+    }
     
     total_venda = Decimal("0.0")
     
@@ -2135,7 +2141,16 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 total_servicos += vlr_instal_base * qty
                 
                 # Custos operacionais do kit de instalação (não multiplicados pelo prazo do contrato)
-                vlt_custo_op_manutencao += (Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0)) + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * qty
+                m_maint_residual = Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0))
+                maint_details["Manutenção"] += m_maint_residual * qty
+                if hasattr(kit, 'monthly_costs') and kit.monthly_costs:
+                    for mcost in kit.monthly_costs:
+                        m_val = Decimal(str(mcost.valor_unitario or 0.0)) * Decimal(str(mcost.quantidade or 1.0))
+                        m_tipo = mcost.tipo_custo or "Operacional"
+                        if m_tipo not in maint_details:
+                            maint_details[m_tipo] = Decimal("0.0")
+                        maint_details[m_tipo] += m_val * qty
+                vlt_custo_op_manutencao += (m_maint_residual + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * qty
                 vlt_custo_op_monitoramento += Decimal(str(summary.get("custo_monitoramento_unitario") or 0.0)) * qty
             else: # LOCACAO or COMODATO
                 total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo_contrato * qty
@@ -2150,7 +2165,16 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 ) * qty
                 
                 # Custos operacionais do kit de locação/comodato (multiplicados pelo prazo do contrato)
-                vlt_custo_op_manutencao += (Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0)) + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * prazo_contrato * qty
+                m_maint_residual = Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0))
+                maint_details["Manutenção"] += m_maint_residual * prazo_contrato * qty
+                if hasattr(kit, 'monthly_costs') and kit.monthly_costs:
+                    for mcost in kit.monthly_costs:
+                        m_val = Decimal(str(mcost.valor_unitario or 0.0)) * Decimal(str(mcost.quantidade or 1.0))
+                        m_tipo = mcost.tipo_custo or "Operacional"
+                        if m_tipo not in maint_details:
+                            maint_details[m_tipo] = Decimal("0.0")
+                        maint_details[m_tipo] += m_val * prazo_contrato * qty
+                vlt_custo_op_manutencao += (m_maint_residual + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * prazo_contrato * qty
                 vlt_custo_op_monitoramento += Decimal(str(summary.get("custo_monitoramento_unitario") or 0.0)) * prazo_contrato * qty
         else: # Standard sales/venda opportunity
             if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
@@ -2419,9 +2443,13 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             
             # Custos operacionais do item direto de locação/comodato
             if ri.is_kit_instalacao:
-                vlt_custo_op_manutencao += Decimal(str(ri.custo_manut_mensal or 0.0)) * qty
+                direct_val = Decimal(str(ri.custo_manut_mensal or 0.0)) * qty
+                maint_details["Manutenção"] += direct_val
+                vlt_custo_op_manutencao += direct_val
             else:
-                vlt_custo_op_manutencao += Decimal(str(ri.custo_manut_mensal or 0.0)) * prazo * qty
+                direct_val = Decimal(str(ri.custo_manut_mensal or 0.0)) * prazo * qty
+                maint_details["Manutenção"] += direct_val
+                vlt_custo_op_manutencao += direct_val
 
     if is_rental_opp:
         # Determine tax rates based on the first item
@@ -2690,6 +2718,16 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         estado = customer.state_sigla or estado
         
     is_rental = len(opportunity.rental_items) > 0
+    
+    detalhes_manutencao = []
+    for tipo, val in maint_details.items():
+        if val > 0:
+            detalhes_manutencao.append({
+                "tipo": tipo,
+                "percent": round((val / total_entradas * 100) if total_entradas > 0 else Decimal("0.0"), 2),
+                "valor": round(val, 2)
+            })
+    detalhes_manutencao.sort(key=lambda x: x["valor"], reverse=True)
         
     return {
         "header": {
@@ -2753,7 +2791,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 },
                 "manutencao": {
                     "percent": round((vlt_custo_op_manutencao / total_entradas * 100) if total_entradas > 0 else Decimal("0.0"), 2),
-                    "valor": round(vlt_custo_op_manutencao, 2)
+                    "valor": round(vlt_custo_op_manutencao, 2),
+                    "detalhes": detalhes_manutencao
                 },
                 "total": round(vlt_custo_op_monitoramento + vlt_custo_op_manutencao, 2)
             },

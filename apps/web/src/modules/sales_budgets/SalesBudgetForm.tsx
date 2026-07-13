@@ -5661,6 +5661,20 @@ export function SalesBudgetForm() {
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.custos_operacionais.manutencao.valor)}
                           </td>
                         </tr>
+                        {dreData.saidas.custos_operacionais.manutencao.detalhes?.map((detail: any, idx: number) => (
+                          <tr key={idx} className="text-text-primary hover:bg-bg-deep/5 transition-colors text-[11px] text-text-muted/80">
+                            <td className="py-1.5 pl-14 flex items-center gap-2">
+                              <span className="text-[10px] text-rose-600/70 font-semibold">(-)</span>
+                              Manut. - {detail.tipo}
+                            </td>
+                            <td className="py-1.5 px-4 text-right font-mono">
+                              {detail.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %
+                            </td>
+                            <td className="py-1.5 px-4 text-right font-mono">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(detail.valor)}
+                            </td>
+                          </tr>
+                        ))}
                         <tr className="font-semibold text-text-secondary hover:bg-bg-deep/5 transition-colors bg-rose-500/5">
                           <td className="py-2 px-8 flex items-center gap-2">
                             <span className="text-xs text-rose-600 font-bold">(=)</span>
