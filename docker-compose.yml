@@ -8,6 +8,7 @@ services:
       POSTGRES_USER: cerberus_user
       POSTGRES_PASSWORD: cerberus_password
       POSTGRES_DB: cerberus
+      TZ: America/Manaus
     ports:
       - "5433:5432"
     volumes:
@@ -29,6 +30,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://cerberus_user:cerberus_password@db:5432/cerberus
+      - TZ=America/Manaus
     depends_on:
       db:
         condition: service_healthy
@@ -44,6 +46,8 @@ services:
       - "8001:8000"
     networks:
       - cerberus_network
+    environment:
+      - TZ=America/Manaus
 
   cost-engine:
     build: ./engines/cost_engine
@@ -52,6 +56,8 @@ services:
       - "8002:8000"
     networks:
       - cerberus_network
+    environment:
+      - TZ=America/Manaus
 
   pricing-engine:
     build: ./engines/pricing_engine
@@ -60,6 +66,8 @@ services:
       - "8003:8000"
     networks:
       - cerberus_network
+    environment:
+      - TZ=America/Manaus
 
   contract-engine:
     build: ./engines/contract_engine
@@ -68,6 +76,8 @@ services:
       - "8004:8000"
     networks:
       - cerberus_network
+    environment:
+      - TZ=America/Manaus
 
   web:
     build: ./apps/web
@@ -79,6 +89,8 @@ services:
       - /app/node_modules
     networks:
       - cerberus_network
+    environment:
+      - TZ=America/Manaus
 
 networks:
   cerberus_network:

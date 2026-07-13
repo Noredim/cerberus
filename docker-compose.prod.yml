@@ -9,6 +9,7 @@ services:
       POSTGRES_USER: cerberus
       POSTGRES_PASSWORD: W@rs26
       POSTGRES_DB: cerberus
+      TZ: America/Manaus
     volumes:
       - /opt/cerberus/data/postgres:/var/lib/postgresql/data
     networks:
@@ -30,6 +31,7 @@ services:
       - DATABASE_URL=postgresql://cerberus:W@rs26@db:5432/cerberus
       - ALLOWED_ORIGINS=https://cerberus.warslab.com.br
       - JWT_SECRET=e2c8ef16a06b9bb429d475a841f6c8b3782ba2bcf799adc7106927e69ce234cd
+      - TZ=America/Manaus
     volumes:
       - /opt/cerberus/data/uploads:/app/uploads
     depends_on:
@@ -46,6 +48,7 @@ services:
     restart: always
     environment:
       - VITE_API_URL=/api
+      - TZ=America/Manaus
     networks:
       - cerberus_prod_network
 
@@ -55,6 +58,8 @@ services:
     restart: always
     networks:
       - cerberus_prod_network
+    environment:
+      - TZ=America/Manaus
 
   cost-engine:
     build: ./engines/cost_engine
@@ -62,6 +67,8 @@ services:
     restart: always
     networks:
       - cerberus_prod_network
+    environment:
+      - TZ=America/Manaus
 
   pricing-engine:
     build: ./engines/pricing_engine
@@ -69,6 +76,8 @@ services:
     restart: always
     networks:
       - cerberus_prod_network
+    environment:
+      - TZ=America/Manaus
 
   contract-engine:
     build: ./engines/contract_engine
@@ -76,6 +85,8 @@ services:
     restart: always
     networks:
       - cerberus_prod_network
+    environment:
+      - TZ=America/Manaus
 
   gateway:
     image: nginx:stable-alpine

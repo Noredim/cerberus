@@ -99,6 +99,13 @@ def run():
             sql5 = f.read()
         cur.execute(sql5)
         print("V005__tipi_implementation.sql executed successfully.")
+
+        # 6. Configure database timezone dynamically
+        print("Configuring database timezone to America/Manaus...")
+        cur.execute("SELECT current_database();")
+        db_name = cur.fetchone()[0]
+        cur.execute(f'ALTER DATABASE "{db_name}" SET timezone TO \'America/Manaus\';')
+        print(f"Database '{db_name}' timezone configured to America/Manaus successfully.")
         
         conn.close()
         print("All SQL migrations completed successfully!")
