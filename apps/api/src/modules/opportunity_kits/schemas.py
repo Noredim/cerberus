@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Any
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
@@ -131,6 +131,12 @@ class OpportunityKitBase(BaseModel):
     perc_frete_venda: Decimal = Field(default=Decimal(0.0))
     perc_despesas_adm: Decimal = Field(default=Decimal(0.0))
     perc_comissao: Decimal = Field(default=Decimal(0.0))
+    tipo_comissionamento: str = "TRADICIONAL"
+    perc_dsr: Decimal = Field(default=Decimal(0.0))
+    perc_fgts: Decimal = Field(default=Decimal(0.0))
+    perc_inss: Decimal = Field(default=Decimal(0.0))
+    perc_demais_incidencias: Decimal = Field(default=Decimal(0.0))
+    perc_despesa_operacional: Decimal = Field(default=Decimal(0.0))
     
     custo_manut_mensal_kit: Decimal = Field(default=Decimal(0.0))
     custo_suporte_mensal_kit: Decimal = Field(default=Decimal(0.0))
@@ -145,6 +151,9 @@ class OpportunityKitBase(BaseModel):
     
     # Target Margin (Margem Alvo)
     margem_minima_desejada: Optional[Decimal] = Field(default=None)
+
+    commercial_policy_id: Optional[UUID] = None
+    comissionamento_detalhado: Optional[Any] = None
 
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
@@ -193,6 +202,12 @@ class OpportunityKitUpdate(BaseModel):
     perc_frete_venda: Optional[Decimal] = None
     perc_despesas_adm: Optional[Decimal] = None
     perc_comissao: Optional[Decimal] = None
+    tipo_comissionamento: Optional[str] = None
+    perc_dsr: Optional[Decimal] = None
+    perc_fgts: Optional[Decimal] = None
+    perc_inss: Optional[Decimal] = None
+    perc_demais_incidencias: Optional[Decimal] = None
+    perc_despesa_operacional: Optional[Decimal] = None
     
     custo_manut_mensal_kit: Optional[Decimal] = None
     custo_suporte_mensal_kit: Optional[Decimal] = None
@@ -244,6 +259,10 @@ class OpportunityKitFinancialSummary(BaseModel):
     imposto_instalacao: Optional[Decimal] = Field(default=Decimal(0))
     valor_comissao_locacao: Optional[Decimal] = Field(default=Decimal(0))
     valor_despesas_adm_locacao: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_dsr_loc: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_fgts_loc: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_inss_loc: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_demais_loc: Optional[Decimal] = Field(default=Decimal(0))
     venda_equipamentos_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
     margem_equipamentos: Optional[Decimal] = Field(default=Decimal(0))
@@ -261,6 +280,8 @@ class OpportunityKitFinancialSummary(BaseModel):
     # ROI payback period in months (LOCACAO/COMODATO only)
     roi_meses: Optional[float] = Field(default=0.0)
     roi_equipamento_meses: Optional[float] = Field(default=0.0)
+    investimento_total: Optional[Decimal] = Field(default=Decimal(0))
+    roi_denominador: Optional[Decimal] = Field(default=Decimal(0))
     # Granular tax/expense breakdown for Fechamento de Venda
     faturamento_total_venda: Optional[Decimal] = Field(default=Decimal(0))
     imposto_equip_loc: Optional[Decimal] = Field(default=Decimal(0))
@@ -273,6 +294,11 @@ class OpportunityKitFinancialSummary(BaseModel):
     vlt_frete_venda: Optional[Decimal] = Field(default=Decimal(0))
     vlt_despesas_adm: Optional[Decimal] = Field(default=Decimal(0))
     vlt_comissao: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_dsr: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_fgts: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_inss: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_comissao_demais: Optional[Decimal] = Field(default=Decimal(0))
+    vlt_despesa_operacional: Optional[Decimal] = Field(default=Decimal(0))
     custo_equip_total_calc: Optional[Decimal] = Field(default=Decimal(0))
     custo_manut_total_calc: Optional[Decimal] = Field(default=Decimal(0))
     

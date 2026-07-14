@@ -19,6 +19,7 @@ class SalesBudget(Base):
     forma_pagamento_id = Column(UUID(as_uuid=True), ForeignKey("formas_pagamento.id", ondelete="SET NULL"), nullable=True, index=True)
     data_vencimento_inicial = Column(DateTime(timezone=True), nullable=True)
     forma_pagamento_snapshot = Column(JSONB, nullable=True)
+    commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="SET NULL"), nullable=True, index=True)
 
     numero_orcamento = Column(String(50), nullable=True)
     titulo = Column(String(255), nullable=False)
@@ -32,6 +33,12 @@ class SalesBudget(Base):
     markup_padrao = Column(Numeric(10, 4), nullable=False, default=1.0)
     perc_despesa_adm = Column(Numeric(6, 4), nullable=False, default=0)
     perc_comissao = Column(Numeric(6, 4), nullable=False, default=0)
+    tipo_comissionamento = Column(String(50), nullable=False, default="TRADICIONAL")
+    perc_dsr = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_fgts = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_inss = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_demais_incidencias = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_despesa_operacional = Column(Numeric(6, 4), nullable=False, default=0.0)
     perc_frete_venda = Column(Numeric(6, 4), nullable=False, default=0)
     perc_pis = Column(Numeric(6, 4), nullable=False, default=0)
     perc_cofins = Column(Numeric(6, 4), nullable=False, default=0)
@@ -79,6 +86,7 @@ class SalesBudget(Base):
     responsaveis = relationship("SalesBudgetResponsavel", back_populates="budget", cascade="all, delete-orphan")
     history = relationship("SalesBudgetHistory", back_populates="budget", cascade="all, delete-orphan", order_by="SalesBudgetHistory.data_movimentacao.desc()")
     approvals = relationship("SalesBudgetApproval", back_populates="budget", cascade="all, delete-orphan")
+    commercial_policy = relationship("CommercialPolicy")
 
 
 class SalesBudgetResponsavel(Base):
@@ -138,6 +146,11 @@ class SalesBudgetItem(Base):
     despesa_adm_unit = Column(Numeric(15, 4), nullable=False, default=0)
     perc_comissao = Column(Numeric(6, 4), nullable=False, default=0)
     comissao_unit = Column(Numeric(15, 4), nullable=False, default=0)
+    dsr_unit = Column(Numeric(15, 4), nullable=False, default=0.0)
+    fgts_unit = Column(Numeric(15, 4), nullable=False, default=0.0)
+    inss_unit = Column(Numeric(15, 4), nullable=False, default=0.0)
+    demais_incidencias_unit = Column(Numeric(15, 4), nullable=False, default=0.0)
+    despesa_operacional_unit = Column(Numeric(15, 4), nullable=False, default=0.0)
 
     # Result
     lucro_unit = Column(Numeric(15, 4), nullable=False, default=0)
@@ -207,6 +220,7 @@ class RentalBudgetItem(Base):
     kit_vlr_instal_calc = Column(Numeric(15, 4), nullable=True)
     kit_parcela_locacao = Column(Numeric(15, 4), nullable=True)
     kit_venda_unit_monitoramento = Column(Numeric(15, 4), nullable=True)
+    kit_comissionamento_detalhado = Column(JSONB, nullable=True)
 
     quantidade = Column(Numeric(15, 4), nullable=False, default=1)
 
@@ -246,6 +260,11 @@ class RentalBudgetItem(Base):
     # ── Commission ──
     perc_comissao = Column(Numeric(6, 4), nullable=False, default=0)
     comissao_mensal = Column(Numeric(15, 4), nullable=False, default=0)
+    dsr_mensal = Column(Numeric(15, 4), nullable=False, default=0.0)
+    fgts_mensal = Column(Numeric(15, 4), nullable=False, default=0.0)
+    inss_mensal = Column(Numeric(15, 4), nullable=False, default=0.0)
+    demais_incidencias_mensal = Column(Numeric(15, 4), nullable=False, default=0.0)
+    despesa_operacional_mensal = Column(Numeric(15, 4), nullable=False, default=0.0)
 
     # ── Result ──
     lucro_mensal = Column(Numeric(15, 4), nullable=False, default=0)

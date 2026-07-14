@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
@@ -255,6 +255,12 @@ interface KitFormValues {
   perc_frete_venda: number;
   perc_despesas_adm: number;
   perc_comissao: number;
+  tipo_comissionamento?: 'TRADICIONAL' | 'COMISSAO_POR_DENTRO';
+  perc_dsr?: number;
+  perc_fgts?: number;
+  perc_inss?: number;
+  perc_demais_incidencias?: number;
+  perc_despesa_operacional?: number;
   custo_manut_mensal_kit: number;
   custo_suporte_mensal_kit: number;
   custo_seguro_mensal_kit: number;
@@ -326,6 +332,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const [userPolicies, setUserPolicies] = useState<any[]>([]);
   const [policiesLoaded, setPoliciesLoaded] = useState(false);
   const [activePolicy, setActivePolicy] = useState<any>(null);
+  const isInitialLoad = useRef(!!kitId);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   // Rich context for the policy violation modal
   const [policyAlert, setPolicyAlert] = useState<{
@@ -336,6 +343,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   } | null>(null);
 
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
+
+  const allowedTypes = useMemo(() => {
+    const isVendaContext = initialTipoContrato === 'VENDA_EQUIPAMENTOS';
+    const isLocacaoContext = initialTipoContrato === 'LOCACAO' || initialTipoContrato === 'COMODATO';
+    const isInBudget = !!sourceBudgetId;
+
+    if (isInBudget) {
+      if (isVendaContext) {
+        return ['VENDA_EQUIPAMENTOS', 'INSTALACAO'];
+      }
+      if (isLocacaoContext) {
+        return ['LOCACAO', 'COMODATO', 'INSTALACAO'];
+      }
+    }
+    return ['LOCACAO', 'COMODATO', 'VENDA_EQUIPAMENTOS', 'INSTALACAO'];
+  }, [initialTipoContrato, sourceBudgetId]);
   const [opportunityCustomerName, setOpportunityCustomerName] = useState<string | null>(null);
   const [isInterstate, setIsInterstate] = useState<boolean>(false);
 
@@ -372,6 +395,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     perc_frete_venda: 0,
     perc_despesas_adm: 0,
     perc_comissao: 0,
+    tipo_comissionamento: 'TRADICIONAL',
+    perc_dsr: 0,
+    perc_fgts: 0,
+    perc_inss: 0,
+    perc_demais_incidencias: 0,
+    perc_despesa_operacional: 0,
     custo_manut_mensal_kit: 0,
     custo_suporte_mensal_kit: 0,
     custo_seguro_mensal_kit: 0,
@@ -441,6 +470,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   useEffect(() => {
     if (kitId) {
       loadKit();
+    } else {
+      isInitialLoad.current = false;
     }
   }, [kitId]);
 
@@ -469,7 +500,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       }
       data.costs = data.costs.map((c: any) => ({
         ...c,
-        descricao_item: c.product?.nome || c.descricao_item || 'Serviço'
+        descricao_item: c.product?.nome || c.own_service?.nome_servico || c.descricao_item || 'Serviço'
       }));
       data.faturamento_servico_separado = data.faturamento_servico_separado || false;
       
@@ -482,6 +513,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       data.perc_frete_venda = data.perc_frete_venda ?? 0;
       data.perc_despesas_adm = data.perc_despesas_adm ?? 0;
       data.perc_comissao = data.perc_comissao ?? 0;
+      data.tipo_comissionamento = data.tipo_comissionamento ?? 'TRADICIONAL';
+      data.perc_dsr = data.perc_dsr ?? 0;
+      data.perc_fgts = data.perc_fgts ?? 0;
+      data.perc_inss = data.perc_inss ?? 0;
+      data.perc_demais_incidencias = data.perc_demais_incidencias ?? 0;
+      data.perc_despesa_operacional = data.perc_despesa_operacional ?? 0;
       data.taxa_juros_mensal = data.taxa_juros_mensal ?? 0;
       data.taxa_manutencao_anual = data.taxa_manutencao_anual ?? 0;
       data.custo_monitoramento_unitario = data.custo_monitoramento_unitario ?? 0;
@@ -489,6 +526,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       data.forma_execucao = data.forma_execucao || 'H. NORMAL';
 
       setForm(data);
+      isInitialLoad.current = false;
       // Ensure we record the loaded contract type so it doesn't trigger the change detection later
       prevTipoContratoRef.current = data.tipo_contrato;
       setIsKitLoaded(true);
@@ -629,11 +667,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   // Effect 1: Detect which tier the current factor falls into.
-  // Runs on every fator_margem_locacao change (committed value, after blur).
+  // Runs on fator_margem_locacao changes or financials updates (to sync with MKP de Venda).
   useEffect(() => {
     if (!userPolicies || userPolicies.length === 0) return;
 
-    const fator = Number(form.fator_margem_locacao);
+    let fator = Number(form.fator_margem_locacao);
+
+    if (['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato)) {
+      const opSums = (financials?.cost_summaries || []).filter((cs: any) => cs.tipo_custo !== 'INSTALACAO');
+      const qtdMeses = Number(form.qtd_meses_manutencao) || 0;
+      const custoB6 = form.havera_manutencao ? opSums.reduce((a: number, s: any) => a + (s.custo_total_item_no_kit || 0), 0) : 0;
+      const custoB6Total = custoB6 * qtdMeses;
+
+      const custoAquisicao = Number(financials?.summary?.custo_aquisicao_total || 0) + custoB6Total;
+      const totalVenda = Number(financials?.summary?.venda_equipamentos_total || 0);
+
+      const calculatedMkp = custoAquisicao > 0 ? (totalVenda / custoAquisicao) : 0;
+      if (calculatedMkp > 0) {
+        fator = calculatedMkp;
+      }
+    }
+
     if (!fator || fator <= 0) return;
 
     const applicable = userPolicies
@@ -641,17 +695,35 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0] ?? null;
 
     setActivePolicy(applicable);
-  }, [form.fator_margem_locacao, userPolicies]);
+  }, [form.fator_margem_locacao, financials, userPolicies, form.tipo_contrato, form.havera_manutencao, form.qtd_meses_manutencao]);
 
   // Effect 2: Sync commission when the active tier changes (tier ID changed).
   // Separated from Effect 1 to avoid nested state setter anti-pattern.
   useEffect(() => {
-    if (!activePolicy) return;
-    setForm(prev => {
-      const incoming = Number(activePolicy.comissao_percentual);
-      if (Number(prev.perc_comissao) === incoming) return prev; // no-op if already correct
-      return { ...prev, perc_comissao: incoming };
-    });
+    if (isInitialLoad.current) return;
+    if (!activePolicy) {
+      setForm(prev => ({
+        ...prev,
+        perc_comissao: 0,
+        tipo_comissionamento: 'TRADICIONAL',
+        perc_dsr: 0,
+        perc_fgts: 0,
+        perc_inss: 0,
+        perc_demais_incidencias: 0,
+        perc_despesa_operacional: 0
+      }));
+      return;
+    }
+    setForm(prev => ({
+      ...prev,
+      perc_comissao: Number(activePolicy.comissao_percentual) || 0,
+      tipo_comissionamento: activePolicy.tipo_comissionamento || 'TRADICIONAL',
+      perc_dsr: Number(activePolicy.dsr_percentual) || 0,
+      perc_fgts: Number(activePolicy.fgts_percentual) || 0,
+      perc_inss: Number(activePolicy.inss_percentual) || 0,
+      perc_demais_incidencias: Number(activePolicy.demais_incidencias_percentual) || 0,
+      perc_despesa_operacional: Number(activePolicy.despesa_operacional_percentual) || 0
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePolicy?.id]); // Only fires when the TIER changes, not on every form render
 
@@ -828,7 +900,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           tipo_custo: data.tipo_custo,
           quantidade: data.quantidade,
           valor_unitario: data.valor_unitario,
-          descricao_item: data.descricao_item,
+          descricao_item: data.descricao_item || data.product?.nome || data.own_service?.nome_servico || 'Serviço',
+          product: data.product,
+          own_service: data.own_service,
         }
       ]
     }));
@@ -894,6 +968,18 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   };
 
   const onSubmit = async () => {
+    if (!allowedTypes.includes(form.tipo_contrato)) {
+      const typeLabels: Record<string, string> = {
+        LOCACAO: 'Locação',
+        COMODATO: 'Comodato',
+        VENDA_EQUIPAMENTOS: 'Venda de Equipamentos',
+        INSTALACAO: 'Apenas Instalação'
+      };
+      const allowedLabels = allowedTypes.map(t => typeLabels[t] || t).join(', ');
+      setAlertMessage(`Não é possível salvar este kit nesta tela. O tipo de modalidade selecionado (${typeLabels[form.tipo_contrato] || form.tipo_contrato}) não é permitido. Tipos permitidos nesta aba: ${allowedLabels}.`);
+      return;
+    }
+
     // Front-end safety validation
     if (userPolicies.length > 0) {
       const minAllowed = Math.min(...userPolicies.map(p => Number(p.fator_limite)));
@@ -1216,11 +1302,15 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               // ── Desp. de venda B4+B5
               const despVendaB4 = itemSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
               const despVendaB5 = instSums.reduce((a: number, s: any) => a + (s.frete_venda_item || 0) + (s.desp_adm_item || 0) + (s.comissao_item || 0), 0);
-              const despVenda = despVendaB4 + despVendaB5;
+              const despVenda = despVendaB4 + despVendaB5 + (Number(financials?.summary?.vlt_despesa_operacional) || 0);
 
               const totalDespAdmB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.desp_adm_item || 0), 0);
               const totalFreteVendaB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.frete_venda_item || 0), 0);
               const totalComissaoB45 = [...itemSums, ...instSums].reduce((a: number, s: any) => a + (s.comissao_item || 0), 0);
+              const vltComissaoDsr = financials?.summary?.vlt_comissao_dsr || 0;
+              const vltComissaoFgts = financials?.summary?.vlt_comissao_fgts || 0;
+              const vltComissaoInss = financials?.summary?.vlt_comissao_inss || 0;
+              const vltComissaoDemais = financials?.summary?.vlt_comissao_demais || 0;
 
               if (!isCalcExpanded) {
                 return (
@@ -1346,38 +1436,40 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   {/* Row 1 — Custos e vendas por bloco */}
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     {/* Custo de Aquisição */}
-                    <Tooltip variant="light" content={
-                      <div className="w-72 space-y-2 text-text-secondary p-1">
-                        <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Detalhamento dos Custos de Compra</div>
-                        <div className="flex justify-between text-xs">
-                          <span>Custo base:</span><span className="font-semibold text-text-primary">{fmtC(financials?.summary?.total_base_cost_total)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span>Valor IPI:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_ipi_total)}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span>Valor ICMS ST:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_st_total)}</span>
-                        </div>
-                        {Number(financials?.summary?.total_difal_total || 0) > 0 && (
+                    <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center cursor-help">
+                      <Tooltip variant="light" content={
+                        <div className="w-72 space-y-2 text-text-secondary p-1">
+                          <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Detalhamento dos Custos de Compra</div>
                           <div className="flex justify-between text-xs">
-                            <span>Valor DIFAL:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_difal_total)}</span>
+                            <span>Custo base:</span><span className="font-semibold text-text-primary">{fmtC(financials?.summary?.total_base_cost_total)}</span>
                           </div>
-                        )}
-                        <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-xs text-text-primary">
-                          <span>Custo Total do Kit:</span><span>{fmtC(financials?.summary?.custo_aquisicao_total)}</span>
+                          <div className="flex justify-between text-xs">
+                            <span>Valor IPI:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_ipi_total)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span>Valor ICMS ST:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_st_total)}</span>
+                          </div>
+                          {Number(financials?.summary?.total_difal_total || 0) > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span>Valor DIFAL:</span><span className="font-semibold text-rose-600">{fmtC(financials?.summary?.total_difal_total)}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-xs text-text-primary">
+                            <span>Custo Total do Kit:</span><span>{fmtC(financials?.summary?.custo_aquisicao_total)}</span>
+                          </div>
                         </div>
-                      </div>
-                    }>
-                      <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center cursor-help">
-                        <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
-                        <div className="text-base font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
-                        <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
-                          <div className="flex justify-between" title="Bloco 4 – Itens"><span>B4 (Itens):</span><span>{fmtC(custoB4)}</span></div>
-                          <div className="flex justify-between" title="Bloco 5 – Instalação"><span>B5 (Inst.):</span><span>{fmtC(custoB5)}</span></div>
-                          <div className="flex justify-between" title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}><span>B6 (Manut.):</span><span>{fmtC(custoB6Total)}</span></div>
+                      }>
+                        <div className="w-full h-full flex flex-col justify-center">
+                          <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1">Custo de Aquisição</span>
+                          <div className="text-base font-bold text-text-primary">{fmtC(custoAquisicao)}</div>
+                          <div className="text-[9px] text-text-muted mt-1 space-y-0.5">
+                            <div className="flex justify-between" title="Bloco 4 – Itens"><span>B4 (Itens):</span><span>{fmtC(custoB4)}</span></div>
+                            <div className="flex justify-between" title="Bloco 5 – Instalação"><span>B5 (Inst.):</span><span>{fmtC(custoB5)}</span></div>
+                            <div className="flex justify-between" title={`Bloco 6 – ${fmtC(custoB6)}/mês × ${qtdMeses}m`}><span>B6 (Manut.):</span><span>{fmtC(custoB6Total)}</span></div>
+                          </div>
                         </div>
-                      </div>
-                    </Tooltip>
+                      </Tooltip>
+                    </div>
 
                     {/* Total da Venda (B4 + B5) */}
                     <div className="bg-bg-subtle border border-border-subtle rounded-xl p-3 flex flex-col justify-center">
@@ -1524,11 +1616,41 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 <span className="text-rose-600 font-medium">{fmtC(totalFreteVendaB45)}</span>
                               </div>
                               {totalComissaoB45 > 0 && (
-                                <div className="flex justify-between text-[11px] font-mono">
-                                  <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
-                                  <span className="text-rose-600 font-medium">{fmtC(totalComissaoB45)}</span>
-                                </div>
+                                <>
+                                  <div className="flex justify-between text-[11px] font-mono">
+                                    <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
+                                    <span className="text-rose-600 font-medium">{fmtC(totalComissaoB45)}</span>
+                                  </div>
+                                  {(vltComissaoDsr > 0 || vltComissaoFgts > 0 || vltComissaoInss > 0 || vltComissaoDemais > 0) && (
+                                    <div className="bg-bg-subtle/50 rounded-lg p-2 my-1 space-y-1 text-[10px] border border-border-subtle/40 font-mono">
+                                      <div className="flex justify-between text-text-muted">
+                                        <span>(-) DSR:</span>
+                                        <span>-{fmtC(vltComissaoDsr)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-text-muted">
+                                        <span>(-) FGTS:</span>
+                                        <span>-{fmtC(vltComissaoFgts)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-text-muted">
+                                        <span>(-) INSS:</span>
+                                        <span>-{fmtC(vltComissaoInss)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-text-muted">
+                                        <span>(-) Outros:</span>
+                                        <span>-{fmtC(vltComissaoDemais)}</span>
+                                      </div>
+                                      <div className="flex justify-between font-bold text-emerald-600 border-t border-border-subtle/40 pt-1 mt-1">
+                                        <span>Comissão Líquida:</span>
+                                        <span>{fmtC(totalComissaoB45 - vltComissaoDsr - vltComissaoFgts - vltComissaoInss - vltComissaoDemais)}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
                               )}
+                              <div className="flex justify-between text-[11px] font-mono">
+                                <span>Desp. Operacional ({Number(form.perc_despesa_operacional || 0).toFixed(2)}%):</span>
+                                <span className="text-rose-600 font-medium">{fmtC(financials?.summary?.vlt_despesa_operacional || 0)}</span>
+                              </div>
                               <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
                                 <span>Total:</span>
                                 <span className="text-rose-700">{fmtC(despVenda)}</span>
@@ -1642,11 +1764,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
             const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
             const valorDespesasAdmLocacao = financials?.summary?.valor_despesas_adm_locacao || 0;
-            const totalComissaoDespAdm = valorComissaoLocacao + valorDespesasAdmLocacao;
-            // const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
-            // const totalInvestimento = custoAq + valorComissaoLocacao + impostoInstalacao;
-            // const impostosMensais = financials?.summary?.valor_impostos || 0;
-            // const totalReceitaContrato = (faturamentoMensal * mesesFaturados) + (form.instalacao_inclusa ? instalacaoEmbutida : 0);
+            const valorDespesaOperacional = financials?.summary?.vlt_despesa_operacional || 0;
+            const totalComissaoDespOp = valorComissaoLocacao + (form.tipo_contrato === 'COMODATO' ? valorDespesaOperacional : 0);
+            const isVendaContract = form.tipo_contrato === 'VENDA_EQUIPAMENTOS';
+            const vltComissaoDsr = isVendaContract ? (financials?.summary?.vlt_comissao_dsr || 0) : (financials?.summary?.vlt_comissao_dsr_loc || 0);
+            const vltComissaoFgts = isVendaContract ? (financials?.summary?.vlt_comissao_fgts || 0) : (financials?.summary?.vlt_comissao_fgts_loc || 0);
+            const vltComissaoInss = isVendaContract ? (financials?.summary?.vlt_comissao_inss || 0) : (financials?.summary?.vlt_comissao_inss_loc || 0);
+            const vltComissaoDemais = isVendaContract ? (financials?.summary?.vlt_comissao_demais || 0) : (financials?.summary?.vlt_comissao_demais_loc || 0);
+            const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
+            const investimentoTotal = financials?.summary?.investimento_total || 0;
+            const roiDenominador = financials?.summary?.roi_denominador || 0;
+            const impostoEquipLoc = financials?.summary?.imposto_equip_loc || 0;
+            const valorMensalAntesImpostos = financials?.summary?.valor_mensal_antes_impostos || 0;
+            const custoMonitoramentoUnitario = financials?.summary?.custo_monitoramento_unitario || 0;
+            const custoOperacionalMensalKit = financials?.summary?.custo_operacional_mensal_kit || 0;
+            const custoMensalBloco7 = financials?.summary?.custo_mensal_bloco_7 || 0;
+            const valorImpostos = financials?.summary?.valor_impostos || 0;
             const roiMeses = financials?.summary?.roi_meses || 0;
             const roiEquipamentoMeses = financials?.summary?.roi_equipamento_meses || 0;
 
@@ -1771,37 +1904,110 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     </div>
                   </div>
 
-                  {/* Card 1.5: Despesas Administrativas e Comissão */}
-                  <Tooltip
-                    variant="light"
-                    content={
-                      <div className="w-64 space-y-2 text-text-secondary p-1 text-xs">
-                        <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
-                          Detalhamento de Comissão e Despesa Adm.
+                  {/* Card 1.5: Desp. de Venda (Comissão & Desp. Op. - Únicas) */}
+                  <div className="w-full h-full">
+                    <Tooltip
+                      variant="light"
+                      className="w-full h-full flex"
+                      content={
+                        <div className="w-64 space-y-2 text-text-secondary p-1 text-xs">
+                          <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                            Detalhamento de Despesas de Venda
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
+                            <span className="font-semibold text-text-primary">{fmtC(valorComissaoLocacao)}</span>
+                          </div>
+                          {vltComissaoDsr > 0 || vltComissaoFgts > 0 ? (
+                            <div className="bg-bg-subtle/30 rounded-lg p-2 space-y-1 text-[11px] border border-border-subtle/40">
+                              <div className="font-semibold text-text-primary mb-1">Encargos de Comissão por Dentro</div>
+                              <div className="flex justify-between">
+                                <span>Comissão Alvo:</span>
+                                <span className="font-semibold text-text-primary">{fmtC(valorComissaoLocacao + vltComissaoDsr + vltComissaoFgts + vltComissaoInss + vltComissaoDemais)}</span>
+                              </div>
+                              <div className="flex justify-between text-rose-600 font-medium">
+                                <span>(-) DSR:</span>
+                                <span>-{fmtC(vltComissaoDsr)}</span>
+                              </div>
+                              <div className="flex justify-between text-rose-600 font-medium">
+                                <span>(-) FGTS:</span>
+                                <span>-{fmtC(vltComissaoFgts)}</span>
+                              </div>
+                              {vltComissaoInss > 0 && (
+                                <div className="flex justify-between text-rose-600 font-medium">
+                                  <span>(-) INSS:</span>
+                                  <span>-{fmtC(vltComissaoInss)}</span>
+                                </div>
+                              )}
+                              {vltComissaoDemais > 0 && (
+                                <div className="flex justify-between text-rose-600 font-medium">
+                                  <span>(-) Outras Incid.:</span>
+                                  <span>-{fmtC(vltComissaoDemais)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between border-t border-border-subtle/40 pt-1 mt-1 font-bold">
+                                <span>Comissão Líquida:</span>
+                                <span className="text-text-primary">{fmtC(valorComissaoLocacao)}</span>
+                              </div>
+                            </div>
+                          ) : null}
+                          {form.tipo_contrato === 'COMODATO' && (
+                            <div className="flex justify-between border-t border-border-subtle/40 pt-1">
+                              <span>Desp. Operacional ({Number(form.perc_despesa_operacional || 0).toFixed(2)}%):</span>
+                              <span className="font-semibold text-text-primary">{fmtC(valorDespesaOperacional)}</span>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex justify-between">
-                          <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
-                          <span className="font-semibold text-text-primary">{fmtC(valorComissaoLocacao)}</span>
+                      }
+                    >
+                      <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center cursor-pointer w-full h-full">
+                        <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">
+                          Desp. de Venda
+                        </span>
+                        <div className="text-base font-bold text-brand-primary tabular-nums">
+                          {fmtC(totalComissaoDespOp)}
                         </div>
-                        <div className="flex justify-between">
-                          <span>Desp. Adm ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
-                          <span className="font-semibold text-text-primary">{fmtC(valorDespesasAdmLocacao)}</span>
+                        <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
+                          Comissão: {Number(form.perc_comissao || 0).toFixed(2)}%
+                          {form.tipo_contrato === 'COMODATO' && ` | Desp. Op: ${Number(form.perc_despesa_operacional || 0).toFixed(2)}%`}
                         </div>
                       </div>
-                    }
-                  >
-                    <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-3 flex flex-col justify-center cursor-pointer">
-                      <span className="block text-[9px] text-brand-primary font-bold uppercase tracking-wider mb-1">
-                        Desp. Adm
-                      </span>
-                      <div className="text-base font-bold text-brand-primary tabular-nums">
-                        {fmtC(totalComissaoDespAdm)}
+                    </Tooltip>
+                  </div>
+
+                  {/* Card 1.6: Desp. Adm. (Mensal - Recorrente) */}
+                  <div className="w-full h-full">
+                    <Tooltip
+                      variant="light"
+                      className="w-full h-full flex"
+                      content={
+                        <div className="w-64 space-y-2 text-text-secondary p-1 text-xs">
+                          <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                            Detalhamento de Despesas Adm. (Mensal)
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Desp. Adm. ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
+                            <span className="font-semibold text-text-primary">{fmtC(valorDespesasAdmLocacao)}</span>
+                          </div>
+                          <div className="text-[10px] text-text-muted mt-1">
+                            Cobrado recorrentemente em todas as parcelas do contrato.
+                          </div>
+                        </div>
+                      }
+                    >
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 flex flex-col justify-center cursor-pointer w-full h-full">
+                        <span className="block text-[9px] text-blue-500 font-bold uppercase tracking-wider mb-1">
+                          Desp. Adm (mês)
+                        </span>
+                        <div className="text-base font-bold text-blue-500 tabular-nums">
+                          {fmtC(valorDespesasAdmLocacao)}
+                        </div>
+                        <div className="text-[9px] text-blue-500/80 mt-1.5 font-medium leading-tight">
+                          Desp. Adm: {Number(form.perc_despesas_adm || 0).toFixed(2)}% (mês)
+                        </div>
                       </div>
-                      <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
-                        Comissão: {Number(form.perc_comissao || 0).toFixed(2)}% | Desp. Adm: {Number(form.perc_despesas_adm || 0).toFixed(2)}%
-                      </div>
-                    </div>
-                  </Tooltip>
+                    </Tooltip>
+                  </div>
 
                   {/* Card 2: Instalação */}
                   <div className={`border rounded-xl p-3 flex flex-col justify-center ${instalacaoEmbutida > 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-bg-subtle border-border-subtle opacity-60'}`}>
@@ -1881,26 +2087,166 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   </div>
 
                   {/* Card 6: ROI Previsto */}
-                  <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
-                    {roiMeses > 0 && (
-                      <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
-                    )}
-                    <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
-                    <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
-                      {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
-                    </div>
+                  <div className="w-full h-full">
+                    <Tooltip
+                      variant="light"
+                      className="w-full h-full flex"
+                      content={
+                        <div className="w-64 space-y-1.5 text-text-secondary p-1 text-xs">
+                          <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                            Cálculo do ROI Previsto (Payback)
+                          </div>
+                          <div className="font-semibold text-text-primary mt-1">1. Investimento (CAPEX + Setup)</div>
+                          <div className="flex justify-between pl-2">
+                            <span>Custo de Aquisição:</span>
+                            <span>{fmtC(custoAq)}</span>
+                          </div>
+                          {impostoInstalacao > 0 && (
+                            <div className="flex justify-between pl-2">
+                              <span>(+) Imposto Instalação:</span>
+                              <span>{fmtC(impostoInstalacao)}</span>
+                            </div>
+                          )}
+                          {valorComissaoLocacao > 0 && (
+                            <div className="flex justify-between pl-2">
+                              <span>(+) Comissão de Locação:</span>
+                              <span>{fmtC(valorComissaoLocacao)}</span>
+                            </div>
+                          )}
+                          {form.tipo_contrato === 'COMODATO' && valorDespesaOperacional > 0 && (
+                            <div className="flex justify-between pl-2">
+                              <span>(+) Despesa Operacional:</span>
+                              <span>{fmtC(valorDespesaOperacional)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                            <span>Total Investimento:</span>
+                            <span className="text-text-primary">{fmtC(investimentoTotal)}</span>
+                          </div>
+
+                          <div className="font-semibold text-text-primary mt-2">2. Fluxo Caixa Mensal Líquido</div>
+                          <div className="flex justify-between pl-2">
+                            <span>Faturamento antes Impostos:</span>
+                            <span>{fmtC(valorMensalAntesImpostos)}</span>
+                          </div>
+                          {custoMonitoramentoUnitario > 0 && (
+                            <div className="flex justify-between pl-2 text-rose-600">
+                              <span>(-) Custo Monitoramento:</span>
+                              <span>-{fmtC(custoMonitoramentoUnitario)}</span>
+                            </div>
+                          )}
+                          {custoOperacionalMensalKit > 0 && (
+                            <div className="flex justify-between pl-2 text-rose-600">
+                              <span>(-) Custo Operacional Bloco 6:</span>
+                              <span>-{fmtC(custoOperacionalMensalKit)}</span>
+                            </div>
+                          )}
+                          {custoMensalBloco7 > 0 && (
+                            <div className="flex justify-between pl-2 text-rose-600">
+                              <span>(-) Custo Operacional Bloco 7:</span>
+                              <span>-{fmtC(custoMensalBloco7)}</span>
+                            </div>
+                          )}
+                          {valorImpostos > 0 && (
+                            <div className="flex justify-between pl-2 text-rose-600">
+                              <span>(-) Impostos Faturamento:</span>
+                              <span>-{fmtC(valorImpostos)}</span>
+                            </div>
+                          )}
+                          {valorDespesasAdmLocacao > 0 && (
+                            <div className="flex justify-between pl-2 text-rose-600">
+                              <span>(-) Despesas Adm (mês):</span>
+                              <span>-{fmtC(valorDespesasAdmLocacao)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                            <span>Fluxo Mensal Líquido:</span>
+                            <span className="text-text-primary">{fmtC(roiDenominador)}</span>
+                          </div>
+
+                          <div className="border-t border-border-subtle/60 pt-1.5 mt-2 text-[10px] text-text-muted italic">
+                            Fórmula: Investimento / Fluxo Mensal
+                          </div>
+                        </div>
+                      }
+                    >
+                      <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative w-full h-full cursor-pointer ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                        {roiMeses > 0 && (
+                          <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                        )}
+                        <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
+                        <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
+                          {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
+                        </div>
+                      </div>
+                    </Tooltip>
                   </div>
 
                   {/* Card 6.5: ROI DE EQUIPAMENTO */}
                   {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
-                    <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative ${roiEquipamentoMeses > 0 ? 'bg-indigo-500/5 border-indigo-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
-                      {roiEquipamentoMeses > 0 && (
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
-                      )}
-                      <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Equipamento</span>
-                      <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiEquipamentoMeses > 0 ? 'text-indigo-500' : 'text-text-muted'}`}>
-                        {roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(1)} meses` : '—'}
-                      </div>
+                    <div className="w-full h-full">
+                      <Tooltip
+                        variant="light"
+                        className="w-full h-full flex"
+                        content={
+                          <div className="w-64 space-y-1.5 text-text-secondary p-1 text-xs">
+                            <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                              Cálculo do ROI Equipamento
+                            </div>
+                            <div className="font-semibold text-text-primary mt-1">1. Custos do Equipamento</div>
+                            <div className="flex justify-between pl-2">
+                              <span>Custo de Aquisição:</span>
+                              <span>{fmtC(custoAq)}</span>
+                            </div>
+                            {valorComissaoLocacao > 0 && (
+                              <div className="flex justify-between pl-2">
+                                <span>(+) Comissão de Locação:</span>
+                                <span>{fmtC(valorComissaoLocacao)}</span>
+                              </div>
+                            )}
+                            {form.tipo_contrato === 'COMODATO' && valorDespesaOperacional > 0 && (
+                              <div className="flex justify-between pl-2">
+                                <span>(+) Despesa Operacional:</span>
+                                <span>{fmtC(valorDespesaOperacional)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                              <span>Total Equipamento:</span>
+                              <span className="text-text-primary">{fmtC(custoAq + valorComissaoLocacao + (form.tipo_contrato === 'COMODATO' ? valorDespesaOperacional : 0))}</span>
+                            </div>
+
+                            <div className="font-semibold text-text-primary mt-2">2. Locação Líquida Mensal</div>
+                            <div className="flex justify-between pl-2">
+                              <span>Locação Mensal:</span>
+                              <span>{fmtC(locacaoMensal)}</span>
+                            </div>
+                            {impostoEquipLoc > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Impostos Locação:</span>
+                                <span>-{fmtC(impostoEquipLoc)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                              <span>Locação Líquida:</span>
+                              <span className="text-text-primary">{fmtC(locacaoMensal - impostoEquipLoc)}</span>
+                            </div>
+
+                            <div className="border-t border-border-subtle/60 pt-1.5 mt-2 text-[10px] text-text-muted italic">
+                              Fórmula: Total Equipamento / Locação Líquida
+                            </div>
+                          </div>
+                        }
+                      >
+                        <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative w-full h-full cursor-pointer ${roiEquipamentoMeses > 0 ? 'bg-indigo-500/5 border-indigo-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                          {roiEquipamentoMeses > 0 && (
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                          )}
+                          <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Equipamento</span>
+                          <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiEquipamentoMeses > 0 ? 'text-indigo-500' : 'text-text-muted'}`}>
+                            {roiEquipamentoMeses > 0 ? `${roiEquipamentoMeses.toFixed(1)} meses` : '—'}
+                          </div>
+                        </div>
+                      </Tooltip>
                     </div>
                   )}
 
@@ -1987,10 +2333,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   onChange={(e) => handleInputChange('tipo_contrato', e.target.value)}
                   className="w-full rounded-lg border border-border-strong bg-bg-surface px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50"
                 >
-                  <option value="LOCACAO">Locação</option>
-                  <option value="COMODATO">Comodato</option>
-                  <option value="VENDA_EQUIPAMENTOS">Venda de Equipamentos</option>
-                  <option value="INSTALACAO">Apenas Instalação</option>
+                  {allowedTypes.includes('LOCACAO') && <option value="LOCACAO">Locação</option>}
+                  {allowedTypes.includes('COMODATO') && <option value="COMODATO">Comodato</option>}
+                  {allowedTypes.includes('VENDA_EQUIPAMENTOS') && <option value="VENDA_EQUIPAMENTOS">Venda de Equipamentos</option>}
+                  {allowedTypes.includes('INSTALACAO') && <option value="INSTALACAO">Apenas Instalação</option>}
                 </select>
               </div>
               <div>
@@ -2095,7 +2441,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           handleInputChange('perc_comissao', val);
                         }
                       }} 
-                      className="w-full" 
+                      className="w-full"
+                      disabled={true}
                     />
                   </div>
                 </>
@@ -2137,7 +2484,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Comissão (%)</label>
-                    <Input type="number" step="0.01" value={form.perc_comissao} onChange={(e) => handleInputChange('perc_comissao', parseFloat(e.target.value) || 0)} className="w-full" />
+                    <Input type="number" step="0.01" value={form.perc_comissao} onChange={(e) => handleInputChange('perc_comissao', parseFloat(e.target.value) || 0)} className="w-full" disabled={true} />
                   </div>
                 </>
               )}
@@ -2175,6 +2522,77 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     className="w-full"
                   />
                 </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium mb-1">Modelo de Comissão</label>
+                <select
+                  value={form.tipo_comissionamento || 'TRADICIONAL'}
+                  onChange={e => handleInputChange('tipo_comissionamento', e.target.value)}
+                  disabled={true}
+                  className="w-full px-3 py-2 border border-border-strong rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-60"
+                >
+                  <option value="TRADICIONAL">Tradicional</option>
+                  <option value="COMISSAO_POR_DENTRO">Comissão por Dentro (Custo Fechado)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Despesa Operacional (%)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.perc_despesa_operacional || 0}
+                  onChange={e => handleInputChange('perc_despesa_operacional', parseFloat(e.target.value) || 0)}
+                  disabled={true}
+                  className="w-full"
+                />
+              </div>
+              {form.tipo_comissionamento === 'COMISSAO_POR_DENTRO' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">DSR (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.perc_dsr || 0}
+                      onChange={e => handleInputChange('perc_dsr', parseFloat(e.target.value) || 0)}
+                      disabled={true}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">FGTS (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.perc_fgts || 0}
+                      onChange={e => handleInputChange('perc_fgts', parseFloat(e.target.value) || 0)}
+                      disabled={true}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">INSS (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.perc_inss || 0}
+                      onChange={e => handleInputChange('perc_inss', parseFloat(e.target.value) || 0)}
+                      disabled={true}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Outras Incid. (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.perc_demais_incidencias || 0}
+                      onChange={e => handleInputChange('perc_demais_incidencias', parseFloat(e.target.value) || 0)}
+                      disabled={true}
+                      className="w-full"
+                    />
+                  </div>
+                </>
               )}
             </div>
 
@@ -2727,7 +3145,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           <tr key={`inst-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
                             <td className="px-4 py-3 font-medium text-text-primary">
                               <div className="flex flex-col gap-0.5">
-                                <span>{c.descricao_item || 'Serviço'}</span>
+                                <span>{c.descricao_item || c.product?.nome || c.own_service?.nome_servico || 'Serviço'}</span>
                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
                                   <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}
@@ -2914,7 +3332,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           <tr key={`op-${idx}`} className="hover:bg-bg-deep/20 transition-colors group">
                             <td className="px-4 py-3 font-medium text-text-primary">
                               <div className="flex flex-col gap-0.5">
-                                <span>{c.descricao_item || 'Serviço'}</span>
+                                <span>{c.descricao_item || c.product?.nome || c.own_service?.nome_servico || 'Serviço'}</span>
                                 {c.own_service_id && (['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao) && (
                                   <span className="w-fit whitespace-nowrap px-1.5 py-0.5 text-[10px] bg-teal-100 text-teal-700 rounded font-semibold border border-teal-200 uppercase">
                                     {['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(form.tipo_contrato) ? form.forma_execucao : c.forma_execucao}

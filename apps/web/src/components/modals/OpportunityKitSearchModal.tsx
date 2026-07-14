@@ -11,9 +11,10 @@ interface OpportunityKitSearchModalProps {
   title?: string;
   salesBudgetId?: string;
   tipoContrato?: string;
+  allowedTypes?: string[];
 }
 
-export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId, tipoContrato }: OpportunityKitSearchModalProps) {
+export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId, tipoContrato, allowedTypes }: OpportunityKitSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -34,9 +35,15 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
     setIsSearching(true);
     try {
       const res = await api.get(`/opportunity-kits/company/${activeCompanyId}`, {
-        params: { sales_budget_id: salesBudgetId, tipo_contrato: tipoContrato }
+        params: { sales_budget_id: salesBudgetId }
       });
-      setResults(res.data);
+      let kits = res.data || [];
+      if (allowedTypes && allowedTypes.length > 0) {
+        kits = kits.filter((kit: any) => allowedTypes.includes(kit.tipo_contrato));
+      } else if (tipoContrato) {
+        kits = kits.filter((kit: any) => kit.tipo_contrato === tipoContrato);
+      }
+      setResults(kits);
     } catch (err) {
       console.error('Erro ao buscar kits', err);
     } finally {

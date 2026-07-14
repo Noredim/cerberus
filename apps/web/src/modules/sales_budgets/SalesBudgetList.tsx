@@ -26,13 +26,13 @@ interface SalesBudgetSummary {
 }
 
 const statusColors: Record<string, string> = {
-  EM_LANCAMENTO: 'bg-slate-50/70 text-slate-600 border border-slate-200/80 dark:bg-slate-950/40 dark:text-slate-400 dark:border-slate-800/80',
-  ENVIADO_APROVACAO: 'bg-blue-50/70 text-blue-600 border border-blue-200/60 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/30',
-  RETORNADO_VENDEDOR: 'bg-amber-50/70 text-amber-600 border border-amber-200/60 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30',
-  APROVADO: 'bg-emerald-50/70 text-emerald-600 border border-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/30',
-  CANCELADO: 'bg-rose-50/70 text-rose-600 border border-rose-200/60 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30',
-  GANHO: 'bg-teal-50/70 text-teal-600 border border-teal-200/60 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-900/30',
-  PERDIDO: 'bg-rose-50/70 text-rose-600 border border-rose-200/60 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/30',
+  EM_LANCAMENTO: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  ENVIADO_APROVACAO: 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200',
+  RETORNADO_VENDEDOR: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200',
+  APROVADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200',
+  CANCELADO: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200',
+  GANHO: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200',
+  PERDIDO: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200',
 };
 
 const statusLabels: Record<string, string> = {
@@ -41,18 +41,21 @@ const statusLabels: Record<string, string> = {
   RETORNADO_VENDEDOR: 'Devolvido',
   APROVADO: 'Aprovado',
   CANCELADO: 'Cancelado',
-  GANHO: 'Orçamento Ganho',
+  GANHO: 'Ganho',
   PERDIDO: 'Perdido',
 };
 
 function MarginBadge({ margin }: { margin: number }) {
-  let cls = 'text-rose-600 bg-rose-50 border border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
-  let label = 'Crítico';
-  if (margin >= 15) { cls = 'text-emerald-600 bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30'; label = 'Saudável'; }
-  else if (margin >= 5) { cls = 'text-amber-600 bg-amber-50 border border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30'; label = 'Atenção'; }
+  let cls = 'text-rose-700 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+  if (margin >= 15) {
+    cls = 'text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+  } else if (margin >= 5) {
+    cls = 'text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
+  }
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold tracking-wide transition-all ${cls}`}>
-      {margin.toFixed(1)}% — {label}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold tracking-wide transition-all ${cls}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+      {margin.toFixed(1)}%
     </span>
   );
 }
@@ -233,39 +236,36 @@ export function SalesBudgetList() {
                       {b.customer_nome || '—'}
                     </div>
                   </td>
-                  <td className="py-4 px-5 w-32 align-middle">
-                    <span className={`inline-flex px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${statusColors[b.status] || ''}`}>
+                  <td className="py-4 px-5 w-40 align-middle">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold tracking-wide whitespace-nowrap ${statusColors[b.status] || 'bg-slate-100 text-slate-800'}`}>
                       {statusLabels[b.status] || b.status}
                     </span>
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
-                        {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                      {b.total_venda > 0 ? (
-                        <MarginBadge margin={b.margem_venda} />
-                      ) : (
-                        <span className="text-xs text-text-muted">—</span>
-                      )}
-                    </div>
+                    <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
+                      {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
                     {b.total_faturamento_rental > 0 ? (
                       <div className="flex flex-col items-end gap-1">
-                        <Tooltip content={
-                          <div className="text-left space-y-1 p-1">
-                            <p><span className="text-text-muted">Valor Mensal:</span> <span className="font-mono">{b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
-                            <p><span className="text-text-muted">Prazo:</span> <span className="font-semibold">{b.prazo_max_rental}</span> meses</p>
-                          </div>
-                        }>
-                          <div className="flex items-center gap-1 cursor-help justify-end">
-                            <span className="font-bold text-brand-primary text-sm whitespace-nowrap tabular-nums">
-                              {b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                            <Info className="w-3.5 h-3.5 text-text-muted opacity-60 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </Tooltip>
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
+                            {b.valor_mensal_total_rental > 0 ? (
+                              <>
+                                {b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                <span className="text-[10px] text-text-muted font-normal ml-0.5">/mês</span>
+                              </>
+                            ) : (
+                              b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                            )}
+                          </span>
+                        </div>
+                        {b.valor_mensal_total_rental > 0 && (
+                          <span className="text-[10px] text-text-muted font-medium block whitespace-nowrap leading-tight">
+                            Total: {b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ({b.prazo_max_rental}m)
+                          </span>
+                        )}
                         <MarginBadge margin={b.margem_rental} />
                       </div>
                     ) : (
@@ -274,7 +274,7 @@ export function SalesBudgetList() {
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
                     {b.margem_geral > 0 ? (
-                      <span className="inline-flex items-center justify-center px-2.5 py-1 rounded border border-border-subtle bg-bg-deep font-bold text-brand-primary text-xs tabular-nums shadow-sm">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded border border-border-subtle bg-bg-deep font-bold text-brand-primary text-xs tabular-nums shadow-sm">
                         {b.margem_geral.toFixed(1)}%
                       </span>
                     ) : (

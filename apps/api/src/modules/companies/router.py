@@ -289,11 +289,15 @@ def get_my_commercial_policies(
         Professional.tenant_id == current_user.tenant_id
     ).first()
 
+    from sqlalchemy.orm import selectinload
+    from .models import CommercialPolicyServiceCommission
+
     if not professional or not professional.role_id:
         # No role assigned — return all active policies for the company
         # so the UI can still display them (read-only info)
         policies = db.query(CommercialPolicy).options(
-            joinedload(CommercialPolicy.roles)
+            joinedload(CommercialPolicy.roles),
+            selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
         ).filter(
             CommercialPolicy.company_id == active_company_id,
             CommercialPolicy.ativo == True
@@ -304,7 +308,8 @@ def get_my_commercial_policies(
     policies = db.query(CommercialPolicy).join(
         CommercialPolicyRole
     ).options(
-        joinedload(CommercialPolicy.roles)
+        joinedload(CommercialPolicy.roles),
+        selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
     ).filter(
         CommercialPolicy.company_id == active_company_id,
         CommercialPolicy.ativo == True,
@@ -508,10 +513,14 @@ def get_commercial_policies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from .models import CommercialPolicy
+    from sqlalchemy.orm import selectinload
+    from .models import CommercialPolicy, CommercialPolicyServiceCommission
     from .schemas import CommercialPolicyOut
     
-    policies = db.query(CommercialPolicy).options(joinedload(CommercialPolicy.roles)).filter(
+    policies = db.query(CommercialPolicy).options(
+        joinedload(CommercialPolicy.roles),
+        selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
+    ).filter(
         CommercialPolicy.company_id == id
     ).all()
     return policies
@@ -523,7 +532,7 @@ def create_commercial_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from .models import CommercialPolicy, CommercialPolicyRole
+    from .models import CommercialPolicy, CommercialPolicyRole, CommercialPolicyServiceCommission
     
     # Check if company exists first
     company = db.query(Company).filter(
@@ -543,6 +552,12 @@ def create_commercial_policy(
         fator_limite=payload.fator_limite,
         manutencao_ano_percentual=payload.manutencao_ano_percentual,
         comissao_percentual=payload.comissao_percentual,
+        tipo_comissionamento=payload.tipo_comissionamento,
+        dsr_percentual=payload.dsr_percentual,
+        fgts_percentual=payload.fgts_percentual,
+        inss_percentual=payload.inss_percentual,
+        demais_incidencias_percentual=payload.demais_incidencias_percentual,
+        despesa_operacional_percentual=payload.despesa_operacional_percentual,
         ativo=payload.ativo,
         is_default=payload.is_default
     )
@@ -551,6 +566,16 @@ def create_commercial_policy(
 
     for role_id in payload.roles:
         db.add(CommercialPolicyRole(policy_id=policy.id, role_id=role_id))
+
+    for sc in payload.service_commissions:
+        db.add(CommercialPolicyServiceCommission(
+            commercial_policy_id=policy.id,
+            own_service_id=sc.own_service_id,
+            commission_installments=sc.commission_installments,
+            ativo=sc.ativo,
+            display_order=sc.display_order,
+            tenant_id=current_user.tenant_id
+        ))
 
     db.commit()
     db.refresh(policy)
@@ -563,7 +588,7 @@ def update_commercial_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from .models import CommercialPolicy, CommercialPolicyRole
+    from .models import CommercialPolicy, CommercialPolicyRole, CommercialPolicyServiceCommission
     
     policy = db.query(CommercialPolicy).options(joinedload(CommercialPolicy.company)).filter(
         CommercialPolicy.id == policy_id
@@ -576,7 +601,7 @@ def update_commercial_policy(
     if payload.is_default and not policy.is_default:
         db.query(CommercialPolicy).filter(CommercialPolicy.company_id == policy.company_id).update({"is_default": False})
 
-    update_data = payload.model_dump(exclude={"roles"}, exclude_unset=True)
+    update_data = payload.model_dump(exclude={"roles", "service_commissions"}, exclude_unset=True)
     for key, value in update_data.items():
         setattr(policy, key, value)
 
@@ -584,6 +609,18 @@ def update_commercial_policy(
         db.query(CommercialPolicyRole).filter(CommercialPolicyRole.policy_id == policy_id).delete()
         for role_id in payload.roles:
             db.add(CommercialPolicyRole(policy_id=policy_id, role_id=role_id))
+
+    if payload.service_commissions is not None:
+        db.query(CommercialPolicyServiceCommission).filter(CommercialPolicyServiceCommission.commercial_policy_id == policy_id).delete()
+        for sc in payload.service_commissions:
+            db.add(CommercialPolicyServiceCommission(
+                commercial_policy_id=policy_id,
+                own_service_id=sc.own_service_id,
+                commission_installments=sc.commission_installments,
+                ativo=sc.ativo,
+                display_order=sc.display_order,
+                tenant_id=current_user.tenant_id
+            ))
 
     db.commit()
     db.refresh(policy)

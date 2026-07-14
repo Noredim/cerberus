@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import Optional, List
+from typing import Optional, List, Any
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
@@ -64,6 +64,7 @@ class RentalBudgetItemBase(BaseModel):
     kit_vlr_instal_calc: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_parcela_locacao: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     kit_venda_unit_monitoramento: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    kit_comissionamento_detalhado: Optional[Any] = None
     
     prazo_contrato: int = 36
     usa_taxa_manut_padrao: bool = True
@@ -71,6 +72,7 @@ class RentalBudgetItemBase(BaseModel):
     perc_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     valor_instalacao_item: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
     fator_margem: Decimal = Field(default=1, max_digits=10, decimal_places=4)
+    despesa_operacional_mensal: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
 
     @model_validator(mode="before")
     @classmethod
@@ -86,7 +88,8 @@ class RentalBudgetItemBase(BaseModel):
                 "kit_perc_comissao", "kit_despesas_adm", "kit_perc_despesas_adm",
                 "kit_vlr_instal_calc", "kit_parcela_locacao",
                 "kit_venda_unit_monitoramento", "taxa_manutencao_anual_item",
-                "perc_instalacao_item", "valor_instalacao_item", "fator_margem"
+                "perc_instalacao_item", "valor_instalacao_item", "fator_margem",
+                "despesa_operacional_mensal"
             ]
             for field in decimal_fields_4:
                 val = data.get(field)
@@ -121,6 +124,11 @@ class RentalBudgetItemOut(RentalBudgetItemBase):
     receita_liquida_mensal: Decimal = Decimal('0.00')
     perc_comissao: Decimal = Decimal('0.00')
     comissao_mensal: Decimal = Decimal('0.00')
+    dsr_mensal: Decimal = Decimal('0.00')
+    fgts_mensal: Decimal = Decimal('0.00')
+    inss_mensal: Decimal = Decimal('0.00')
+    demais_incidencias_mensal: Decimal = Decimal('0.00')
+    despesa_operacional_mensal: Decimal = Decimal('0.00')
     lucro_mensal: Decimal = Decimal('0.00')
     margem: Decimal = Decimal('0.00')
     product_nome: Optional[str] = None
@@ -189,6 +197,11 @@ class SalesBudgetItemOut(SalesBudgetItemBase):
     iss_unit: Decimal = Decimal('0.00')
     despesa_adm_unit: Decimal = Decimal('0.00')
     comissao_unit: Decimal = Decimal('0.00')
+    dsr_unit: Decimal = Decimal('0.00')
+    fgts_unit: Decimal = Decimal('0.00')
+    inss_unit: Decimal = Decimal('0.00')
+    demais_incidencias_unit: Decimal = Decimal('0.00')
+    despesa_operacional_unit: Decimal = Decimal('0.00')
     lucro_unit: Decimal = Decimal('0.00')
     margem_unit: Decimal = Decimal('0.00')
     total_venda: Decimal = Decimal('0.00')
@@ -207,6 +220,7 @@ class SalesBudgetBase(BaseModel):
     forma_pagamento_id: Optional[UUID] = None
     data_vencimento_inicial: Optional[datetime] = None
     forma_pagamento_snapshot: Optional[dict] = None
+    commercial_policy_id: Optional[UUID] = None
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime
@@ -215,6 +229,12 @@ class SalesBudgetBase(BaseModel):
     markup_padrao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
     perc_despesa_adm: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_comissao: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    tipo_comissionamento: Optional[str] = "TRADICIONAL"
+    perc_dsr: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_fgts: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_inss: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_demais_incidencias: Decimal = Field(default=0, max_digits=6, decimal_places=4)
+    perc_despesa_operacional: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_frete_venda: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_pis: Decimal = Field(default=0, max_digits=6, decimal_places=4)
     perc_cofins: Decimal = Field(default=0, max_digits=6, decimal_places=4)
@@ -254,8 +274,9 @@ class SalesBudgetBase(BaseModel):
     def round_decimals(cls, data):
         if isinstance(data, dict):
             decimal_fields_4 = [
-                "markup_padrao", "perc_despesa_adm", "perc_comissao", "perc_frete_venda",
-                "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_iss",
+                "markup_padrao", "perc_despesa_adm", "perc_comissao",
+                "perc_dsr", "perc_fgts", "perc_inss", "perc_demais_incidencias", "perc_despesa_operacional",
+                "perc_frete_venda", "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_iss",
                 "perc_icms_interno", "perc_icms_externo", "venda_markup_produtos",
                 "venda_markup_servicos", "venda_markup_instalacao", "venda_markup_manutencao",
                 "taxa_manutencao_anual", "fator_margem_padrao", "fator_manutencao_padrao",

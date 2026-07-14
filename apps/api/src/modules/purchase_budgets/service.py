@@ -794,3 +794,35 @@ class PurchaseBudgetService:
         db.commit()
         return True
 
+    @staticmethod
+    def link_sales_budget(db: Session, tenant_id: str, company_id: UUID, budget_id: UUID, sales_budget_id: Optional[UUID]) -> PurchaseBudget:
+        budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, str(company_id))
+        
+        old_sales_budget_id = budget.sales_budget_id
+        budget.sales_budget_id = sales_budget_id
+        
+        from src.modules.payment_methods.service import PaymentMethodsService
+        PaymentMethodsService.sync_purchase_budget_planning(db, budget)
+        
+        db.commit()
+        db.refresh(budget)
+        
+        # Sync reference prices for the new budget link
+        PurchaseBudgetService._update_product_reference_prices(db, budget)
+        
+        # If there was an old sales budget, sync reference prices for that one too
+        if old_sales_budget_id and old_sales_budget_id != sales_budget_id:
+            product_ids = {item.product_id for item in budget.items}
+            for pid in product_ids:
+                PurchaseBudgetService.sync_product_reference_prices(
+                    db,
+                    str(pid),
+                    tenant_id,
+                    sales_budget_id=old_sales_budget_id,
+                    licitacao_id=budget.licitacao_id
+                )
+        
+        db.commit()
+        db.refresh(budget)
+        return budget
+

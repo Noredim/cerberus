@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Star, Link2Off } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -249,6 +249,23 @@ interface RentalBudgetItem {
   kit_custo_monitoramento_unit?: number;
   roi_meses?: number;
   faturamento_mensal?: number;
+  comissao_dsr?: number;
+  comissao_fgts?: number;
+  comissao_inss?: number;
+  comissao_demais?: number;
+  desp_operacional?: number;
+  kit_comissao_dsr?: number;
+  kit_comissao_fgts?: number;
+  kit_comissao_inss?: number;
+  kit_comissao_demais?: number;
+  kit_despesa_operacional?: number;
+  dsr_mensal?: number;
+  fgts_mensal?: number;
+  inss_mensal?: number;
+  demais_incidencias_mensal?: number;
+  despesa_operacional_mensal?: number;
+  kit_comissionamento_detalhado?: any;
+  kit_raw?: any;
 }
 
 function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
@@ -292,7 +309,32 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
       fator_margem: Number(item.fator_margem || 1),
       perc_comissao: Number(item.kit_perc_comissao || 0),
       comissao_mensal: Number(item.kit_comissao || 0),
-      prazo_contrato: item.tipo_contrato_kit === 'INSTALACAO' ? 1 : item.prazo_contrato
+      comissao_dsr: item.comissao_dsr !== undefined && item.comissao_dsr !== null
+        ? Number(item.comissao_dsr)
+        : (item.dsr_mensal !== undefined && item.dsr_mensal !== null
+          ? Number(item.dsr_mensal)
+          : Number(item.kit_comissao_dsr || 0)),
+      comissao_fgts: item.comissao_fgts !== undefined && item.comissao_fgts !== null
+        ? Number(item.comissao_fgts)
+        : (item.fgts_mensal !== undefined && item.fgts_mensal !== null
+          ? Number(item.fgts_mensal)
+          : Number(item.kit_comissao_fgts || 0)),
+      comissao_inss: item.comissao_inss !== undefined && item.comissao_inss !== null
+        ? Number(item.comissao_inss)
+        : (item.inss_mensal !== undefined && item.inss_mensal !== null
+          ? Number(item.inss_mensal)
+          : Number(item.kit_comissao_inss || 0)),
+      comissao_demais: item.comissao_demais !== undefined && item.comissao_demais !== null
+        ? Number(item.comissao_demais)
+        : (item.demais_incidencias_mensal !== undefined && item.demais_incidencias_mensal !== null
+          ? Number(item.demais_incidencias_mensal)
+          : Number(item.kit_comissao_demais || 0)),
+      prazo_contrato: item.tipo_contrato_kit === 'INSTALACAO' ? 1 : item.prazo_contrato,
+      desp_operacional: item.desp_operacional !== undefined && item.desp_operacional !== null && Number(item.desp_operacional) !== 0
+        ? Number(item.desp_operacional)
+        : (item.despesa_operacional_mensal !== undefined && item.despesa_operacional_mensal !== null && Number(item.despesa_operacional_mensal) !== 0
+          ? Number(item.despesa_operacional_mensal)
+          : Number(item.kit_despesa_operacional || 0))
     };
   }
 
@@ -358,6 +400,34 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
 
   const roi = recLiq > 0 ? (custoTotal / recLiq) : 0;
 
+  const percDespOp = Number(rd.perc_despesa_operacional || 0);
+  const despOperacional = +(baseFinanceiraLocacao * percDespOp / 100).toFixed(4);
+
+  const tipoComissionamento = rd.tipo_comissionamento || 'TRADICIONAL';
+  const percDsr = Number(rd.perc_dsr || 0);
+  const percFgts = Number(rd.perc_fgts || 0);
+  const percInss = Number(rd.perc_inss || 0);
+  const percDemais = Number(rd.perc_demais_incidencias || 0);
+
+  let comissao_mensal = comissao;
+  let dsr_mensal = 0;
+  let fgts_mensal = 0;
+  let inss_mensal = 0;
+  let demais_incidencias_mensal = 0;
+
+  if (tipoComissionamento === 'POR_DENTRO') {
+    const fatorTotal = (1 + percDsr / 100) * (1 + (percFgts + percInss + percDemais) / 100);
+    const comissaoReal = +(comissao / fatorTotal).toFixed(4);
+    dsr_mensal = +(comissaoReal * percDsr / 100).toFixed(4);
+    fgts_mensal = +((comissaoReal + dsr_mensal) * percFgts / 100).toFixed(4);
+    inss_mensal = +((comissaoReal + dsr_mensal) * percInss / 100).toFixed(4);
+    demais_incidencias_mensal = +((comissaoReal + dsr_mensal) * percDemais / 100).toFixed(4);
+
+    const soma = comissaoReal + dsr_mensal + fgts_mensal + inss_mensal + demais_incidencias_mensal;
+    const diff = comissao - soma;
+    comissao_mensal = comissaoReal + diff;
+  }
+
   return {
     ...item,
     instalacao_unit: instalacao,
@@ -374,11 +444,24 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
     impostos_mensal: impostos,
     receita_liquida_mensal: recLiq,
     perc_comissao: pCom,
-    comissao_mensal: comissao,
+    comissao_mensal: comissao_mensal,
+    comissao_dsr: dsr_mensal,
+    comissao_fgts: fgts_mensal,
+    comissao_inss: inss_mensal,
+    comissao_demais: demais_incidencias_mensal,
+    dsr_mensal: dsr_mensal,
+    fgts_mensal: fgts_mensal,
+    inss_mensal: inss_mensal,
+    demais_incidencias_mensal: demais_incidencias_mensal,
     lucro_mensal: lucro,
     margem,
     roi_meses: roi,
-    faturamento_mensal: valorMensal
+    faturamento_mensal: valorMensal,
+    desp_operacional: item.desp_operacional !== undefined && item.desp_operacional !== null && Number(item.desp_operacional) !== 0
+      ? Number(item.desp_operacional)
+      : (item.despesa_operacional_mensal !== undefined && item.despesa_operacional_mensal !== null && Number(item.despesa_operacional_mensal) !== 0
+        ? Number(item.despesa_operacional_mensal)
+        : despOperacional)
   };
 }
 
@@ -496,6 +579,7 @@ export function SalesBudgetForm() {
   const [fatorManutencaoPadrao, setFatorManutencaoPadrao] = useState(1.35);
   const [userPolicies, setUserPolicies] = useState<any[]>([]);
   const [activePolicy, setActivePolicy] = useState<any>(null);
+  const [loadedCommercialPolicyId, setLoadedCommercialPolicyId] = useState<string | null>(null);
   const [minFatorAllowed, setMinFatorAllowed] = useState(0);
   const [vendaHaveraManutencao, setVendaHaveraManutencao] = useState(false);
   const [vendaQtdMesesManutencao, setVendaQtdMesesManutencao] = useState(0);
@@ -547,6 +631,8 @@ export function SalesBudgetForm() {
   const [isQuickSupplierModalOpen, setIsQuickSupplierModalOpen] = useState(false);
 
   const [opportunityPurchaseBudgets, setOpportunityPurchaseBudgets] = useState<any[]>([]);
+  const [availablePurchaseBudgets, setAvailablePurchaseBudgets] = useState<any[]>([]);
+  const [selectedPurchaseBudgetToLink, setSelectedPurchaseBudgetToLink] = useState<string>('');
   const [showPurchaseBudgetModal, setShowPurchaseBudgetModal] = useState(false);
   const [savingPurchaseBudget, setSavingPurchaseBudget] = useState(false);
 
@@ -599,6 +685,7 @@ export function SalesBudgetForm() {
   const [percIrpjRental, setPercIrpjRental] = useState(0);
   const [percIssRental, setPercIssRental] = useState(0);
   const [percComissaoDiretoria, setPercComissaoDiretoria] = useState(0);
+  const [percDespesaOperacional, setPercDespesaOperacional] = useState(0);
   const [isComparativoExpanded, setIsComparativoExpanded] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
@@ -609,7 +696,11 @@ export function SalesBudgetForm() {
   const [novoKitTipoContrato, setNovoKitTipoContrato] = useState<string | undefined>(undefined);
   const [showOverwriteModal, setShowOverwriteModal] = useState(false);
   const [showEvolutivoChart, setShowEvolutivoChart] = useState(false);
-  const [viewingKitId, setViewingKitId] = useState<string | null>(null);
+  const [editingKit, setEditingKit] = useState<{
+    id: string;
+    tab: 'venda' | 'locacao';
+    index: number;
+  } | null>(null);
 
   // Lookups
   const [customers, setCustomers] = useState<any[]>([]);
@@ -649,7 +740,8 @@ export function SalesBudgetForm() {
     perc_csll_rental: percCsllRental,
     perc_irpj_rental: percIrpjRental,
     perc_iss_rental: percIssRental,
-  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental]);
+    perc_despesa_operacional: percDespesaOperacional,
+  }), [tipoReceitaRental, prazoContratoMeses, prazoInstalacaoMeses, taxaJurosMensal, taxaManutencaoAnual, percInstalacaoPadrao, percComissaoRental, percPisRental, percCofinsRental, percCsllRental, percIrpjRental, percIssRental, percDespesaOperacional]);
 
   useEffect(() => {
     setRentalItems(prev => prev.map(item => calcRentalItem(item, rentalDefaults)));
@@ -695,6 +787,59 @@ export function SalesBudgetForm() {
     };
     checkApproverStatus();
   }, [activeCompanyId]);
+
+  // Load & Link Purchase Budgets helper functions
+  const loadPurchaseBudgetsData = async () => {
+    if (!id) return;
+    try {
+      const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
+      setOpportunityPurchaseBudgets(pbData || []);
+      
+      const resAvail = await api.get('/purchase-budgets', { params: { limit: 500 } });
+      const allBudgets = Array.isArray(resAvail.data) ? resAvail.data : (resAvail.data.items || []);
+      // Filter budgets that don't have sales_budget_id
+      const available = allBudgets.filter((b: any) => !b.sales_budget_id);
+      setAvailablePurchaseBudgets(available);
+    } catch (err) {
+      console.error('Failed to load purchase budgets:', err);
+    }
+  };
+
+  const handleLinkPurchaseBudget = async () => {
+    if (!selectedPurchaseBudgetToLink) return;
+    try {
+      await api.patch(`/purchase-budgets/${selectedPurchaseBudgetToLink}/link-sales-budget`, null, {
+        params: { sales_budget_id: id }
+      });
+      await loadPurchaseBudgetsData();
+      setSelectedPurchaseBudgetToLink('');
+      alert('Orçamento de compra vinculado com sucesso!');
+    } catch (err: any) {
+      console.error('Error linking purchase budget:', err);
+      alert(err.response?.data?.detail || 'Erro ao vincular orçamento de compra.');
+    }
+  };
+
+  const handleUnlinkPurchaseBudget = async (pbId: string) => {
+    if (!window.confirm("Deseja realmente desvincular este orçamento de compra da oportunidade?")) return;
+    try {
+      await api.patch(`/purchase-budgets/${pbId}/link-sales-budget`, null, {
+        params: { sales_budget_id: null }
+      });
+      await loadPurchaseBudgetsData();
+      alert("Orçamento de compra desvinculado com sucesso!");
+    } catch (err: any) {
+      console.error("Failed to unlink purchase budget", err);
+      const detail = err.response?.data?.detail;
+      alert("Erro ao desvincular: " + (typeof detail === 'string' ? detail : JSON.stringify(detail)));
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'compra' && id) {
+      loadPurchaseBudgetsData();
+    }
+  }, [activeTab, id]);
 
   // Always load company _venda taxes for the modal display, regardless of isEditing
   useEffect(() => {
@@ -744,6 +889,11 @@ export function SalesBudgetForm() {
           const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
             .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
           if (applicable) setActivePolicy(applicable);
+
+          const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
+          if (!isEditing) {
+            setPercDespesaOperacional(Number(applicable?.despesa_operacional_percentual ?? defaultPolicy?.despesa_operacional_percentual ?? 0));
+          }
         }
       }).catch(err => console.error('Failed to load policies', err));
 
@@ -785,6 +935,9 @@ export function SalesBudgetForm() {
     setLoading(true);
     api.get(`/sales-budgets/${id}`).then(async (res) => {
       const d = res.data;
+      if (d.commercial_policy_id) {
+        setLoadedCommercialPolicyId(d.commercial_policy_id);
+      }
       if (d.company_state_sigla) {
         setCompanyStateSigla(d.company_state_sigla);
       }
@@ -836,6 +989,7 @@ export function SalesBudgetForm() {
       setPercIrpjRental(Number(d.perc_irpj_rental) || 0);
       setPercIssRental(Number(d.perc_iss_rental) || 0);
       setPercComissaoDiretoria(Number(d.perc_comissao_diretoria) || 0);
+      setPercDespesaOperacional(Number(d.perc_despesa_operacional) || 0);
 
       // Load sale items and separate kits from regular items
       const loadedItems: SalesBudgetItem[] = d.items || [];
@@ -960,15 +1114,31 @@ export function SalesBudgetForm() {
                 kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
                 kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
-                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
-                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
-                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
-                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
                 kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
                 kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
                 kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
                 kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
+                comissao_dsr: item.dsr_mensal !== null && item.dsr_mensal !== undefined && Number(item.dsr_mensal) !== 0 ? Number(item.dsr_mensal) : Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                comissao_fgts: item.fgts_mensal !== null && item.fgts_mensal !== undefined && Number(item.fgts_mensal) !== 0 ? Number(item.fgts_mensal) : Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                comissao_inss: item.inss_mensal !== null && item.inss_mensal !== undefined && Number(item.inss_mensal) !== 0 ? Number(item.inss_mensal) : Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                comissao_demais: item.demais_incidencias_mensal !== null && item.demais_incidencias_mensal !== undefined && Number(item.demais_incidencias_mensal) !== 0 ? Number(item.demais_incidencias_mensal) : Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                kit_comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                kit_comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                kit_comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                kit_comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                desp_operacional: item.desp_operacional !== null && item.desp_operacional !== undefined && Number(item.desp_operacional) !== 0
+                  ? Number(item.desp_operacional)
+                  : (item.despesa_operacional_mensal !== null && item.despesa_operacional_mensal !== undefined && Number(item.despesa_operacional_mensal) !== 0
+                    ? Number(item.despesa_operacional_mensal)
+                    : Number(kit.summary?.vlt_despesa_operacional || 0)),
+                kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
+                kit_comissionamento_detalhado: item.kit_comissionamento_detalhado || kit.comissionamento_detalhado,
+                kit_raw: kit,
               };
             } catch { /* fallback */ }
           }
@@ -992,21 +1162,26 @@ export function SalesBudgetForm() {
         perc_iss_rental: d.perc_iss_rental,
         perc_comissao_diretoria: d.perc_comissao_diretoria,
         tipo_receita_rental: d.tipo_receita_rental,
+        perc_despesa_operacional: d.perc_despesa_operacional,
       };
 
       setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
 
       // Load Purchase Budgets
-      try {
-        const { data: pbData } = await api.get(`/purchase-budgets`, { params: { sales_budget_id: id } });
-        setOpportunityPurchaseBudgets(pbData || []);
-      } catch (err) {
-        console.error('Failed to load purchase budgets associated with sales budget', err);
-      }
+      loadPurchaseBudgetsData();
 
     }).catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (userPolicies.length > 0 && loadedCommercialPolicyId) {
+      const match = userPolicies.find((p: any) => p.id === loadedCommercialPolicyId);
+      if (match) {
+        setActivePolicy(match);
+      }
+    }
+  }, [userPolicies, loadedCommercialPolicyId]);
 
 
 
@@ -1046,6 +1221,11 @@ export function SalesBudgetForm() {
 
   const handleAddKit = (kit: any) => {
     if (!kit) return;
+    const allowed = ['LOCACAO', 'COMODATO', 'INSTALACAO'];
+    if (!allowed.includes(kit.tipo_contrato)) {
+      alert(`Não é possível adicionar este kit na aba de Locação / Comodato. O kit selecionado é do tipo "${kit.tipo_contrato}". Tipos permitidos nesta aba: Locação, Comodato e Apenas Instalação.`);
+      return;
+    }
     setHasUnsavedChanges(true);
     setRentalItems(prev => {
       const newItem: RentalBudgetItem = {
@@ -1088,6 +1268,8 @@ export function SalesBudgetForm() {
         kit_lucro_mensal: Number(kit.summary?.lucro_mensal_kit || 0),
         kit_margem: Number(kit.summary?.margem_kit || 0),
         kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+        kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
+        desp_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
 
         // Grid Detailed Fields Snapshot
         kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
@@ -1101,6 +1283,15 @@ export function SalesBudgetForm() {
         kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
         kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
 
+        comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+        comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+        comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+        comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+        kit_comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+        kit_comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+        kit_comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+        kit_comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+
         custo_manut_mensal: 0,
         custo_total_mensal: 0,
         valor_venda_equipamento: 0, parcela_locacao: 0, manutencao_locacao: 0, valor_mensal: 0,
@@ -1113,6 +1304,11 @@ export function SalesBudgetForm() {
 
   const handleAddKitVenda = (kit: any) => {
     if (!kit) return;
+    const allowed = ['VENDA_EQUIPAMENTOS', 'INSTALACAO'];
+    if (!allowed.includes(kit.tipo_contrato)) {
+      alert(`Não é possível adicionar este kit na aba de Venda. O kit selecionado é do tipo "${kit.tipo_contrato}". Tipos permitidos nesta aba: Venda de Equipamentos e Apenas Instalação.`);
+      return;
+    }
     setHasUnsavedChanges(true);
     const q = Number(kit.quantidade_kits || 1);
     const newKit: VendaKitItem = {
@@ -1585,6 +1781,9 @@ export function SalesBudgetForm() {
       // Tax breakdown (sales)
       total_pis: 0, total_cofins: 0, total_csll: 0,
       total_irpj: 0, total_icms: 0, total_iss: 0, total_credito_icms: 0,
+      // Commission charges & operational expenses
+      comissao_dsr: 0, comissao_fgts: 0, comissao_inss: 0, comissao_demais: 0, desp_operacional: 0,
+      total_impostos_compra: 0, total_impostos_venda: 0
     };
     items.forEach(i => {
       const q = Number(i.quantidade) || 0;
@@ -1629,6 +1828,11 @@ export function SalesBudgetForm() {
       t.frete += Number(s.vlt_frete_venda ?? 0) * q;
       t.despAdm += Number(s.vlt_despesas_adm ?? 0) * q;
       t.comissao += Number(s.vlt_comissao ?? 0) * q;
+      t.comissao_dsr += Number(s.vlt_comissao_dsr ?? 0) * q;
+      t.comissao_fgts += Number(s.vlt_comissao_fgts ?? 0) * q;
+      t.comissao_inss += Number(s.vlt_comissao_inss ?? 0) * q;
+      t.comissao_demais += Number(s.vlt_comissao_demais ?? 0) * q;
+      t.desp_operacional += Number(s.vlt_despesa_operacional ?? 0) * q;
       t.lucro += Number(s.lucro_mensal_kit ?? vk.lucro_final ?? 0) * q;
 
       // Cost composition / purchase taxes for kits
@@ -1655,6 +1859,8 @@ export function SalesBudgetForm() {
     const vendaTaxes = t.total_pis + t.total_cofins + t.total_csll + t.total_irpj + t.total_icms + t.total_iss;
     const vendaTaxesNet = Math.max(0, vendaTaxes - (isInterstate ? t.total_icms_st : 0));
     t.impostos = compraTaxesNet + vendaTaxesNet;
+    t.total_impostos_compra = compraTaxesNet;
+    t.total_impostos_venda = vendaTaxesNet;
 
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
   }, [items, vendaKits, isInterstate]);
@@ -1668,6 +1874,14 @@ export function SalesBudgetForm() {
       impostosInstalacaoTotal: 0, custoOpInstalacaoTotal: 0,
       comissaoTotal: 0,
       comissaoUnit: 0,
+      comissaoLiquidaTotal: 0,
+      comissaoDsrTotal: 0,
+      comissaoFgtsTotal: 0,
+      comissaoInssTotal: 0,
+      comissaoDemaisTotal: 0,
+      despOperacionalTotal: 0,
+      custoAquisicaoCapex: 0,
+      comodatoDespOpTotal: 0,
       nominalPercComissao: 0,
       despAdmTotal: 0,
       despAdmInstalacaoTotal: 0,
@@ -1701,6 +1915,7 @@ export function SalesBudgetForm() {
       const q = i.quantidade;
       const prazoItemRaw = Number(i.prazo_contrato || prazoContratoMeses || 1);
       const prazoItem = Math.max(0, prazoItemRaw - Number(prazoInstalacaoMeses || 0));
+      const isCom = i.tipo_contrato_kit === 'COMODATO' || i.tipo_contrato_kit === 'INSTALACAO' || (!i.opportunity_kit_id && rentalDefaults.tipo_receita_rental === 'COMODATO');
 
       const faturamentoMensalItem = (i.kit_valor_mensal || i.faturamento_mensal || i.valor_mensal || 0) * q;
       const impostos = i.impostos_mensal * q;
@@ -1754,23 +1969,41 @@ export function SalesBudgetForm() {
 
       const difal_ipi_st = ((i.difal_unit || 0) + (i.ipi_unit || 0) + (i.icms_st_unit || 0)) * q;
       const frete = (i.frete_unit || 0) * q;
-      const comissaoItem = Number(i.kit_comissao || 0) * q;
-      const comissaoUnitItem = Number(i.kit_comissao || 0);
+      const netItemComissao = i.opportunity_kit_id
+        ? Number(i.kit_comissao || 0)
+        : Number(i.comissao_mensal || 0) * prazoItem;
+
+      const dsrVal = i.opportunity_kit_id ? Number(i.comissao_dsr || i.dsr_mensal || 0) : Number(i.comissao_dsr || i.dsr_mensal || 0) * prazoItem;
+      const fgtsVal = i.opportunity_kit_id ? Number(i.comissao_fgts || i.fgts_mensal || 0) : Number(i.comissao_fgts || i.fgts_mensal || 0) * prazoItem;
+      const inssVal = i.opportunity_kit_id ? Number(i.comissao_inss || i.inss_mensal || 0) : Number(i.comissao_inss || i.inss_mensal || 0) * prazoItem;
+      const demaisVal = i.opportunity_kit_id ? Number(i.comissao_demais || i.demais_incidencias_mensal || 0) : Number(i.comissao_demais || i.demais_incidencias_mensal || 0) * prazoItem;
+
+      const grossItemComissao = netItemComissao + dsrVal + fgtsVal + inssVal + demaisVal;
+
+      const comissaoItem = grossItemComissao * q;
+      const comissaoUnitItem = grossItemComissao;
+      const netComissaoItem = netItemComissao * q;
       const impostoInstalacaoItem = Number(i.kit_imposto_instalacao || 0) * q;
 
-      const freteInstVal = i.is_kit_instalacao ? (i.frete_venda_unit || 0) * q : 0;
-      const itemPercDesp = (i.opportunity_kit_id && i.kit_perc_despesas_adm !== undefined && i.kit_perc_despesas_adm !== null)
-        ? Number(i.kit_perc_despesas_adm)
-        : percDespesaAdm;
-      const despAdmItem = (i.is_kit_instalacao)
-        ? ((i.opportunity_kit_id && i.kit_despesas_adm !== undefined && i.kit_despesas_adm !== null)
-          ? Number(i.kit_despesas_adm) * q
-          : faturamentoMensalItem * (itemPercDesp / 100)) + freteInstVal
-        : 0;
-      t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem + despAdmItem;
+      const custoAqTotal = (Number(i.kit_custo_produtos || 0) * q) + (Number(i.kit_custo_servicos || 0) * q) || (i.custo_total_aquisicao * q);
+      const despOpCapex = i.tipo_contrato_kit !== 'INSTALACAO' ? Number(i.desp_operacional || 0) * q : 0;
+
+      if (i.is_kit_instalacao) {
+        // Exclude installation kit from equipment investment
+      } else {
+        t.investimento += ((Number(i.kit_investimento_total || 0) * q) || (i.custo_total_aquisicao * q)) + comissaoItem + despOpCapex;
+        t.custoAquisicaoCapex += custoAqTotal;
+        t.comodatoDespOpTotal += despOpCapex;
+      }
 
       t.comissaoTotal += comissaoItem;
       t.comissaoUnit += comissaoUnitItem;
+      t.comissaoLiquidaTotal += netComissaoItem;
+      t.comissaoDsrTotal += dsrVal * q;
+      t.comissaoFgtsTotal += fgtsVal * q;
+      t.comissaoInssTotal += inssVal * q;
+      t.comissaoDemaisTotal += demaisVal * q;
+      t.despOperacionalTotal += Number(i.desp_operacional || 0) * q;
       if (!i.is_kit_instalacao) {
         t.comissaoMensalTotal += comissaoItem;
       }
@@ -1778,7 +2011,6 @@ export function SalesBudgetForm() {
       t.impostoInstalacaoKitTotal += impostoInstalacaoItem;
       t.freteTotal += frete;
       // Fornecedores = Total sem impostos de compra = custo_aquisicao_total - difal_ipi_st
-      const custoAqTotal = (Number(i.kit_custo_produtos || 0) * q) + (Number(i.kit_custo_servicos || 0) * q) || (i.custo_total_aquisicao * q);
       t.fornecedoresTotal += custoAqTotal - difal_ipi_st;
 
       // Breakdown monthly taxes
@@ -1788,7 +2020,6 @@ export function SalesBudgetForm() {
       let loc = 0, man = 0, mon = 0;
       let rate_pis = 0, rate_cofins = 0, rate_csll = 0, rate_irpj = 0, rate_iss = 0;
       let isSep = false;
-      const isCom = i.tipo_contrato_kit === 'COMODATO' || i.tipo_contrato_kit === 'INSTALACAO' || (!i.opportunity_kit_id && rentalDefaults.tipo_receita_rental === 'COMODATO');
 
       if (i.opportunity_kit_id) {
         const faturamento = (i.kit_valor_mensal || i.faturamento_mensal || i.valor_mensal || 0) * q;
@@ -2036,6 +2267,8 @@ export function SalesBudgetForm() {
         perc_irpj_rental: +percIrpjRental,
         perc_iss_rental: +percIssRental,
         perc_comissao_diretoria: +percComissaoDiretoria,
+        perc_despesa_operacional: +percDespesaOperacional,
+        commercial_policy_id: activePolicy?.id || null,
         responsavel_ids: responsavelIds,
         items: [
           ...items.map(i => ({
@@ -2125,6 +2358,8 @@ export function SalesBudgetForm() {
           usa_taxa_manut_padrao: i.usa_taxa_manut_padrao,
           taxa_manutencao_anual_item: i.taxa_manutencao_anual_item ? +i.taxa_manutencao_anual_item : null,
           fator_margem: +i.fator_margem,
+          despesa_operacional_mensal: i.desp_operacional != null ? +i.desp_operacional : null,
+          kit_comissionamento_detalhado: i.kit_comissionamento_detalhado || null,
         })),
       };
 
@@ -2294,15 +2529,29 @@ export function SalesBudgetForm() {
                 kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
                 kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
-                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
-                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
-                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
-                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
                 kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
                 kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
                 kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
                 kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
+                comissao_dsr: item.dsr_mensal !== null && item.dsr_mensal !== undefined && Number(item.dsr_mensal) !== 0 ? Number(item.dsr_mensal) : Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                comissao_fgts: item.fgts_mensal !== null && item.fgts_mensal !== undefined && Number(item.fgts_mensal) !== 0 ? Number(item.fgts_mensal) : Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                comissao_inss: item.inss_mensal !== null && item.inss_mensal !== undefined && Number(item.inss_mensal) !== 0 ? Number(item.inss_mensal) : Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                comissao_demais: item.demais_incidencias_mensal !== null && item.demais_incidencias_mensal !== undefined && Number(item.demais_incidencias_mensal) !== 0 ? Number(item.demais_incidencias_mensal) : Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                kit_comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                kit_comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                kit_comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                kit_comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                desp_operacional: item.desp_operacional !== null && item.desp_operacional !== undefined && Number(item.desp_operacional) !== 0
+                  ? Number(item.desp_operacional)
+                  : (item.despesa_operacional_mensal !== null && item.despesa_operacional_mensal !== undefined && Number(item.despesa_operacional_mensal) !== 0
+                    ? Number(item.despesa_operacional_mensal)
+                    : Number(kit.summary?.vlt_despesa_operacional || 0)),
+                kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
               };
             } catch { /* fallback */ }
           }
@@ -2325,6 +2574,7 @@ export function SalesBudgetForm() {
         perc_iss_rental: d.perc_iss_rental,
         perc_comissao_diretoria: d.perc_comissao_diretoria,
         tipo_receita_rental: d.tipo_receita_rental,
+        perc_despesa_operacional: d.perc_despesa_operacional,
       };
       setRentalItems(enrichedRental.map(ri => calcRentalItem(ri, rDefaults)));
       
@@ -2790,11 +3040,12 @@ export function SalesBudgetForm() {
         {/* Consolidação Diretoria — right after header */}
         {isApprover && (items.length > 0 || vendaKits.length > 0) && (() => {
           const venda_fat = totals.venda;
-          const venda_custo_total = totals.custo + (totals.total_pis + totals.total_cofins + totals.total_csll + totals.total_irpj + totals.total_icms + totals.total_iss - (isInterstate ? totals.total_icms_st : 0)) + totals.despAdm + totals.frete + totals.comissao;
+          const venda_custo_total = venda_fat - totals.lucro;
           const venda_rec_liq = venda_fat - venda_custo_total;
           const venda_comissao_diretoria = Math.max(0, venda_rec_liq * (percComissaoDiretoria / 100));
           const venda_saldo = venda_rec_liq - venda_comissao_diretoria;
           const venda_margem = venda_fat > 0 ? (venda_saldo / venda_fat) * 100 : 0;
+          const comissaoBruta = totals.comissao + totals.comissao_dsr + totals.comissao_fgts + totals.comissao_inss + totals.comissao_demais;
 
           return (
             <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mb-6 mt-4">
@@ -2914,7 +3165,7 @@ export function SalesBudgetForm() {
                   <Receipt className="w-4 h-4 text-brand-primary" />
                   Detalhamento de Operação
                 </h3>
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisição</span>
                     <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.custo)}</p>
@@ -2983,28 +3234,109 @@ export function SalesBudgetForm() {
                     <span className="text-[10px] text-text-muted uppercase tracking-wider">Desp. Adm.</span>
                     <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.despAdm)}</p>
                   </div>
-                  <Tooltip content={
-                    <div className="w-64 space-y-1 text-gray-200 p-1">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Comissão Padrão</div>
-                      <div className="text-xs">Comissão informada linha-a-linha na tabela de mercadorias. (Não é a comissão da diretoria)</div>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Comissão Padrão</span>
-                      <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.comissao)}</p>
-                    </div>
-                  </Tooltip>
-                  <Tooltip content={
-                    <div className="w-64 space-y-1 text-gray-200 p-1">
-                      <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2">Lucro Padrão</div>
-                      <div className="text-xs">Lucro tradicional considerando a comissão padrão e sem deduzir a comissão de diretoria.</div>
-                    </div>
-                  }>
-                    <div className="bg-bg-deep rounded-lg p-3 group cursor-help">
-                      <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Lucro Padrão</span>
-                      <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
-                    </div>
-                  </Tooltip>
+                  <div className="bg-bg-deep rounded-lg p-3">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Desp. Operacional</span>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.desp_operacional)}</p>
+                  </div>
+                  {/* Comissão Padrão */}
+                  <div className="bg-bg-deep rounded-lg p-3 cursor-help">
+                    <Tooltip content={
+                      <div className="w-64 space-y-1 text-gray-200 p-1 font-mono text-[11px]">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2 font-sans text-xs">Comissão Padrão (Detalhamento)</div>
+                        <div className="flex justify-between text-gray-300">
+                          <span>Comissão Bruta:</span>
+                          <span className="font-semibold text-white">{fmt(comissaoBruta)}</span>
+                        </div>
+                        {(totals.comissao_dsr > 0 || totals.comissao_fgts > 0 || totals.comissao_inss > 0 || totals.comissao_demais > 0) && (
+                          <div className="border border-white/10 rounded p-1.5 my-1.5 space-y-1 bg-black/20">
+                            <div className="flex justify-between text-gray-400">
+                              <span>(-) DSR:</span>
+                              <span>-{fmt(totals.comissao_dsr)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                              <span>(-) FGTS:</span>
+                              <span>-{fmt(totals.comissao_fgts)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                              <span>(-) INSS:</span>
+                              <span>-{fmt(totals.comissao_inss)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-400">
+                              <span>(-) Outros:</span>
+                              <span>-{fmt(totals.comissao_demais)}</span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold text-emerald-400">
+                          <span>Comissão Líquida:</span>
+                          <span>{fmt(totals.comissao)}</span>
+                        </div>
+                      </div>
+                    }>
+                      <div className="w-full h-full flex flex-col justify-center">
+                        <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted w-fit">Comissão Padrão</span>
+                        <p className="text-sm font-bold text-text-primary mt-1">{fmt(comissaoBruta)}</p>
+                      </div>
+                    </Tooltip>
+                  </div>
+
+                  {/* Lucro Padrão */}
+                  <div className="bg-bg-deep rounded-lg p-3 cursor-help">
+                    <Tooltip content={
+                      <div className="w-80 space-y-1.5 text-gray-200 p-1 font-mono text-[11px]">
+                        <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2 font-sans text-xs">Cálculo do Lucro Padrão</div>
+                        <div className="flex justify-between text-gray-300">
+                          <span>(+) Faturamento:</span>
+                          <span className="font-semibold text-teal-300">{fmt(totals.venda)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400">
+                          <span>(-) Valor de Aquisição:</span>
+                          <span>-{fmt(totals.base_fornecedor)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400">
+                          <span>(-) Imposto Compra:</span>
+                          <span>-{fmt(totals.total_impostos_compra)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400">
+                          <span>(-) Imposto Venda:</span>
+                          <span>-{fmt(totals.total_impostos_venda)}</span>
+                        </div>
+                        {totals.frete > 0 && (
+                          <div className="flex justify-between text-gray-400">
+                            <span>(-) Frete Venda:</span>
+                            <span>-{fmt(totals.frete)}</span>
+                          </div>
+                        )}
+                        {totals.despAdm > 0 && (
+                          <div className="flex justify-between text-gray-400">
+                            <span>(-) Desp. Adm.:</span>
+                            <span>-{fmt(totals.despAdm)}</span>
+                          </div>
+                        )}
+                        {comissaoBruta > 0 && (
+                          <div className="flex justify-between text-gray-400">
+                            <span>(-) Comissão Bruta:</span>
+                            <span>-{fmt(comissaoBruta)}</span>
+                          </div>
+                        )}
+                        {totals.desp_operacional > 0 && (
+                          <div className="flex justify-between text-gray-400">
+                            <span>(-) Desp. Operacional:</span>
+                            <span>-{fmt(totals.desp_operacional)}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-white/20 pt-1.5 mt-2 flex justify-between font-bold text-emerald-400 text-xs">
+                          <span>Total (Lucro Padrão):</span>
+                          <span>{fmt(totals.lucro)}</span>
+                        </div>
+                      </div>
+                    }>
+                      <div className="w-full h-full flex flex-col justify-center">
+                        <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted w-fit">Lucro Padrão</span>
+                        <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
+                      </div>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3193,6 +3525,11 @@ export function SalesBudgetForm() {
             acc.comissao += (Number(s.vlt_comissao) || 0) * q;
             acc.despAdm += (Number(s.vlt_despesas_adm) || 0) * q;
             acc.freteVenda += (Number(s.vlt_frete_venda) || 0) * q;
+            acc.despOperacional += (Number(s.vlt_despesa_operacional) || 0) * q;
+            acc.comissaoDsr += (Number(s.vlt_comissao_dsr) || 0) * q;
+            acc.comissaoFgts += (Number(s.vlt_comissao_fgts) || 0) * q;
+            acc.comissaoInss += (Number(s.vlt_comissao_inss) || 0) * q;
+            acc.comissaoDemais += (Number(s.vlt_comissao_demais) || 0) * q;
 
             return acc;
           }, {
@@ -3201,7 +3538,8 @@ export function SalesBudgetForm() {
             baseFornecedor: 0, freteCompra: 0,
             vLTSt: 0, vLTIpi: 0, vLTDifal: 0,
             pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms: 0, credito_icms: 0,
-            comissao: 0, despAdm: 0, freteVenda: 0
+            comissao: 0, despAdm: 0, freteVenda: 0,
+            despOperacional: 0, comissaoDsr: 0, comissaoFgts: 0, comissaoInss: 0, comissaoDemais: 0
           });
 
           // Cálculos de Impostos = Impostos de Saída (B4+B5)
@@ -3211,11 +3549,12 @@ export function SalesBudgetForm() {
 
           // Cálculos Despesas (Consolidadas dos kits)
           const vltDespAdmConsolidado = t.despAdm;
-          const vltComissaoConsolidado = t.comissao;
+          const vltComissaoConsolidado = t.comissao + t.comissaoDsr + t.comissaoFgts + t.comissaoInss + t.comissaoDemais;
           const vltFreteVendaConsolidado = t.freteVenda;
+          const vltDespOperacionalConsolidado = t.despOperacional;
 
           const despesasAdmComFrete = vltDespAdmConsolidado + vltFreteVendaConsolidado;
-          const despesasVendaTotal = despesasAdmComFrete + vltComissaoConsolidado;
+          const despesasVendaTotal = despesasAdmComFrete + vltComissaoConsolidado + vltDespOperacionalConsolidado;
 
           const lucroVendaConsolidado = t.totalVenda - (impostosConsolidadoGlobal + despesasVendaTotal + t.custoAquisicaoLimpo + t.freteCompra);
           const margemVenda = t.totalVenda > 0 ? (lucroVendaConsolidado / t.totalVenda) * 100 : 0;
@@ -3265,8 +3604,19 @@ export function SalesBudgetForm() {
 
                 {/* 2. Total de Venda */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Venda</div>
-                  <div className="text-2xl font-black text-brand-primary mb-4">{fmt(t.totalVenda)}</div>
+                  <div>
+                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Venda</div>
+                    <div className="text-2xl font-black text-brand-primary mb-4">{fmt(t.totalVenda)}</div>
+
+                    <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-text-muted">
+                      <div className="flex justify-between items-center">
+                        <span>MKP Venda</span>
+                        <span className="font-semibold font-mono text-text-primary">
+                          {((t.custoAquisicaoLimpo + t.freteCompra) > 0 ? (t.totalVenda / (t.custoAquisicaoLimpo + t.freteCompra)) : 0).toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex justify-between items-center text-[10px] text-text-muted mt-auto pt-3 border-t border-border-subtle uppercase">
                     <span>Faturamento Equip/Serv</span>
                   </div>
@@ -3304,13 +3654,50 @@ export function SalesBudgetForm() {
                     <div className="text-2xl font-bold text-amber-600 mb-4">{fmt(despesasVendaTotal)}</div>
 
                     <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-amber-800/70">
-                      <div className="flex justify-between items-center"><span>Adm <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.despAdm / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.despAdm)}</span></div>
-                      <div className="flex justify-between items-center"><span>Frete <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.freteVenda / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.freteVenda)}</span></div>
-                      <div className="flex justify-between items-center"><span>Comissão <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.comissao / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span><span className="font-semibold">{fmt(t.comissao)}</span></div>
+                      <div className="flex justify-between items-center">
+                        <span>Desp. Adm <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.despAdm / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span>
+                        <span className="font-semibold">{fmt(t.despAdm)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Frete Venda <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.freteVenda / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span>
+                        <span className="font-semibold">{fmt(t.freteVenda)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Comissão Bruta <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((vltComissaoConsolidado / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span>
+                        <span className="font-semibold">{fmt(vltComissaoConsolidado)}</span>
+                      </div>
+                      {(t.comissaoDsr > 0 || t.comissaoFgts > 0 || t.comissaoInss > 0 || t.comissaoDemais > 0) && (
+                        <div className="bg-amber-100/40 rounded-lg p-2 my-1 space-y-1 text-[10px] border border-amber-200/30 font-mono">
+                          <div className="flex justify-between text-amber-800/60">
+                            <span>(-) DSR:</span>
+                            <span>-{fmt(t.comissaoDsr)}</span>
+                          </div>
+                          <div className="flex justify-between text-amber-800/60">
+                            <span>(-) FGTS:</span>
+                            <span>-{fmt(t.comissaoFgts)}</span>
+                          </div>
+                          <div className="flex justify-between text-amber-800/60">
+                            <span>(-) INSS:</span>
+                            <span>-{fmt(t.comissaoInss)}</span>
+                          </div>
+                          <div className="flex justify-between text-amber-800/60">
+                            <span>(-) Outros:</span>
+                            <span>-{fmt(t.comissaoDemais)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-emerald-600 border-t border-amber-200/30 pt-1 mt-1">
+                            <span>Comissão Líquida:</span>
+                            <span>{fmt(t.comissao)}</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span>Desp. Operacional <span className="opacity-60 ml-1 font-mono text-[9px]">({t.totalVenda > 0 ? ((t.despOperacional / t.totalVenda) * 100).toFixed(2) : 0}%)</span></span>
+                        <span className="font-semibold">{fmt(t.despOperacional)}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-amber-800/60 mt-auto pt-3 border-t border-amber-100/60 uppercase tracking-wide">
-                    <span>Adm + Frete + Comissão</span>
+                    <span>Adm + Frete + Comissão + Desp. Op.</span>
                   </div>
                 </div>
 
@@ -3555,7 +3942,7 @@ export function SalesBudgetForm() {
                           {!isReadonly && (
                             <div className="flex items-center gap-1 justify-center">
                               <button
-                                onClick={() => setViewingKitId(item.opportunity_kit_id)}
+                                onClick={() => setEditingKit({ id: item.opportunity_kit_id, tab: 'venda', index: idx })}
                                 className="p-1 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
                                 title="Editar kit"
                               >
@@ -3826,8 +4213,12 @@ export function SalesBudgetForm() {
                       <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback (Diretoria)</div>
                       <div className="text-[10.5px] space-y-1">
                         <div className="font-bold text-brand-primary">Investimento Inicial (Capex):</div>
-                        <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento - rentalTotals.impostosInstalacaoTotal - rentalTotals.despAdmInstalacaoTotal - rentalTotals.freteInstalacaoTotal)}</span></div>
-                        <div className="flex justify-between pl-2"><span>(+) Impostos de Instalação:</span> <span>{fmt(rentalTotals.impostosInstalacaoTotal)}</span></div>
+                        <div className="flex justify-between pl-2"><span>(+) Custo de Aquisição:</span> <span>{fmt(rentalTotals.custoAquisicaoCapex)}</span></div>
+                        <div className="flex justify-between pl-2"><span>(+) Imposto Instalação:</span> <span>{fmt(rentalTotals.impostoInstalacaoKitTotal + rentalTotals.impostosInstalacaoTotal)}</span></div>
+                        <div className="flex justify-between pl-2"><span>(+) Comissão de Locação:</span> <span>{fmt(rentalTotals.comissaoTotal)}</span></div>
+                        {rentalTotals.comodatoDespOpTotal > 0 && (
+                          <div className="flex justify-between pl-2"><span>(+) Despesa Operacional:</span> <span>{fmt(rentalTotals.comodatoDespOpTotal)}</span></div>
+                        )}
                         {rentalTotals.despAdmInstalacaoTotal > 0 && (
                           <div className="flex justify-between pl-2"><span>(+) Desp. Adm. Instalação:</span> <span>{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>
                         )}
@@ -4033,6 +4424,7 @@ export function SalesBudgetForm() {
                         {rentalTotals.impostoInstalacaoKitTotal > 0 && <div className="flex justify-between text-sm"><span>Imp. Instalação:</span> <span className="font-medium text-amber-400">{fmt(rentalTotals.impostoInstalacaoKitTotal)}</span></div>}
                         <div className="flex justify-between text-sm"><span>Frete:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteTotal)}</span></div>
                         <div className="flex justify-between text-sm"><span>Comissão:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
+                        {rentalTotals.comodatoDespOpTotal > 0 && <div className="flex justify-between text-sm"><span>Desp. Operacional:</span> <span className="font-medium text-white">{fmt(rentalTotals.comodatoDespOpTotal)}</span></div>}
                         {rentalTotals.despAdmInstalacaoTotal > 0 && <div className="flex justify-between text-sm"><span>Desp. Adm. Instalação:</span> <span className="font-medium text-white">{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>}
                         {rentalTotals.freteInstalacaoTotal > 0 && <div className="flex justify-between text-sm"><span>Frete de Instalação:</span> <span className="font-medium text-white">{fmt(rentalTotals.freteInstalacaoTotal)}</span></div>}
                       </div>
@@ -4144,8 +4536,12 @@ export function SalesBudgetForm() {
                           <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Cálculo do Payback</div>
                           <div className="text-[10.5px] space-y-1">
                             <div className="font-bold text-brand-primary">Investimento Inicial (Capex):</div>
-                            <div className="flex justify-between pl-2"><span>(+) Custos de Aquisição:</span> <span>{fmt(rentalTotals.investimento - rentalTotals.impostosInstalacaoTotal - rentalTotals.despAdmInstalacaoTotal - rentalTotals.freteInstalacaoTotal)}</span></div>
-                            <div className="flex justify-between pl-2"><span>(+) Impostos de Instalação:</span> <span>{fmt(rentalTotals.impostosInstalacaoTotal)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(+) Custo de Aquisição:</span> <span>{fmt(rentalTotals.custoAquisicaoCapex)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(+) Imposto Instalação:</span> <span>{fmt(rentalTotals.impostoInstalacaoKitTotal + rentalTotals.impostosInstalacaoTotal)}</span></div>
+                            <div className="flex justify-between pl-2"><span>(+) Comissão de Locação:</span> <span>{fmt(rentalTotals.comissaoTotal)}</span></div>
+                            {rentalTotals.comodatoDespOpTotal > 0 && (
+                              <div className="flex justify-between pl-2"><span>(+) Despesa Operacional:</span> <span>{fmt(rentalTotals.comodatoDespOpTotal)}</span></div>
+                            )}
                             {rentalTotals.despAdmInstalacaoTotal > 0 && (
                               <div className="flex justify-between pl-2"><span>(+) Desp. Adm. Instalação:</span> <span>{fmt(rentalTotals.despAdmInstalacaoTotal)}</span></div>
                             )}
@@ -4184,7 +4580,6 @@ export function SalesBudgetForm() {
                       {(() => {
                         const mkpDivisor = rentalTotals.investimento + rentalTotals.impostosTotal + rentalTotals.custoOpTotal;
                         const mkpGeral = mkpDivisor > 0 ? rentalTotals.faturamentoTotal / mkpDivisor : 0;
-                        const pctComissao = rentalTotals.nominalPercComissao;
                         return (
                           <>
                             <Tooltip content={
@@ -4215,25 +4610,46 @@ export function SalesBudgetForm() {
                               </div>
                             </Tooltip>
 
-                            <Tooltip content={
-                              <div className="w-64 space-y-2 text-gray-200">
-                                <div className="font-bold text-white border-b border-gray-600 pb-1">Comissão Comercial</div>
-                                <div className="flex justify-between text-sm"><span>Valor Unitário:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoUnit)}</span></div>
-                                <div className="flex justify-between text-sm"><span>Valor Total:</span> <span className="font-medium text-green-400">{fmt(rentalTotals.comissaoTotal)}</span></div>
-                                <div className="flex justify-between text-sm"><span>% sobre Fat.:</span> <span className="font-medium text-white">{pctComissao.toFixed(2)}%</span></div>
-                              </div>
-                            }>
-                              <div className="p-4 hover:bg-green-500/5 transition-colors cursor-help group bg-green-500/10">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-green-500 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                                  Comissão
-                                  <HelpCircle className="w-3" />
-                                </span>
-                                <div className="flex flex-col">
-                                  <p className="text-lg font-black text-green-500">{pctComissao.toFixed(2)}%</p>
-                                  <p className="text-[10px] font-semibold text-green-500/80 -mt-1">{fmt(rentalTotals.comissaoUnit)}</p>
-                                </div>
-                              </div>
-                            </Tooltip>
+                            {(() => {
+                              const totalCommVal = rentalTotals.comissaoTotal;
+                              const grossTotalCard = totalCommVal + rentalTotals.despOperacionalTotal;
+                              return (
+                                <Tooltip content={
+                                  <div className="w-72 space-y-2 text-gray-200">
+                                    <div className="font-bold text-white border-b border-gray-600 pb-1 mb-1">Comissão e Despesa Operacional</div>
+                                    
+                                    <div className="font-semibold text-teal-400">1. Formação da Comissão por Dentro</div>
+                                    <div className="flex justify-between text-xs"><span>Comissão Cheia (Bruta):</span> <span className="font-medium text-white">{fmt(totalCommVal)}</span></div>
+                                    {rentalTotals.comissaoDsrTotal > 0 && <div className="flex justify-between text-xs text-red-400"><span>(-) DSR:</span> <span>-{fmt(rentalTotals.comissaoDsrTotal)}</span></div>}
+                                    {rentalTotals.comissaoFgtsTotal > 0 && <div className="flex justify-between text-xs text-red-400"><span>(-) FGTS:</span> <span>-{fmt(rentalTotals.comissaoFgtsTotal)}</span></div>}
+                                    {rentalTotals.comissaoInssTotal > 0 && <div className="flex justify-between text-xs text-red-400"><span>(-) INSS:</span> <span>-{fmt(rentalTotals.comissaoInssTotal)}</span></div>}
+                                    {rentalTotals.comissaoDemaisTotal > 0 && <div className="flex justify-between text-xs text-red-400"><span>(-) Outras Incidências:</span> <span>-{fmt(rentalTotals.comissaoDemaisTotal)}</span></div>}
+                                    <div className="flex justify-between text-xs border-t border-gray-700 pt-1 font-semibold text-emerald-400"><span>Comissão Comercial (Líquida):</span> <span>{fmt(rentalTotals.comissaoLiquidaTotal)}</span></div>
+                                    
+                                    <div className="font-semibold text-teal-400 mt-2">2. Despesa Operacional</div>
+                                    <div className="flex justify-between text-xs"><span>Desp. Operacional:</span> <span className="font-medium text-white">{fmt(rentalTotals.despOperacionalTotal)}</span></div>
+                                    
+                                    <div className="flex justify-between border-t border-gray-600 pt-1.5 mt-1.5 font-bold text-white">
+                                      <span>Total (Comissão Cheia + Desp. Op.):</span>
+                                      <span>{fmt(grossTotalCard)}</span>
+                                    </div>
+                                  </div>
+                                }>
+                                  <div className="p-4 hover:bg-green-500/5 transition-colors cursor-help group bg-green-500/10">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-green-500 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
+                                      Comissão e Desp. Op.
+                                      <HelpCircle className="w-3" />
+                                    </span>
+                                    <div className="flex flex-col">
+                                      <p className="text-lg font-black text-green-500">{fmt(grossTotalCard)}</p>
+                                      <p className="text-[9px] font-semibold text-green-500/80 -mt-1">
+                                        Comissão Cheia: {fmt(totalCommVal)} | Desp. Op.: {fmt(rentalTotals.despOperacionalTotal)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </Tooltip>
+                              );
+                            })()}
                           </>
                         );
                       })()}
@@ -4247,6 +4663,88 @@ export function SalesBudgetForm() {
           );
         })()}
 
+        {rentalItems.some(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0) && (
+          <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
+            <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500" />
+              Detalhamento de Origens da Comissão
+            </h3>
+            <div className="space-y-4">
+              {rentalItems.filter(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0).map((ri, riIndex) => (
+                <div key={riIndex} className="border border-border-subtle rounded-lg p-4 bg-bg-secondary/30">
+                  <h4 className="font-semibold text-text-secondary text-sm mb-3">
+                    {ri.opportunity_kit_id ? `Kit: ${ri.kit_raw?.nome_kit || 'Kit Locação'}` : 'Item Locação'} (Quantidade: {ri.quantidade})
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border-subtle bg-bg-secondary text-text-muted font-bold uppercase tracking-wider">
+                          <th className="px-3 py-2">Origem</th>
+                          <th className="px-3 py-2 text-right">Base</th>
+                          <th className="px-3 py-2 text-center">Regra</th>
+                          <th className="px-3 py-2 text-right">Valor Destinado (Unit.)</th>
+                          <th className="px-3 py-2 text-right">Valor Destinado (Total)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle text-text-primary">
+                        {ri.kit_comissionamento_detalhado.comissao_venda.map((orig: any, origIdx: number) => (
+                          <tr key={origIdx} className="hover:bg-bg-secondary/40">
+                            <td className="px-3 py-2 font-medium">{orig.origem}</td>
+                            <td className="px-3 py-2 text-right">{fmt(orig.base)}</td>
+                            <td className="px-3 py-2 text-center font-semibold text-brand-primary">{orig.regra}</td>
+                            <td className="px-3 py-2 text-right">{fmt(orig.valor_destinado)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{fmt(orig.valor_destinado * ri.quantidade)}</td>
+                          </tr>
+                        ))}
+                        {/* Total Destinado Row */}
+                        <tr className="bg-bg-secondary/60 font-bold border-t border-border-default">
+                          <td className="px-3 py-2">Total Destinado (Capex)</td>
+                          <td className="px-3 py-2 text-right"></td>
+                          <td className="px-3 py-2 text-center"></td>
+                          <td className="px-3 py-2 text-right">{fmt(ri.kit_comissao)}</td>
+                          <td className="px-3 py-2 text-right text-green-600">{fmt((ri.kit_comissao || 0) * ri.quantidade)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Incidences Breakdown */}
+                  {ri.kit_comissionamento_detalhado.detalhamento_incidencias && (
+                    <div className="mt-4 border-t border-border-subtle pt-3">
+                      <h5 className="font-semibold text-text-muted text-xs uppercase tracking-wider mb-2">Detalhamento das Incidências (Unitário)</h5>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Comissão Efetiva</span>
+                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.comissao_efetiva)}</span>
+                        </div>
+                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">DSR</span>
+                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.dsr)}</span>
+                        </div>
+                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">FGTS</span>
+                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.fgts)}</span>
+                        </div>
+                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">INSS</span>
+                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.inss)}</span>
+                        </div>
+                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Demais Incid.</span>
+                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.demais)}</span>
+                        </div>
+                        <div className="p-2.5 bg-green-500/5 border border-green-500/20 rounded-lg">
+                          <span className="block text-[10px] text-green-600 font-bold uppercase tracking-wider">Total</span>
+                          <span className="text-sm font-black text-green-600">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Rental Parameters */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -4289,7 +4787,10 @@ export function SalesBudgetForm() {
                       variant="outline"
                       size="sm"
                       disabled={!id}
-                      onClick={() => setShowCreateKitModal(true)}
+                      onClick={() => {
+                        setNovoKitTipoContrato('LOCACAO');
+                        setShowCreateKitModal(true);
+                      }}
                     >
                       <Plus className="w-4 h-4 mr-1" /> Criar Novo Kit na Oportunidade
                     </Button>
@@ -4333,7 +4834,7 @@ export function SalesBudgetForm() {
                             <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>
                             {ri.opportunity_kit_id && (
                               <button
-                                onClick={() => !isReadonly && setViewingKitId(ri.opportunity_kit_id!)}
+                                onClick={() => !isReadonly && setEditingKit({ id: ri.opportunity_kit_id!, tab: 'locacao', index: idx })}
                                 disabled={isReadonly}
                                 className="flex-shrink-0 p-0.5 text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 title={isReadonly ? "Edição do kit bloqueada para oportunidade finalizada" : "Ver Itens do Kit"}
@@ -4349,7 +4850,17 @@ export function SalesBudgetForm() {
                             className="w-10 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_investimento_total || 0)}</td>
-                        <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_comissao || 0)}</td>
+                        {(() => {
+                          const dsrVal = ri.opportunity_kit_id ? Number(ri.comissao_dsr || ri.dsr_mensal || 0) : Number(ri.comissao_dsr || ri.dsr_mensal || 0) * (ri.prazo_contrato || 0);
+                          const fgtsVal = ri.opportunity_kit_id ? Number(ri.comissao_fgts || ri.fgts_mensal || 0) : Number(ri.comissao_fgts || ri.fgts_mensal || 0) * (ri.prazo_contrato || 0);
+                          const inssVal = ri.opportunity_kit_id ? Number(ri.comissao_inss || ri.inss_mensal || 0) : Number(ri.comissao_inss || ri.inss_mensal || 0) * (ri.prazo_contrato || 0);
+                          const demaisVal = ri.opportunity_kit_id ? Number(ri.comissao_demais || ri.demais_incidencias_mensal || 0) : Number(ri.comissao_demais || ri.demais_incidencias_mensal || 0) * (ri.prazo_contrato || 0);
+                          const netVal = ri.opportunity_kit_id ? Number(ri.kit_comissao || 0) : Number(ri.comissao_mensal || 0) * (ri.prazo_contrato || 0);
+                          const grossComVal = netVal + dsrVal + fgtsVal + inssVal + demaisVal;
+                          return (
+                            <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(grossComVal)}</td>
+                          );
+                        })()}
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_vlr_instal_calc || 0)}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_parcela_locacao || 0)}</td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_vlt_manut || 0)}</td>
@@ -4434,7 +4945,17 @@ export function SalesBudgetForm() {
                   <tr>
                     <td colSpan={2} className="px-1.5 py-2 text-right">Total:</td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_investimento_total || 0) * ri.quantidade), 0))}</td>
-                    <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_comissao || 0) * ri.quantidade), 0))}</td>
+                    <td className="px-1.5 py-2 text-right text-text-primary">
+                      {fmt(rentalItems.reduce((acc, ri) => {
+                        const dsrVal = ri.opportunity_kit_id ? Number(ri.comissao_dsr || ri.dsr_mensal || 0) : Number(ri.comissao_dsr || ri.dsr_mensal || 0) * (ri.prazo_contrato || 0);
+                        const fgtsVal = ri.opportunity_kit_id ? Number(ri.comissao_fgts || ri.fgts_mensal || 0) : Number(ri.comissao_fgts || ri.fgts_mensal || 0) * (ri.prazo_contrato || 0);
+                        const inssVal = ri.opportunity_kit_id ? Number(ri.comissao_inss || ri.inss_mensal || 0) : Number(ri.comissao_inss || ri.inss_mensal || 0) * (ri.prazo_contrato || 0);
+                        const demaisVal = ri.opportunity_kit_id ? Number(ri.comissao_demais || ri.demais_incidencias_mensal || 0) : Number(ri.comissao_demais || ri.demais_incidencias_mensal || 0) * (ri.prazo_contrato || 0);
+                        const netVal = ri.opportunity_kit_id ? Number(ri.kit_comissao || 0) : Number(ri.comissao_mensal || 0) * (ri.prazo_contrato || 0);
+                        const grossComVal = netVal + dsrVal + fgtsVal + inssVal + demaisVal;
+                        return acc + (grossComVal * ri.quantidade);
+                      }, 0))}
+                    </td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_vlr_instal_calc || 0) * ri.quantidade), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_parcela_locacao || 0) * ri.quantidade), 0))}</td>
                     <td className="px-1.5 py-2 text-right text-text-primary">{fmt(rentalItems.reduce((acc, ri) => acc + ((ri.kit_vlt_manut || 0) * ri.quantidade), 0))}</td>
@@ -4604,6 +5125,34 @@ export function SalesBudgetForm() {
                   Lançar Orçamento
                 </Button>
               </div>
+              
+              {!isReadonly && (
+                <div className="flex flex-col md:flex-row gap-3 items-end bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-4">
+                  <div className="flex-1 space-y-1.5">
+                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider font-sans">Vincular Orçamento Existente</label>
+                    <select
+                      value={selectedPurchaseBudgetToLink}
+                      onChange={e => setSelectedPurchaseBudgetToLink(e.target.value)}
+                      className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11 font-sans"
+                    >
+                      <option value="">Selecione um orçamento para vincular...</option>
+                      {availablePurchaseBudgets.map(b => (
+                        <option key={b.id} value={b.id}>
+                          Nº {b.numero_orcamento || 'Sem Nº'} — {b.supplier_nome_fantasia || b.vendedor_nome || 'Sem Fornecedor'} — {b.data_orcamento ? new Date(b.data_orcamento).toLocaleDateString('pt-BR') : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={!selectedPurchaseBudgetToLink}
+                    onClick={handleLinkPurchaseBudget}
+                    className="shrink-0 h-11 bg-orange-500 hover:bg-orange-600 text-white border-0 font-sans font-semibold"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Vincular Orçamento
+                  </Button>
+                </div>
+              )}
 
               {opportunityPurchaseBudgets.length === 0 ? (
                 <div className="bg-surface border border-border-subtle border-dashed rounded-xl p-12 text-center shadow-sm">
@@ -4692,6 +5241,14 @@ export function SalesBudgetForm() {
                                     title="Editar Orçamento"
                                   >
                                     <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleUnlinkPurchaseBudget(pb.id)}
+                                    className="p-1 hover:bg-slate-100 rounded transition-colors text-text-muted hover:text-text-primary"
+                                    title="Desvincular Orçamento"
+                                    disabled={isReadonly}
+                                  >
+                                    <Link2Off className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => handleDeletePurchaseBudget(pb.id)}
@@ -5628,14 +6185,87 @@ export function SalesBudgetForm() {
                         <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.frete.valor)}</td>
                       </tr>
                     )}
-                    <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
-                      <td className="py-2.5 px-8 flex items-center gap-2">
-                        <span className="text-xs text-rose-600 font-bold">(-)</span>
-                        Comissão
-                      </td>
-                      <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.comissao.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
-                      <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao.valor)}</td>
-                    </tr>
+                    {(() => {
+                      const comissaoTotalVal = 
+                        (dreData.saidas.despesas_venda.comissao?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_dsr?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_fgts?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_inss?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_demais?.valor || 0);
+                      const comissaoTotalPct = dreData.entradas.total_entradas > 0
+                        ? (comissaoTotalVal / dreData.entradas.total_entradas) * 100
+                        : 0;
+                      return (
+                        <>
+                          <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors font-semibold">
+                            <td className="py-2.5 px-8 flex items-center gap-2">
+                              <span className="text-xs text-rose-600 font-bold">(-)</span>
+                              Comissão
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-text-muted font-mono">{comissaoTotalPct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                            <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(comissaoTotalVal)}</td>
+                          </tr>
+                          <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                            <td className="py-2.5 px-12 flex items-center gap-2 text-text-muted text-xs">
+                              <span className="text-xs text-rose-600/70 font-bold">(-)</span>
+                              Comissão Líquida
+                            </td>
+                            <td className="py-2.5 px-4 text-right text-text-muted font-mono text-xs">{dreData.saidas.despesas_venda.comissao.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                            <td className="py-2.5 px-4 text-right text-text-muted font-mono text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao.valor)}</td>
+                          </tr>
+                          {dreData.saidas.despesas_venda.comissao_dsr && dreData.saidas.despesas_venda.comissao_dsr.valor > 0 && (
+                            <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                              <td className="py-2 px-12 flex items-center gap-2 text-text-muted text-xs">
+                                <span className="text-xs text-rose-600/70 font-bold">(-)</span>
+                                DSR sobre Comissão
+                              </td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{dreData.saidas.despesas_venda.comissao_dsr.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao_dsr.valor)}</td>
+                            </tr>
+                          )}
+                          {dreData.saidas.despesas_venda.comissao_fgts && dreData.saidas.despesas_venda.comissao_fgts.valor > 0 && (
+                            <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                              <td className="py-2 px-12 flex items-center gap-2 text-text-muted text-xs">
+                                <span className="text-xs text-rose-600/70 font-bold">(-)</span>
+                                FGTS sobre Comissão
+                              </td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{dreData.saidas.despesas_venda.comissao_fgts.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao_fgts.valor)}</td>
+                            </tr>
+                          )}
+                          {dreData.saidas.despesas_venda.comissao_inss && dreData.saidas.despesas_venda.comissao_inss.valor > 0 && (
+                            <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                              <td className="py-2 px-12 flex items-center gap-2 text-text-muted text-xs">
+                                <span className="text-xs text-rose-600/70 font-bold">(-)</span>
+                                INSS sobre Comissão
+                              </td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{dreData.saidas.despesas_venda.comissao_inss.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao_inss.valor)}</td>
+                            </tr>
+                          )}
+                          {dreData.saidas.despesas_venda.comissao_demais && dreData.saidas.despesas_venda.comissao_demais.valor > 0 && (
+                            <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                              <td className="py-2 px-12 flex items-center gap-2 text-text-muted text-xs">
+                                <span className="text-xs text-rose-600/70 font-bold">(-)</span>
+                                Encargos sobre Comissão (Outros)
+                              </td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{dreData.saidas.despesas_venda.comissao_demais.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                              <td className="py-2 px-4 text-right text-text-muted font-mono text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.comissao_demais.valor)}</td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {dreData.saidas.despesas_venda.despesa_operacional && dreData.saidas.despesas_venda.despesa_operacional.valor > 0 && (
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
+                        <td className="py-2.5 px-8 flex items-center gap-2">
+                          <span className="text-xs text-rose-600 font-bold">(-)</span>
+                          Despesa Operacional
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">{dreData.saidas.despesas_venda.despesa_operacional.percent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</td>
+                        <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.despesa_operacional.valor)}</td>
+                      </tr>
+                    )}
                     <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
                       <td className="py-2.5 px-8 flex items-center gap-2">
                         <span className="text-xs text-rose-600 font-bold">(-)</span>
@@ -5645,7 +6275,15 @@ export function SalesBudgetForm() {
                       <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.saidas.despesas_venda.despesas_administrativas.valor)}</td>
                     </tr>
                     {(() => {
-                      const totalDespesasVenda = (dreData.saidas.despesas_venda.frete?.valor || 0) + (dreData.saidas.despesas_venda.comissao?.valor || 0) + (dreData.saidas.despesas_venda.despesas_administrativas?.valor || 0);
+                      const totalDespesasVenda = 
+                        (dreData.saidas.despesas_venda.frete?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_dsr?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_fgts?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_inss?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.comissao_demais?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.despesa_operacional?.valor || 0) + 
+                        (dreData.saidas.despesas_venda.despesas_administrativas?.valor || 0);
                       return (
                         <tr className="font-semibold text-text-secondary hover:bg-bg-deep/5 transition-colors bg-rose-500/5">
                           <td className="py-2 px-8 flex items-center gap-2">
@@ -5836,9 +6474,11 @@ export function SalesBudgetForm() {
       {showKitSearchModal && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchModal}
+          allowedTypes={['LOCACAO', 'COMODATO', 'INSTALACAO']}
           salesBudgetId={id}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
+          title="Buscar Kit de Locação / Comodato / Instalação"
         />
       )}
 
@@ -5846,140 +6486,144 @@ export function SalesBudgetForm() {
       {showKitSearchVenda && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchVenda}
-          tipoContrato="VENDA_EQUIPAMENTOS"
+          allowedTypes={['VENDA_EQUIPAMENTOS', 'INSTALACAO']}
           salesBudgetId={id}
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
+          title="Buscar Kit de Venda / Instalação"
         />
       )}
       {/* Kit Items Edit Modal */}
-      {viewingKitId && (
+      {editingKit && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-bg-deep rounded-2xl shadow-2xl w-full h-full max-w-[98vw] max-h-[98vh] flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border-subtle bg-bg-surface flex justify-between items-center shrink-0">
               <h3 className="font-semibold text-lg text-text-primary flex items-center gap-2">Editar Kit na Oportunidade</h3>
-              <button onClick={() => setViewingKitId(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+              <button onClick={() => setEditingKit(null)} className="p-1 hover:bg-black/5 rounded transition-colors text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 bg-bg-deep">
               <OpportunityKitForm
                 isModal={true}
-                modalEditKitId={viewingKitId}
-                onClose={() => setViewingKitId(null)}
+                modalEditKitId={editingKit.id}
+                onClose={() => setEditingKit(null)}
                 initialSalesBudgetId={id}
+                initialTipoContrato={editingKit.tab === 'venda' ? 'VENDA_EQUIPAMENTOS' : 'LOCACAO'}
                 onSuccess={(savedKit) => {
-                  setViewingKitId(null);
+                  setEditingKit(null);
                   if (savedKit) {
-                    // Update Rental Items
-                    setRentalItems(prev => prev.map(item => {
-                      if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
-                        const billingValue = savedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(savedKit.summary?.venda_equipamentos_total || 0) : Number(savedKit.summary?.valor_mensal_antes_impostos ?? savedKit.summary?.valor_mensal_kit ?? item.kit_valor_mensal ?? 0);
-                        const aliqTotal = Number(savedKit.summary?.aliq_total_impostos || 0) / 100;
-                        const impostosKit = billingValue * aliqTotal;
-                        const recLiqKit = billingValue - impostosKit;
-                        const prazoMensalidades = Math.max(0,
-                          Number(savedKit.prazo_contrato_meses || item.prazo_contrato || 0) -
-                          Number(rentalDefaults.prazo_instalacao_meses || 0)
-                        );
-                        const custoAqUnit = Number(savedKit.summary?.custo_aquisicao_total || 0);
-                        const custoOpMes = Number(savedKit.summary?.custo_operacional_mensal_kit || 0) + Number(savedKit.summary?.custo_mensal_bloco_7 || 0);
-                        const custoTotalContrato = custoAqUnit + (custoOpMes * prazoMensalidades);
+                    if (editingKit.tab === 'locacao') {
+                      // Update Rental Items
+                      setRentalItems(prev => prev.map((item, i) => {
+                        if (i === editingKit.index) {
+                          const billingValue = savedKit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(savedKit.summary?.venda_equipamentos_total || 0) : Number(savedKit.summary?.valor_mensal_antes_impostos ?? savedKit.summary?.valor_mensal_kit ?? item.kit_valor_mensal ?? 0);
+                          const aliqTotal = Number(savedKit.summary?.aliq_total_impostos || 0) / 100;
+                          const impostosKit = billingValue * aliqTotal;
+                          const recLiqKit = billingValue - impostosKit;
+                          const prazoMensalidades = Math.max(0,
+                            Number(savedKit.prazo_contrato_meses || item.prazo_contrato || 0) -
+                            Number(rentalDefaults.prazo_instalacao_meses || 0)
+                          );
+                          const custoAqUnit = Number(savedKit.summary?.custo_aquisicao_total || 0);
+                          const custoOpMes = Number(savedKit.summary?.custo_operacional_mensal_kit || 0) + Number(savedKit.summary?.custo_mensal_bloco_7 || 0);
+                          const custoTotalContrato = custoAqUnit + (custoOpMes * prazoMensalidades);
 
-                        return {
-                          ...item,
-                          opportunity_kit_id: savedKit.id,
-                          product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
-                          custo_op_mensal_kit: custoOpMes,
-                          is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
-                          tipo_contrato_kit: savedKit.tipo_contrato,
-                          kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
-                          kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
-                          kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
-                          kit_pis: Number(savedKit.aliq_pis || 0),
-                          kit_cofins: Number(savedKit.aliq_cofins || 0),
-                          kit_csll: Number(savedKit.aliq_csll || 0),
-                          kit_irpj: Number(savedKit.aliq_irpj || 0),
-                          kit_iss: Number(savedKit.aliq_iss || 0),
-                          custo_aquisicao_unit: custoAqUnit,
-                          ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
-                          frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
-                          icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
-                          difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
-                          kit_imposto_instalacao: Number(savedKit.summary?.imposto_instalacao || 0),
-                          taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
-                          fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
-                          prazo_contrato: savedKit.tipo_contrato === 'INSTALACAO' ? 1 : Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
-                          kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
-                          kit_custo_monitoramento_unit: Number(savedKit.summary?.custo_monitoramento_unitario || savedKit.custo_monitoramento_unitario || 0),
-                          kit_valor_mensal: billingValue,
-                          kit_valor_impostos: impostosKit,
-                          kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
-                          kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
-                          kit_margem: Number(savedKit.summary?.margem_kit || 0),
-                          kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
-                          kit_investimento_total: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.imposto_instalacao || 0),
-                          kit_vlr_instal_calc: Number(savedKit.summary?.vlr_instal_calc || 0),
-                          kit_parcela_locacao: Number(savedKit.summary?.valor_parcela_locacao || 0),
-                          kit_venda_unit_monitoramento: Number(savedKit.summary?.venda_unit_monitoramento || 0),
-                          kit_comissao: Number(savedKit.summary?.valor_comissao_locacao || 0),
-                          kit_perc_comissao: Number(savedKit.perc_comissao || 0),
-                          kit_despesas_adm: Number(savedKit.summary?.valor_despesas_adm_locacao || 0),
-                          kit_perc_despesas_adm: Number(savedKit.perc_despesas_adm || 0),
-                          frete_venda_unit: Number(savedKit.summary?.vlt_frete_venda || 0),
-                          perc_comissao: Number(savedKit.perc_comissao || 0),
-                          comissao_mensal: Number(savedKit.summary?.valor_comissao_locacao || 0),
-                          // Computed display fields
-                          faturamento_mensal: billingValue,
-                          valor_mensal: billingValue,
-                          impostos_mensal: impostosKit,
-                          receita_liquida_mensal: recLiqKit,
-                          lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
-                          margem: Number(savedKit.summary?.margem_kit || 0),
-                          roi_meses: recLiqKit > 0 ? (custoTotalContrato / recLiqKit) : 0,
-                          custo_total_aquisicao: custoAqUnit,
-                          custo_manut_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
-                          custo_total_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
-                        };
-                      }
-                      return item;
-                    }));
+                          return {
+                            ...item,
+                            opportunity_kit_id: savedKit.id,
+                            product_nome: `Kit: ${savedKit.nome_kit || 'Personalizado'}`,
+                            custo_op_mensal_kit: custoOpMes,
+                            is_kit_instalacao: savedKit.tipo_contrato === 'INSTALACAO',
+                            tipo_contrato_kit: savedKit.tipo_contrato,
+                            kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
+                            kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
+                            kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
+                            kit_pis: Number(savedKit.aliq_pis || 0),
+                            kit_cofins: Number(savedKit.aliq_cofins || 0),
+                            kit_csll: Number(savedKit.aliq_csll || 0),
+                            kit_irpj: Number(savedKit.aliq_irpj || 0),
+                            kit_iss: Number(savedKit.aliq_iss || 0),
+                            custo_aquisicao_unit: custoAqUnit,
+                            ipi_unit: Number(savedKit.summary?.total_ipi_kit || 0),
+                            frete_unit: Number(savedKit.summary?.total_frete_kit || 0),
+                            icms_st_unit: Number(savedKit.summary?.total_st_kit || 0),
+                            difal_unit: Number(savedKit.summary?.total_difal_kit || 0),
+                            kit_imposto_instalacao: Number(savedKit.summary?.imposto_instalacao || 0),
+                            taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
+                            fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
+                            prazo_contrato: savedKit.tipo_contrato === 'INSTALACAO' ? 1 : Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
+                            kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
+                            kit_custo_monitoramento_unit: Number(savedKit.summary?.custo_monitoramento_unitario || savedKit.custo_monitoramento_unitario || 0),
+                            kit_valor_mensal: billingValue,
+                            kit_valor_impostos: impostosKit,
+                            kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
+                            kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
+                            kit_margem: Number(savedKit.summary?.margem_kit || 0),
+                            kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
+                            kit_investimento_total: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.imposto_instalacao || 0),
+                            kit_vlr_instal_calc: Number(savedKit.summary?.vlr_instal_calc || 0),
+                            kit_parcela_locacao: Number(savedKit.summary?.valor_parcela_locacao || 0),
+                            kit_venda_unit_monitoramento: Number(savedKit.summary?.venda_unit_monitoramento || 0),
+                            kit_comissao: Number(savedKit.summary?.valor_comissao_locacao || 0),
+                            kit_perc_comissao: Number(savedKit.perc_comissao || 0),
+                            kit_despesas_adm: Number(savedKit.summary?.valor_despesas_adm_locacao || 0),
+                            kit_perc_despesas_adm: Number(savedKit.perc_despesas_adm || 0),
+                            frete_venda_unit: Number(savedKit.summary?.vlt_frete_venda || 0),
+                            perc_comissao: Number(savedKit.perc_comissao || 0),
+                            comissao_mensal: Number(savedKit.summary?.valor_comissao_locacao || 0),
+                            // Computed display fields
+                            faturamento_mensal: billingValue,
+                            valor_mensal: billingValue,
+                            impostos_mensal: impostosKit,
+                            receita_liquida_mensal: recLiqKit,
+                            lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
+                            margem: Number(savedKit.summary?.margem_kit || 0),
+                            roi_meses: recLiqKit > 0 ? (custoTotalContrato / recLiqKit) : 0,
+                            custo_total_aquisicao: custoAqUnit,
+                            custo_manut_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
+                            custo_total_mensal: Number(savedKit.summary?.vlt_manut || 0) + custoOpMes,
+                          };
+                        }
+                        return item;
+                      }));
+                    } else if (editingKit.tab === 'venda') {
+                      // Update Venda Kits
+                      setVendaKits(prev => prev.map((item, i) => {
+                        if (i === editingKit.index) {
+                          return {
+                            ...item,
+                            opportunity_kit_id: savedKit.id,
+                            nome_kit: savedKit.nome_kit || 'Kit Venda',
+                            fator_margem_locacao: Number(savedKit.fator_margem_locacao || 1),
+                            fator_margem_servicos_produtos: Number(savedKit.fator_margem_servicos_produtos || 1),
+                            fator_margem_instalacao: Number(savedKit.fator_margem_instalacao || 1),
+                            fator_margem_manutencao: Number(savedKit.fator_margem_manutencao || 1),
 
-                    // Update Venda Kits
-                    setVendaKits(prev => prev.map(item => {
-                      if (item.opportunity_kit_id === savedKit.id || item.opportunity_kit_id === viewingKitId) {
-                        return {
-                          ...item,
-                          opportunity_kit_id: savedKit.id,
-                          nome_kit: savedKit.nome_kit || 'Kit Venda',
-                          fator_margem_locacao: Number(savedKit.fator_margem_locacao || 1),
-                          fator_margem_servicos_produtos: Number(savedKit.fator_margem_servicos_produtos || 1),
-                          fator_margem_instalacao: Number(savedKit.fator_margem_instalacao || 1),
-                          fator_margem_manutencao: Number(savedKit.fator_margem_manutencao || 1),
+                            custo_aquisicao_equip_unit: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.vlr_instal_calc || 0),
+                            custo_manutencao_unit: Number(savedKit.summary?.vlt_manut || 0),
 
-                          custo_aquisicao_equip_unit: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.vlr_instal_calc || 0),
-                          custo_manutencao_unit: Number(savedKit.summary?.vlt_manut || 0),
+                            venda_equip_unit: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0),
+                            venda_manut_unit: Number(savedKit.summary?.venda_manutencao_total ?? 0),
 
-                          venda_equip_unit: Number(savedKit.summary?.venda_equipamentos_total ?? savedKit.summary?.valor_mensal_kit ?? 0),
-                          venda_manut_unit: Number(savedKit.summary?.venda_manutencao_total ?? 0),
+                            faturamento_total: Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0))),
 
-                          faturamento_total: Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0))),
+                            lucro_venda: Number(savedKit.summary?.lucro_equipamentos || 0),
+                            margem_venda: Number(savedKit.summary?.margem_equipamentos || 0),
 
-                          lucro_venda: Number(savedKit.summary?.lucro_equipamentos || 0),
-                          margem_venda: Number(savedKit.summary?.margem_equipamentos || 0),
+                            lucro_manutencao: Number(savedKit.summary?.lucro_manutencao || 0),
+                            margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
 
-                          lucro_manutencao: Number(savedKit.summary?.lucro_manutencao || 0),
-                          margem_manutencao: Number(savedKit.summary?.margem_manutencao || 0),
+                            lucro_final: Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0),
+                            margem_geral: (Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0)) / Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
 
-                          lucro_final: Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0),
-                          margem_geral: (Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(savedKit.summary?.lucro_equipamentos || 0) + Number(savedKit.summary?.lucro_manutencao || 0)) / Number(savedKit.summary?.faturamento_total_venda ?? (Number(savedKit.summary?.venda_equipamentos_total || 0) + Number(savedKit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
-
-                          havera_manutencao: !!savedKit.havera_manutencao,
-                          qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null,
-                          summary: savedKit.summary,
-                          kit_raw: savedKit
-                        };
-                      }
-                      return item;
-                    }));
+                            havera_manutencao: !!savedKit.havera_manutencao,
+                            qtd_meses_manutencao: savedKit.qtd_meses_manutencao ?? null,
+                            summary: savedKit.summary,
+                            kit_raw: savedKit
+                          };
+                        }
+                        return item;
+                      }));
+                    }
                   }
                 }}
               />

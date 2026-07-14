@@ -121,6 +121,7 @@ class OpportunityKitService:
         sales_budget_id: Optional[str] = None,
         sales_proposal_id: Optional[str] = None
     ) -> dict:
+        comissao_venda_origens = []
         from src.modules.sales_budgets.models import SalesBudget
         from src.modules.licitacoes.models import Licitacao
         
@@ -180,6 +181,13 @@ class OpportunityKitService:
         perc_frete_venda = Decimal(str(kit.perc_frete_venda or 0)) / Decimal(100.0)
         perc_despesas_adm = Decimal(str(kit.perc_despesas_adm or 0)) / Decimal(100.0)
         perc_comissao = Decimal(str(kit.perc_comissao or 0)) / Decimal(100.0)
+        
+        tipo_com = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
+        perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
+        perc_fgts = Decimal(str(getattr(kit, "perc_fgts", 0) or 0))
+        perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
+        perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
+        perc_desp_op = Decimal(str(getattr(kit, "perc_despesa_operacional", 0) or 0))
 
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
@@ -500,6 +508,11 @@ class OpportunityKitService:
                 venda_total_item = (custo_base_unitario_item * Decimal(str(item.quantidade_no_kit or 1))) * fator_item
                 imposto_venda_item = venda_total_item * imposto_tax
                 total_imposto_itens_venda += imposto_venda_item
+            else:
+                if tipo_produto in ["SERVICO", "LICENCA"]:
+                    fator_item = Decimal(getattr(kit, 'fator_margem_servicos_produtos', 1) or 1)
+                    venda_unitario_item = custo_base_unitario_item * fator_item
+                    venda_total_item = (custo_base_unitario_item * Decimal(str(item.quantidade_no_kit or 1))) * fator_item
             
             # Additional detailed kit item metrics
             frete_venda_item = venda_total_item * perc_frete_venda
@@ -657,10 +670,91 @@ class OpportunityKitService:
             valor_base_venda = custo_aquisicao_kit * fator_margem
             
             perc_comissao_locacao = Decimal(getattr(kit, 'perc_comissao', 0) or 0) / Decimal(100.0)
-            valor_comissao_locacao = valor_base_venda * perc_comissao_locacao
+            com_destinado_loc = valor_base_venda * perc_comissao_locacao
+            
+            # --- START SERVICE COMMISSION CALCULATION ---
+            valor_destinado_comissao_servicos = Decimal("0.0")
+            comissao_venda_origens = [
+                {
+                    "origem": "Comissão percentual do kit",
+                    "base": float(round(valor_base_venda, 2)),
+                    "regra": f"{float(perc_comissao_locacao * 100):.2f}%",
+                    "valor_destinado": float(round(com_destinado_loc, 2))
+                }
+            ]
+            
+            # Resolve active policy
+            policy_id = kit.commercial_policy_id or (sales_budget.commercial_policy_id if sales_budget else None)
+            policy = None
+            if policy_id:
+                from src.modules.companies.models import CommercialPolicy
+                policy = self.db.query(CommercialPolicy).filter(
+                    CommercialPolicy.id == policy_id,
+                    CommercialPolicy.ativo == True
+                ).first()
+                
+            if policy and policy.service_commissions:
+                # Group active service commission rules
+                rules_by_service = {
+                    sc.own_service_id: sc 
+                    for sc in policy.service_commissions 
+                    if sc.ativo and sc.commission_installments > 0
+                }
+                
+                # Check for items that are SERVICO_PROPRIO in the kit
+                for item in kit.items:
+                    if getattr(item, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" and getattr(item, "own_service_id", None):
+                        rule = rules_by_service.get(item.own_service_id)
+                        if rule:
+                            # Preço mensal do serviço (venda_unitario_item) was calculated in the items loop.
+                            venda_mensal_unit = Decimal("0.0")
+                            for summary in item_summaries:
+                                if (summary.get("id") == str(item.id)) or (summary.get("own_service_id") == str(item.own_service_id)):
+                                    venda_mensal_unit = Decimal(str(summary.get("venda_unitario_item", 0.0)))
+                                    break
+                            
+                            qty = Decimal(str(item.quantidade_no_kit or 1.0))
+                            valor_mensal_total_servico = venda_mensal_unit * qty
+                            valor_destinado_comissao_servico = valor_mensal_total_servico * Decimal(str(rule.commission_installments))
+                            
+                            valor_destinado_comissao_servicos += valor_destinado_comissao_servico
+                            
+                            service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio")
+                            comissao_venda_origens.append({
+                                "origem": f"Serviço {service_name}",
+                                "base": float(round(valor_mensal_total_servico, 2)),
+                                "regra": f"{rule.commission_installments} mensalidade" if rule.commission_installments == 1 else f"{rule.commission_installments} mensalidades",
+                                "valor_destinado": float(round(valor_destinado_comissao_servico, 2))
+                            })
+            
+            # Add service commissions to total com_destinado_loc
+            com_destinado_loc += valor_destinado_comissao_servicos
+            # --- END SERVICE COMMISSION CALCULATION ---
+            
+            vlt_comissao_dsr_loc = Decimal("0.0")
+            vlt_comissao_fgts_loc = Decimal("0.0")
+            vlt_comissao_inss_loc = Decimal("0.0")
+            vlt_comissao_demais_loc = Decimal("0.0")
+            
+            if tipo_com == "COMISSAO_POR_DENTRO" and com_destinado_loc > 0:
+                fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+                comissao_real_loc = com_destinado_loc / fator_total
+                vlt_comissao_dsr_loc = comissao_real_loc * perc_dsr / Decimal("100")
+                vlt_comissao_fgts_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_fgts / Decimal("100")
+                vlt_comissao_inss_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_inss / Decimal("100")
+                vlt_comissao_demais_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_demais / Decimal("100")
+                
+                soma = comissao_real_loc + vlt_comissao_dsr_loc + vlt_comissao_fgts_loc + vlt_comissao_inss_loc + vlt_comissao_demais_loc
+                diff = com_destinado_loc - soma
+                comissao_real_loc += diff
+                
+                valor_comissao_locacao = comissao_real_loc
+            else:
+                valor_comissao_locacao = com_destinado_loc
+                
+            valor_despesa_operacional_loc = valor_base_venda * perc_desp_op / Decimal("100")
 
             perc_despesas_adm_locacao = Decimal(getattr(kit, 'perc_despesas_adm', 0) or 0) / Decimal(100.0)
-            valor_despesas_adm_locacao = valor_base_venda * perc_despesas_adm_locacao
             
             # Monitoramento
             custo_monitoramento_unitario = Decimal(getattr(kit, 'custo_monitoramento_unitario', 0) or 0)
@@ -685,6 +779,7 @@ class OpportunityKitService:
 
             # Removing duplicate INSTALACAO check here as it is handled by the unified sales block
             valor_base_final = valor_parcela_locacao + manutencao_mensal + venda_unit_monitoramento
+            valor_despesas_adm_locacao = valor_base_final * perc_despesas_adm_locacao
             # custo_operacional_mensal_kit = raw Block 6 cost (DO NOT MUTATE)
             # custo_total_mensal_kit = all operational costs for profitability calc
             custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut)) + custo_monitoramento_unitario
@@ -769,13 +864,37 @@ class OpportunityKitService:
         # 16.5 Sales expenses (freight, admin expenses, and commission)
         vlt_frete_venda = valor_mensal_kit * perc_frete_venda
         vlt_despesas_adm = valor_mensal_kit * perc_despesas_adm
-        vlt_comissao = valor_mensal_kit * perc_comissao
+        
+        com_destinado = valor_mensal_kit * perc_comissao
+        vlt_comissao_dsr = Decimal("0.0")
+        vlt_comissao_fgts = Decimal("0.0")
+        vlt_comissao_inss = Decimal("0.0")
+        vlt_comissao_demais = Decimal("0.0")
+        
+        if tipo_com == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+            fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+            comissao_real = com_destinado / fator_total
+            vlt_comissao_dsr = comissao_real * perc_dsr / Decimal("100")
+            vlt_comissao_fgts = (comissao_real + vlt_comissao_dsr) * perc_fgts / Decimal("100")
+            vlt_comissao_inss = (comissao_real + vlt_comissao_dsr) * perc_inss / Decimal("100")
+            vlt_comissao_demais = (comissao_real + vlt_comissao_dsr) * perc_demais / Decimal("100")
+            
+            soma = comissao_real + vlt_comissao_dsr + vlt_comissao_fgts + vlt_comissao_inss + vlt_comissao_demais
+            diff = com_destinado - soma
+            comissao_real += diff
+            
+            vlt_comissao = comissao_real
+        else:
+            vlt_comissao = com_destinado
+            
+        vlt_despesa_operacional = valor_mensal_kit * perc_desp_op / Decimal("100")
 
         # 17. Lucro Mensal
         if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total - (vlt_frete_venda + vlt_despesas_adm + vlt_comissao)
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 + credito_icms_compra_total - (vlt_frete_venda + vlt_despesas_adm + com_destinado) - vlt_despesa_operacional
         else:
-            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 - (vlt_frete_venda + vlt_despesas_adm + vlt_comissao)
+            # Commission and Operational Expenses are upfront and do not repeat monthly
+            lucro_mensal_kit = receita_liquida_mensal_kit - custo_total_mensal_kit - custo_mensal_bloco_7 - (vlt_frete_venda + vlt_despesas_adm)
 
         margem_kit = Decimal("0.0")
         if receita_liquida_mensal_kit > 0:
@@ -798,7 +917,8 @@ class OpportunityKitService:
             venda_manutencao_total = valor_venda_manutencao
             custo_manut_total_calc = vlt_manut
             imposto_manut_total = impostos_manutencao
-            lucro_manutencao = venda_manutencao_total - custo_manut_total_calc - imposto_manut_total - (venda_manutencao_total * (perc_frete_venda + perc_despesas_adm + perc_comissao))
+            despesa_op_manutencao = venda_manutencao_total * perc_desp_op / Decimal("100")
+            lucro_manutencao = venda_manutencao_total - custo_manut_total_calc - imposto_manut_total - (venda_manutencao_total * (perc_frete_venda + perc_despesas_adm + perc_comissao)) - despesa_op_manutencao
             if venda_manutencao_total > 0:
                 margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
             
@@ -808,7 +928,8 @@ class OpportunityKitService:
             imposto_equipamentos_total = impostos_produtos_base + impostos_instalacao
             if force_12_icms:
                 imposto_equipamentos_total -= total_st_kit
-            lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao)) + credito_icms_compra_total
+            despesa_op_equipamentos = venda_equipamentos_total * perc_desp_op / Decimal("100")
+            lucro_equipamentos = venda_equipamentos_total - custo_equipamentos_total - imposto_equipamentos_total - (venda_equipamentos_total * (perc_frete_venda + perc_despesas_adm + perc_comissao)) + credito_icms_compra_total - despesa_op_equipamentos
             if venda_equipamentos_total > 0:
                 margem_equipamentos = (lucro_equipamentos / venda_equipamentos_total) * Decimal(100.0)
         else:
@@ -832,21 +953,33 @@ class OpportunityKitService:
             if venda_manutencao_total > 0:
                 margem_manutencao = (lucro_manutencao / venda_manutencao_total) * Decimal(100.0)
 
-        # ROI = Investimento / (Faturamento - Custo Monitoramento - Custo Op. Bloco6 - Custo Bloco7 - Impostos)
+        # ROI = Investimento / (Faturamento - Custo Monitoramento - Custo Op. Bloco6 - Custo Bloco7 - Impostos - Desp. Adm)
         custo_monit = locals().get("custo_monitoramento_unitario", Decimal("0.0"))
-        roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
         valor_com_loc = locals().get("valor_comissao_locacao", Decimal("0.0"))
         valor_desp_adm_loc = locals().get("valor_despesas_adm_locacao", Decimal("0.0"))
         imposto_inst = locals().get("imposto_instalacao_upfront", Decimal("0.0"))
-        investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc + valor_desp_adm_loc
+        
+        if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
+            investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc
+            if kit.tipo_contrato == "COMODATO":
+                investimento_total += locals().get("valor_despesa_operacional_loc", Decimal("0.0"))
+            
+            roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos - valor_desp_adm_loc
+        else:
+            investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc + valor_desp_adm_loc
+            roi_denominador = valor_mensal_antes_impostos - custo_monit - custo_operacional_mensal_kit - custo_mensal_bloco_7 - valor_impostos
+
         roi_meses = float(investimento_total / roi_denominador) if roi_denominador > 0 else 0.0
 
-        # ROI Equipamento = (Custo de Aquisição + Comissão + Despesa Adm) / (Locação Mensal - Imposto de Locação)
+        # ROI Equipamento = (Custo de Aquisição + Comissão + Despesa Adm / Desp. Op) / (Locação Mensal - Imposto de Locação)
         roi_equipamento_meses = 0.0
         if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
             locacao_liquida = venda_equipamentos_total - locals().get("imposto_equip_loc", Decimal("0.0"))
             if locacao_liquida > 0:
-                roi_equipamento_meses = float((custo_aquisicao_kit + valor_com_loc + valor_desp_adm_loc) / locacao_liquida)
+                numerator = custo_aquisicao_kit + valor_com_loc
+                if kit.tipo_contrato == "COMODATO":
+                    numerator += locals().get("valor_despesa_operacional_loc", Decimal("0.0"))
+                roi_equipamento_meses = float(numerator / locacao_liquida)
 
         # 19. Aggregate granular tax fields for the frontend Fechamento de Venda
         faturamento_total_venda = valor_mensal_kit
@@ -875,9 +1008,36 @@ class OpportunityKitService:
 
         vlt_frete_venda = faturamento_total_venda * perc_frete_venda
         vlt_despesas_adm = faturamento_total_venda * perc_despesas_adm
-        vlt_comissao = faturamento_total_venda * perc_comissao
+        
+        com_destinado = faturamento_total_venda * perc_comissao
+        vlt_comissao_dsr = Decimal("0.0")
+        vlt_comissao_fgts = Decimal("0.0")
+        vlt_comissao_inss = Decimal("0.0")
+        vlt_comissao_demais = Decimal("0.0")
+        
+        if tipo_com == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+            fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+            comissao_real = com_destinado / fator_total
+            vlt_comissao_dsr = comissao_real * perc_dsr / Decimal("100")
+            vlt_comissao_fgts = (comissao_real + vlt_comissao_dsr) * perc_fgts / Decimal("100")
+            vlt_comissao_inss = (comissao_real + vlt_comissao_dsr) * perc_inss / Decimal("100")
+            vlt_comissao_demais = (comissao_real + vlt_comissao_dsr) * perc_demais / Decimal("100")
+            
+            soma = comissao_real + vlt_comissao_dsr + vlt_comissao_fgts + vlt_comissao_inss + vlt_comissao_demais
+            diff = com_destinado - soma
+            comissao_real += diff
+            
+            vlt_comissao = comissao_real
+        else:
+            vlt_comissao = com_destinado
+            
+        if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
+            vlt_despesa_operacional = valor_base_venda * perc_desp_op / Decimal("100")
+        else:
+            vlt_despesa_operacional = faturamento_total_venda * perc_desp_op / Decimal("100")
+        
         if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
-            valor_comissao_locacao = vlt_comissao
+            valor_comissao_locacao = com_destinado
             valor_despesas_adm_locacao = vlt_despesas_adm
 
 
@@ -915,8 +1075,32 @@ class OpportunityKitService:
             lucro_minimo = Decimal(str(min_res["summary"]["lucro_mensal_kit"]))
             margem_minima_resultante = Decimal(str(min_res["margem_kit_raw"]))
 
+        # Build comissionamento_detalhado JSON structure
+        if kit.tipo_contrato not in ["LOCACAO", "COMODATO"]:
+            comissao_venda_origens = [
+                {
+                    "origem": "Comissão percentual do kit",
+                    "base": float(round(faturamento_total_venda, 2)),
+                    "regra": f"{float(perc_comissao * 100):.2f}%",
+                    "valor_destinado": float(round(com_destinado, 2))
+                }
+            ]
+            
+        comissionamento_detalhado = {
+            "comissao_venda": comissao_venda_origens,
+            "detalhamento_incidencias": {
+                "comissao_efetiva": float(round(vlt_comissao, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(valor_comissao_locacao, 2)),
+                "dsr": float(round(vlt_comissao_dsr, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(vlt_comissao_dsr_loc, 2)),
+                "fgts": float(round(vlt_comissao_fgts, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(vlt_comissao_fgts_loc, 2)),
+                "inss": float(round(vlt_comissao_inss, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(vlt_comissao_inss_loc, 2)),
+                "demais": float(round(vlt_comissao_demais, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(vlt_comissao_demais_loc, 2)),
+                "total": float(round(com_destinado, 2)) if kit.tipo_contrato not in ["LOCACAO", "COMODATO"] else float(round(com_destinado_loc, 2))
+            }
+        }
+
         return {
             "margem_kit_raw": margem_kit,
+            "comissionamento_detalhado": comissionamento_detalhado,
             "summary": {
                 "fator_minimo_calculado": round(fator_minimo_calculado, 4) if fator_minimo_calculado is not None else None,
                 "valor_venda_minimo": round(valor_venda_minimo, 2) if valor_venda_minimo is not None else None,
@@ -944,6 +1128,10 @@ class OpportunityKitService:
                 "imposto_instalacao": round(locals().get("imposto_instalacao_upfront", Decimal("0.0")), 2),  # type: ignore
                 "valor_comissao_locacao": round(locals().get("valor_comissao_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_despesas_adm_locacao": round(locals().get("valor_despesas_adm_locacao", Decimal("0.0")), 2),  # type: ignore
+                "vlt_comissao_dsr_loc": round(locals().get("vlt_comissao_dsr_loc", Decimal("0.0")), 2),  # type: ignore
+                "vlt_comissao_fgts_loc": round(locals().get("vlt_comissao_fgts_loc", Decimal("0.0")), 2),  # type: ignore
+                "vlt_comissao_inss_loc": round(locals().get("vlt_comissao_inss_loc", Decimal("0.0")), 2),  # type: ignore
+                "vlt_comissao_demais_loc": round(locals().get("vlt_comissao_demais_loc", Decimal("0.0")), 2),  # type: ignore
                 "valor_parcela_locacao": round(valor_parcela_locacao, 2),  # type: ignore
                 "manutencao_mensal": round(manutencao_mensal, 2),  # type: ignore
                 "valor_mensal_antes_impostos": round(valor_mensal_antes_impostos, 2),  # type: ignore
@@ -955,6 +1143,8 @@ class OpportunityKitService:
                 "margem_kit": round(margem_kit, 2),  # type: ignore
                 "roi_meses": round(roi_meses, 1),  # type: ignore
                 "roi_equipamento_meses": round(roi_equipamento_meses, 2), # type: ignore
+                "investimento_total": round(investimento_total, 2), # type: ignore
+                "roi_denominador": round(roi_denominador, 2), # type: ignore
                 "imposto_equip_loc": round(locals().get("imposto_equip_loc", Decimal("0.0")), 2), # type: ignore
                 "credito_icms_compra_total": round(credito_icms_compra_total, 2), # type: ignore
                 # New granular fields
@@ -982,6 +1172,11 @@ class OpportunityKitService:
                 "vlt_frete_venda": round(vlt_frete_venda, 2), # type: ignore
                 "vlt_despesas_adm": round(vlt_despesas_adm, 2), # type: ignore
                 "vlt_comissao": round(vlt_comissao, 2), # type: ignore
+                "vlt_comissao_dsr": round(locals().get("vlt_comissao_dsr", Decimal("0.0")), 2),
+                "vlt_comissao_fgts": round(locals().get("vlt_comissao_fgts", Decimal("0.0")), 2),
+                "vlt_comissao_inss": round(locals().get("vlt_comissao_inss", Decimal("0.0")), 2),
+                "vlt_comissao_demais": round(locals().get("vlt_comissao_demais", Decimal("0.0")), 2),
+                "vlt_despesa_operacional": round(locals().get("vlt_despesa_operacional", Decimal("0.0")), 2),
                 "custo_equip_total_calc": round(custo_equip_total_calc, 2), # type: ignore
                 "custo_manut_total_calc": round(custo_manut_total_calc, 2), # type: ignore
             },
@@ -1101,6 +1296,14 @@ class OpportunityKitService:
             perc_frete_venda=perc_frete_venda,
             perc_despesas_adm=perc_despesas_adm,
             perc_comissao=perc_comissao,
+            tipo_comissionamento=data.tipo_comissionamento,
+            perc_dsr=data.perc_dsr,
+            perc_fgts=data.perc_fgts,
+            perc_inss=data.perc_inss,
+            perc_demais_incidencias=data.perc_demais_incidencias,
+            perc_despesa_operacional=data.perc_despesa_operacional,
+            custo_monitoramento_unitario=data.custo_monitoramento_unitario,
+            fator_monitoramento=data.fator_monitoramento,
             aliq_pis=aliq_pis,
             aliq_cofins=aliq_cofins,
             aliq_csll=aliq_csll,
@@ -1114,7 +1317,8 @@ class OpportunityKitService:
             custo_logistica_mensal_kit=data.custo_logistica_mensal_kit,
             custo_software_mensal_kit=data.custo_software_mensal_kit,
             custo_itens_acessorios_mensal_kit=data.custo_itens_acessorios_mensal_kit,
-            margem_minima_desejada=data.margem_minima_desejada
+            margem_minima_desejada=data.margem_minima_desejada,
+            commercial_policy_id=data.commercial_policy_id
         )
         self.db.add(kit)
         self.db.flush()
@@ -1160,6 +1364,7 @@ class OpportunityKitService:
         # Calculate financials to validate and populate minimum columns before committing
         fin = self.calculate_financials(kit, tenant_id)
         current_margin = Decimal(str(fin["margem_kit_raw"]))
+        kit.comissionamento_detalhado = fin.get("comissionamento_detalhado")
         
         if kit.margem_minima_desejada is not None:
             if Decimal(str(kit.margem_minima_desejada)) > current_margin:
@@ -1254,6 +1459,7 @@ class OpportunityKitService:
         # Calculate financials to validate and populate minimum columns before committing
         fin = self.calculate_financials(kit, tenant_id)
         current_margin = Decimal(str(fin["margem_kit_raw"]))
+        kit.comissionamento_detalhado = fin.get("comissionamento_detalhado")
         
         if kit.margem_minima_desejada is not None:
             if Decimal(str(kit.margem_minima_desejada)) > current_margin:

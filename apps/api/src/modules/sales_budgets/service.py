@@ -129,9 +129,38 @@ def calculate_item(
         impostos_total = pis_u + cofins_u + csll_u + irpj_u + icms_u
         actual_st = has_st
 
+    tipo_comissionamento = budget_defaults.get("tipo_comissionamento", "TRADICIONAL")
+    perc_dsr = _d(budget_defaults.get("perc_dsr", 0)) if not is_same_cnpj else Decimal("0")
+    perc_fgts = _d(budget_defaults.get("perc_fgts", 0)) if not is_same_cnpj else Decimal("0")
+    perc_inss = _d(budget_defaults.get("perc_inss", 0)) if not is_same_cnpj else Decimal("0")
+    perc_demais = _d(budget_defaults.get("perc_demais_incidencias", 0)) if not is_same_cnpj else Decimal("0")
+    perc_desp_op = _d(budget_defaults.get("perc_despesa_operacional", 0)) if not is_same_cnpj else Decimal("0")
+
     desp_u = _round(venda * perc_desp / 100)
-    com_u = _round(venda * perc_com / 100)
-    lucro = venda - custo - frete_unit - impostos_total - desp_u - com_u
+    com_destinado = _round(venda * perc_com / 100)
+    
+    dsr_u = fgts_u = inss_u = demais_u = Decimal("0.0")
+    
+    if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+        fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+        comissao_real = _round(com_destinado / fator_total)
+        dsr_u = _round(comissao_real * perc_dsr / Decimal("100"))
+        fgts_u = _round((comissao_real + dsr_u) * perc_fgts / Decimal("100"))
+        inss_u = _round((comissao_real + dsr_u) * perc_inss / Decimal("100"))
+        demais_u = _round((comissao_real + dsr_u) * perc_demais / Decimal("100"))
+        
+        soma = comissao_real + dsr_u + fgts_u + inss_u + demais_u
+        diff = com_destinado - soma
+        comissao_real += diff
+        
+        com_u = comissao_real
+    else:
+        com_u = com_destinado
+
+    desp_op_u = _round(venda * perc_desp_op / 100)
+
+    # Commission total cost to the company is com_u + dsr_u + fgts_u + inss_u + demais_u (which is exactly com_destinado)
+    lucro = venda - custo - frete_unit - impostos_total - desp_u - com_destinado - desp_op_u
     margem = _round(lucro / venda * 100, 4) if venda > 0 else Decimal("0")
     qty = _d(item_data.quantidade)
     total = _round(venda * qty)
@@ -156,6 +185,11 @@ def calculate_item(
         "perc_iss": perc_iss, "iss_unit": iss_u,
         "perc_despesa_adm": perc_desp, "despesa_adm_unit": desp_u,
         "perc_comissao": perc_com, "comissao_unit": com_u,
+        "dsr_unit": dsr_u,
+        "fgts_unit": fgts_u,
+        "inss_unit": inss_u,
+        "demais_incidencias_unit": demais_u,
+        "despesa_operacional_unit": desp_op_u,
         "lucro_unit": lucro, "margem_unit": margem,
         "quantidade": qty, "total_venda": total,
     }
@@ -291,6 +325,46 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             if rec_liq_unit > 0:
                 margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
 
+        tipo_comissionamento = rental_defaults.get("tipo_comissionamento", "TRADICIONAL")
+        perc_dsr = _d(rental_defaults.get("perc_dsr", 0))
+        perc_fgts = _d(rental_defaults.get("perc_fgts", 0))
+        perc_inss = _d(rental_defaults.get("perc_inss", 0))
+        perc_demais = _d(rental_defaults.get("perc_demais_incidencias", 0))
+        perc_desp_op = _d(rental_defaults.get("perc_despesa_operacional", 0))
+
+        com_destinado = com_val
+        dsr_mensal = fgts_mensal = inss_mensal = demais_incidencias_mensal = Decimal("0.0")
+
+        if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+            fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+            comissao_real = _round(com_destinado / fator_total)
+            dsr_mensal = _round(comissao_real * perc_dsr / Decimal("100"))
+            fgts_mensal = _round((comissao_real + dsr_mensal) * perc_fgts / Decimal("100"))
+            inss_mensal = _round((comissao_real + dsr_mensal) * perc_inss / Decimal("100"))
+            demais_incidencias_mensal = _round((comissao_real + dsr_mensal) * perc_demais / Decimal("100"))
+            
+            soma = comissao_real + dsr_mensal + fgts_mensal + inss_mensal + demais_incidencias_mensal
+            diff = com_destinado - soma
+            comissao_real += diff
+            
+            com_val = comissao_real
+        else:
+            com_val = com_destinado
+
+        desp_op_val = _round(valor_base_venda_unit * perc_desp_op / Decimal("100"))
+        if getattr(item_data, "despesa_operacional_mensal", None) is not None:
+            desp_op_val = _d(item_data.despesa_operacional_mensal)
+
+        if tipo_comissionamento == "COMISSAO_POR_DENTRO" or perc_desp_op > 0:
+            if is_instalacao:
+                lucro_mensal_unit = lucro_mensal_unit - desp_op_val
+            if not is_comodato and valor_mensal_unit > 0:
+                margem = _round((lucro_mensal_unit / valor_mensal_unit) * 100, 2) if is_instalacao else _round((lucro_mensal_unit / rec_liq_unit) * 100, 2)
+
+        if is_comodato:
+            lucro_mensal_unit = Decimal("0")
+            margem = Decimal("0")
+
         return {
             "custo_aquisicao_unit": custo_aquisicao_unit,
             "custo_total_aquisicao": custo_aquisicao_unit,
@@ -307,6 +381,11 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             "receita_liquida_mensal": rec_liq_unit,
             "perc_comissao": p_com,
             "comissao_mensal": com_val,
+            "dsr_mensal": dsr_mensal,
+            "fgts_mensal": fgts_mensal,
+            "inss_mensal": inss_mensal,
+            "demais_incidencias_mensal": demais_incidencias_mensal,
+            "despesa_operacional_mensal": desp_op_val,
             "lucro_mensal": lucro_mensal_unit,
             "margem": margem,
             "quantidade": _d(item_data.quantidade),
@@ -356,9 +435,39 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
     receita_liquida_mensal = valor_mensal - impostos_mensal
     
     p_com = _d(rental_defaults.get("perc_comissao_rental", 0))
-    comissao_mensal = _round(receita_liquida_mensal * (p_com / Decimal("100")))
+    com_destinado = _round(receita_liquida_mensal * (p_com / Decimal("100")))
     
-    lucro_mensal = receita_liquida_mensal - custo_total_mensal - comissao_mensal
+    tipo_comissionamento = rental_defaults.get("tipo_comissionamento", "TRADICIONAL")
+    perc_dsr = _d(rental_defaults.get("perc_dsr", 0))
+    perc_fgts = _d(rental_defaults.get("perc_fgts", 0))
+    perc_inss = _d(rental_defaults.get("perc_inss", 0))
+    perc_demais = _d(rental_defaults.get("perc_demais_incidencias", 0))
+    perc_desp_op = _d(rental_defaults.get("perc_despesa_operacional", 0))
+
+    dsr_mensal = fgts_mensal = inss_mensal = demais_incidencias_mensal = Decimal("0.0")
+
+    if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+        fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+        comissao_real = _round(com_destinado / fator_total)
+        dsr_mensal = _round(comissao_real * perc_dsr / Decimal("100"))
+        fgts_mensal = _round((comissao_real + dsr_mensal) * perc_fgts / Decimal("100"))
+        inss_mensal = _round((comissao_real + dsr_mensal) * perc_inss / Decimal("100"))
+        demais_incidencias_mensal = _round((comissao_real + dsr_mensal) * perc_demais / Decimal("100"))
+        
+        soma = comissao_real + dsr_mensal + fgts_mensal + inss_mensal + demais_incidencias_mensal
+        diff = com_destinado - soma
+        comissao_real += diff
+        
+        comissao_mensal = comissao_real
+    else:
+        comissao_mensal = com_destinado
+
+    desp_op_val = _round(valor_venda_equipamento * perc_desp_op / Decimal("100"))
+    if getattr(item_data, "despesa_operacional_mensal", None) is not None:
+        desp_op_val = _d(item_data.despesa_operacional_mensal)
+    
+    # Commission and Operational Expenses are upfront and do not repeat monthly
+    lucro_mensal = receita_liquida_mensal - custo_total_mensal
     margem = _round((lucro_mensal / valor_mensal) * Decimal("100"), 2) if valor_mensal > 0 else Decimal("0")
 
     if is_comodato:
@@ -383,6 +492,11 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
         "receita_liquida_mensal": receita_liquida_mensal,
         "perc_comissao": p_com,
         "comissao_mensal": comissao_mensal,
+        "dsr_mensal": dsr_mensal,
+        "fgts_mensal": fgts_mensal,
+        "inss_mensal": inss_mensal,
+        "demais_incidencias_mensal": demais_incidencias_mensal,
+        "despesa_operacional_mensal": desp_op_val,
         "lucro_mensal": lucro_mensal,
         "margem": margem,
         "quantidade": _d(item_data.quantidade),
@@ -398,6 +512,12 @@ def _build_defaults(budget: SalesBudget) -> dict:
         "markup_padrao": budget.markup_padrao,
         "perc_despesa_adm": budget.perc_despesa_adm,
         "perc_comissao": budget.perc_comissao,
+        "tipo_comissionamento": getattr(budget, "tipo_comissionamento", "TRADICIONAL"),
+        "perc_dsr": getattr(budget, "perc_dsr", Decimal("0.0")),
+        "perc_fgts": getattr(budget, "perc_fgts", Decimal("0.0")),
+        "perc_inss": getattr(budget, "perc_inss", Decimal("0.0")),
+        "perc_demais_incidencias": getattr(budget, "perc_demais_incidencias", Decimal("0.0")),
+        "perc_despesa_operacional": getattr(budget, "perc_despesa_operacional", Decimal("0.0")),
         "perc_frete_venda": budget.perc_frete_venda,
         "perc_pis": budget.perc_pis,
         "perc_cofins": budget.perc_cofins,
@@ -424,6 +544,12 @@ def _build_rental_defaults(budget: SalesBudget) -> dict:
         "perc_irpj_rental": budget.perc_irpj_rental,
         "perc_iss_rental": budget.perc_iss_rental,
         "perc_despesa_adm": budget.perc_despesa_adm,
+        "tipo_comissionamento": getattr(budget, "tipo_comissionamento", "TRADICIONAL"),
+        "perc_dsr": getattr(budget, "perc_dsr", Decimal("0.0")),
+        "perc_fgts": getattr(budget, "perc_fgts", Decimal("0.0")),
+        "perc_inss": getattr(budget, "perc_inss", Decimal("0.0")),
+        "perc_demais_incidencias": getattr(budget, "perc_demais_incidencias", Decimal("0.0")),
+        "perc_despesa_operacional": getattr(budget, "perc_despesa_operacional", Decimal("0.0")),
     }
 
 
@@ -538,6 +664,7 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
             kit_vlr_instal_calc=getattr(item_data, "kit_vlr_instal_calc", None),
             kit_parcela_locacao=getattr(item_data, "kit_parcela_locacao", None),
             kit_venda_unit_monitoramento=getattr(item_data, "kit_venda_unit_monitoramento", None),
+            kit_comissionamento_detalhado=getattr(item_data, "kit_comissionamento_detalhado", None),
             perc_instalacao_item=getattr(item_data, "perc_instalacao_item", None),
             valor_instalacao_item=getattr(item_data, "valor_instalacao_item", None),
             **calc
@@ -653,6 +780,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         forma_pagamento_id=data.forma_pagamento_id,
         data_vencimento_inicial=data.data_vencimento_inicial,
         forma_pagamento_snapshot=data.forma_pagamento_snapshot,
+        commercial_policy_id=data.commercial_policy_id,
         numero_orcamento=get_next_numero(db, tenant_id, company_id),
         titulo=data.titulo,
         observacoes=data.observacoes,
@@ -690,6 +818,12 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_irpj_rental=data.perc_irpj_rental,
         perc_iss_rental=data.perc_iss_rental,
         perc_comissao_diretoria=data.perc_comissao_diretoria,
+        tipo_comissionamento=getattr(data, "tipo_comissionamento", "TRADICIONAL"),
+        perc_dsr=getattr(data, "perc_dsr", Decimal("0.0")),
+        perc_fgts=getattr(data, "perc_fgts", Decimal("0.0")),
+        perc_inss=getattr(data, "perc_inss", Decimal("0.0")),
+        perc_demais_incidencias=getattr(data, "perc_demais_incidencias", Decimal("0.0")),
+        perc_despesa_operacional=getattr(data, "perc_despesa_operacional", Decimal("0.0")),
     )
     db.add(budget)
     db.flush()
@@ -915,6 +1049,7 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
 
     # Update header + sale defaults
     budget.customer_id = data.customer_id
+    budget.commercial_policy_id = data.commercial_policy_id
     budget.titulo = data.titulo
     budget.observacoes = data.observacoes
     budget.data_orcamento = data.data_orcamento
@@ -955,6 +1090,12 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.perc_irpj_rental = data.perc_irpj_rental
     budget.perc_iss_rental = data.perc_iss_rental
     budget.perc_comissao_diretoria = data.perc_comissao_diretoria
+    budget.tipo_comissionamento = getattr(data, "tipo_comissionamento", "TRADICIONAL")
+    budget.perc_dsr = getattr(data, "perc_dsr", Decimal("0.0"))
+    budget.perc_fgts = getattr(data, "perc_fgts", Decimal("0.0"))
+    budget.perc_inss = getattr(data, "perc_inss", Decimal("0.0"))
+    budget.perc_demais_incidencias = getattr(data, "perc_demais_incidencias", Decimal("0.0"))
+    budget.perc_despesa_operacional = getattr(data, "perc_despesa_operacional", Decimal("0.0"))
 
     # Update responsaveis
     db.query(SalesBudgetResponsavel).filter(SalesBudgetResponsavel.budget_id == budget.id).delete()
@@ -1118,6 +1259,7 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
         titulo=f"{original.titulo} (Cópia)",
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
+        commercial_policy_id=original.commercial_policy_id,
         status="EM_LANCAMENTO",
         venda_havera_manutencao=original.venda_havera_manutencao,
         venda_qtd_meses_manutencao=original.venda_qtd_meses_manutencao,
@@ -1229,6 +1371,7 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
             comissao_mensal=ri.comissao_mensal,
             lucro_mensal=ri.lucro_mensal,
             margem=ri.margem,
+            kit_comissionamento_detalhado=ri.kit_comissionamento_detalhado,
         )
         db.add(new_ri)
 
@@ -2002,6 +2145,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     # Despesas
     vlt_frete = Decimal("0.0")
     vlt_comissao = Decimal("0.0")
+    vlt_dsr = Decimal("0.0")
+    vlt_fgts = Decimal("0.0")
+    vlt_inss = Decimal("0.0")
+    vlt_demais = Decimal("0.0")
+    vlt_despesa_operacional = Decimal("0.0")
     vlt_despesas_adm = Decimal("0.0")
     total_frete_compra = Decimal("0.0")
     
@@ -2259,12 +2407,29 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         if is_rental_opp:
             if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
                 vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * qty
+                vlt_dsr += Decimal(str(summary.get("vlt_comissao_dsr", 0) or 0)) * qty
+                vlt_fgts += Decimal(str(summary.get("vlt_comissao_fgts", 0) or 0)) * qty
+                vlt_inss += Decimal(str(summary.get("vlt_comissao_inss", 0) or 0)) * qty
+                vlt_demais += Decimal(str(summary.get("vlt_comissao_demais", 0) or 0)) * qty
+                vlt_despesa_operacional += Decimal(str(summary.get("vlt_despesa_operacional", 0) or 0)) * qty
                 vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * qty
             else:
-                vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * prazo_contrato * qty
+                # Commission and Despesa Operacional are upfront Capex and do not repeat monthly
+                vlt_comissao += Decimal(str(summary.get("valor_comissao_locacao", 0) or 0)) * qty
+                vlt_dsr += Decimal(str(summary.get("vlt_comissao_dsr_loc", 0) or 0)) * qty
+                vlt_fgts += Decimal(str(summary.get("vlt_comissao_fgts_loc", 0) or 0)) * qty
+                vlt_inss += Decimal(str(summary.get("vlt_comissao_inss_loc", 0) or 0)) * qty
+                vlt_demais += Decimal(str(summary.get("vlt_comissao_demais_loc", 0) or 0)) * qty
+                vlt_despesa_operacional += Decimal(str(summary.get("vlt_despesa_operacional", 0) or 0)) * qty
+                # Administrative expenses are recurring and repeat monthly
                 vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * prazo_contrato * qty
         else:
             vlt_comissao += Decimal(str(summary.get("vlt_comissao", 0) or 0)) * qty
+            vlt_dsr += Decimal(str(summary.get("vlt_comissao_dsr", 0) or 0)) * qty
+            vlt_fgts += Decimal(str(summary.get("vlt_comissao_fgts", 0) or 0)) * qty
+            vlt_inss += Decimal(str(summary.get("vlt_comissao_inss", 0) or 0)) * qty
+            vlt_demais += Decimal(str(summary.get("vlt_comissao_demais", 0) or 0)) * qty
+            vlt_despesa_operacional += Decimal(str(summary.get("vlt_despesa_operacional", 0) or 0)) * qty
             vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * qty
         
         total_venda += (Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0)) *
@@ -2383,6 +2548,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             # Expenses
             vlt_frete += Decimal(str(item.frete_venda_unit or 0.0)) * item_qty
             vlt_comissao += Decimal(str(item.comissao_unit or 0.0)) * item_qty
+            vlt_dsr += Decimal(str(getattr(item, "dsr_unit", 0.0) or 0.0)) * item_qty
+            vlt_fgts += Decimal(str(getattr(item, "fgts_unit", 0.0) or 0.0)) * item_qty
+            vlt_inss += Decimal(str(getattr(item, "inss_unit", 0.0) or 0.0)) * item_qty
+            vlt_demais += Decimal(str(getattr(item, "demais_incidencias_unit", 0.0) or 0.0)) * item_qty
+            vlt_despesa_operacional += Decimal(str(getattr(item, "despesa_operacional_unit", 0.0) or 0.0)) * item_qty
             vlt_despesas_adm += Decimal(str(item.despesa_adm_unit or 0.0)) * item_qty
 
     # Process direct rental/locação items (without kit)
@@ -2437,8 +2607,13 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             # Sell-side Taxes: calculated precisely at the end of the DRE function
             pass
             
-            # Expenses (comissão e despesas adm)
-            vlt_comissao += (receita_locacao + receita_instalacao) * Decimal(str(opportunity.perc_comissao_rental or opportunity.perc_comissao or 0.0)) / 100
+            # Expenses (comissão e despesas adm) - Commission and Despesa Operacional are upfront and do not repeat monthly
+            vlt_comissao += Decimal(str(getattr(ri, "comissao_mensal", 0.0) or 0.0)) * prazo * qty
+            vlt_dsr += Decimal(str(getattr(ri, "dsr_mensal", 0.0) or 0.0)) * prazo * qty
+            vlt_fgts += Decimal(str(getattr(ri, "fgts_mensal", 0.0) or 0.0)) * prazo * qty
+            vlt_inss += Decimal(str(getattr(ri, "inss_mensal", 0.0) or 0.0)) * prazo * qty
+            vlt_demais += Decimal(str(getattr(ri, "demais_incidencias_mensal", 0.0) or 0.0)) * prazo * qty
+            vlt_despesa_operacional += Decimal(str(getattr(ri, "despesa_operacional_mensal", 0.0) or 0.0)) * qty
             vlt_despesas_adm += (receita_locacao + receita_instalacao) * Decimal(str(opportunity.perc_despesa_adm or 0.0)) / 100
             
             # Custos operacionais do item direto de locação/comodato
@@ -2657,6 +2832,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     total_receita_venda = total_produtos + total_servicos
     frete_pct = (vlt_frete / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
     comissao_pct = (vlt_comissao / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    dsr_pct = (vlt_dsr / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    fgts_pct = (vlt_fgts / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    inss_pct = (vlt_inss / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    demais_pct = (vlt_demais / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
+    desp_op_pct = (vlt_despesa_operacional / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
     despesas_adm_pct = (vlt_despesas_adm / total_receita_venda * 100) if total_receita_venda > 0 else Decimal("0.0")
         
     ipi_venda_pct = Decimal("0.0")
@@ -2674,7 +2854,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         total_fornecedores +
         purchase_ipi + purchase_st + purchase_difal +
         vlt_pis + vlt_cofins + vlt_icms + vlt_iss + vlt_irpj + vlt_csll +
-        vlt_frete + vlt_comissao + vlt_despesas_adm +
+        vlt_frete + vlt_comissao + vlt_dsr + vlt_fgts + vlt_inss + vlt_demais + vlt_despesa_operacional + vlt_despesas_adm +
         total_custos_operacionais
     )
     
@@ -2782,6 +2962,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             "despesas_venda": {
                 "frete": {"percent": round(frete_pct, 2), "valor": round(vlt_frete, 2)},
                 "comissao": {"percent": round(comissao_pct, 2), "valor": round(vlt_comissao, 2)},
+                "comissao_dsr": {"percent": round(dsr_pct, 2), "valor": round(vlt_dsr, 2)},
+                "comissao_fgts": {"percent": round(fgts_pct, 2), "valor": round(vlt_fgts, 2)},
+                "comissao_inss": {"percent": round(inss_pct, 2), "valor": round(vlt_inss, 2)},
+                "comissao_demais": {"percent": round(demais_pct, 2), "valor": round(vlt_demais, 2)},
+                "despesa_operacional": {"percent": round(desp_op_pct, 2), "valor": round(vlt_despesa_operacional, 2)},
                 "despesas_administrativas": {"percent": round(despesas_adm_pct, 2), "valor": round(vlt_despesas_adm, 2)}
             },
             "custos_operacionais": {

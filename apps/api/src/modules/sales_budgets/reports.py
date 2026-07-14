@@ -438,10 +438,41 @@ class OpportunitiesReportService:
                 
             # Despesas venda
             add_row("2.4 Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
-            for k, exp in dre_data["saidas"]["despesas_venda"].items():
-                if k == "frete" and float(exp.get("valor") or 0.0) == 0:
-                    continue
-                add_row(f"(-) Despesa {k.capitalize()}", float(exp.get('percent', 0.0) or 0.0), exp['valor'], is_indent=True)
+            # Frete
+            frete_exp = dre_data["saidas"]["despesas_venda"].get("frete")
+            if frete_exp and float(frete_exp.get("valor") or 0.0) > 0:
+                add_row("(-) Frete de Venda", float(frete_exp.get('percent', 0.0) or 0.0), frete_exp['valor'], is_indent=True)
+                
+            # Commission grouping
+            com_keys = ["comissao", "comissao_dsr", "comissao_fgts", "comissao_inss", "comissao_demais"]
+            comissao_total_val = sum(float(dre_data["saidas"]["despesas_venda"].get(k, {}).get("valor") or 0.0) for k in com_keys)
+            
+            if comissao_total_val > 0:
+                comissao_total_pct = (comissao_total_val / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0
+                add_row("(-) Comissão", comissao_total_pct, comissao_total_val, is_bold=True, is_indent=True)
+                
+                desp_labels = {
+                    "comissao": "Comissão Líquida",
+                    "comissao_dsr": "DSR sobre Comissão",
+                    "comissao_fgts": "FGTS sobre Comissão",
+                    "comissao_inss": "INSS sobre Comissão",
+                    "comissao_demais": "Encargos sobre Comissão (Outros)"
+                }
+                for k in com_keys:
+                    exp = dre_data["saidas"]["despesas_venda"].get(k)
+                    if exp and float(exp.get("valor") or 0.0) > 0:
+                        label = desp_labels.get(k, k.capitalize())
+                        add_row(f"  (-) {label}", float(exp.get('percent', 0.0) or 0.0), exp['valor'], is_indent=True)
+                        
+            # Despesa Operacional
+            op_exp = dre_data["saidas"]["despesas_venda"].get("despesa_operacional")
+            if op_exp and float(op_exp.get("valor") or 0.0) > 0:
+                add_row("(-) Despesa Operacional", float(op_exp.get('percent', 0.0) or 0.0), op_exp['valor'], is_indent=True)
+                
+            # Despesas Administrativas
+            adm_exp = dre_data["saidas"]["despesas_venda"].get("despesas_administrativas")
+            if adm_exp and float(adm_exp.get("valor") or 0.0) > 0:
+                add_row("(-) Despesas Administrativas", float(adm_exp.get('percent', 0.0) or 0.0), adm_exp['valor'], is_indent=True)
             add_row("(=) Total Despesas de Venda", (float(total_despesas_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_despesas_venda, is_bold=True, bg_color='#f1f5f9')
             
             # Custos Operacionais (Rental only)
@@ -1529,15 +1560,18 @@ class OpportunitiesReportService:
                     frete_venda_unit = 0.0
                     desp_adm_unit = 0.0
                     comissao_unit = 0.0
+                    despesa_op_unit = 0.0
                 else:
                     frete_venda_unit = float(item.frete_venda_unit or 0.0)
                     desp_adm_unit = float(item.despesa_adm_unit or 0.0)
                     comissao_unit = float(item.comissao_unit or 0.0)
+                    despesa_op_unit = float(getattr(item, "despesa_operacional_unit", 0.0) or 0.0)
                 
                 frete_total = frete_venda_unit * qty
                 desp_adm_total = desp_adm_unit * qty
                 comissao_total = comissao_unit * qty
-                despesas_adm_total = frete_total + desp_adm_total + comissao_total
+                despesa_op_total = despesa_op_unit * qty
+                despesas_adm_total = frete_total + desp_adm_total + comissao_total + despesa_op_total
                 
                 lucro_total = 0.0 if (is_same_cnpj and item.tipo_item == "MERCADORIA") else (venda_total - custo_total - ipi_total - st_total - difal_total - sales_tax_total - despesas_adm_total)
                 if is_same_cnpj and item.tipo_item == "MERCADORIA":
@@ -1597,6 +1631,8 @@ class OpportunitiesReportService:
                     "_desp_adm_total": desp_adm_total,
                     "_comissao_unit": comissao_unit,
                     "_comissao_total": comissao_total,
+                    "_despesa_op_unit": despesa_op_unit,
+                    "_despesa_op_total": despesa_op_total,
                 })
             elif item.opportunity_kit_id:
                 # Kit item (pack components into it)
@@ -1651,7 +1687,8 @@ class OpportunitiesReportService:
                             "_desp_adm_unit": 0.0,
                             "_desp_adm_total": 0.0,
                             "_comissao_unit": 0.0,
-                            "_comissao_total": 0.0
+                            "_comissao_total": 0.0,
+                            "_despesa_op_total": 0.0
                         }
                         
                         components_list = []
@@ -1973,6 +2010,11 @@ class OpportunitiesReportService:
                         # Set markup to dash for parent kit row per user request
                         kit_details["markup"] = "-"
                         
+                        despesa_op_total = float(kit_financials["summary"].get("vlt_despesa_operacional", 0.0) or 0.0) * kit_qty
+                        kit_details["_despesa_op_total"] = despesa_op_total
+                        kit_details["_despesas_adm_total"] += despesa_op_total
+                        kit_details["_lucro_total"] -= despesa_op_total
+                        
                         kit_details["valor_venda"] = format_currency(kit_details["_venda_total"] / kit_qty if kit_qty > 0 else 0.0)
                         kit_details["venda_total"] = format_currency(kit_details["_venda_total"])
                         kit_details["impostos_venda"] = format_currency(kit_details["_sales_tax_total"])
@@ -2190,39 +2232,46 @@ class OpportunitiesReportService:
         frete_total = sum(x["_frete_total"] for x in items_details)
         desp_adm_total = sum(x["_desp_adm_total"] for x in items_details)
         comissao_total = sum(x["_comissao_total"] for x in items_details)
+        despesa_op_total = sum(x.get("_despesa_op_total", 0.0) for x in items_details)
         
         # Unit values calculated based on total divided by total quantity (Point 4)
         if is_same_cnpj:
             frete_pct = 0.0
             desp_adm_pct = 0.0
             comissao_pct = 0.0
+            despesa_op_pct = 0.0
             
             frete_unit = 0.0
             desp_adm_unit = 0.0
             comissao_unit = 0.0
+            despesa_op_unit = 0.0
             
             frete_total = 0.0
             desp_adm_total = 0.0
             comissao_total = 0.0
+            despesa_op_total = 0.0
         else:
             frete_unit = (frete_total / total_qty) if total_qty > 0 else 0.0
             desp_adm_unit = (desp_adm_total / total_qty) if total_qty > 0 else 0.0
             comissao_unit = (comissao_total / total_qty) if total_qty > 0 else 0.0
+            despesa_op_unit = (despesa_op_total / total_qty) if total_qty > 0 else 0.0
             
             # Percentages relative to total revenue (venda_consolidada)
             frete_pct = (frete_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
             desp_adm_pct = (desp_adm_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
             comissao_pct = (comissao_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
+            despesa_op_pct = (despesa_op_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
         
         expenses_summary = [
             {"name": "Despesas Administrativas", "percent": f"{desp_adm_pct:.2f}%", "unit": format_currency(desp_adm_unit), "total": format_currency(desp_adm_total)},
             {"name": "Frete de Venda", "percent": f"{frete_pct:.2f}%", "unit": format_currency(frete_unit), "total": format_currency(frete_total)},
             {"name": "Comissão de Venda", "percent": f"{comissao_pct:.2f}%", "unit": format_currency(comissao_unit), "total": format_currency(comissao_total)},
+            {"name": "Despesas Operacionais", "percent": f"{despesa_op_pct:.2f}%", "unit": format_currency(despesa_op_unit), "total": format_currency(despesa_op_total)},
         ]
         expenses_totals = {
-            "percent": f"{(desp_adm_pct + frete_pct + comissao_pct):.2f}%",
-            "unit": format_currency(desp_adm_unit + frete_unit + comissao_unit),
-            "total": format_currency(desp_adm_total + frete_total + comissao_total)
+            "percent": f"{(desp_adm_pct + frete_pct + comissao_pct + despesa_op_pct):.2f}%",
+            "unit": format_currency(desp_adm_unit + frete_unit + comissao_unit + despesa_op_unit),
+            "total": format_currency(desp_adm_total + frete_total + comissao_total + despesa_op_total)
         }
 
         # 5. Opportunity dict

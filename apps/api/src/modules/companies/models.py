@@ -238,6 +238,12 @@ class CommercialPolicy(Base):
     fator_limite = Column(Numeric(10, 4), nullable=False)
     manutencao_ano_percentual = Column(Numeric(5, 2), nullable=False)
     comissao_percentual = Column(Numeric(5, 2), nullable=False)
+    tipo_comissionamento = Column(String(50), nullable=False, default="TRADICIONAL")
+    dsr_percentual = Column(Numeric(5, 2), nullable=False, default=0.0)
+    fgts_percentual = Column(Numeric(5, 2), nullable=False, default=0.0)
+    inss_percentual = Column(Numeric(5, 2), nullable=False, default=0.0)
+    demais_incidencias_percentual = Column(Numeric(5, 2), nullable=False, default=0.0)
+    despesa_operacional_percentual = Column(Numeric(5, 2), nullable=False, default=0.0)
     ativo = Column(Boolean, default=True)
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=func.now())
@@ -245,6 +251,7 @@ class CommercialPolicy(Base):
 
     company = relationship("Company", back_populates="commercial_policies")
     roles = relationship("CommercialPolicyRole", back_populates="policy", cascade="all, delete-orphan")
+    service_commissions = relationship("CommercialPolicyServiceCommission", back_populates="policy", cascade="all, delete-orphan")
 
 class CommercialPolicyRole(Base):
     __tablename__ = "company_commercial_policy_roles"
@@ -254,4 +261,23 @@ class CommercialPolicyRole(Base):
     created_at = Column(DateTime(timezone=True), default=func.now())
 
     policy = relationship("CommercialPolicy", back_populates="roles")
+
+
+class CommercialPolicyServiceCommission(Base):
+    __tablename__ = "commercial_policy_service_commissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    own_service_id = Column(UUID(as_uuid=True), ForeignKey("own_services.id", ondelete="CASCADE"), nullable=False, index=True)
+    commission_installments = Column(Integer, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    display_order = Column(Integer, nullable=True)
+    tenant_id = Column(String, nullable=False, index=True)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    policy = relationship("CommercialPolicy", back_populates="service_commissions")
+    own_service = relationship("OwnService")
+
 

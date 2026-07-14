@@ -1,10 +1,21 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Shield, Star, CheckCircle2 } from 'lucide-react';
 import { api } from '../../../services/api';
 
 interface Role {
     id: string;
     name: string;
+}
+
+interface CommercialPolicyServiceCommission {
+    id?: string;
+    own_service_id: string;
+    commission_installments: number;
+    ativo: boolean;
+    display_order?: number;
+    own_service?: {
+        nome_servico: string;
+    };
 }
 
 interface CommercialPolicy {
@@ -16,6 +27,13 @@ interface CommercialPolicy {
     ativo: boolean;
     is_default: boolean;
     roles: { role_id: string }[];
+    service_commissions?: CommercialPolicyServiceCommission[];
+    tipo_comissionamento?: 'TRADICIONAL' | 'COMISSAO_POR_DENTRO';
+    dsr_percentual?: number;
+    fgts_percentual?: number;
+    inss_percentual?: number;
+    demais_incidencias_percentual?: number;
+    despesa_operacional_percentual?: number;
 }
 
 interface Props {
@@ -26,6 +44,7 @@ interface Props {
 export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
     const [policies, setPolicies] = useState<CommercialPolicy[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [ownServices, setOwnServices] = useState<{ id: string; nome_servico: string }[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
@@ -39,12 +58,14 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
         setLoading(true);
         setError('');
         try {
-            const [rolesRes, policiesRes] = await Promise.all([
+            const [rolesRes, policiesRes, servicesRes] = await Promise.all([
                 api.get('/roles'),
-                api.get(`/companies/${companyId}/commercial-policies`)
+                api.get(`/companies/${companyId}/commercial-policies`),
+                api.get('/own-services')
             ]);
             setRoles(rolesRes.data);
             setPolicies(policiesRes.data);
+            setOwnServices(servicesRes.data);
         } catch (err: any) {
             console.error('Error loading commercial policies', err);
             setError('Erro ao carregar políticas comerciais.');
@@ -61,7 +82,14 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
             comissao_percentual: 0,
             ativo: true,
             is_default: policies.length === 0, // First policy becomes default
-            roles: []
+            roles: [],
+            service_commissions: [],
+            tipo_comissionamento: 'TRADICIONAL',
+            dsr_percentual: 0,
+            fgts_percentual: 0,
+            inss_percentual: 0,
+            demais_incidencias_percentual: 0,
+            despesa_operacional_percentual: 0
         }]);
     };
 
@@ -126,7 +154,19 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                     comissao_percentual: p.comissao_percentual,
                     ativo: p.ativo,
                     is_default: p.is_default,
-                    roles: p.roles.map(r => r.role_id)
+                    roles: p.roles.map(r => r.role_id),
+                    service_commissions: (p.service_commissions || []).map(sc => ({
+                        own_service_id: sc.own_service_id,
+                        commission_installments: sc.commission_installments,
+                        ativo: sc.ativo,
+                        display_order: sc.display_order
+                    })),
+                    tipo_comissionamento: p.tipo_comissionamento || 'TRADICIONAL',
+                    dsr_percentual: p.dsr_percentual || 0,
+                    fgts_percentual: p.fgts_percentual || 0,
+                    inss_percentual: p.inss_percentual || 0,
+                    demais_incidencias_percentual: p.demais_incidencias_percentual || 0,
+                    despesa_operacional_percentual: p.despesa_operacional_percentual || 0
                 };
 
                 if (p.id) {
@@ -144,6 +184,14 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
             setSaving(false);
         }
     };
+
+    if (loading) {
+        return (
+            <div className="p-8 text-center text-text-muted text-sm animate-pulse">
+                Carregando políticas comerciais...
+            </div>
+        );
+    }
 
     if (!companyId) {
         return (
@@ -308,6 +356,94 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                         </div>
                                     </div>
 
+                                    {/* New Commission type & breakdown fields */}
+                                    <div className="grid grid-cols-2 gap-4 mt-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                Modelo de Comissão
+                                            </label>
+                                            <select
+                                                className="input-field w-full"
+                                                value={policy.tipo_comissionamento || 'TRADICIONAL'}
+                                                onChange={(e) => handlePolicyChange(index, 'tipo_comissionamento', e.target.value)}
+                                                disabled={isReadOnly}
+                                            >
+                                                <option value="TRADICIONAL">Tradicional</option>
+                                                <option value="COMISSAO_POR_DENTRO">Comissionamento por Dentro (Custo Fechado)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                Despesa Operacional (%)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                className="input-field w-full"
+                                                value={policy.despesa_operacional_percentual || 0}
+                                                onChange={(e) => handlePolicyChange(index, 'despesa_operacional_percentual', parseFloat(e.target.value) || 0)}
+                                                disabled={isReadOnly}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {(policy.tipo_comissionamento === 'COMISSAO_POR_DENTRO') && (
+                                        <div className="grid grid-cols-4 gap-4 mt-3 p-3 bg-bg-secondary rounded-lg border border-border-subtle">
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                    DSR (%)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="input-field w-full bg-white"
+                                                    value={policy.dsr_percentual || 0}
+                                                    onChange={(e) => handlePolicyChange(index, 'dsr_percentual', parseFloat(e.target.value) || 0)}
+                                                    disabled={isReadOnly}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                    FGTS (%)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="input-field w-full bg-white"
+                                                    value={policy.fgts_percentual || 0}
+                                                    onChange={(e) => handlePolicyChange(index, 'fgts_percentual', parseFloat(e.target.value) || 0)}
+                                                    disabled={isReadOnly}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                    INSS (%)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="input-field w-full bg-white"
+                                                    value={policy.inss_percentual || 0}
+                                                    onChange={(e) => handlePolicyChange(index, 'inss_percentual', parseFloat(e.target.value) || 0)}
+                                                    disabled={isReadOnly}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                                                    Outras Incid. (%)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="input-field w-full bg-white"
+                                                    value={policy.demais_incidencias_percentual || 0}
+                                                    onChange={(e) => handlePolicyChange(index, 'demais_incidencias_percentual', parseFloat(e.target.value) || 0)}
+                                                    disabled={isReadOnly}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Controls row */}
                                     <div className="flex items-center gap-4 pt-1">
                                         {/* Active toggle */}
@@ -376,6 +512,123 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Commission by Service Rules */}
+                            <div className="border-t border-border-subtle/60 p-4 bg-bg-surface/50">
+                                <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <Star className="w-3.5 h-3.5 text-brand-primary" />
+                                    Comissão Adicional por Serviço (Tático / NOC / etc.)
+                                </h4>
+                                <p className="text-xs text-text-muted mb-3">
+                                    Defina a quantidade de parcelas/mensalidades que serão convertidas em comissão adicional para este perfil comercial ao incluir o serviço em kits de Locação/Comodato.
+                                </p>
+
+                                {/* List of existing service commission rules */}
+                                <div className="space-y-2 mb-3">
+                                    {(policy.service_commissions || []).map((sc, scIndex) => (
+                                        <div key={sc.id || scIndex} className="flex items-center gap-3 p-3 bg-bg-secondary rounded-lg border border-border-subtle text-sm">
+                                            <div className="flex-1 font-semibold text-text-primary">
+                                                {sc.own_service?.nome_servico || ownServices.find(s => s.id === sc.own_service_id)?.nome_servico || 'Serviço'}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-xs text-text-muted font-medium">Mensalidades:</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    disabled={isReadOnly}
+                                                    className="input-field w-20 bg-white"
+                                                    value={sc.commission_installments}
+                                                    onChange={(e) => {
+                                                        const newVal = parseInt(e.target.value) || 1;
+                                                        const updatedComms = [...(policy.service_commissions || [])];
+                                                        updatedComms[scIndex] = { ...updatedComms[scIndex], commission_installments: newVal };
+                                                        handlePolicyChange(index, 'service_commissions', updatedComms);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        disabled={isReadOnly}
+                                                        checked={sc.ativo}
+                                                        onChange={(e) => {
+                                                            const updatedComms = [...(policy.service_commissions || [])];
+                                                            updatedComms[scIndex] = { ...updatedComms[scIndex], ativo: e.target.checked };
+                                                            handlePolicyChange(index, 'service_commissions', updatedComms);
+                                                        }}
+                                                        className="w-3.5 h-3.5 accent-brand-primary"
+                                                    />
+                                                    <span className="text-xs text-text-secondary font-medium">Ativo</span>
+                                                </label>
+                                            </div>
+                                            {!isReadOnly && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const updatedComms = [...(policy.service_commissions || [])];
+                                                        updatedComms.splice(scIndex, 1);
+                                                        handlePolicyChange(index, 'service_commissions', updatedComms);
+                                                    }}
+                                                    className="text-text-muted hover:text-red-500 p-1 rounded transition-colors"
+                                                    title="Excluir regra"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    
+                                    {(!policy.service_commissions || policy.service_commissions.length === 0) && (
+                                        <div className="text-xs text-text-muted italic p-2 bg-bg-secondary rounded border border-dashed border-border-subtle text-center">
+                                            Nenhum serviço comissionado configurado para esta política.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Form to add new rule */}
+                                {!isReadOnly && (
+                                    <div className="flex flex-wrap items-center gap-3 p-3 bg-bg-secondary/40 rounded-lg border border-border-subtle/50">
+                                        <div className="flex-1 min-w-[200px]">
+                                            <select
+                                                id={`add-service-select-${index}`}
+                                                className="input-field w-full"
+                                                defaultValue=""
+                                                onChange={(e) => {
+                                                    const svcId = e.target.value;
+                                                    if (!svcId) return;
+                                                    
+                                                    // Check if already exists
+                                                    const exists = (policy.service_commissions || []).some(sc => sc.own_service_id === svcId);
+                                                    if (exists) {
+                                                        alert('Este serviço já está configurado nesta política.');
+                                                        e.target.value = "";
+                                                        return;
+                                                    }
+                                                    
+                                                    const newRule: CommercialPolicyServiceCommission = {
+                                                        own_service_id: svcId,
+                                                        commission_installments: 1,
+                                                        ativo: true,
+                                                        own_service: {
+                                                            nome_servico: ownServices.find(s => s.id === svcId)?.nome_servico || 'Serviço'
+                                                        }
+                                                    };
+                                                    
+                                                    const updatedComms = [...(policy.service_commissions || []), newRule];
+                                                    handlePolicyChange(index, 'service_commissions', updatedComms);
+                                                    e.target.value = "";
+                                                }}
+                                            >
+                                                <option value="">-- Adicionar comissão para serviço --</option>
+                                                {ownServices.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.nome_servico}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

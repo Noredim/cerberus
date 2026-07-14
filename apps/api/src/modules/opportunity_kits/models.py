@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Numeric, Text, Integer
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.own_services.models  # ensure OwnService is in registry for mapper
@@ -17,6 +17,8 @@ class OpportunityKit(Base):
     sales_proposal_id = Column(UUID(as_uuid=True), ForeignKey("sales_proposals.id", ondelete="CASCADE"), nullable=True, index=True)
     licitacao_id = Column(UUID(as_uuid=True), ForeignKey("licitacoes.id", ondelete="CASCADE"), nullable=True, index=True)
     licitacao_item_id = Column(UUID(as_uuid=True), ForeignKey("licitacao_items.id", ondelete="CASCADE"), nullable=True, index=True)
+    commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="SET NULL"), nullable=True, index=True)
+    comissionamento_detalhado = Column(JSONB, nullable=True)
     
     # Dados Gerais
     nome_kit = Column(String(255), nullable=False)
@@ -62,6 +64,12 @@ class OpportunityKit(Base):
     perc_frete_venda = Column(Numeric(6, 4), nullable=False, default=0.0)
     perc_despesas_adm = Column(Numeric(6, 4), nullable=False, default=0.0)
     perc_comissao = Column(Numeric(6, 4), nullable=False, default=0.0)
+    tipo_comissionamento = Column(String(50), nullable=False, default="TRADICIONAL")
+    perc_dsr = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_fgts = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_inss = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_demais_incidencias = Column(Numeric(6, 4), nullable=False, default=0.0)
+    perc_despesa_operacional = Column(Numeric(6, 4), nullable=False, default=0.0)
 
     
     # Custos Operacionais Mensais
@@ -91,6 +99,7 @@ class OpportunityKit(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     company = relationship("Company")
+    commercial_policy = relationship("CommercialPolicy")
     licitacao = relationship("Licitacao", back_populates="kits", foreign_keys=[licitacao_id])
     licitacao_item = relationship("LicitacaoItem", back_populates="kits", foreign_keys=[licitacao_item_id])
     items = relationship("OpportunityKitItem", back_populates="kit", cascade="all, delete-orphan")

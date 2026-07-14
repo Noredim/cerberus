@@ -264,23 +264,46 @@ class CommercialPolicyRoleBase(BaseModel):
     role_id: str
     model_config = ConfigDict(from_attributes=True)
 
+class CommercialPolicyServiceCommissionBase(BaseModel):
+    own_service_id: UUID
+    commission_installments: int = Field(..., ge=1)
+    ativo: bool = True
+    display_order: Optional[int] = None
+
+class CommercialPolicyServiceCommissionCreate(CommercialPolicyServiceCommissionBase):
+    pass
+
+class CommercialPolicyServiceCommissionOut(CommercialPolicyServiceCommissionBase):
+    id: UUID
+    commercial_policy_id: UUID
+    model_config = ConfigDict(from_attributes=True)
+
 class CommercialPolicyBase(BaseModel):
     nome_politica: str = Field(..., max_length=25)
     fator_limite: Decimal = Field(..., ge=1)
     manutencao_ano_percentual: Decimal = Field(..., ge=0)
     comissao_percentual: Decimal = Field(..., ge=0)
+    tipo_comissionamento: str = "TRADICIONAL"
+    dsr_percentual: Decimal = Decimal("0.0")
+    fgts_percentual: Decimal = Decimal("0.0")
+    inss_percentual: Decimal = Decimal("0.0")
+    demais_incidencias_percentual: Decimal = Decimal("0.0")
+    despesa_operacional_percentual: Decimal = Decimal("0.0")
     ativo: bool = True
     is_default: bool = False
 
 class CommercialPolicyCreate(CommercialPolicyBase):
     roles: List[str] = []  # List of role UUID strings
+    service_commissions: List[CommercialPolicyServiceCommissionCreate] = []
 
 class CommercialPolicyUpdate(CommercialPolicyBase):
     roles: Optional[List[str]] = None
+    service_commissions: Optional[List[CommercialPolicyServiceCommissionCreate]] = None
 
 class CommercialPolicyOut(CommercialPolicyBase):
     id: UUID
     company_id: UUID
     roles: List[CommercialPolicyRoleBase] = []
+    service_commissions: List[CommercialPolicyServiceCommissionOut] = []
     model_config = ConfigDict(from_attributes=True)
 

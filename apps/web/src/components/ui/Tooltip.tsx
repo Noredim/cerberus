@@ -5,9 +5,10 @@ interface TooltipProps {
   children: React.ReactNode;
   content: React.ReactNode;
   variant?: 'dark' | 'light';
+  className?: string;
 }
 
-export function Tooltip({ children, content, variant = 'dark' }: TooltipProps) {
+export function Tooltip({ children, content, variant = 'dark', className }: TooltipProps) {
   const [show, setShow] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
   const [offset, setOffset] = useState(0);
@@ -71,7 +72,7 @@ export function Tooltip({ children, content, variant = 'dark' }: TooltipProps) {
       ref={ref}
       onMouseEnter={handleEnter}
       onMouseLeave={() => setShow(false)}
-      className="inline-flex cursor-help relative"
+      className={`relative cursor-help ${className ? className : 'inline-flex'}`}
     >
       {children}
       {show &&

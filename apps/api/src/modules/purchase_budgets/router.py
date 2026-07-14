@@ -119,3 +119,15 @@ def delete_budget(
 ):
     PurchaseBudgetService.delete_budget(db, current_user.tenant_id, budget_id, company_id)
     return None
+
+@router.patch("/{budget_id}/link-sales-budget", response_model=schemas.PurchaseBudgetOut)
+def link_sales_budget(
+    budget_id: UUID,
+    sales_budget_id: Optional[UUID] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    return PurchaseBudgetService.link_sales_budget(db, current_user.tenant_id, UUID(company_id), budget_id, sales_budget_id)

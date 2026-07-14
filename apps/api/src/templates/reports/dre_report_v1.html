@@ -323,11 +323,53 @@
                 <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.frete.valor) }}</td>
             </tr>
             {% endif %}
-            <tr class="row-item">
-                <td class="row-item-detail">(-) Comissão de Venda</td>
-                <td class="text-right">{{ format_percent(saidas.despesas_venda.comissao.percent) }}%</td>
-                <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.comissao.valor) }}</td>
+            {% set comissao_total_val = (saidas.despesas_venda.comissao.valor or 0) + (saidas.despesas_venda.comissao_dsr.valor or 0) + (saidas.despesas_venda.comissao_fgts.valor or 0) + (saidas.despesas_venda.comissao_inss.valor or 0) + (saidas.despesas_venda.comissao_demais.valor or 0) %}
+            {% set comissao_total_pct = (comissao_total_val / entradas.total_entradas * 100) if entradas.total_entradas > 0 else 0 %}
+            <tr class="row-item" style="font-weight: bold;">
+                <td class="row-item-detail">(-) Comissão</td>
+                <td class="text-right">{{ format_percent(comissao_total_pct) }}%</td>
+                <td class="text-right">R$ {{ format_currency(comissao_total_val) }}</td>
             </tr>
+            <tr class="row-item">
+                <td class="row-item-detail" style="padding-left: 30px; font-size: 11px; color: #64748b;">(-) Comissão Líquida</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">{{ format_percent(saidas.despesas_venda.comissao.percent) }}%</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">R$ {{ format_currency(saidas.despesas_venda.comissao.valor) }}</td>
+            </tr>
+            {% if saidas.despesas_venda.comissao_dsr and saidas.despesas_venda.comissao_dsr.valor > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail" style="padding-left: 30px; font-size: 11px; color: #64748b;">(-) DSR sobre Comissão</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">{{ format_percent(saidas.despesas_venda.comissao_dsr.percent) }}%</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">R$ {{ format_currency(saidas.despesas_venda.comissao_dsr.valor) }}</td>
+            </tr>
+            {% endif %}
+            {% if saidas.despesas_venda.comissao_fgts and saidas.despesas_venda.comissao_fgts.valor > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail" style="padding-left: 30px; font-size: 11px; color: #64748b;">(-) FGTS sobre Comissão</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">{{ format_percent(saidas.despesas_venda.comissao_fgts.percent) }}%</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">R$ {{ format_currency(saidas.despesas_venda.comissao_fgts.valor) }}</td>
+            </tr>
+            {% endif %}
+            {% if saidas.despesas_venda.comissao_inss and saidas.despesas_venda.comissao_inss.valor > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail" style="padding-left: 30px; font-size: 11px; color: #64748b;">(-) INSS sobre Comissão</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">{{ format_percent(saidas.despesas_venda.comissao_inss.percent) }}%</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">R$ {{ format_currency(saidas.despesas_venda.comissao_inss.valor) }}</td>
+            </tr>
+            {% endif %}
+            {% if saidas.despesas_venda.comissao_demais and saidas.despesas_venda.comissao_demais.valor > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail" style="padding-left: 30px; font-size: 11px; color: #64748b;">(-) Encargos sobre Comissão (Outros)</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">{{ format_percent(saidas.despesas_venda.comissao_demais.percent) }}%</td>
+                <td class="text-right" style="font-size: 11px; color: #64748b;">R$ {{ format_currency(saidas.despesas_venda.comissao_demais.valor) }}</td>
+            </tr>
+            {% endif %}
+            {% if saidas.despesas_venda.despesa_operacional and saidas.despesas_venda.despesa_operacional.valor > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail">(-) Despesa Operacional</td>
+                <td class="text-right">{{ format_percent(saidas.despesas_venda.despesa_operacional.percent) }}%</td>
+                <td class="text-right">R$ {{ format_currency(saidas.despesas_venda.despesa_operacional.valor) }}</td>
+            </tr>
+            {% endif %}
             <tr class="row-item">
                 <td class="row-item-detail">(-) Despesas Administrativas</td>
                 <td class="text-right">{{ format_percent(saidas.despesas_venda.despesas_administrativas.percent) }}%</td>
