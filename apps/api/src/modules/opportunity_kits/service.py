@@ -1162,6 +1162,7 @@ class OpportunityKitService:
                 "imposto_instalacao": round(locals().get("imposto_instalacao_upfront", Decimal("0.0")), 2),  # type: ignore
                 "valor_comissao_locacao": round(locals().get("valor_comissao_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_despesas_adm_locacao": round(locals().get("valor_despesas_adm_locacao", Decimal("0.0")), 2),  # type: ignore
+                "valor_despesa_operacional_loc": round(locals().get("valor_despesa_operacional_loc", Decimal("0.0")), 2),  # type: ignore
                 "vlt_comissao_dsr_loc": round(locals().get("vlt_comissao_dsr_loc", Decimal("0.0")), 2),  # type: ignore
                 "vlt_comissao_fgts_loc": round(locals().get("vlt_comissao_fgts_loc", Decimal("0.0")), 2),  # type: ignore
                 "vlt_comissao_inss_loc": round(locals().get("vlt_comissao_inss_loc", Decimal("0.0")), 2),  # type: ignore

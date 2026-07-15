@@ -3024,6 +3024,13 @@ class OpportunitiesReportService:
         total_fat_mensal_total_calc = 0.0
         total_vlr_total_calc = 0.0
         total_impostos_mensal_calc = 0.0
+        
+        total_comissao_liquida = 0.0
+        total_comissao_dsr = 0.0
+        total_comissao_fgts = 0.0
+        total_comissao_inss = 0.0
+        total_comissao_demais = 0.0
+        total_despesa_operacional = 0.0
 
         prazo_contrato = opportunity.prazo_contrato_meses or 36
         prazo_instalacao = opportunity.prazo_instalacao_meses or 0
@@ -3071,6 +3078,13 @@ class OpportunitiesReportService:
                 impostos_mensal_item = impostos_mensal_val * qty
                 custo_op_mensal = custo_op_mensal_val * qty
                 
+                total_comissao_liquida += float(s.get("valor_comissao_locacao") or 0.0) * qty
+                total_comissao_dsr += float(s.get("vlt_comissao_dsr_loc") or 0.0) * qty
+                total_comissao_fgts += float(s.get("vlt_comissao_fgts_loc") or 0.0) * qty
+                total_comissao_inss += float(s.get("vlt_comissao_inss_loc") or 0.0) * qty
+                total_comissao_demais += float(s.get("vlt_comissao_demais_loc") or 0.0) * qty
+                total_despesa_operacional += float(s.get("valor_despesa_operacional_loc") or 0.0) * qty
+                
                 purchase_tax_unit = float(s.get("total_difal_kit") or 0.0) + float(s.get("total_st_kit") or 0.0) + float(s.get("total_ipi_kit") or 0.0)
             else:
                 custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
@@ -3089,6 +3103,13 @@ class OpportunitiesReportService:
                 fat_mensal_total_item = float(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0) * qty
                 impostos_mensal_item = float(item.impostos_mensal or 0.0) * qty
                 
+                total_comissao_liquida += base_com * qty
+                total_comissao_dsr += float(item.dsr_mensal or 0.0) * qty
+                total_comissao_fgts += float(item.fgts_mensal or 0.0) * qty
+                total_comissao_inss += float(item.inss_mensal or 0.0) * qty
+                total_comissao_demais += float(item.demais_incidencias_mensal or 0.0) * qty
+                total_despesa_operacional += float(item.despesa_operacional_mensal or 0.0) * qty
+                
                 difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
                 purchase_tax_unit = difal_unit + st_unit + ipi_unit
                 
@@ -3097,7 +3118,7 @@ class OpportunitiesReportService:
                     kit = kits_by_id.get(item.opportunity_kit_id)
                     if kit:
                         custo_monitoramento = float(kit.custo_monitoramento_unitario or 0.0)
-
+ 
                 if item.opportunity_kit_id:
                     custo_op_mensal = (float(item.custo_op_mensal_kit or 0.0) + custo_monitoramento) * qty
                 else:
@@ -3650,6 +3671,13 @@ class OpportunitiesReportService:
             "lucro_mensal_total": format_currency(retorno_mensal_liquido),
             
             "comissao_total_str": format_currency(comissao_total_aquisicao),
+            "total_comissao_liquida": format_currency(total_comissao_liquida),
+            "total_comissao_dsr": format_currency(total_comissao_dsr),
+            "total_comissao_fgts": format_currency(total_comissao_fgts),
+            "total_comissao_inss": format_currency(total_comissao_inss),
+            "total_comissao_demais": format_currency(total_comissao_demais),
+            "total_despesa_operacional": format_currency(total_despesa_operacional),
+            "total_comissao_cheia_mais_desp": format_currency(comissao_total_aquisicao + total_despesa_operacional),
             "impostos_instalacao_str": format_currency(impostos_instalacao_total),
             "desp_adm_instalacao_str": format_currency(desp_adm_instalacao_total),
             "desp_adm_instalacao_val": desp_adm_instalacao_total,
