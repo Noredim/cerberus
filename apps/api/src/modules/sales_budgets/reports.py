@@ -3378,16 +3378,9 @@ class OpportunitiesReportService:
                 else:
                     total_own_services_cost += custo_total
 
-        if total_own_services_cost > 0.0:
-            company_name = (opportunity.company.nome_fantasia or opportunity.company.razao_social or "STELMAT").upper()
-            mapped_by_supplier["own_services"] = {
-                "fornecedor": company_name,
-                "total_sem_imposto": total_own_services_cost,
-                "total_imposto": 0.0,
-                "total_custo": total_own_services_cost,
-                "forma_pagamento": "Próprio / Interno"
-            }
-            total_fornecedores_produtos += total_own_services_cost
+        # Exclude own services from the CAPEX initial investment/acquisition cost as they are recurring opex support costs.
+        total_aquisicao_calc = max(0.0, total_aquisicao_calc - total_own_services_cost)
+        total_aquisicao_sem_comissao = total_aquisicao_calc
 
         # Format supplier summaries to strings
         supplier_summaries_list = []
