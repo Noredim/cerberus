@@ -214,19 +214,19 @@
             </table>
         </div>
 
-        <!-- TABELA DE DESPESAS, FRETE E COMISSÃO -->
+        <!-- TABELA DE COMISSÃO E DESPESAS OPERACIONAIS -->
         <div class="tables-col">
-            <div class="section-title">Despesas, Frete e Comissão</div>
+            <div class="section-title">Comissão e Desp. Operacionais</div>
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Despesa</th>
+                        <th>Item</th>
                         <th class="text-right" style="width: 30%;">% Fat.</th>
                         <th class="text-right" style="width: 40%;">Val. Total</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for e in expenses_summary %}
+                    {% for e in commission_expenses_summary %}
                     <tr>
                         <td>{{ e.name }}</td>
                         <td class="text-right">{{ e.percent }}</td>
@@ -235,8 +235,36 @@
                     {% endfor %}
                     <tr class="total-row">
                         <td>TOTAL</td>
-                        <td class="text-right">{{ expenses_totals.percent }}</td>
-                        <td class="text-right" style="color: #0f172a;">R$ {{ expenses_totals.total }}</td>
+                        <td class="text-right">{{ commission_expenses_totals.percent }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ commission_expenses_totals.total }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TABELA DE DESPESAS ADMINISTRATIVAS E FRETE -->
+        <div class="tables-col">
+            <div class="section-title">Desp. Administrativas e Frete</div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-right" style="width: 30%;">% Fat.</th>
+                        <th class="text-right" style="width: 40%;">Val. Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in admin_expenses_summary %}
+                    <tr>
+                        <td>{{ e.name }}</td>
+                        <td class="text-right">{{ e.percent }}</td>
+                        <td class="text-right font-bold">R$ {{ e.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td>TOTAL</td>
+                        <td class="text-right">{{ admin_expenses_totals.percent }}</td>
+                        <td class="text-right" style="color: #0f172a;">R$ {{ admin_expenses_totals.total }}</td>
                     </tr>
                 </tbody>
             </table>

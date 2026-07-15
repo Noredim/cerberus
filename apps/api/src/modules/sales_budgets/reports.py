@@ -2273,6 +2273,26 @@ class OpportunitiesReportService:
             "unit": format_currency(desp_adm_unit + frete_unit + comissao_unit + despesa_op_unit),
             "total": format_currency(desp_adm_total + frete_total + comissao_total + despesa_op_total)
         }
+        
+        commission_expenses_summary = [
+            {"name": "Comissão de Venda", "percent": f"{comissao_pct:.2f}%", "unit": format_currency(comissao_unit), "total": format_currency(comissao_total)},
+            {"name": "Despesas Operacionais", "percent": f"{despesa_op_pct:.2f}%", "unit": format_currency(despesa_op_unit), "total": format_currency(despesa_op_total)},
+        ]
+        commission_expenses_totals = {
+            "percent": f"{(comissao_pct + despesa_op_pct):.2f}%",
+            "unit": format_currency(comissao_unit + despesa_op_unit),
+            "total": format_currency(comissao_total + despesa_op_total)
+        }
+        
+        admin_expenses_summary = [
+            {"name": "Despesas Administrativas", "percent": f"{desp_adm_pct:.2f}%", "unit": format_currency(desp_adm_unit), "total": format_currency(desp_adm_total)},
+            {"name": "Frete de Venda", "percent": f"{frete_pct:.2f}%", "unit": format_currency(frete_unit), "total": format_currency(frete_total)},
+        ]
+        admin_expenses_totals = {
+            "percent": f"{(desp_adm_pct + frete_pct):.2f}%",
+            "unit": format_currency(desp_adm_unit + frete_unit),
+            "total": format_currency(desp_adm_total + frete_total)
+        }
 
         # 5. Opportunity dict
         status_labels = {
@@ -2353,6 +2373,10 @@ class OpportunitiesReportService:
             purchase_taxes_totals=purchase_taxes_totals,
             expenses_summary=expenses_summary,
             expenses_totals=expenses_totals,
+            commission_expenses_summary=commission_expenses_summary,
+            commission_expenses_totals=commission_expenses_totals,
+            admin_expenses_summary=admin_expenses_summary,
+            admin_expenses_totals=admin_expenses_totals,
             auditoria=auditoria
         )
 
