@@ -22,8 +22,9 @@ const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 
 
 export function BudgetsList() {
   const navigate = useNavigate();
-  const [page] = useState(1);
-  const pageSize = 10;
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 25;
   const [budgets, setBudgets] = useState<PurchaseBudget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -35,6 +36,8 @@ export function BudgetsList() {
           params: { skip: (page - 1) * pageSize, limit: pageSize }
         });
         setBudgets(response.data as PurchaseBudget[]);
+        const count = parseInt(response.headers['x-total-count'] || '0', 10);
+        setTotalCount(count);
       } catch (err) {
         console.error(err);
       } finally {
@@ -43,6 +46,8 @@ export function BudgetsList() {
     }
     load();
   }, [page, pageSize]);
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <div className="space-y-6 w-full">
@@ -80,14 +85,14 @@ export function BudgetsList() {
             <tbody className="divide-y divide-border-subtle bg-surface">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-text-muted">
+                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-brand-primary" />
                     Carregando orçamentos...
                   </td>
                 </tr>
               ) : (!budgets || budgets.length === 0) ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-text-muted flex flex-col items-center justify-center">
+                  <td colSpan={7} className="px-6 py-12 text-center text-text-muted flex flex-col items-center justify-center">
                     <FileText className="w-12 h-12 text-text-muted/30 mb-3" />
                     Nenhum orçamento encontrado.
                   </td>
@@ -130,6 +135,72 @@ export function BudgetsList() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border-subtle bg-surface px-6 py-4">
+            <div className="flex flex-1 justify-between sm:hidden">
+              <button
+                onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+                className="relative inline-flex items-center rounded-md border border-border-subtle bg-surface px-4 py-2 text-sm font-medium text-text-muted hover:bg-bg-deep disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={page === totalPages}
+                className="relative ml-3 inline-flex items-center rounded-md border border-border-subtle bg-surface px-4 py-2 text-sm font-medium text-text-muted hover:bg-bg-deep disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Próximo
+              </button>
+            </div>
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-text-muted">
+                  Mostrando <span className="font-semibold text-text-primary">{(page - 1) * pageSize + 1}</span> a{' '}
+                  <span className="font-semibold text-text-primary">
+                    {Math.min(page * pageSize, totalCount)}
+                  </span>{' '}
+                  de <span className="font-semibold text-text-primary">{totalCount}</span> resultados
+                </p>
+              </div>
+              <div>
+                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <button
+                    onClick={() => setPage(1)}
+                    disabled={page === 1}
+                    className="relative inline-flex items-center rounded-l-md px-3 py-2 text-text-muted ring-1 ring-inset ring-border-subtle hover:bg-bg-deep focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Primeira
+                  </button>
+                  <button
+                    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+                    disabled={page === 1}
+                    className="relative inline-flex items-center px-3 py-2 text-text-muted ring-1 ring-inset ring-border-subtle hover:bg-bg-deep focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Anterior
+                  </button>
+                  <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-text-primary ring-1 ring-inset ring-border-subtle">
+                    Página {page} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={page === totalPages}
+                    className="relative inline-flex items-center px-3 py-2 text-text-muted ring-1 ring-inset ring-border-subtle hover:bg-bg-deep focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Próxima
+                  </button>
+                  <button
+                    onClick={() => setPage(totalPages)}
+                    disabled={page === totalPages}
+                    className="relative inline-flex items-center rounded-r-md px-3 py-2 text-text-muted ring-1 ring-inset ring-border-subtle hover:bg-bg-deep focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Última
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

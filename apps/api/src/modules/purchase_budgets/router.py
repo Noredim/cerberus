@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, Query, File, UploadFile, HTTPException, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -17,6 +17,7 @@ router = APIRouter(
 
 @router.get("", response_model=List[schemas.PurchaseBudgetOut])
 def list_budgets(
+    response: Response,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     supplier_id: Optional[str] = None,
@@ -29,6 +30,8 @@ def list_budgets(
     """
     Listar orcamentos de compra.
     """
+    total = PurchaseBudgetService.get_budgets_count(db, current_user.tenant_id, supplier_id, sales_budget_id, company_id, licitacao_id)
+    response.headers["X-Total-Count"] = str(total)
     return PurchaseBudgetService.get_budgets(db, current_user.tenant_id, skip, limit, supplier_id, sales_budget_id, company_id, licitacao_id)
 
 @router.get("/{budget_id}", response_model=schemas.PurchaseBudgetOut)

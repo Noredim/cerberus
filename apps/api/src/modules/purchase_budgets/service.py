@@ -32,6 +32,19 @@ class PurchaseBudgetService:
         return query.order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
+    def get_budgets_count(db: Session, tenant_id: str, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None):
+        query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
+        if company_id:
+            query = query.filter(PurchaseBudget.company_id == company_id)
+        if supplier_id:
+            query = query.filter(PurchaseBudget.supplier_id == supplier_id)
+        if sales_budget_id:
+            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+        if licitacao_id:
+            query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
+        return query.count()
+
+    @staticmethod
     def get_budget_by_id(db: Session, tenant_id: str, budget_id: UUID, company_id: Optional[str] = None) -> PurchaseBudget:
         query = db.query(PurchaseBudget).filter(PurchaseBudget.id == budget_id, PurchaseBudget.tenant_id == tenant_id)
         if company_id:
