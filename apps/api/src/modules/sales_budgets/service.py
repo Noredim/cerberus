@@ -2246,6 +2246,9 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             
         return difal, st, ipi
 
+    venda_oportunidade_total_venda = Decimal("0.0")
+    venda_oportunidade_total_custo = Decimal("0.0")
+
     kits_financials = {}
     for kit in kits:
         override_factor = None
@@ -2301,16 +2304,15 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 vlt_custo_op_manutencao += (m_maint_residual + Decimal(str(summary.get("custo_mensal_bloco_7") or 0.0))) * qty
                 vlt_custo_op_monitoramento += Decimal(str(summary.get("custo_monitoramento_unitario") or 0.0)) * qty
             else: # LOCACAO or COMODATO
-                total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo_contrato * qty
+                # Faturamento da mensalidade total da locação / comodato
+                # O valor cheio da mensalidade é valor_mensal_locacao_base + manutencao_mensal + venda_unit_monitoramento
+                vlr_recorrente_mensal = Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) + \
+                                        Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0)) + \
+                                        Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
+                vlr_instalacao = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
                 
-                vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
-                vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
-                vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
-                
-                total_servicos += (
-                    vlr_inst +
-                    (vlr_manut + vlr_monit) * prazo_contrato
-                ) * qty
+                total_produtos += vlr_recorrente_mensal * prazo_contrato * qty
+                total_servicos += vlr_instalacao * qty
                 
                 # Custos operacionais do kit de locação/comodato (multiplicados pelo prazo do contrato)
                 m_maint_residual = Decimal(str(summary.get("custo_operacional_mensal_kit") or 0.0))
@@ -2436,6 +2438,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                         (prazo_contrato if (is_rental_opp and kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]) else Decimal("1.0")) *
                         qty)
 
+        # Accumulate for dynamic MKP calculation
+        if not is_rental_opp or kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+            venda_oportunidade_total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0.0)) * qty
+            venda_oportunidade_total_custo += Decimal(str(summary.get("custo_aquisicao_total") or summary.get("custo_total") or 0.0)) * qty
+
         # Accumulate supplier values from kit components
         for item_sum in fin.get("item_summaries", []):
             p_id = item_sum.get("product_id")
@@ -2509,6 +2516,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + base_forn_total
                 
                 total_produtos += Decimal(str(item.total_venda or 0.0))
+                venda_oportunidade_total_venda += Decimal(str(item.total_venda or 0.0))
+                venda_oportunidade_total_custo += cost_total
                 custo_base_produtos += Decimal(str(item.custo_unit_base or 0.0)) * item_qty
                 
                 # Purchase Taxes
@@ -2520,6 +2529,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 base_forn = Decimal(str(item.custo_unit_base or 0.0))
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
                 total_servicos += Decimal(str(item.total_venda or 0.0))
+                venda_oportunidade_total_venda += Decimal(str(item.total_venda or 0.0))
+                venda_oportunidade_total_custo += base_forn * item_qty
 
             total_venda += Decimal(str(item.total_venda or 0.0))
             
@@ -2648,13 +2659,6 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         impostos_locacao_csll = Decimal("0.0")
         impostos_locacao_irpj = Decimal("0.0")
         impostos_locacao_iss = Decimal("0.0")
-
-        impostos_instalacao_pis = Decimal("0.0")
-        impostos_instalacao_cofins = Decimal("0.0")
-        impostos_instalacao_csll = Decimal("0.0")
-        impostos_instalacao_irpj = Decimal("0.0")
-        impostos_instalacao_iss = Decimal("0.0")
-        impostos_instalacao_icms = Decimal("0.0")
 
         prazo_instalacao = opportunity.prazo_instalacao_meses or 0
 
@@ -2909,6 +2913,12 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             })
     detalhes_manutencao.sort(key=lambda x: x["valor"], reverse=True)
         
+    venda_markup = Decimal("1.0")
+    if venda_oportunidade_total_custo > Decimal("0.0"):
+        venda_markup = venda_oportunidade_total_venda / venda_oportunidade_total_custo
+    else:
+        venda_markup = opportunity.venda_markup_produtos or Decimal("1.0")
+
     return {
         "header": {
             "cliente_nome": customer.nome_fantasia or customer.razao_social if customer else "Não informado",
@@ -2918,7 +2928,11 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             "responsavel_nome": responsavel_nome,
             "numero_oportunidade": opportunity.numero_orcamento or "Sem número",
             "data_fechamento": data_fechamento,
-            "is_rental": is_rental
+            "is_rental": is_rental,
+            "has_venda": len(opportunity.items) > 0,
+            "has_locacao": len(opportunity.rental_items) > 0,
+            "prazo_contrato_meses": opportunity.prazo_contrato_meses,
+            "venda_markup_produtos": float(round(venda_markup, 4))
         },
         "entradas": {
             "total_produtos": round(total_produtos, 2),

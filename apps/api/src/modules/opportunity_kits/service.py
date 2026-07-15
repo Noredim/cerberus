@@ -693,6 +693,16 @@ class OpportunityKitService:
                     CommercialPolicy.ativo == True
                 ).first()
                 
+            if not policy:
+                from src.modules.companies.models import CommercialPolicy
+                comp_id = kit.company_id or (sales_budget.company_id if sales_budget else None)
+                if comp_id:
+                    policy = self.db.query(CommercialPolicy).filter(
+                        CommercialPolicy.company_id == comp_id,
+                        CommercialPolicy.is_default == True,
+                        CommercialPolicy.ativo == True
+                    ).first()
+                
             if policy and policy.service_commissions:
                 # Group active service commission rules
                 rules_by_service = {
@@ -726,6 +736,30 @@ class OpportunityKitService:
                                 "regra": f"{rule.commission_installments} mensalidade" if rule.commission_installments == 1 else f"{rule.commission_installments} mensalidades",
                                 "valor_destinado": float(round(valor_destinado_comissao_servico, 2))
                             })
+                
+                # Check for items that are SERVICO_PROPRIO in Block 6 (kit.costs)
+                if hasattr(kit, 'costs') and kit.costs:
+                    for cost in kit.costs:
+                        if getattr(cost, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" and getattr(cost, "own_service_id", None):
+                            rule = rules_by_service.get(cost.own_service_id)
+                            if rule:
+                                # For LOCACAO/COMODATO, the service selling price in Block 6 is: cost.valor_unitario * kit.fator_manutencao
+                                fator_manut_val = Decimal(str(kit.fator_manutencao if kit.fator_manutencao is not None else 1))
+                                venda_mensal_unit = Decimal(str(cost.valor_unitario or 0)) * fator_manut_val
+                                
+                                qty = Decimal(str(cost.quantidade or 1.0))
+                                valor_mensal_total_servico = venda_mensal_unit * qty
+                                valor_destinado_comissao_servico = valor_mensal_total_servico * Decimal(str(rule.commission_installments))
+                                
+                                valor_destinado_comissao_servicos += valor_destinado_comissao_servico
+                                
+                                service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio")
+                                comissao_venda_origens.append({
+                                    "origem": f"Serviço {service_name} (B6)",
+                                    "base": float(round(valor_mensal_total_servico, 2)),
+                                    "regra": f"{rule.commission_installments} mensalidade" if rule.commission_installments == 1 else f"{rule.commission_installments} mensalidades",
+                                    "valor_destinado": float(round(valor_destinado_comissao_servico, 2))
+                                })
             
             # Add service commissions to total com_destinado_loc
             com_destinado_loc += valor_destinado_comissao_servicos
@@ -960,7 +994,7 @@ class OpportunityKitService:
         imposto_inst = locals().get("imposto_instalacao_upfront", Decimal("0.0"))
         
         if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
-            investimento_total = custo_aquisicao_kit + imposto_inst + valor_com_loc
+            investimento_total = custo_aquisicao_kit + imposto_inst + locals().get("com_destinado_loc", Decimal("0.0"))
             if kit.tipo_contrato == "COMODATO":
                 investimento_total += locals().get("valor_despesa_operacional_loc", Decimal("0.0"))
             
@@ -976,7 +1010,7 @@ class OpportunityKitService:
         if kit.tipo_contrato in ["LOCACAO", "COMODATO"]:
             locacao_liquida = venda_equipamentos_total - locals().get("imposto_equip_loc", Decimal("0.0"))
             if locacao_liquida > 0:
-                numerator = custo_aquisicao_kit + valor_com_loc
+                numerator = custo_aquisicao_kit + locals().get("com_destinado_loc", Decimal("0.0"))
                 if kit.tipo_contrato == "COMODATO":
                     numerator += locals().get("valor_despesa_operacional_loc", Decimal("0.0"))
                 roi_equipamento_meses = float(numerator / locacao_liquida)

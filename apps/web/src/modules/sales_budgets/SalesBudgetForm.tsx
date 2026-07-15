@@ -585,6 +585,7 @@ export function SalesBudgetForm() {
   const [vendaQtdMesesManutencao, setVendaQtdMesesManutencao] = useState(0);
   // Controls the tax-detail info modal in Parâmetros Padrão (Venda)
   const [showTaxModal, setShowTaxModal] = useState(false);
+  const [showCommissionDetailModal, setShowCommissionDetailModal] = useState(false);
   // Company _venda taxes — always reflects current company config, used only by the modal (read-only)
   const [companyVendaTaxes, setCompanyVendaTaxes] = useState({ pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms_interno: 0, icms_externo: 0 });
   // Company MKP for Venda — drives the 4 fatorMargem fields reactively (race-condition safe)
@@ -4637,8 +4638,24 @@ export function SalesBudgetForm() {
                                 }>
                                   <div className="p-4 hover:bg-green-500/5 transition-colors cursor-help group bg-green-500/10">
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-green-500 mb-2 flex items-center justify-between opacity-80 group-hover:opacity-100 transition-opacity">
-                                      Comissão e Desp. Op.
-                                      <HelpCircle className="w-3" />
+                                      <span>Comissão e Desp. Op.</span>
+                                      <div className="flex items-center gap-1.5 pointer-events-auto">
+                                        {rentalItems.some(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0) && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              e.preventDefault();
+                                              setShowCommissionDetailModal(true);
+                                            }}
+                                            className="flex items-center gap-1 px-1.5 py-0.5 text-[8px] bg-green-500/20 text-green-400 hover:text-white hover:bg-green-500/30 rounded border border-green-500/30 transition-colors uppercase font-bold cursor-pointer"
+                                          >
+                                            <Eye className="w-3 h-3" />
+                                            Origens
+                                          </button>
+                                        )}
+                                        <HelpCircle className="w-3" />
+                                      </div>
                                     </span>
                                     <div className="flex flex-col">
                                       <p className="text-lg font-black text-green-500">{fmt(grossTotalCard)}</p>
@@ -4663,88 +4680,7 @@ export function SalesBudgetForm() {
           );
         })()}
 
-        {rentalItems.some(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0) && (
-          <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
-            <h3 className="font-semibold text-text-primary text-base flex items-center gap-2">
-              <Star className="w-5 h-5 text-amber-500" />
-              Detalhamento de Origens da Comissão
-            </h3>
-            <div className="space-y-4">
-              {rentalItems.filter(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0).map((ri, riIndex) => (
-                <div key={riIndex} className="border border-border-subtle rounded-lg p-4 bg-bg-secondary/30">
-                  <h4 className="font-semibold text-text-secondary text-sm mb-3">
-                    {ri.opportunity_kit_id ? `Kit: ${ri.kit_raw?.nome_kit || 'Kit Locação'}` : 'Item Locação'} (Quantidade: {ri.quantidade})
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-border-subtle bg-bg-secondary text-text-muted font-bold uppercase tracking-wider">
-                          <th className="px-3 py-2">Origem</th>
-                          <th className="px-3 py-2 text-right">Base</th>
-                          <th className="px-3 py-2 text-center">Regra</th>
-                          <th className="px-3 py-2 text-right">Valor Destinado (Unit.)</th>
-                          <th className="px-3 py-2 text-right">Valor Destinado (Total)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border-subtle text-text-primary">
-                        {ri.kit_comissionamento_detalhado.comissao_venda.map((orig: any, origIdx: number) => (
-                          <tr key={origIdx} className="hover:bg-bg-secondary/40">
-                            <td className="px-3 py-2 font-medium">{orig.origem}</td>
-                            <td className="px-3 py-2 text-right">{fmt(orig.base)}</td>
-                            <td className="px-3 py-2 text-center font-semibold text-brand-primary">{orig.regra}</td>
-                            <td className="px-3 py-2 text-right">{fmt(orig.valor_destinado)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{fmt(orig.valor_destinado * ri.quantidade)}</td>
-                          </tr>
-                        ))}
-                        {/* Total Destinado Row */}
-                        <tr className="bg-bg-secondary/60 font-bold border-t border-border-default">
-                          <td className="px-3 py-2">Total Destinado (Capex)</td>
-                          <td className="px-3 py-2 text-right"></td>
-                          <td className="px-3 py-2 text-center"></td>
-                          <td className="px-3 py-2 text-right">{fmt(ri.kit_comissao)}</td>
-                          <td className="px-3 py-2 text-right text-green-600">{fmt((ri.kit_comissao || 0) * ri.quantidade)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
 
-                  {/* Incidences Breakdown */}
-                  {ri.kit_comissionamento_detalhado.detalhamento_incidencias && (
-                    <div className="mt-4 border-t border-border-subtle pt-3">
-                      <h5 className="font-semibold text-text-muted text-xs uppercase tracking-wider mb-2">Detalhamento das Incidências (Unitário)</h5>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
-                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Comissão Efetiva</span>
-                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.comissao_efetiva)}</span>
-                        </div>
-                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
-                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">DSR</span>
-                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.dsr)}</span>
-                        </div>
-                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
-                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">FGTS</span>
-                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.fgts)}</span>
-                        </div>
-                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
-                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">INSS</span>
-                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.inss)}</span>
-                        </div>
-                        <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
-                          <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Demais Incid.</span>
-                          <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.demais)}</span>
-                        </div>
-                        <div className="p-2.5 bg-green-500/5 border border-green-500/20 rounded-lg">
-                          <span className="block text-[10px] text-green-600 font-bold uppercase tracking-wider">Total</span>
-                          <span className="text-sm font-black text-green-600">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.total)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Rental Parameters */}
         <div className="bg-surface border border-border-subtle rounded-xl p-5 space-y-4">
@@ -5819,7 +5755,13 @@ export function SalesBudgetForm() {
           ) : (
             <div className="space-y-6">
               {/* Header Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-bg-deep/10 border border-border-subtle/50 p-4 rounded-xl">
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 bg-bg-deep/10 border border-border-subtle/50 p-4 rounded-xl ${
+                dreData.header.has_locacao && dreData.header.has_venda
+                  ? 'lg:grid-cols-6'
+                  : dreData.header.has_locacao || dreData.header.has_venda
+                  ? 'lg:grid-cols-5'
+                  : 'lg:grid-cols-4'
+              }`}>
                 <div>
                   <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Cliente</span>
                   <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.cliente_nome}</span>
@@ -5840,6 +5782,20 @@ export function SalesBudgetForm() {
                     Fechamento: {dreData.header.data_fechamento ? new Date(dreData.header.data_fechamento).toLocaleDateString('pt-BR') : 'Pendente'}
                   </span>
                 </div>
+                {dreData.header.has_locacao && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">Prazo de Contrato</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">{dreData.header.prazo_contrato_meses} meses</span>
+                  </div>
+                )}
+                {dreData.header.has_venda && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted block">MKP Geral Venda</span>
+                    <span className="text-sm font-semibold text-text-primary block mt-0.5">
+                      {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(dreData.header.venda_markup_produtos)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* DRV Structure */}
@@ -5862,7 +5818,11 @@ export function SalesBudgetForm() {
                     <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
                       <td className="py-2.5 px-6 flex items-center gap-2">
                         <span className="text-xs text-emerald-600 font-bold">(+)</span>
-                        {dreData.header.is_rental ? 'Valores de Mensalidades' : 'Valor Total Produtos'}
+                        {dreData.header.has_venda && dreData.header.has_locacao
+                          ? 'Locação / Comodato (Mensalidades)'
+                          : dreData.header.is_rental
+                          ? 'Valores de Mensalidades'
+                          : 'Valor Total Produtos'}
                       </td>
                       <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
                       <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_produtos)}</td>
@@ -5870,7 +5830,11 @@ export function SalesBudgetForm() {
                     <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors">
                       <td className="py-2.5 px-6 flex items-center gap-2">
                         <span className="text-xs text-emerald-600 font-bold">(+)</span>
-                        {dreData.header.is_rental ? 'Instalação de Equipamentos / Serviços em Comodato' : 'Valor Total Serviços'}
+                        {dreData.header.has_venda && dreData.header.has_locacao
+                          ? 'Venda (Equipamentos / Serviços)'
+                          : dreData.header.is_rental
+                          ? 'Instalação de Equipamentos / Serviços em Comodato'
+                          : 'Valor Total Serviços'}
                       </td>
                       <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
                       <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_servicos)}</td>
@@ -6408,6 +6372,96 @@ export function SalesBudgetForm() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Commission Origin Details Modal */}
+      {showCommissionDetailModal && (
+        <Modal
+          isOpen={showCommissionDetailModal}
+          onClose={() => setShowCommissionDetailModal(false)}
+          title="Detalhamento de Origens da Comissão"
+          maxWidth="5xl"
+        >
+          <div className="space-y-4 font-sans text-xs">
+            {rentalItems.filter(ri => ri.kit_comissionamento_detalhado?.comissao_venda?.length > 0).map((ri, riIndex) => (
+              <div key={riIndex} className="border border-border-subtle rounded-lg p-4 bg-bg-secondary/30">
+                <h4 className="font-semibold text-text-secondary text-sm mb-3">
+                  {ri.opportunity_kit_id ? `Kit: ${ri.kit_raw?.nome_kit || 'Kit Locação'}` : 'Item Locação'} (Quantidade: {ri.quantidade})
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border-subtle bg-bg-secondary text-text-muted font-bold uppercase tracking-wider">
+                        <th className="px-3 py-2">Origem</th>
+                        <th className="px-3 py-2 text-right">Base</th>
+                        <th className="px-3 py-2 text-center">Regra</th>
+                        <th className="px-3 py-2 text-right">Valor Destinado (Unit.)</th>
+                        <th className="px-3 py-2 text-right">Valor Destinado (Total)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle text-text-primary">
+                      {ri.kit_comissionamento_detalhado.comissao_venda.map((orig: any, origIdx: number) => (
+                        <tr key={origIdx} className="hover:bg-bg-secondary/40">
+                          <td className="px-3 py-2 font-medium">{orig.origem}</td>
+                          <td className="px-3 py-2 text-right">{fmt(orig.base)}</td>
+                          <td className="px-3 py-2 text-center font-semibold text-brand-primary">{orig.regra}</td>
+                          <td className="px-3 py-2 text-right">{fmt(orig.valor_destinado)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{fmt(orig.valor_destinado * ri.quantidade)}</td>
+                        </tr>
+                      ))}
+                      {/* Total Destinado Row */}
+                      <tr className="bg-bg-secondary/60 font-bold border-t border-border-default">
+                        <td className="px-3 py-2">Total Destinado (Capex)</td>
+                        <td className="px-3 py-2 text-right"></td>
+                        <td className="px-3 py-2 text-center"></td>
+                        <td className="px-3 py-2 text-right">{fmt(ri.kit_comissao)}</td>
+                        <td className="px-3 py-2 text-right text-green-600">{fmt((ri.kit_comissao || 0) * ri.quantidade)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Incidences Breakdown */}
+                {ri.kit_comissionamento_detalhado.detalhamento_incidencias && (
+                  <div className="mt-4 border-t border-border-subtle pt-3">
+                    <h5 className="font-semibold text-text-muted text-xs uppercase tracking-wider mb-2">Detalhamento das Incidências (Unitário)</h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                      <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                        <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Comissão Efetiva</span>
+                        <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.comissao_efetiva)}</span>
+                      </div>
+                      <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                        <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">DSR</span>
+                        <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.dsr)}</span>
+                      </div>
+                      <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                        <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">FGTS</span>
+                        <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.fgts)}</span>
+                      </div>
+                      <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                        <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">INSS</span>
+                        <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.inss)}</span>
+                      </div>
+                      <div className="p-2.5 bg-bg-surface border border-border-subtle rounded-lg">
+                        <span className="block text-[10px] text-text-muted font-medium uppercase tracking-wider">Demais Incid.</span>
+                        <span className="text-sm font-bold text-text-primary">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.demais)}</span>
+                      </div>
+                      <div className="p-2.5 bg-green-500/5 border border-green-500/20 rounded-lg">
+                        <span className="block text-[10px] text-green-600 font-bold uppercase tracking-wider">Total</span>
+                        <span className="text-sm font-black text-green-600">{fmt(ri.kit_comissionamento_detalhado.detalhamento_incidencias.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="flex justify-end pt-4 border-t border-border-subtle">
+              <Button onClick={() => setShowCommissionDetailModal(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Workflow Transition Confirmation Modal */}

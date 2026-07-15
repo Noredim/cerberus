@@ -41,11 +41,17 @@
                 <strong>Cliente:</strong> {{ header.cliente_nome }}<br/>
                 <strong>Cidade/UF:</strong> {{ header.cidade }} - {{ header.estado }}<br/>
                 <strong>Vendedor:</strong> {{ header.vendedor_nome }}
+                {% if header.has_locacao %}
+                <br/><strong>Prazo de Contrato:</strong> {{ header.prazo_contrato_meses }} meses
+                {% endif %}
             </td>
             <td style="width: 50%;">
                 <strong>Responsáveis:</strong> {{ header.responsavel_nome }}<br/>
                 <strong>Data de Fechamento:</strong> {{ header.data_fechamento_str }}<br/>
                 <strong>Emissão do Relatório:</strong> {{ emissao_data_hora }}
+                {% if header.has_venda %}
+                <br/><strong>MKP Geral Venda:</strong> {{ "%.2f"|format(header.venda_markup_produtos)|replace('.', ',') }}
+                {% endif %}
             </td>
         </tr>
     </table>
@@ -87,7 +93,18 @@
                 <td class="text-right">100,00%</td>
                 <td class="text-right">R$ {{ format_currency(entradas.total_entradas) }}</td>
             </tr>
-            {% if header.is_rental %}
+            {% if header.has_venda and header.has_locacao %}
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Locação / Comodato (Mensalidades)</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.total_produtos, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_produtos) }}</td>
+            </tr>
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Venda (Equipamentos / Serviços)</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.total_servicos, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.total_servicos) }}</td>
+            </tr>
+            {% elif header.is_rental %}
             <tr class="row-item">
                 <td class="row-item-detail">(+) Valores de Mensalidades</td>
                 <td class="text-right">{{ format_percent_ratio(entradas.total_produtos, entradas.total_entradas) }}%</td>

@@ -1765,12 +1765,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
             const valorDespesasAdmLocacao = financials?.summary?.valor_despesas_adm_locacao || 0;
             const valorDespesaOperacional = financials?.summary?.vlt_despesa_operacional || 0;
-            const totalComissaoDespOp = valorComissaoLocacao + (form.tipo_contrato === 'COMODATO' ? valorDespesaOperacional : 0);
             const isVendaContract = form.tipo_contrato === 'VENDA_EQUIPAMENTOS';
             const vltComissaoDsr = isVendaContract ? (financials?.summary?.vlt_comissao_dsr || 0) : (financials?.summary?.vlt_comissao_dsr_loc || 0);
             const vltComissaoFgts = isVendaContract ? (financials?.summary?.vlt_comissao_fgts || 0) : (financials?.summary?.vlt_comissao_fgts_loc || 0);
             const vltComissaoInss = isVendaContract ? (financials?.summary?.vlt_comissao_inss || 0) : (financials?.summary?.vlt_comissao_inss_loc || 0);
             const vltComissaoDemais = isVendaContract ? (financials?.summary?.vlt_comissao_demais || 0) : (financials?.summary?.vlt_comissao_demais_loc || 0);
+            const comissaoBruta = valorComissaoLocacao + vltComissaoDsr + vltComissaoFgts + vltComissaoInss + vltComissaoDemais;
+            const totalComissaoDespOp = comissaoBruta + (form.tipo_contrato === 'COMODATO' ? valorDespesaOperacional : 0);
             const impostoInstalacao = financials?.summary?.imposto_instalacao || 0;
             const investimentoTotal = financials?.summary?.investimento_total || 0;
             const roiDenominador = financials?.summary?.roi_denominador || 0;
