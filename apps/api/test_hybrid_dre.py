@@ -48,12 +48,12 @@ def run_hybrid_dre_tests():
         print(f"venda_markup_produtos: {venda_markup_produtos}")
         print("----------------------------\n")
         
-        assert total_produtos == Decimal("3041.64"), f"Expected total_produtos 3041.64, got {total_produtos}"
+        assert total_produtos == Decimal("9485.04"), f"Expected total_produtos 9485.04, got {total_produtos}"
         assert total_servicos == Decimal("2505.10"), f"Expected total_servicos 2505.10, got {total_servicos}"
-        assert total_entradas == Decimal("5546.74"), f"Expected total_entradas 5546.74, got {total_entradas}"
-        assert total_saidas == Decimal("4791.50"), f"Expected total_saidas 4791.50, got {total_saidas}"
-        assert lucro_ebitda == Decimal("755.24"), f"Expected lucro_ebitda 755.24, got {lucro_ebitda}"
-        assert margem_liquida == Decimal("13.62"), f"Expected margem_liquida 13.62, got {margem_liquida}"
+        assert total_entradas == Decimal("11990.14"), f"Expected total_entradas 11990.14, got {total_entradas}"
+        assert total_saidas == Decimal("8903.90"), f"Expected total_saidas 8903.90, got {total_saidas}"
+        assert lucro_ebitda == Decimal("3086.24"), f"Expected lucro_ebitda 3086.24, got {lucro_ebitda}"
+        assert margem_liquida == Decimal("25.74"), f"Expected margem_liquida 25.74, got {margem_liquida}"
         assert has_venda is True, "Expected has_venda to be True"
         assert has_locacao is True, "Expected has_locacao to be True"
         assert prazo_contrato_meses == 12, f"Expected prazo_contrato_meses 12, got {prazo_contrato_meses}"

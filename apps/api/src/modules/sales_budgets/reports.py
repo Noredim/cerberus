@@ -3049,7 +3049,13 @@ class OpportunitiesReportService:
             if kit_financials_summary:
                 s = kit_financials_summary
                 custo_total = float(s.get("custo_aquisicao_total") or 0.0) * qty
-                comissao_val = float(s.get("valor_comissao_locacao") or 0.0)
+                comissao_val = (
+                    float(s.get("valor_comissao_locacao") or 0.0) +
+                    float(s.get("vlt_comissao_dsr_loc") or 0.0) +
+                    float(s.get("vlt_comissao_fgts_loc") or 0.0) +
+                    float(s.get("vlt_comissao_inss_loc") or 0.0) +
+                    float(s.get("vlt_comissao_demais_loc") or 0.0)
+                )
                 instalacao_val = float(s.get("vlr_instal_calc") or 0.0)
                 manut_val = float(s.get("vlt_manut") or 0.0)
                 monitoramento_val = float(s.get("venda_unit_monitoramento") or 0.0)
@@ -3068,7 +3074,15 @@ class OpportunitiesReportService:
                 purchase_tax_unit = float(s.get("total_difal_kit") or 0.0) + float(s.get("total_st_kit") or 0.0) + float(s.get("total_ipi_kit") or 0.0)
             else:
                 custo_total = (float(item.kit_investimento_total or 0.0) * qty) or (float(item.custo_total_aquisicao or 0.0) * qty)
-                comissao_item = float(item.kit_comissao or 0.0) * qty
+                base_com = float(item.comissao_mensal or 0.0) or float(item.kit_comissao or 0.0)
+                comissao_val = (
+                    base_com +
+                    float(item.dsr_mensal or 0.0) +
+                    float(item.fgts_mensal or 0.0) +
+                    float(item.inss_mensal or 0.0) +
+                    float(item.demais_incidencias_mensal or 0.0)
+                )
+                comissao_item = comissao_val * qty
                 instalacao_item = float(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0) * qty
                 manut_mes_item = float(item.kit_vlt_manut or item.manutencao_locacao or 0.0) * qty
                 monitoramento_item = float(item.kit_venda_unit_monitoramento or 0.0) * qty
