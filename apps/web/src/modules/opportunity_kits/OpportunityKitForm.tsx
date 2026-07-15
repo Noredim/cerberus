@@ -286,6 +286,8 @@ interface KitFormValues {
     quantidade: number;
     valor_unitario: number;
     descricao_item?: string;
+    product?: any;
+    own_service?: any;
   }>;
   monthly_costs: Array<{
     servico: string;

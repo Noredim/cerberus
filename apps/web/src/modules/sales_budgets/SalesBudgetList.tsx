@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Receipt, Search, Eye, Trash2, Info } from 'lucide-react';
+import { Plus, Receipt, Search, Eye, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
-import { Tooltip } from '../../components/ui/Tooltip';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 import Modal from '../../components/modals/Modal';
 import { AlertCircle } from 'lucide-react';

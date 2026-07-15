@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Star, Link2Off } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api } from '../../services/api';
@@ -6414,7 +6414,7 @@ export function SalesBudgetForm() {
                         <td className="px-3 py-2">Total Destinado (Capex)</td>
                         <td className="px-3 py-2 text-right"></td>
                         <td className="px-3 py-2 text-center"></td>
-                        <td className="px-3 py-2 text-right">{fmt(ri.kit_comissao)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(ri.kit_comissao || 0)}</td>
                         <td className="px-3 py-2 text-right text-green-600">{fmt((ri.kit_comissao || 0) * ri.quantidade)}</td>
                       </tr>
                     </tbody>
