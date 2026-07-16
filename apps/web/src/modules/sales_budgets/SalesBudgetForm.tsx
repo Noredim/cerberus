@@ -9,6 +9,7 @@ import { AddRentalItemModal } from './AddRentalItemModal';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
 import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 import { EvolutivoChartModal } from './EvolutivoChartModal';
+import { PurchaseBudgetSearchModal } from '../../components/modals/PurchaseBudgetSearchModal';
 import { BudgetItemsGrid } from '../purchase_budgets/components/BudgetItemsGrid';
 import { Building2, UserSquare2, BadgeDollarSign, Truck as TruckIcon } from 'lucide-react';
 import Modal from '../../components/modals/Modal';
@@ -634,6 +635,7 @@ export function SalesBudgetForm() {
   const [opportunityPurchaseBudgets, setOpportunityPurchaseBudgets] = useState<any[]>([]);
   const [availablePurchaseBudgets, setAvailablePurchaseBudgets] = useState<any[]>([]);
   const [selectedPurchaseBudgetToLink, setSelectedPurchaseBudgetToLink] = useState<string>('');
+  const [isPurchaseSearchModalOpen, setIsPurchaseSearchModalOpen] = useState(false);
   const [showPurchaseBudgetModal, setShowPurchaseBudgetModal] = useState(false);
   const [savingPurchaseBudget, setSavingPurchaseBudget] = useState(false);
 
@@ -798,18 +800,19 @@ export function SalesBudgetForm() {
       
       const resAvail = await api.get('/purchase-budgets', { params: { limit: 500 } });
       const allBudgets = Array.isArray(resAvail.data) ? resAvail.data : (resAvail.data.items || []);
-      // Filter budgets that don't have sales_budget_id
-      const available = allBudgets.filter((b: any) => !b.sales_budget_id);
+      // Show all budgets that are not already linked to the current sales budget
+      const available = allBudgets.filter((b: any) => b.sales_budget_id !== id);
       setAvailablePurchaseBudgets(available);
     } catch (err) {
       console.error('Failed to load purchase budgets:', err);
     }
   };
 
-  const handleLinkPurchaseBudget = async () => {
-    if (!selectedPurchaseBudgetToLink) return;
+  const handleLinkPurchaseBudget = async (pbId?: string) => {
+    const targetId = pbId || selectedPurchaseBudgetToLink;
+    if (!targetId) return;
     try {
-      await api.patch(`/purchase-budgets/${selectedPurchaseBudgetToLink}/link-sales-budget`, null, {
+      await api.patch(`/purchase-budgets/${targetId}/link-sales-budget`, null, {
         params: { sales_budget_id: id }
       });
       await loadPurchaseBudgetsData();
@@ -1099,7 +1102,7 @@ export function SalesBudgetForm() {
                 ...item,
                 custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
                 kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
-                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0),
+                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0) + Number(kit.summary?.vlr_instal_calc || 0),
                 custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
                 ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
                 frete_unit: Number(kit.summary?.total_frete_kit || 0),
@@ -1113,13 +1116,13 @@ export function SalesBudgetForm() {
                 kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
                 kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
                 kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
-                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0) + Number(kit.summary?.vlr_instal_calc || 0),
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
                 kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
                 kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
                 kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
                 kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
-                kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.valor_venda_instalacao ?? kit.summary?.vlr_instal_calc ?? 0),
                 kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
                 kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
@@ -1240,13 +1243,13 @@ export function SalesBudgetForm() {
         tipo_contrato_kit: kit.tipo_contrato,
         kit_taxa_juros_mensal: kit.taxa_juros_mensal != null ? Number(kit.taxa_juros_mensal) : null,
         kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
-        kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0),
+        kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0) + Number(kit.summary?.vlr_instal_calc || 0),
         kit_pis: Number(kit.aliq_pis || 0),
         kit_cofins: Number(kit.aliq_cofins || 0),
         kit_csll: Number(kit.aliq_csll || 0),
         kit_irpj: Number(kit.aliq_irpj || 0),
         kit_iss: Number(kit.aliq_iss || 0),
-
+ 
         quantidade: Number(kit.quantidade_kits || 1),
         perc_instalacao_item: null,
         valor_instalacao_item: 0,
@@ -1271,15 +1274,15 @@ export function SalesBudgetForm() {
         kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
         kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
         desp_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
-
+ 
         // Grid Detailed Fields Snapshot
-        kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+        kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0) + Number(kit.summary?.vlr_instal_calc || 0),
         kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
         kit_comissao: Number(kit.summary?.valor_comissao_locacao || 0),
         kit_perc_comissao: Number(kit.perc_comissao || 0),
         kit_despesas_adm: Number(kit.summary?.valor_despesas_adm_locacao || 0),
         kit_perc_despesas_adm: Number(kit.perc_despesas_adm || 0),
-        kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+        kit_vlr_instal_calc: Number(kit.summary?.valor_venda_instalacao ?? kit.summary?.vlr_instal_calc ?? 0),
         kit_parcela_locacao: Number(kit.summary?.valor_parcela_locacao || 0),
         kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
         kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
@@ -1963,6 +1966,7 @@ export function SalesBudgetForm() {
         t.despAdmTotal += despAdmMensal * (prazoContratoMeses || 1);
 
         const vlrInstalItem = Number(i.kit_vlr_instal_calc || i.valor_instalacao_item || 0) * q;
+        t.totalInstalacao += vlrInstalItem;
         t.faturamentoTotal += (faturamentoMensalItem * prazoItem) + vlrInstalItem;
         t.impostosTotal += impostos * prazoItem;
         t.custoOpTotal += custoOpMensal * prazoItem;
@@ -2514,7 +2518,7 @@ export function SalesBudgetForm() {
                 ...item,
                 custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
                 kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
-                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0),
+                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0) + Number(kit.summary?.vlr_instal_calc || 0),
                 custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
                 ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
                 frete_unit: Number(kit.summary?.total_frete_kit || 0),
@@ -2528,13 +2532,13 @@ export function SalesBudgetForm() {
                 kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
                 kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
                 kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
-                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0) + Number(kit.summary?.vlr_instal_calc || 0),
                 kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
                 kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
                 kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
                 kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
                 kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
-                kit_vlr_instal_calc: Number(kit.summary?.vlr_instal_calc || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.valor_venda_instalacao ?? kit.summary?.vlr_instal_calc ?? 0),
                 kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
                 kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
                 kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
@@ -3532,6 +3536,16 @@ export function SalesBudgetForm() {
             acc.comissaoInss += (Number(s.vlt_comissao_inss) || 0) * q;
             acc.comissaoDemais += (Number(s.vlt_comissao_demais) || 0) * q;
 
+            const raw = kit.kit_raw || {};
+            const isInstalacaoInclusa = !!raw.instalacao_inclusa;
+            const percentInstalacao = Number(raw.percentual_instalacao) || 0;
+            const instSale = (Number(s.valor_venda_instalacao) || 0) * q;
+            acc.valorVendaInstalacao += instSale;
+            acc.valorVendaProdutos += ((kit.venda_equip_unit || 0) * q) - instSale;
+            if (isInstalacaoInclusa && percentInstalacao > 0) {
+              acc.percentualInstalacao = percentInstalacao;
+            }
+
             return acc;
           }, {
             custoAquisicaoLimpo: 0, mat: 0, mao: 0, totalVenda: 0, totalManutencao: 0, vltManutMensal: 0,
@@ -3540,7 +3554,8 @@ export function SalesBudgetForm() {
             vLTSt: 0, vLTIpi: 0, vLTDifal: 0,
             pis: 0, cofins: 0, csll: 0, irpj: 0, iss: 0, icms: 0, credito_icms: 0,
             comissao: 0, despAdm: 0, freteVenda: 0,
-            despOperacional: 0, comissaoDsr: 0, comissaoFgts: 0, comissaoInss: 0, comissaoDemais: 0
+            despOperacional: 0, comissaoDsr: 0, comissaoFgts: 0, comissaoInss: 0, comissaoDemais: 0,
+            valorVendaInstalacao: 0, valorVendaProdutos: 0, percentualInstalacao: 0
           });
 
           // Cálculos de Impostos = Impostos de Saída (B4+B5)
@@ -3585,10 +3600,23 @@ export function SalesBudgetForm() {
                     <div className="text-2xl font-bold text-text-primary mb-4">{fmt(t.custoAquisicaoLimpo + t.freteCompra)}</div>
                     
                     <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-text-muted">
-                      <div className="flex justify-between items-center">
-                        <span>Equipamentos e Impostos</span>
-                        <span className="font-semibold">{fmt(t.custoAquisicaoLimpo)}</span>
-                      </div>
+                      {t.mao > 0 ? (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span>Custo de Equipamentos</span>
+                            <span className="font-semibold">{fmt(t.custoAquisicaoLimpo - t.mao)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Custo de Instalação</span>
+                            <span className="font-semibold">{fmt(t.mao)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between items-center">
+                          <span>Equipamentos e Impostos</span>
+                          <span className="font-semibold">{fmt(t.custoAquisicaoLimpo)}</span>
+                        </div>
+                      )}
                       {t.freteCompra > 0 && (
                         <div className="flex justify-between items-center text-amber-600 font-medium">
                           <span>(+) Frete de Compra</span>
@@ -3616,6 +3644,18 @@ export function SalesBudgetForm() {
                           {((t.custoAquisicaoLimpo + t.freteCompra) > 0 ? (t.totalVenda / (t.custoAquisicaoLimpo + t.freteCompra)) : 0).toFixed(4)}
                         </span>
                       </div>
+                      {t.valorVendaInstalacao > 0 && (
+                        <>
+                          <div className="flex justify-between items-center border-t border-border-subtle/50 pt-1.5 mt-1.5">
+                            <span>Venda de Equipamentos</span>
+                            <span className="font-semibold text-text-primary">{fmt(t.valorVendaProdutos)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Instala. Embutida {t.percentualInstalacao > 0 ? `${t.percentualInstalacao}%` : ''}</span>
+                            <span className="font-semibold text-text-primary">{fmt(t.valorVendaInstalacao)}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-text-muted mt-auto pt-3 border-t border-border-subtle uppercase">
@@ -3974,14 +4014,14 @@ export function SalesBudgetForm() {
       {/* ═══ LOCAÇÃO / COMODATO TAB ═══ */}
       {activeTab === 'locacao' && (<>
         {rentalItems.length > 0 && (() => {
-          const diretor_rec_liq = rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal;
+          const diretor_rec_liq = rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal - rentalTotals.despAdmTotal;
 
           const prazo_fat = Math.max(1, (prazoContratoMeses || 1) - (prazoInstalacaoMeses || 0));
 
           // Installation net revenue: only from is_kit_instalacao items
           const rec_liq_inst_calc = rentalTotals.totalInstalacao - rentalTotals.investimentoInstalacao - rentalTotals.impostosInstalacaoTotal - rentalTotals.custoOpInstalacaoTotal;
-          // Mensal net revenue: everything else (derived as residual so inst + mensal = total exactly)
-          const rec_liq_mensal_calc = diretor_rec_liq - rec_liq_inst_calc;
+          // Subtracted residual calculation
+          const rec_liq_mensal_calc = (rentalTotals.faturamentoTotal - rentalTotals.investimento - rentalTotals.impostosTotal - rentalTotals.custoOpTotal) - rec_liq_inst_calc;
 
           const comissao_inst_calc = Math.max(0, rec_liq_inst_calc * (percComissaoDiretoria / 100));
           const comissao_mensal_calc = Math.max(0, (rec_liq_mensal_calc * (percComissaoDiretoria / 100)) / prazo_fat);
@@ -3995,7 +4035,7 @@ export function SalesBudgetForm() {
           
           // 1. Calculate base_roi as requested: (custo de aquisição + custos operacionais + impostos totais) / mensal locação
           const despAdmMensalTotal = rentalTotals.despAdmMensalTotal || 0;
-          const capexTotal = rentalTotals.investimento + rentalTotals.impostosInstalacaoTotal;
+          const capexTotal = rentalTotals.investimento;
           const saldoCapex = capexTotal - rentalTotals.totalInstalacao;
           const divisorBase = rentalTotals.faturamentoMensal - rentalTotals.impostosMensal - opMes - despAdmMensalTotal;
           const base_roi = divisorBase > 0 ? (saldoCapex / divisorBase) : (pCtr + 1);
@@ -5063,29 +5103,17 @@ export function SalesBudgetForm() {
               </div>
               
               {!isReadonly && (
-                <div className="flex flex-col md:flex-row gap-3 items-end bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-4">
-                  <div className="flex-1 space-y-1.5">
+                <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-4 w-full">
+                  <div className="space-y-1">
                     <label className="text-xs font-bold text-text-muted uppercase tracking-wider font-sans">Vincular Orçamento Existente</label>
-                    <select
-                      value={selectedPurchaseBudgetToLink}
-                      onChange={e => setSelectedPurchaseBudgetToLink(e.target.value)}
-                      className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11 font-sans"
-                    >
-                      <option value="">Selecione um orçamento para vincular...</option>
-                      {availablePurchaseBudgets.map(b => (
-                        <option key={b.id} value={b.id}>
-                          Nº {b.numero_orcamento || 'Sem Nº'} — {b.supplier_nome_fantasia || b.vendedor_nome || 'Sem Fornecedor'} — {b.data_orcamento ? new Date(b.data_orcamento).toLocaleDateString('pt-BR') : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <p className="text-xs text-text-muted">Selecione e importe uma proposta de fornecedor cadastrada no sistema.</p>
                   </div>
                   <Button
                     type="button"
-                    disabled={!selectedPurchaseBudgetToLink}
-                    onClick={handleLinkPurchaseBudget}
-                    className="shrink-0 h-11 bg-orange-500 hover:bg-orange-600 text-white border-0 font-sans font-semibold"
+                    onClick={() => setIsPurchaseSearchModalOpen(true)}
+                    className="shrink-0 h-11 bg-orange-500 hover:bg-orange-600 text-white border-0 font-sans font-semibold px-6 flex items-center gap-1.5"
                   >
-                    <Plus className="w-4 h-4 mr-1" /> Vincular Orçamento
+                    <Search className="w-4 h-4" /> Buscar e Vincular Orçamento
                   </Button>
                 </div>
               )}
@@ -6547,6 +6575,17 @@ export function SalesBudgetForm() {
           title="Buscar Kit de Venda / Instalação"
         />
       )}
+
+      {/* Purchase Budget Search Modal */}
+      {isPurchaseSearchModalOpen && (
+        <PurchaseBudgetSearchModal
+          isOpen={isPurchaseSearchModalOpen}
+          availableBudgets={availablePurchaseBudgets}
+          onClose={() => setIsPurchaseSearchModalOpen(false)}
+          onSelect={(b) => handleLinkPurchaseBudget(b.id)}
+          title="Vincular Orçamento de Compra Existente"
+        />
+      )}
       {/* Kit Items Edit Modal */}
       {editingKit && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -6590,7 +6629,7 @@ export function SalesBudgetForm() {
                             tipo_contrato_kit: savedKit.tipo_contrato,
                             kit_taxa_juros_mensal: savedKit.taxa_juros_mensal != null ? Number(savedKit.taxa_juros_mensal) : null,
                             kit_custo_produtos: Number(savedKit.summary?.custo_aquisicao_produtos || 0),
-                            kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0),
+                            kit_custo_servicos: Number(savedKit.summary?.custo_aquisicao_servicos || 0) + Number(savedKit.summary?.vlr_instal_calc || 0),
                             kit_pis: Number(savedKit.aliq_pis || 0),
                             kit_cofins: Number(savedKit.aliq_cofins || 0),
                             kit_csll: Number(savedKit.aliq_csll || 0),
@@ -6605,6 +6644,8 @@ export function SalesBudgetForm() {
                             taxa_manutencao_anual_item: Number(savedKit.taxa_manutencao_anual || 0),
                             fator_margem: Number(savedKit.fator_margem_locacao || item.fator_margem || 1),
                             prazo_contrato: savedKit.tipo_contrato === 'INSTALACAO' ? 1 : Number(savedKit.prazo_contrato_meses || item.prazo_contrato),
+                            kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
+                            kit_investimento_total: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.imposto_instalacao || 0) + Number(savedKit.summary?.vlr_instal_calc || 0),
                             kit_vlt_manut: Number(savedKit.summary?.vlt_manut || 0),
                             kit_custo_monitoramento_unit: Number(savedKit.summary?.custo_monitoramento_unitario || savedKit.custo_monitoramento_unitario || 0),
                             kit_valor_mensal: billingValue,
@@ -6612,9 +6653,7 @@ export function SalesBudgetForm() {
                             kit_receita_liquida: Number(savedKit.summary?.receita_liquida_mensal_kit || 0),
                             kit_lucro_mensal: Number(savedKit.summary?.lucro_mensal_kit || 0),
                             kit_margem: Number(savedKit.summary?.margem_kit || 0),
-                            kit_faturamento_separado: Boolean(savedKit.faturamento_servico_separado),
-                            kit_investimento_total: Number(savedKit.summary?.custo_aquisicao_total || 0) + Number(savedKit.summary?.imposto_instalacao || 0),
-                            kit_vlr_instal_calc: Number(savedKit.summary?.vlr_instal_calc || 0),
+                            kit_vlr_instal_calc: Number(savedKit.summary?.valor_venda_instalacao ?? savedKit.summary?.vlr_instal_calc ?? 0),
                             kit_parcela_locacao: Number(savedKit.summary?.valor_parcela_locacao || 0),
                             kit_venda_unit_monitoramento: Number(savedKit.summary?.venda_unit_monitoramento || 0),
                             kit_comissao: Number(savedKit.summary?.valor_comissao_locacao || 0),

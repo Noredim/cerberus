@@ -14,6 +14,7 @@ import Modal from '../../components/modals/Modal';
 import { useCompanies } from '../companies/hooks/useCompanies';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { LicitacaoDashboard } from './components/LicitacaoDashboard';
+import { PurchaseBudgetSearchModal } from '../../components/modals/PurchaseBudgetSearchModal';
 
 interface KitItem {
   id: string;
@@ -43,6 +44,7 @@ interface KitItem {
     vlt_frete_venda?: number;
     vlt_despesas_adm?: number;
     vlt_comissao?: number;
+    valor_venda_instalacao?: number;
   };
 }
 
@@ -162,6 +164,7 @@ export function LicitacaoForm() {
   const [purchaseBudgets, setPurchaseBudgets] = useState<PurchaseBudgetSummary[]>([]);
   const [availableBudgets, setAvailableBudgets] = useState<PurchaseBudgetSummary[]>([]);
   const [selectedBudgetToLink, setSelectedBudgetToLink] = useState('');
+  const [isPurchaseSearchModalOpen, setIsPurchaseSearchModalOpen] = useState(false);
   const [isApprover, setIsApprover] = useState(false);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -336,7 +339,8 @@ export function LicitacaoForm() {
       const res = await api.get('/purchase-budgets', { params: { limit: 500 } });
       const allBudgets = Array.isArray(res.data) ? res.data : (res.data.items || []);
       const linked = allBudgets.filter((b: any) => b.licitacao_id === id);
-      const available = allBudgets.filter((b: any) => !b.licitacao_id);
+      // Show all budgets that are not already linked to the current licitacao
+      const available = allBudgets.filter((b: any) => b.licitacao_id !== id);
       setPurchaseBudgets(linked);
       setAvailableBudgets(available);
     } catch (err) {
@@ -678,11 +682,12 @@ export function LicitacaoForm() {
   };
 
   // --- Purchase Budget Vínculos ---
-  const handleLinkBudget = async () => {
-    if (!selectedBudgetToLink) return;
+  const handleLinkBudget = async (budgetId?: string) => {
+    const targetId = budgetId || selectedBudgetToLink;
+    if (!targetId) return;
     try {
       setLoading(true);
-      await api.post(`/licitacoes/${id}/purchase-budgets/${selectedBudgetToLink}`);
+      await api.post(`/licitacoes/${id}/purchase-budgets/${targetId}`);
       setSelectedBudgetToLink('');
       await loadAll();
       alert('Orçamento de compra vinculado com sucesso!');
@@ -1935,7 +1940,7 @@ export function LicitacaoForm() {
                                           {Number(k.summary?.valor_mensal_kit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </td>
                                         <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                          {Number(k.summary?.vlr_instal_calc || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          {Number(k.summary?.valor_venda_instalacao ?? k.summary?.vlr_instal_calc ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </td>
                                         <td className="py-3 px-4 text-right font-mono text-brand-primary tabular-nums font-semibold">
                                           {vTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -2014,29 +2019,17 @@ export function LicitacaoForm() {
             </div>
 
             {!isLocked && (
-              <div className="flex flex-col md:flex-row gap-3 items-end bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-4">
-                <div className="flex-1 space-y-1.5">
+              <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-bg-deep/15 border border-border-subtle/50 rounded-xl p-4 w-full">
+                <div className="space-y-1">
                   <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Vincular Orçamento Existente</label>
-                  <select
-                    value={selectedBudgetToLink}
-                    onChange={e => setSelectedBudgetToLink(e.target.value)}
-                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none h-11"
-                  >
-                    <option value="">Selecione um orçamento para vincular...</option>
-                    {availableBudgets.map(b => (
-                      <option key={b.id} value={b.id}>
-                        Nº {b.numero_orcamento || 'Sem Nº'} — {b.supplier_nome || 'Sem Fornecedor'} ({b.vendedor_nome || 'Sem Vendedor'}) — {b.data_orcamento ? new Date(b.data_orcamento).toLocaleDateString('pt-BR') : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <p className="text-xs text-text-muted">Selecione e importe uma proposta de fornecedor cadastrada no sistema.</p>
                 </div>
                 <Button
                   type="button"
-                  disabled={!selectedBudgetToLink}
-                  onClick={handleLinkBudget}
-                  className="shrink-0 h-11"
+                  onClick={() => setIsPurchaseSearchModalOpen(true)}
+                  className="shrink-0 h-11 bg-orange-500 hover:bg-orange-600 text-white border-0 font-sans font-semibold px-6 flex items-center gap-1.5"
                 >
-                  <Plus className="w-4 h-4 mr-1" /> Vincular Orçamento
+                  <Search className="w-4 h-4" /> Buscar e Vincular Orçamento
                 </Button>
               </div>
             )}
@@ -3508,6 +3501,16 @@ export function LicitacaoForm() {
           </div>
         </div>
       </Modal>
+
+      {isPurchaseSearchModalOpen && (
+        <PurchaseBudgetSearchModal
+          isOpen={isPurchaseSearchModalOpen}
+          availableBudgets={availableBudgets}
+          onClose={() => setIsPurchaseSearchModalOpen(false)}
+          onSelect={(b) => handleLinkBudget(b.id)}
+          title="Vincular Orçamento de Compra Existente"
+        />
+      )}
     </div>
   );
 }

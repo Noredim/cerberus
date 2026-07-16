@@ -476,6 +476,7 @@ class OpportunityKitService:
             venda_unitario_item = Decimal("0.0")
             venda_total_item = Decimal("0.0")
             imposto_venda_item = Decimal("0.0")
+            perc_icms_aplicado = Decimal("0.0")
             
             if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
                 fator_item = fator_margem
@@ -498,7 +499,9 @@ class OpportunityKitService:
                     imposto_tax = aliq_pis_val + aliq_cofins_val + aliq_csll_val + aliq_irpj_val + aliq_iss_val
                 else:
                     perfil_st_ativo = info.get("perfil_st_ativo", True)
-                    if info.get("tem_st") and perfil_st_ativo and not force_12_icms:
+                    if info.get("is_intrastate", True):
+                        perc_icms_aplicado = Decimal("0.0")
+                    elif info.get("tem_st") and perfil_st_ativo and not force_12_icms:
                         perc_icms_aplicado = Decimal("0.0")
                     # If perfil_st_ativo is False, perc_icms_aplicado remains aliq_icms_val
                     
@@ -573,7 +576,7 @@ class OpportunityKitService:
                 "perc_cofins": float(str(kit.aliq_cofins or 0)),
                 "perc_csll": float(str(kit.aliq_csll or 0)),
                 "perc_irpj": float(str(kit.aliq_irpj or 0)),
-                "perc_icms": float(effective_aliq_icms),
+                "perc_icms": float(perc_icms_aplicado * 100),
                 "perc_iss": float(str(kit.aliq_iss or 0)),
                 "pis_unit": round(venda_total_item * (Decimal(str(kit.aliq_pis or 0)) / Decimal(100)), 2),  # type: ignore
                 "cofins_unit": round(venda_total_item * (Decimal(str(kit.aliq_cofins or 0)) / Decimal(100)), 2),  # type: ignore
@@ -634,7 +637,7 @@ class OpportunityKitService:
             
             if kit.instalacao_inclusa:
                 vlr_instal_calc = vlr_instal_calc_base_manut
-                valor_venda_instalacao = vlr_instal_calc * fator_margem_inst
+                valor_venda_instalacao = valor_venda_produtos * perc_inst
             else:
                 vlr_instal_calc = custo_instalacao_avulso
                 valor_venda_instalacao = custo_instalacao_avulso * fator_margem_inst
@@ -663,8 +666,10 @@ class OpportunityKitService:
             # Original Locacao/Comodato Logic
             if kit.instalacao_inclusa:
                 vlr_instal_calc = vlr_instal_calc_base_manut
+                valor_venda_instalacao = (custo_aquisicao_kit * fator_margem) * perc_inst
                 valor_mensal_locacao_base = ((custo_aquisicao_kit + vlr_instal_calc) * fator_margem) * tx_locacao
             else:
+                valor_venda_instalacao = custo_instalacao_avulso * fator_margem_inst
                 valor_mensal_locacao_base = (custo_aquisicao_kit * fator_margem) * tx_locacao
 
             valor_base_venda = custo_aquisicao_kit * fator_margem
@@ -863,11 +868,7 @@ class OpportunityKitService:
 
             # --- START UPFRONT INSTALLATION TAX CALCULATION ---
             imposto_instalacao_upfront = Decimal("0.0")
-            venda_instalacao_upfront = Decimal("0.0")
-            if kit.instalacao_inclusa:
-                venda_instalacao_upfront = locals().get("vlr_instal_calc_base_manut", Decimal("0.0"))
-            else:
-                venda_instalacao_upfront = locals().get("custo_instalacao_avulso", Decimal("0.0"))
+            venda_instalacao_upfront = valor_venda_instalacao
                 
             if venda_instalacao_upfront > 0:
                 if faturamento_separado:
@@ -1025,8 +1026,27 @@ class OpportunityKitService:
             vlt_irpj = sum(Decimal(str(is_.get("irpj_unit", 0))) for is_ in item_summaries)
             vlt_icms = sum(Decimal(str(is_.get("icms_unit", 0))) for is_ in item_summaries)
             vlt_iss = sum(Decimal(str(is_.get("iss_unit", 0))) for is_ in item_summaries)
-            # Add ISS from installation and maintenance (services not in item_summaries)
-            vlt_iss += impostos_instalacao + impostos_manutencao
+
+            # Distribute installation taxes
+            aliq_pis_dec = Decimal(str(kit.aliq_pis or 0.0)) / Decimal("100.0")
+            aliq_cofins_dec = Decimal(str(kit.aliq_cofins or 0.0)) / Decimal("100.0")
+            aliq_csll_dec = Decimal(str(kit.aliq_csll or 0.0)) / Decimal("100.0")
+            aliq_irpj_dec = Decimal(str(kit.aliq_irpj or 0.0)) / Decimal("100.0")
+            aliq_iss_dec = Decimal(str(kit.aliq_iss or 0.0)) / Decimal("100.0")
+
+            vlt_pis += valor_venda_instalacao * aliq_pis_dec
+            vlt_cofins += valor_venda_instalacao * aliq_cofins_dec
+            vlt_csll += valor_venda_instalacao * aliq_csll_dec
+            vlt_irpj += valor_venda_instalacao * aliq_irpj_dec
+            vlt_iss += valor_venda_instalacao * aliq_iss_dec
+
+            # Distribute maintenance taxes
+            vlt_pis += valor_venda_manutencao * aliq_pis_dec
+            vlt_cofins += valor_venda_manutencao * aliq_cofins_dec
+            vlt_csll += valor_venda_manutencao * aliq_csll_dec
+            vlt_irpj += valor_venda_manutencao * aliq_irpj_dec
+            vlt_iss += valor_venda_manutencao * aliq_iss_dec
+
             faturamento_total_venda = venda_equipamentos_total + venda_manutencao_total
         else:
             # Locação/Comodato: calculate from aliquots × faturamento
@@ -1156,6 +1176,7 @@ class OpportunityKitService:
                 "custo_total_mensal_kit": round(custo_total_mensal_kit, 2),  # type: ignore
                 "tx_locacao": round(tx_locacao, 6),  # type: ignore
                 "vlr_instal_calc": round(vlr_instal_calc, 2),  # type: ignore
+                "valor_venda_instalacao": round(valor_venda_instalacao, 2),  # type: ignore
                 "valor_mensal_locacao_base": round(valor_mensal_locacao_base, 2),  # type: ignore
                 "vlt_manut": round(vlt_manut, 2),  # type: ignore
                 "valor_base_venda": round(valor_base_venda, 2),  # type: ignore

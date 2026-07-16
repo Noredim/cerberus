@@ -160,6 +160,8 @@ class SalesBudgetItemBase(BaseModel):
     perc_comissao: Optional[Decimal] = Field(default=None, max_digits=6, decimal_places=4)
     tem_st: bool = False
     icms_abatido_unit: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    override_venda_unit: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
+    override_lucro_unit: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=4)
 
     @model_validator(mode="before")
     @classmethod
@@ -168,7 +170,8 @@ class SalesBudgetItemBase(BaseModel):
             decimal_fields_4 = [
                 "custo_unit_base", "markup", "quantidade", "perc_frete_venda",
                 "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_icms",
-                "perc_iss", "perc_despesa_adm", "perc_comissao", "icms_abatido_unit"
+                "perc_iss", "perc_despesa_adm", "perc_comissao", "icms_abatido_unit",
+                "override_venda_unit", "override_lucro_unit"
             ]
             for field in decimal_fields_4:
                 val = data.get(field)

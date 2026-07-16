@@ -1507,7 +1507,18 @@ class OpportunitiesReportService:
             if not item.opportunity_kit_id and item.product_id:
                 # Standalone item
                 pb_info = product_suppliers.get(item.product_id)
-                supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                supplier_name = pb_info["fornecedor"] if pb_info else None
+                if not supplier_name and item.product_id:
+                    from src.modules.products.models import Product
+                    product = db.query(Product).filter(Product.id == item.product_id).first()
+                    if product:
+                        ref_id = product.orcamento_referencia_revenda_id or product.orcamento_referencia_uso_consumo_id
+                        if ref_id:
+                            pb = db.query(PurchaseBudget).filter(PurchaseBudget.id == ref_id).first()
+                            if pb:
+                                supplier_name = pb.supplier_nome_fantasia
+                if not supplier_name:
+                    supplier_name = "Não Cadastrado"
                 pb_item = pb_info["pb_item"] if pb_info else None
                 
                 difal_unit, st_unit, ipi_unit, origem_imposto = get_purchase_tax_breakdown(item.product_id, pb_item)
@@ -1709,7 +1720,18 @@ class OpportunitiesReportService:
                             component_qty = kit_qty * qty_in_kit
                             
                             pb_info = product_suppliers.get(p_uuid) if p_uuid else None
-                            supplier_name = pb_info["fornecedor"] if pb_info else "Não Cadastrado"
+                            supplier_name = pb_info["fornecedor"] if pb_info else None
+                            if not supplier_name and p_uuid:
+                                from src.modules.products.models import Product
+                                product = db.query(Product).filter(Product.id == p_uuid).first()
+                                if product:
+                                    ref_id = product.orcamento_referencia_revenda_id or product.orcamento_referencia_uso_consumo_id
+                                    if ref_id:
+                                        pb = db.query(PurchaseBudget).filter(PurchaseBudget.id == ref_id).first()
+                                        if pb:
+                                            supplier_name = pb.supplier_nome_fantasia
+                            if not supplier_name:
+                                supplier_name = "Não Cadastrado"
                             
                             if p_uuid:
                                 difal_unit = float(summary.get("difal_unitario") or 0.0)
@@ -1852,7 +1874,10 @@ class OpportunitiesReportService:
                         # 4.2. Virtual components for Installation and Maintenance inside the kit
                         vlr_instal_calc = float(kit_financials["summary"].get("vlr_instal_calc", 0.0) or 0.0)
                         fator_margem_inst = float(getattr(kit, "fator_margem_instalacao", 1.0) or 1.0)
-                        valor_venda_instalacao = vlr_instal_calc * fator_margem_inst
+                        if getattr(kit, "instalacao_inclusa", False):
+                            valor_venda_instalacao = float(kit_financials["summary"].get("valor_venda_instalacao", 0.0) or 0.0)
+                        else:
+                            valor_venda_instalacao = vlr_instal_calc * fator_margem_inst
                         
                         if valor_venda_instalacao > 0:
                             venda_total_inst = valor_venda_instalacao * kit_qty
@@ -2041,8 +2066,8 @@ class OpportunitiesReportService:
         # Imposto de Compra no card superior = ST + DIFAL
         custo_impostos = total_difal_all + total_st_all
         
-        # Custo de Aquisição no card superior = Custo Base + IPI
-        custo_total_com_impostos = custo_consolidado + total_ipi_all
+        # Custo de Aquisição no card superior = Custo Base + IPI + Serviços Próprios
+        custo_total_com_impostos = custo_consolidado + total_ipi_all + custo_servicos_proprios_total
         
         total_custo_aquisicao = custo_total_com_impostos + custo_impostos
         
@@ -2057,7 +2082,7 @@ class OpportunitiesReportService:
         else:
             impostos_venda = sum(x["_sales_tax_total"] for x in items_details)
             despesas_totais = sum(x["_despesas_adm_total"] for x in items_details)
-            lucro_total = venda_consolidada - custo_total_com_impostos - custo_impostos - impostos_venda - despesas_totais - custo_servicos_proprios_total
+            lucro_total = venda_consolidada - custo_total_com_impostos - custo_impostos - impostos_venda - despesas_totais
             margem_percentual = (lucro_total / venda_consolidada * 100.0) if venda_consolidada > 0 else 0.0
             markup = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else 1.0
 
@@ -3087,7 +3112,8 @@ class OpportunitiesReportService:
                     float(s.get("vlt_comissao_inss_loc") or 0.0) +
                     float(s.get("vlt_comissao_demais_loc") or 0.0)
                 )
-                instalacao_val = float(s.get("vlr_instal_calc") or 0.0)
+                instalacao_val = float(s.get("valor_venda_instalacao") or s.get("vlr_instal_calc") or 0.0)
+
                 manut_val = float(s.get("vlt_manut") or 0.0)
                 monitoramento_val = float(s.get("venda_unit_monitoramento") or 0.0)
                 fat_mensal_val = float(s.get("valor_mensal_antes_impostos") or s.get("valor_mensal_kit") or 0.0)
@@ -3191,6 +3217,22 @@ class OpportunitiesReportService:
                 elif kit_financials_summary:
                     kit_desp_adm_val = float(kit_financials_summary.get("valor_despesas_adm_locacao") or 0.0)
 
+            vlr_inst_cost = 0.0
+            imposto_inst_item = 0.0
+            if item.opportunity_kit_id:
+                if kit_financials_summary:
+                    vlr_inst_cost = float(kit_financials_summary.get("vlr_instal_calc") or 0.0) * qty
+                    imposto_inst_item = float(kit_financials_summary.get("imposto_instalacao") or 0.0) * qty
+            else:
+                vlr_inst_cost = float(item.valor_instalacao_item or 0.0) * qty
+                if vlr_inst_cost > 0:
+                    rate_total = float(opportunity.perc_pis_rental or 0.0) + \
+                                 float(opportunity.perc_cofins_rental or 0.0) + \
+                                 float(opportunity.perc_csll_rental or 0.0) + \
+                                 float(opportunity.perc_irpj_rental or 0.0) + \
+                                 float(opportunity.perc_iss_rental or 0.0)
+                    imposto_inst_item = vlr_inst_cost * (rate_total / 100.0)
+
             if item.is_kit_instalacao:
                 total_instalacao += instalacao_item
                 impostos_instalacao_total += impostos_mensal_item
@@ -3215,6 +3257,11 @@ class OpportunitiesReportService:
                 impostos_mensal_total += impostos_mensal_item
                 custo_op_mensal_total += custo_op_mensal
                 investimento_rental += custo_total
+                
+                total_instalacao += instalacao_item
+                impostos_instalacao_total += imposto_inst_item
+                investimento_instalacao += vlr_inst_cost
+                
                 if kit_desp_adm_val is not None:
                     desp_adm_mensal = kit_desp_adm_val * qty
                 else:
@@ -3354,6 +3401,14 @@ class OpportunitiesReportService:
 
         # Supplier summaries
         mapped_by_supplier = {}
+        fallback_supplier_key = "sem_proposta"
+        mapped_by_supplier[fallback_supplier_key] = {
+            "fornecedor": "Não Cadastrado",
+            "total_sem_imposto": 0.0,
+            "total_imposto": 0.0,
+            "total_custo": 0.0,
+            "forma_pagamento": "À Vista"
+        }
         for pb in purchase_budgets:
             supplier_id = pb.supplier_id
             if supplier_id not in mapped_by_supplier:
@@ -3399,7 +3454,13 @@ class OpportunitiesReportService:
                             total_fornecedores_produtos += (c_cost_total - c_tax_total)
                             total_fornecedores_impostos += c_tax_total
                         else:
-                            total_own_services_cost += c_cost_total
+                            if c.get("product_id") is not None:
+                                supplier_data = mapped_by_supplier[fallback_supplier_key]
+                                supplier_data["total_sem_imposto"] += c_cost_total
+                                supplier_data["total_custo"] += c_cost_total
+                                total_fornecedores_produtos += c_cost_total
+                            else:
+                                total_own_services_cost += c_cost_total
                             
                     for c in kf.get("cost_summaries", []):
                         if c.get("own_service_id") is not None:
@@ -3421,11 +3482,18 @@ class OpportunitiesReportService:
                     total_fornecedores_produtos += (custo_total - tax_total)
                     total_fornecedores_impostos += tax_total
                 else:
-                    total_own_services_cost += custo_total
+                    if item.product_id is not None:
+                        supplier_data = mapped_by_supplier[fallback_supplier_key]
+                        supplier_data["total_sem_imposto"] += custo_total
+                        supplier_data["total_custo"] += custo_total
+                        total_fornecedores_produtos += custo_total
+                    else:
+                        total_own_services_cost += custo_total
 
-        # Exclude own services from the CAPEX initial investment/acquisition cost as they are recurring opex support costs.
-        total_aquisicao_calc = max(0.0, total_aquisicao_calc - total_own_services_cost)
+        # Do not subtract own services from total_aquisicao_calc, as they are calculated separately and were not added to it
         total_aquisicao_sem_comissao = total_aquisicao_calc
+
+
 
         # Format supplier summaries to strings
         supplier_summaries_list = []
@@ -3457,15 +3525,16 @@ class OpportunitiesReportService:
         diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat)
 
         # Capex & Payback
-        receita_contratada = total_vlr_total_calc
+        receita_contratada = faturamento_total_rental
         
         # desp_adm_instalacao_total and desp_adm_mensal_total are already computed dynamically in the loop above.
 
-        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação + frete instalação)
-        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total + frete_instalacao_total
+        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação + frete instalação + despesa operacional + custo de instalação)
+        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total + frete_instalacao_total + total_despesa_operacional + investimento_instalacao
         
         # Project Total Cost (Capex + Impostos + Custos Operacionais + Despesas Adm)
-        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + frete_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato)
+        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + frete_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato) + total_despesa_operacional + impostos_instalacao_total + investimento_instalacao
+
         
         # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal - Despesas Adm Mensais
         retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total - desp_adm_mensal_total
@@ -3677,7 +3746,9 @@ class OpportunitiesReportService:
             "receita_contratada": format_currency(receita_contratada),
             "investimento_total": format_currency(custo_total_projeto),
             "investimento_capex": format_currency(investimento_total),
-            "investimento_capex_grid": format_currency(total_aquisicao_calc + comissao_total_aquisicao),
+            "investimento_capex_grid": format_currency(investimento_total),
+            "total_despesa_operacional_val": total_despesa_operacional,
+
             "locacao_mensal": format_currency(locacao_mensal),
             "custo_op_total": format_currency(custo_op_total),
             "impostos_totais": format_currency(impostos_totais),
@@ -3713,8 +3784,8 @@ class OpportunitiesReportService:
             "total_fornecedores_impostos": format_currency(total_fornecedores_impostos),
             "custo_total_aquisicao_bruto": format_currency(total_aquisicao_sem_comissao - total_st_difal),
             "custo_aquisicao_terceiros_str": format_currency(total_aquisicao_calc - total_own_services_cost),
-            "custo_servicos_proprios_str": format_currency(total_own_services_cost),
-            "custo_servicos_proprios": total_own_services_cost,
+            "custo_servicos_proprios_str": format_currency(investimento_instalacao),
+            "custo_servicos_proprios": investimento_instalacao,
             "total_instalacao_str": format_currency(total_instalacao),
             "saldo_capex_amortizar_str": format_currency(investimento_total - total_instalacao),
         }

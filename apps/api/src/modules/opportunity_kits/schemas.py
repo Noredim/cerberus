@@ -269,6 +269,8 @@ class OpportunityKitFinancialSummary(BaseModel):
     venda_manutencao_total: Optional[Decimal] = Field(default=Decimal(0))
     lucro_manutencao: Optional[Decimal] = Field(default=Decimal(0))
     margem_manutencao: Optional[Decimal] = Field(default=Decimal(0))
+    valor_venda_instalacao: Optional[Decimal] = Field(default=Decimal(0))
+    valor_venda_manutencao: Optional[Decimal] = Field(default=Decimal(0))
     
     # Monitoramento fields
     venda_unit_monitoramento: Optional[Decimal] = Field(default=Decimal(0))

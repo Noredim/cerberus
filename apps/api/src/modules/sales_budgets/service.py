@@ -110,7 +110,9 @@ def calculate_item(
         custo = _d(product.vlr_referencia_revenda)
 
     venda = _round(custo * markup)
-    if is_same_cnpj and not is_service and getattr(item_data, "venda_unit", None) is not None:
+    if getattr(item_data, "override_venda_unit", None) is not None:
+        venda = _d(item_data.override_venda_unit)
+    elif is_same_cnpj and not is_service and getattr(item_data, "venda_unit", None) is not None:
         venda = _d(item_data.venda_unit)
     frete_unit = _round(venda * perc_frete / 100) if not is_service else Decimal("0")
 
@@ -169,7 +171,10 @@ def calculate_item(
     icms_abatido = _d(getattr(item_data, 'icms_abatido_unit', 0) or 0)
     
     # Apply ICMS credit to profit
-    lucro = lucro + icms_abatido
+    if getattr(item_data, "override_lucro_unit", None) is not None:
+        lucro = _d(item_data.override_lucro_unit)
+    else:
+        lucro = lucro + icms_abatido
     margem = _round(lucro / venda * 100, 4) if venda > 0 else Decimal("0")
 
     return {
@@ -335,24 +340,48 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
         com_destinado = com_val
         dsr_mensal = fgts_mensal = inss_mensal = demais_incidencias_mensal = Decimal("0.0")
 
-        if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
-            fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
-            comissao_real = _round(com_destinado / fator_total)
-            dsr_mensal = _round(comissao_real * perc_dsr / Decimal("100"))
-            fgts_mensal = _round((comissao_real + dsr_mensal) * perc_fgts / Decimal("100"))
-            inss_mensal = _round((comissao_real + dsr_mensal) * perc_inss / Decimal("100"))
-            demais_incidencias_mensal = _round((comissao_real + dsr_mensal) * perc_demais / Decimal("100"))
-            
-            soma = comissao_real + dsr_mensal + fgts_mensal + inss_mensal + demais_incidencias_mensal
-            diff = com_destinado - soma
-            comissao_real += diff
-            
-            com_val = comissao_real
-        else:
-            com_val = com_destinado
+        # Check if we can parse pre-calculated commission breakdown from kit details
+        comissao_detalhada_usada = False
+        if is_kit and getattr(item_data, "kit_comissionamento_detalhado", None) is not None:
+            import json
+            raw_det = item_data.kit_comissionamento_detalhado
+            detalhes = None
+            if isinstance(raw_det, str):
+                try:
+                    detalhes = json.loads(raw_det)
+                except Exception:
+                    pass
+            elif isinstance(raw_det, dict):
+                detalhes = raw_det
+                
+            if detalhes and isinstance(detalhes, dict) and "detalhamento_incidencias" in detalhes:
+                incidencias = detalhes["detalhamento_incidencias"]
+                com_val = _d(incidencias.get("comissao_efetiva", com_val))
+                dsr_mensal = _d(incidencias.get("dsr", 0.0))
+                fgts_mensal = _d(incidencias.get("fgts", 0.0))
+                inss_mensal = _d(incidencias.get("inss", 0.0))
+                demais_incidencias_mensal = _d(incidencias.get("demais", 0.0))
+                comissao_detalhada_usada = True
+
+        if not comissao_detalhada_usada:
+            if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
+                fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+                comissao_real = _round(com_destinado / fator_total)
+                dsr_mensal = _round(comissao_real * perc_dsr / Decimal("100"))
+                fgts_mensal = _round((comissao_real + dsr_mensal) * perc_fgts / Decimal("100"))
+                inss_mensal = _round((comissao_real + dsr_mensal) * perc_inss / Decimal("100"))
+                demais_incidencias_mensal = _round((comissao_real + dsr_mensal) * perc_demais / Decimal("100"))
+                
+                soma = comissao_real + dsr_mensal + fgts_mensal + inss_mensal + demais_incidencias_mensal
+                diff = com_destinado - soma
+                comissao_real += diff
+                
+                com_val = comissao_real
+            else:
+                com_val = com_destinado
 
         desp_op_val = _round(valor_base_venda_unit * perc_desp_op / Decimal("100"))
-        if getattr(item_data, "despesa_operacional_mensal", None) is not None:
+        if not is_kit and getattr(item_data, "despesa_operacional_mensal", None) is not None:
             desp_op_val = _d(item_data.despesa_operacional_mensal)
 
         if tipo_comissionamento == "COMISSAO_POR_DENTRO" or perc_desp_op > 0:
@@ -631,8 +660,21 @@ def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_
 
 def _process_rental_items(db, budget, data_items, rental_defaults):
     """Process and save rental items for a budget."""
+    from src.modules.opportunity_kits.models import OpportunityKit
     for item_data in data_items:
-        calc = calculate_rental_item(item_data, rental_defaults)
+        local_defaults = dict(rental_defaults)
+        kit_id = getattr(item_data, "opportunity_kit_id", None)
+        if kit_id:
+            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit:
+                local_defaults["tipo_comissionamento"] = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
+                local_defaults["perc_dsr"] = getattr(kit, "perc_dsr", Decimal("0.0"))
+                local_defaults["perc_fgts"] = getattr(kit, "perc_fgts", Decimal("0.0"))
+                local_defaults["perc_inss"] = getattr(kit, "perc_inss", Decimal("0.0"))
+                local_defaults["perc_demais_incidencias"] = getattr(kit, "perc_demais_incidencias", Decimal("0.0"))
+                local_defaults["perc_despesa_operacional"] = getattr(kit, "perc_despesa_operacional", Decimal("0.0"))
+
+        calc = calculate_rental_item(item_data, local_defaults)
         db_item = RentalBudgetItem(
             budget_id=budget.id,
             product_id=item_data.product_id,
@@ -2260,6 +2302,8 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         fin = kit_service.calculate_financials(kit, tenant_id, override_factor=override_factor, sales_budget_id=str(opportunity_id))
         kits_financials[kit.id] = fin
         summary = fin["summary"]
+        vlr_instal_calc = Decimal(str(summary.get("vlr_instal_calc", 0.0) or 0.0))
+        vlt_manut = Decimal(str(summary.get("vlt_manut", 0.0) or 0.0))
         
         # Populate kit items taxes into opp_product_taxes
         for item_sum in fin.get("item_summaries", []):
@@ -2309,7 +2353,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 vlr_recorrente_mensal = Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) + \
                                         Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0)) + \
                                         Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
-                vlr_instalacao = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
+                vlr_instalacao = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
                 
                 total_produtos += vlr_recorrente_mensal * prazo_contrato * qty
                 total_servicos += vlr_instalacao * qty
@@ -2341,7 +2385,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 prazo_mensalidades = Decimal(str(summary.get("prazo_mensalidades") or 0))
                 total_produtos += Decimal(str(summary.get("valor_mensal_locacao_base", 0) or 0)) * prazo_mensalidades * qty
                 
-                vlr_inst = Decimal(str(summary.get("vlr_instal_calc", 0) or 0))
+                vlr_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or summary.get("vlr_instal_calc", 0) or 0))
                 vlr_manut = Decimal(str(summary.get("manutencao_mensal", 0) or summary.get("vlt_manut", 0) or 0))
                 vlr_monit = Decimal(str(summary.get("venda_unit_monitoramento", 0) or 0))
                 
@@ -2441,7 +2485,17 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         # Accumulate for dynamic MKP calculation
         if not is_rental_opp or kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
             venda_oportunidade_total_venda += Decimal(str(summary.get("faturamento_total_venda") or summary.get("venda_total") or 0.0)) * qty
-            venda_oportunidade_total_custo += Decimal(str(summary.get("custo_aquisicao_total") or summary.get("custo_total") or 0.0)) * qty
+            custo_kit_com_servicos = Decimal(str(summary.get("custo_aquisicao_total") or summary.get("custo_total") or 0.0)) + vlr_instal_calc + vlt_manut
+            venda_oportunidade_total_custo += custo_kit_com_servicos * qty
+
+        # Accumulate virtual installation & maintenance costs for the kit in the DRE
+        if vlr_instal_calc > 0:
+            supplier_map["Serviços Próprios"] = supplier_map.get("Serviços Próprios", Decimal("0.0")) + (vlr_instal_calc * qty)
+        # Only add vlt_manut to supplier_map for non-rental opportunities to avoid double-counting maintenance Opex in rental DRE
+        if not is_rental_opp and vlt_manut > 0:
+            maint_cost = vlt_manut * Decimal("1.0")
+            supplier_map["Serviços Próprios"] = supplier_map.get("Serviços Próprios", Decimal("0.0")) + (maint_cost * qty)
+
 
         # Accumulate supplier values from kit components
         for item_sum in fin.get("item_summaries", []):
@@ -2464,20 +2518,26 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                     supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * component_qty)
                 else:
                     p_uuid = UUID(p_id) if isinstance(p_id, str) else p_id
-                    sup_name = product_suppliers.get(p_uuid, "Não Cadastrado")
+                    sup_name = product_suppliers.get(p_uuid)
+                    if not sup_name:
+                        from src.modules.products.models import Product
+                        product = db.query(Product).filter(Product.id == p_uuid).first()
+                        if product:
+                            ref_id = product.orcamento_referencia_revenda_id or product.orcamento_referencia_uso_consumo_id
+                            if ref_id:
+                                pb = db.query(PurchaseBudget).filter(PurchaseBudget.id == ref_id).first()
+                                if pb:
+                                    sup_name = pb.supplier_nome_fantasia
+                    if not sup_name:
+                        sup_name = "Não Cadastrado"
                     
-                    pb_item = None
-                    for pb in purchase_budgets:
-                        pb_item = next((pbi for pbi in pb.items if pbi.product_id == p_uuid), None)
-                        if pb_item:
-                            break
+                    difal_val = Decimal(str(item_sum.get("difal_unitario") or 0.0))
+                    st_val = Decimal(str(item_sum.get("icms_st_unitario") or 0.0))
+                    ipi_val = Decimal(str(item_sum.get("ipi_unit") or 0.0))
+                    frete_compra_unit = Decimal(str(item_sum.get("frete_cif_unit") or 0.0))
                     
-                    difal_val, st_val, ipi_val = get_purchase_tax_breakdown(p_uuid, pb_item)
                     c_cost_total = Decimal(str(item_sum.get("custo_total_item_no_kit") or 0.0)) * qty
                     c_tax_total = (difal_val + st_val + ipi_val) * component_qty
-                    
-                    # Subtrair frete de compra de base_forn_total para não duplicar, pois c_cost_total já engloba o frete
-                    frete_compra_unit = Decimal(str(pb_item.frete_valor)) / Decimal(str(pb_item.quantidade)) if (pb_item and pb_item.frete_valor and pb_item.quantidade > 0) else Decimal("0.0")
                     frete_total = frete_compra_unit * component_qty
                     base_forn_total = c_cost_total - c_tax_total - frete_total
                     total_frete_compra += frete_total
@@ -2726,13 +2786,19 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             impostos_locacao_irpj += c_irpj * ratio * prazo_item
             impostos_locacao_iss += c_iss * ratio * prazo_item
 
-        # Loop 2: Installation Taxes (only is_kit_instalacao)
+        # Loop 2: Installation Taxes (supports both separate installation kits and built-in/embedded installation)
         for item in opportunity.rental_items:
             q = Decimal(str(item.quantidade or 1.0))
-            if not item.is_kit_instalacao:
+            
+            # Determine installation faturamento
+            if item.is_kit_instalacao:
+                faturamento_instalacao = Decimal(str(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0)) * q
+            else:
+                faturamento_instalacao = Decimal(str(item.kit_vlr_instal_calc or item.valor_instalacao_item or 0.0)) * q
+                
+            if faturamento_instalacao <= 0:
                 continue
                 
-            faturamento = Decimal(str(item.valor_mensal or getattr(item, "kit_valor_mensal", 0.0) or 0.0)) * q
             if item.opportunity_kit_id:
                 rate_pis = Decimal(str(item.kit_pis or 0.0))
                 rate_cofins = Decimal(str(item.kit_cofins or 0.0))
@@ -2746,22 +2812,29 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 rate_irpj = aliq_irpj_rental
                 rate_iss = aliq_iss_rental
                 
-            c_pis = faturamento * (rate_pis / Decimal("100.0"))
-            c_cofins = faturamento * (rate_cofins / Decimal("100.0"))
-            c_csll = faturamento * (rate_csll / Decimal("100.0"))
-            c_irpj = faturamento * (rate_irpj / Decimal("100.0"))
-            c_iss = faturamento * (rate_iss / Decimal("100.0"))
+            c_pis = faturamento_instalacao * (rate_pis / Decimal("100.0"))
+            c_cofins = faturamento_instalacao * (rate_cofins / Decimal("100.0"))
+            c_csll = faturamento_instalacao * (rate_csll / Decimal("100.0"))
+            c_irpj = faturamento_instalacao * (rate_irpj / Decimal("100.0"))
+            c_iss = faturamento_instalacao * (rate_iss / Decimal("100.0"))
             
-            total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
-            impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
-            ratio = impostos / total_calc if total_calc > 0 else Decimal("1.0")
-            
-            impostos_instalacao_pis += c_pis * ratio
-            impostos_instalacao_cofins += c_cofins * ratio
-            impostos_instalacao_csll += c_csll * ratio
-            impostos_instalacao_irpj += c_irpj * ratio
-            impostos_instalacao_iss += c_iss * ratio
-            impostos_instalacao_icms += Decimal(str(getattr(item, "icms_abatido_unit", 0.0) or getattr(item, "icms_unit", 0.0) or 0.0)) * q
+            if item.is_kit_instalacao:
+                total_calc = c_pis + c_cofins + c_csll + c_irpj + c_iss
+                impostos = Decimal(str(item.impostos_mensal or 0.0)) * q
+                ratio = impostos / total_calc if total_calc > 0 else Decimal("1.0")
+                
+                impostos_instalacao_pis += c_pis * ratio
+                impostos_instalacao_cofins += c_cofins * ratio
+                impostos_instalacao_csll += c_csll * ratio
+                impostos_instalacao_irpj += c_irpj * ratio
+                impostos_instalacao_iss += c_iss * ratio
+                impostos_instalacao_icms += Decimal(str(getattr(item, "icms_abatido_unit", 0.0) or getattr(item, "icms_unit", 0.0) or 0.0)) * q
+            else:
+                impostos_instalacao_pis += c_pis
+                impostos_instalacao_cofins += c_cofins
+                impostos_instalacao_csll += c_csll
+                impostos_instalacao_irpj += c_irpj
+                impostos_instalacao_iss += c_iss
 
         # Apply to master DRE variables
         vlt_pis = impostos_instalacao_pis + impostos_locacao_pis
@@ -2919,6 +2992,20 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     else:
         venda_markup = opportunity.venda_markup_produtos or Decimal("1.0")
 
+    # Use nominal (registered) tax rates, not effective rates
+    eff_loc_pis = aliq_pis_rental
+    eff_loc_cofins = aliq_cofins_rental
+    eff_loc_irpj = aliq_irpj_rental
+    eff_loc_csll = aliq_csll_rental
+    eff_loc_iss = aliq_iss_rental
+
+    # Use nominal (registered) tax rates for instalacao
+    eff_inst_pis = pis_venda_pct
+    eff_inst_cofins = cofins_venda_pct
+    eff_inst_iss = iss_venda_pct
+    eff_inst_irpj = irpj_venda_pct
+    eff_inst_csll = csll_venda_pct
+
     return {
         "header": {
             "cliente_nome": customer.nome_fantasia or customer.razao_social if customer else "Não informado",
@@ -2957,20 +3044,20 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 "csll": {"percent": round(csll_venda_pct, 2), "valor": round(vlt_csll, 2)}
             },
             "impostos_instalacao": {
-                "pis": {"percent": round(pis_venda_pct, 2), "valor": round(impostos_instalacao_pis, 2)},
-                "cofins": {"percent": round(cofins_venda_pct, 2), "valor": round(impostos_instalacao_cofins, 2)},
+                "pis": {"percent": round(eff_inst_pis, 2), "valor": round(impostos_instalacao_pis, 2)},
+                "cofins": {"percent": round(eff_inst_cofins, 2), "valor": round(impostos_instalacao_cofins, 2)},
                 "icms": {"percent": round(icms_venda_pct, 2), "valor": round(impostos_instalacao_icms, 2)},
-                "iss": {"percent": round(iss_venda_pct, 2), "valor": round(impostos_instalacao_iss, 2)},
-                "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(impostos_instalacao_irpj, 2)},
-                "csll": {"percent": round(csll_venda_pct, 2), "valor": round(impostos_instalacao_csll, 2)},
+                "iss": {"percent": round(eff_inst_iss, 2), "valor": round(impostos_instalacao_iss, 2)},
+                "irpj": {"percent": round(eff_inst_irpj, 2), "valor": round(impostos_instalacao_irpj, 2)},
+                "csll": {"percent": round(eff_inst_csll, 2), "valor": round(impostos_instalacao_csll, 2)},
                 "total": round(total_impostos_instalacao, 2)
             },
             "impostos_locacao": {
-                "pis": {"percent": round(aliq_pis_rental, 2), "valor": round(impostos_locacao_pis, 2)},
-                "cofins": {"percent": round(aliq_cofins_rental, 2), "valor": round(impostos_locacao_cofins, 2)},
-                "irpj": {"percent": round(aliq_irpj_rental, 2), "valor": round(impostos_locacao_irpj, 2)},
-                "csll": {"percent": round(aliq_csll_rental, 2), "valor": round(impostos_locacao_csll, 2)},
-                "iss": {"percent": round(aliq_iss_rental, 2), "valor": round(impostos_locacao_iss, 2)},
+                "pis": {"percent": round(eff_loc_pis, 2), "valor": round(impostos_locacao_pis, 2)},
+                "cofins": {"percent": round(eff_loc_cofins, 2), "valor": round(impostos_locacao_cofins, 2)},
+                "irpj": {"percent": round(eff_loc_irpj, 2), "valor": round(impostos_locacao_irpj, 2)},
+                "csll": {"percent": round(eff_loc_csll, 2), "valor": round(impostos_locacao_csll, 2)},
+                "iss": {"percent": round(eff_loc_iss, 2), "valor": round(impostos_locacao_iss, 2)},
                 "total": round(total_impostos_locacao, 2)
             },
             "despesas_venda": {

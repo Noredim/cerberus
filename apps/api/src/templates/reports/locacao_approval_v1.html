@@ -205,6 +205,30 @@
                         <td>À Vista / Faturamento</td>
                     </tr>
                     {% endif %}
+                    
+                    {% if kpis.total_despesa_operacional_val > 0 %}
+                    <tr>
+                        <td colspan="3">Despesa Operacional (Lançada como investimento)</td>
+                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.total_despesa_operacional }}</td>
+                        <td>À Vista / Faturamento</td>
+                    </tr>
+                    {% endif %}
+
+                    {% if kpis.custo_servicos_proprios > 0 %}
+                    <tr>
+                        <td colspan="3">Investimento com Serviços Próprios (Stelmat - Instalação)</td>
+                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.custo_servicos_proprios_str }}</td>
+                        <td>À Vista / Faturamento</td>
+                    </tr>
+                    {% endif %}
+
+                    {% if impostos_instalacao_total > 0 %}
+                    <tr>
+                        <td colspan="3">Impostos de Instalação/Startup</td>
+                        <td class="text-right font-bold" style="color: #b91c1c;">R$ {{ kpis.impostos_instalacao_str }}</td>
+                        <td>À Vista / Faturamento</td>
+                    </tr>
+                    {% endif %}
 
                     
                     <tr class="total-row">
