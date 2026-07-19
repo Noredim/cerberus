@@ -5184,8 +5184,8 @@ export function SalesBudgetForm() {
                                       setPurchaseItems(
                                         (pb.items || []).map((i: any) => ({
                                           product_id: i.product_id,
-                                          product_nome: i.product?.nome || '',
-                                          product_codigo: i.product?.codigo || '',
+                                          product_nome: i.product_nome || i.product?.nome || '',
+                                          product_codigo: i.product_codigo || i.product?.codigo || '',
                                           codigo_fornecedor: i.codigo_fornecedor || '',
                                           ncm: i.ncm || '',
                                           quantidade: Number(i.quantidade) || 1,

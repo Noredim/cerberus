@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
@@ -66,6 +66,7 @@ def recalculate_licitacao(
 @router.post("", response_model=schemas.LicitacaoResponse)
 def create_licitacao(
     data: schemas.LicitacaoCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
@@ -73,12 +74,24 @@ def create_licitacao(
     if not company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
-    return LicitacaoService.create_licitacao(db, tenant_id, company_id, data, current_user)
+    licitacao = LicitacaoService.create_licitacao(db, tenant_id, company_id, data, current_user)
+    
+    # Trigger messaging hook
+    _emit_licitacao_event(
+        db=db,
+        licitacao_id=str(licitacao.id),
+        action_key="licitacao.created",
+        user=current_user,
+        background_tasks=background_tasks,
+    )
+    
+    return licitacao
 
 @router.put("/{licitacao_id}", response_model=schemas.LicitacaoResponse)
 def update_licitacao(
     licitacao_id: UUID,
     data: schemas.LicitacaoUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
@@ -86,7 +99,24 @@ def update_licitacao(
     if not company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
-    return LicitacaoService.update_licitacao(db, tenant_id, company_id, licitacao_id, data, current_user)
+
+    # Get previous state for comparison
+    prev_licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+    prev_status = prev_licitacao.status if prev_licitacao else None
+
+    licitacao = LicitacaoService.update_licitacao(db, tenant_id, company_id, licitacao_id, data, current_user)
+
+    # Trigger messaging hook if status changed
+    if prev_status and licitacao.status != prev_status:
+        _emit_licitacao_event(
+            db=db,
+            licitacao_id=str(licitacao.id),
+            action_key="licitacao.status_changed",
+            user=current_user,
+            background_tasks=background_tasks,
+        )
+
+    return licitacao
 
 @router.delete("/{licitacao_id}", status_code=204)
 def delete_licitacao(
@@ -650,3 +680,45 @@ def get_licitacao_dre(
         raise HTTPException(status_code=400, detail="X-Company-Id header is required")
     tenant_id = str(current_user.tenant_id)
     return LicitacaoService.get_licitacao_dre(db, tenant_id, licitacao_id, company_id)
+
+
+def _emit_licitacao_event(
+    db: Session,
+    licitacao_id: str,
+    action_key: str,
+    user: User,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        from src.modules.messaging.hooks import emit_messaging_event
+        from src.modules.licitacoes.models import Licitacao
+
+        licitacao = db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+        if not licitacao:
+            return
+
+        cliente_nome = licitacao.customer.razao_social if licitacao.customer else ""
+        responsavel_nome = licitacao.po.name if licitacao.po else user.name
+
+        context = {
+            "numero_edital": licitacao.numero_edital or "",
+            "cliente": cliente_nome,
+            "modalidade": licitacao.modalidade or "",
+            "valor_total_estimado": f"R$ {licitacao.valor_total_estimado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            "status": licitacao.status,
+            "responsavel": responsavel_nome,
+        }
+
+        emit_messaging_event(
+            action_key=action_key,
+            context=context,
+            source_module="licitações",
+            user=user,
+            db=db,
+            background_tasks=background_tasks,
+            source_entity_id=str(licitacao.id),
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[Messaging] Error emitting licitacao event: {e}")
+

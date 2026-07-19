@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import Optional
@@ -341,6 +341,7 @@ def get_product_cost_composition(
 @router.post("")
 def create_budget(
     data: SalesBudgetCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
@@ -350,6 +351,16 @@ def create_budget(
     budget = service.create_budget(
         db, current_user.tenant_id, company_id, data
     )
+    
+    # Trigger messaging hook
+    _emit_opportunity_event(
+        db=db,
+        budget_id=str(budget.id),
+        action_key="opportunity.created",
+        user=current_user,
+        background_tasks=background_tasks,
+    )
+
     return _budget_to_dict(budget, db)
 
 
@@ -456,6 +467,7 @@ def update_header(
 def update_status(
     budget_id: UUID,
     data: SalesBudgetStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -463,6 +475,15 @@ def update_status(
     if not budget:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     budget = service.update_status(db, current_user.tenant_id, str(budget_id), data.status.value)
+    
+    _emit_opportunity_event(
+        db=db,
+        budget_id=str(budget.id),
+        action_key="opportunity.status_changed",
+        user=current_user,
+        background_tasks=background_tasks,
+    )
+    
     return {"status": budget.status}
 
 
@@ -707,11 +728,13 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
 def enviar_para_aprovacao(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.enviar_para_aprovacao(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -723,11 +746,14 @@ def enviar_para_aprovacao(
 def aprovar_oportunidade(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.aprovar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
+        _emit_opportunity_event(db, str(budget.id), "proposal.approved", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -739,11 +765,14 @@ def aprovar_oportunidade(
 def retornar_ao_vendedor(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.retornar_ao_vendedor(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
+        _emit_opportunity_event(db, str(budget.id), "proposal.rejected", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -755,11 +784,13 @@ def retornar_ao_vendedor(
 def cancelar_oportunidade(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.cancelar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -771,11 +802,13 @@ def cancelar_oportunidade(
 def ganhar_oportunidade(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.ganhar_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -787,11 +820,13 @@ def ganhar_oportunidade(
 def perder_oportunidade(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.perder_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -803,11 +838,13 @@ def perder_oportunidade(
 def reabrir_oportunidade(
     budget_id: UUID,
     data: WorkflowTransitionSchema,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         budget = service.reabrir_oportunidade(db, current_user.tenant_id, str(budget_id), current_user.id, data.justificativa)
+        _emit_opportunity_event(db, str(budget.id), "opportunity.status_changed", current_user, background_tasks)
         return _budget_to_dict(budget, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -893,3 +930,54 @@ def get_historico(
         "descricao": h.descricao,
         "data_movimentacao": h.data_movimentacao.isoformat() if h.data_movimentacao else None
     } for h in budget.history]
+
+
+def _emit_opportunity_event(
+    db: Session,
+    budget_id: str,
+    action_key: str,
+    user: User,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        from src.modules.messaging.hooks import emit_messaging_event
+        from src.modules.sales_budgets.models import SalesBudget
+
+        budget = db.query(SalesBudget).filter(SalesBudget.id == budget_id).first()
+        if not budget:
+            return
+
+        cliente_nome = budget.customer.razao_social if budget.customer else ""
+        vendedor_nome = budget.vendedor.name if budget.vendedor else ""
+        
+        responsavel_nome = ""
+        if budget.responsaveis:
+            first_resp = budget.responsaveis[0]
+            if first_resp.user:
+                responsavel_nome = first_resp.user.name
+        if not responsavel_nome:
+            responsavel_nome = user.name
+
+        context = {
+            "numero": budget.numero_orcamento or str(budget.id),
+            "vendedor": vendedor_nome or user.name,
+            "responsavel": responsavel_nome,
+            "cliente": cliente_nome,
+            "valor_total": f"R$ {budget.valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            "status": budget.status,
+        }
+
+        # Mapping for opportunity actions
+        emit_messaging_event(
+            action_key=action_key,
+            context=context,
+            source_module="oportunidades",
+            user=user,
+            db=db,
+            background_tasks=background_tasks,
+            source_entity_id=str(budget.id),
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[Messaging] Error emitting budget event: {e}")
+

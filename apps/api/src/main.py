@@ -38,6 +38,7 @@ from src.modules.payment_methods.router import router as payment_methods_router
 from src.modules.document_templates.router import router as document_templates_router
 from src.modules.notifications.router import router as notifications_router
 from src.modules.licitacoes.router import router as licitacoes_router
+from src.modules.messaging.router import router as messaging_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -170,3 +171,4 @@ app.include_router(payment_methods_router)
 app.include_router(document_templates_router)
 app.include_router(notifications_router)
 app.include_router(licitacoes_router)
+app.include_router(messaging_router)

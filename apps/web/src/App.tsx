@@ -47,6 +47,7 @@ import FormasPagamentoForm from './modules/payment_methods/FormasPagamentoForm';
 import DocumentTemplateList from './modules/document_templates/DocumentTemplateList';
 import DocumentTemplateForm from './modules/document_templates/DocumentTemplateForm';
 import PWAManager from './components/pwa/PWAManager';
+import MessagingDashboard from './modules/messaging/MessagingDashboard';
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -152,6 +153,7 @@ function App() {
             <Route path="/cadastros/hora-homem" element={<ManHoursDashboard />} />
             <Route path="/cadastros/servicos-proprios" element={<OwnServicesDashboard />} />
             <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
+            <Route path="/seguranca/mensageria" element={<MessagingDashboard />} />
 
             {/* Empresas */}
             <Route path="/empresas" element={<EmpresasList />} />

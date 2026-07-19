@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from src.core.search import unaccent_ilike
@@ -52,7 +52,8 @@ def list_users(
 
 @router.patch("/{user_id}/toggle-active")
 def toggle_user_active(
-    user_id: str, 
+    user_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(check_not_engenharia_preco)
 ):
@@ -62,13 +63,27 @@ def toggle_user_active(
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     if user.email == "wars@warslab.com.br":
         raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
+    
+    was_active = user.is_active
     user.is_active = not user.is_active
     db.commit()
+    
+    # Trigger messaging hook if user was deactivated
+    if was_active and not user.is_active:
+        _emit_user_event(
+            user_data=user,
+            action_key="user.deactivated",
+            actor=current_user,
+            db=db,
+            background_tasks=background_tasks,
+        )
+        
     return {"id": user.id, "is_active": user.is_active}
 
 @router.post("", response_model=UserResponse)
 def create_user(
     payload: UserCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(check_not_engenharia_preco)
 ):
@@ -106,6 +121,15 @@ def create_user(
         db.commit()
 
     db.refresh(new_user)
+
+    # Trigger messaging hook
+    _emit_user_event(
+        user_data=new_user,
+        action_key="user.created",
+        actor=current_user,
+        db=db,
+        background_tasks=background_tasks,
+    )
 
     return format_user_response(new_user)
 
@@ -376,3 +400,33 @@ def unassign_user_company(
             
     db.commit()
     return {"message": "Acesso revogado com sucesso"}
+
+
+def _emit_user_event(
+    user_data: User,
+    action_key: str,
+    actor: User,
+    db: Session,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        from src.modules.messaging.hooks import emit_messaging_event
+
+        context = {
+            "nome": user_data.name,
+            "email": user_data.email,
+        }
+
+        emit_messaging_event(
+            action_key=action_key,
+            context=context,
+            source_module="usuários",
+            user=actor,
+            db=db,
+            background_tasks=background_tasks,
+            source_entity_id=str(user_data.id),
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[Messaging] Error emitting user event: {e}")
+

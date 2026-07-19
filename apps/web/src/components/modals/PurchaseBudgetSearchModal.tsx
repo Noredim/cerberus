@@ -19,6 +19,8 @@ export function PurchaseBudgetSearchModal({
 }: PurchaseBudgetSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const [hoveredBudgetId, setHoveredBudgetId] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (isOpen) {
@@ -116,6 +118,27 @@ export function PurchaseBudgetSearchModal({
                         onSelect(budget);
                         onClose();
                       }}
+                      onMouseEnter={() => {
+                        setHoveredBudgetId(budget.id);
+                      }}
+                      onMouseMove={(e) => {
+                        const tooltipWidth = 420;
+                        const tooltipHeight = 220;
+                        let x = e.clientX + 15;
+                        let y = e.clientY + 15;
+
+                        if (x + tooltipWidth > window.innerWidth) {
+                          x = e.clientX - tooltipWidth - 15;
+                        }
+                        if (y + tooltipHeight > window.innerHeight) {
+                          y = e.clientY - tooltipHeight - 15;
+                        }
+
+                        setTooltipPosition({ x, y });
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredBudgetId(null);
+                      }}
                     >
                       <td className="px-4 py-3.5 font-medium text-text-primary">
                         Nº {budget.numero_orcamento || 'Sem Número'}
@@ -151,6 +174,59 @@ export function PurchaseBudgetSearchModal({
           )}
         </div>
       </div>
+      
+      {/* Floating Equipments Tooltip */}
+      {hoveredBudgetId && (() => {
+        const budget = availableBudgets.find(b => b.id === hoveredBudgetId);
+        if (!budget) return null;
+        const items = budget.items || [];
+        return (
+          <div 
+            className="fixed z-[200] w-[420px] bg-slate-900/95 backdrop-blur-sm text-white rounded-lg p-3 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col gap-2 font-sans transition-all duration-75"
+            style={{ left: `${tooltipPosition.x}px`, top: `${tooltipPosition.y}px` }}
+          >
+            <div className="font-semibold text-orange-400 border-b border-slate-700 pb-1 flex justify-between items-center">
+              <span>Itens do Orçamento (Nº {budget.numero_orcamento || 'Sem Número'})</span>
+              <span className="text-[10px] text-slate-400 font-normal">{items.length} item(ns)</span>
+            </div>
+            
+            {items.length === 0 ? (
+              <p className="text-slate-400 text-center py-2">Nenhum equipamento cadastrado.</p>
+            ) : (
+              <div className="max-h-[180px] overflow-y-auto pr-1">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-800 text-[10px] uppercase font-semibold">
+                      <th className="pr-2 pb-1.5 w-[80px]">Cód.</th>
+                      <th className="pr-2 pb-1.5">Produto</th>
+                      <th className="pr-2 pb-1.5 text-right w-[40px]">Qtd.</th>
+                      <th className="pb-1.5 text-right w-[80px]">Unitário</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {items.map((item: any) => (
+                      <tr key={item.id} className="text-slate-200 hover:bg-slate-800/30">
+                        <td className="pr-2 py-1.5 font-mono text-[10px] text-slate-400 truncate max-w-[80px]" title={item.product_codigo}>
+                          {item.product_codigo || '--'}
+                        </td>
+                        <td className="pr-2 py-1.5 truncate max-w-[180px]" title={item.product_nome}>
+                          {item.product_nome || 'Sem Nome'}
+                        </td>
+                        <td className="pr-2 py-1.5 text-right tabular-nums font-medium">
+                          {Number(item.quantidade)}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-emerald-400">
+                          {formatCurrency(Number(item.valor_unitario) || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
