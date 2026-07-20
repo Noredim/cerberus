@@ -159,12 +159,14 @@ class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []
     costs: List[OpportunityKitCostCreate] = []
     monthly_costs: List[OpportunityKitMonthlyCostCreate] = []
+    sales_teams: Optional[List[UUID]] = []
 
 
 class OpportunityKitUpdate(BaseModel):
     items: Optional[List[OpportunityKitItemCreate]] = None
     costs: Optional[List[OpportunityKitCostCreate]] = None
     monthly_costs: Optional[List[OpportunityKitMonthlyCostCreate]] = None
+    sales_teams: Optional[List[UUID]] = None
 
     nome_kit: Optional[str] = None
     descricao_kit: Optional[str] = None
@@ -353,11 +355,21 @@ class OpportunityKitItemFinancialSummary(BaseModel):
     uf_destino: str = Field(default="")
     custo_unit_final: Decimal = Field(default=Decimal(0))
 
+class OpportunityKitSalesTeamResponse(BaseModel):
+    id: UUID
+    sales_team_id: UUID
+    nome_equipe: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class OpportunityKitResponse(OpportunityKitBase):
     id: UUID
     items: List[OpportunityKitItemResponse]
     costs: List[OpportunityKitCostResponse] = []
     monthly_costs: List[OpportunityKitMonthlyCostResponse] = []
+    sales_teams: List[OpportunityKitSalesTeamResponse] = []
 
     summary: Optional[OpportunityKitFinancialSummary] = None
     item_summaries: Optional[List[OpportunityKitItemFinancialSummary]] = None

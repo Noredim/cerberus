@@ -268,6 +268,7 @@ interface KitFormValues {
   custo_software_mensal_kit: number;
   custo_itens_acessorios_mensal_kit: number;
   sales_budget_id?: string;
+  sales_teams?: string[];
   items: Array<{
     tipo_item?: string;
     product_id: string | null;
@@ -346,6 +347,32 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
 
+  const [salesTeams, setSalesTeams] = useState<any[]>([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (activeCompanyId) {
+      api.get(`/companies/${activeCompanyId}/sales-teams`)
+        .then(res => {
+          const activeTeams = (res.data || []).filter((team: any) => team.ativo);
+          setSalesTeams(activeTeams);
+        })
+        .catch(err => console.error("Erro ao buscar equipes de venda:", err));
+    }
+  }, [activeCompanyId]);
+
+  const userTeams = useMemo(() => {
+    if (!user) return [];
+    return salesTeams.filter((team: any) =>
+      team.members?.some((m: any) => m.user_id === user.id)
+    );
+  }, [salesTeams, user]);
+
+  const isAdmin = useMemo(() => {
+    return user?.roles?.includes('ADMIN') || user?.roles?.includes('ADMINISTRADOR');
+  }, [user]);
+
+
   const allowedTypes = useMemo(() => {
     const isVendaContext = initialTipoContrato === 'VENDA_EQUIPAMENTOS';
     const isLocacaoContext = initialTipoContrato === 'LOCACAO' || initialTipoContrato === 'COMODATO';
@@ -416,7 +443,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     custo_monitoramento_unitario: 0,
     fator_monitoramento: 1.0,
     margem_minima_desejada: '',
+    sales_teams: [],
   });
+
+  useEffect(() => {
+    if (!isAdmin && userTeams.length === 1 && !sourceBudgetId && !form.sales_budget_id) {
+      const singleTeamId = userTeams[0].id;
+      if (!form.sales_teams?.includes(singleTeamId)) {
+        setForm(prev => ({
+          ...prev,
+          sales_teams: [singleTeamId]
+        }));
+      }
+    }
+  }, [isAdmin, userTeams, sourceBudgetId, form.sales_budget_id, form.sales_teams]);
 
   useEffect(() => {
     const fetchItemDetails = async () => {
@@ -484,6 +524,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       if (!data.items) data.items = [];
       if (!data.costs) data.costs = [];
       if (!data.monthly_costs) data.monthly_costs = [];
+      data.sales_teams = (data.sales_teams || []).map((t: any) => t.sales_team_id);
 
       // Safely parse the incoming maintenance factor
       const loadFm = data.fator_manutencao;
@@ -763,6 +804,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
       margem_minima_desejada: data.margem_minima_desejada === '' || data.margem_minima_desejada === undefined ? null : data.margem_minima_desejada,
       faturamento_servico_separado: data.faturamento_servico_separado || false,
+      sales_teams: (sourceBudgetId || data.sales_budget_id) ? [] : data.sales_teams || [],
       costs: sanitizedCosts,
       monthly_costs: data.monthly_costs,
     };
@@ -2395,6 +2437,70 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   onChange={(e) => handleInputChange('descricao_kit', e.target.value)}
                   className="w-full rounded-lg border border-border-strong bg-bg-surface px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50 min-h-[100px]"
                 />
+              </div>
+
+              <div className="md:col-span-2 border border-border-subtle rounded-xl p-4 bg-bg-surface/50">
+                <label className="block text-sm font-semibold mb-2 text-text-primary">Equipes de Venda Autorizadas</label>
+                
+                {(sourceBudgetId || form.sales_budget_id) ? (
+                  <div className="text-xs text-text-muted bg-bg-surface border border-border-strong rounded-lg p-3">
+                    Este kit está vinculado a uma Oportunidade. Acesso restrito a esta oportunidade.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-text-muted mb-3">
+                      Defina quais equipes de venda poderão visualizar e utilizar este kit no catálogo geral.
+                    </p>
+                    
+                    {!isAdmin && userTeams.length === 1 && (
+                      <div className="text-xs text-brand-primary font-medium bg-brand-primary/5 border border-brand-primary/10 rounded-lg p-3">
+                        Acesso exclusivo à sua equipe: <strong className="font-bold">{userTeams[0].nome}</strong> (configuração travada).
+                      </div>
+                    )}
+                    
+                    {(isAdmin || userTeams.length > 1) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {(isAdmin ? salesTeams : userTeams).map((team) => {
+                          const isChecked = form.sales_teams?.includes(team.id);
+                          return (
+                            <label
+                              key={team.id}
+                              className={`flex items-center gap-3 p-3 rounded-lg border text-sm cursor-pointer transition ${
+                                isChecked
+                                  ? 'border-brand-primary bg-brand-primary/5 text-brand-primary font-medium'
+                                  : 'border-border-strong hover:bg-bg-hover text-text-secondary'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  const currentTeams = form.sales_teams || [];
+                                  if (isChecked) {
+                                    handleInputChange(
+                                      'sales_teams',
+                                      currentTeams.filter((id) => id !== team.id)
+                                    );
+                                  } else {
+                                    handleInputChange('sales_teams', [...currentTeams, team.id]);
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                              />
+                              <span className="truncate">{team.nome}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    {!isAdmin && userTeams.length === 0 && (
+                      <div className="text-xs text-text-muted bg-bg-surface border border-border-strong rounded-lg p-3">
+                        Você não está vinculado a nenhuma equipe de vendas ativa nesta empresa.
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               <div>

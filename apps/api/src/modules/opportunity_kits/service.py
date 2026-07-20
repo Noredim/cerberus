@@ -1240,20 +1240,65 @@ class OpportunityKitService:
             "cost_summaries": cost_summaries
         }
 
-    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None):
-        query = self.db.query(OpportunityKit).filter(
+    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None, current_user: Optional[any] = None):
+        from sqlalchemy.orm import joinedload
+        from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
+        
+        query = self.db.query(OpportunityKit).options(
+            joinedload(OpportunityKit.sales_teams).joinedload(OpportunityKitSalesTeam.sales_team)
+        ).filter(
             OpportunityKit.tenant_id == tenant_id,
             OpportunityKit.company_id == company_id
         )
         if tipo_contrato:
             query = query.filter(OpportunityKit.tipo_contrato == tipo_contrato)
 
-        if sales_budget_id:
-            query = query.filter(
-                (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
-            )
+        if current_user:
+            from src.modules.users.models import UserRoleEnum
+            from src.modules.companies.models import SalesTeamMember
+            from sqlalchemy import exists, and_
+            
+            is_admin = any(r.role == UserRoleEnum.ADMIN for r in current_user.roles)
+            if not is_admin:
+                user_team_ids = [r[0] for r in self.db.query(SalesTeamMember.sales_team_id).filter(
+                    SalesTeamMember.user_id == current_user.id
+                ).all()]
+                
+                public_cond = ~exists().where(OpportunityKitSalesTeam.opportunity_kit_id == OpportunityKit.id)
+                if user_team_ids:
+                    match_cond = exists().where(
+                        and_(
+                            OpportunityKitSalesTeam.opportunity_kit_id == OpportunityKit.id,
+                            OpportunityKitSalesTeam.sales_team_id.in_(user_team_ids)
+                        )
+                    )
+                    visibility_cond = (public_cond | match_cond)
+                else:
+                    visibility_cond = public_cond
+                
+                if sales_budget_id:
+                    query = query.filter(
+                        (OpportunityKit.sales_budget_id == sales_budget_id) |
+                        ((OpportunityKit.sales_budget_id == None) & visibility_cond)
+                    )
+                else:
+                    query = query.filter(
+                        (OpportunityKit.sales_budget_id == None) & visibility_cond
+                    )
+            else:
+                if sales_budget_id:
+                    query = query.filter(
+                        (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
+                    )
+                else:
+                    query = query.filter(OpportunityKit.sales_budget_id == None)
         else:
-            query = query.filter(OpportunityKit.sales_budget_id == None)
+            if sales_budget_id:
+                query = query.filter(
+                    (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
+                )
+            else:
+                query = query.filter(OpportunityKit.sales_budget_id == None)
             
         kits = query.all()
         
@@ -1265,7 +1310,11 @@ class OpportunityKitService:
         return kits
 
     def get_kit(self, kit_id: str, tenant_id: str, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, sales_proposal_id: Optional[str] = None):
-        query = self.db.query(OpportunityKit).filter(
+        from sqlalchemy.orm import joinedload
+        from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
+        query = self.db.query(OpportunityKit).options(
+            joinedload(OpportunityKit.sales_teams).joinedload(OpportunityKitSalesTeam.sales_team)
+        ).filter(
             OpportunityKit.id == kit_id,
             OpportunityKit.tenant_id == tenant_id
         )
@@ -1278,7 +1327,7 @@ class OpportunityKitService:
             kit.item_summaries = fin["item_summaries"]
         return kit
 
-    def create_kit(self, tenant_id: str, company_id: str, data: OpportunityKitCreate) -> OpportunityKit:
+    def create_kit(self, tenant_id: str, company_id: str, data: OpportunityKitCreate, current_user: Optional[any] = None) -> OpportunityKit:
         if data.prazo_instalacao_meses > data.prazo_contrato_meses:
             raise ValueError("Prazo de instalação não pode ser maior que o prazo do contrato.")
             
@@ -1379,6 +1428,58 @@ class OpportunityKitService:
         self.db.add(kit)
         self.db.flush()
 
+        # Handle Sales Teams associations
+        sales_team_ids = []
+        if data.sales_budget_id is not None:
+            sales_team_ids = []
+        else:
+            from src.modules.companies.models import SalesTeamMember, SalesTeam
+            from src.modules.users.models import UserRoleEnum
+            
+            is_admin = False
+            if current_user:
+                is_admin = any(r.role == UserRoleEnum.ADMIN for r in current_user.roles)
+            
+            if current_user and not is_admin:
+                user_team_ids = [r[0] for r in self.db.query(SalesTeamMember.sales_team_id).join(
+                    SalesTeam, SalesTeam.id == SalesTeamMember.sales_team_id
+                ).filter(
+                    SalesTeamMember.user_id == current_user.id,
+                    SalesTeam.company_id == company_id,
+                    SalesTeam.ativo == True
+                ).all()]
+                
+                if data.sales_teams:
+                    for tid in data.sales_teams:
+                        if tid not in user_team_ids:
+                            raise ValueError("Você não tem permissão para associar este kit a uma equipe à qual não pertence.")
+                    sales_team_ids = data.sales_teams
+                else:
+                    if len(user_team_ids) == 1:
+                        sales_team_ids = user_team_ids
+                    else:
+                        sales_team_ids = []
+            else:
+                if data.sales_teams:
+                    active_company_teams = [r[0] for r in self.db.query(SalesTeam.id).filter(
+                        SalesTeam.company_id == company_id,
+                        SalesTeam.ativo == True
+                    ).all()]
+                    for tid in data.sales_teams:
+                        if tid not in active_company_teams:
+                            raise ValueError(f"Equipe de vendas {tid} não encontrada ou inativa nesta empresa.")
+                    sales_team_ids = data.sales_teams
+                else:
+                    sales_team_ids = []
+
+        from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
+        for tid in sales_team_ids:
+            link = OpportunityKitSalesTeam(
+                opportunity_kit_id=kit.id,
+                sales_team_id=tid
+            )
+            self.db.add(link)
+
         for item_data in data.items:
             item = OpportunityKitItem(
                 kit_id=kit.id,
@@ -1445,12 +1546,69 @@ class OpportunityKitService:
         kit.item_summaries = fin["item_summaries"]
         return kit
 
-    def update_kit(self, kit_id: str, tenant_id: str, data: OpportunityKitUpdate, company_id: Optional[str] = None) -> OpportunityKit:
+    def update_kit(self, kit_id: str, tenant_id: str, data: OpportunityKitUpdate, company_id: Optional[str] = None, current_user: Optional[any] = None) -> OpportunityKit:
         kit = self.get_kit(kit_id, tenant_id, company_id)
         if not kit:
             return None
             
         update_data = data.model_dump(exclude_unset=True)
+        
+        sales_teams_data = update_data.pop("sales_teams", None)
+        if sales_teams_data is not None:
+            from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
+            self.db.query(OpportunityKitSalesTeam).filter(OpportunityKitSalesTeam.opportunity_kit_id == kit.id).delete()
+            self.db.flush()
+            
+            if kit.sales_budget_id is not None:
+                sales_team_ids = []
+            else:
+                from src.modules.companies.models import SalesTeamMember, SalesTeam
+                from src.modules.users.models import UserRoleEnum
+                
+                is_admin = False
+                if current_user:
+                    is_admin = any(r.role == UserRoleEnum.ADMIN for r in current_user.roles)
+                
+                comp_id = company_id or str(kit.company_id)
+                if current_user and not is_admin:
+                    user_team_ids = [r[0] for r in self.db.query(SalesTeamMember.sales_team_id).join(
+                        SalesTeam, SalesTeam.id == SalesTeamMember.sales_team_id
+                    ).filter(
+                        SalesTeamMember.user_id == current_user.id,
+                        SalesTeam.company_id == comp_id,
+                        SalesTeam.ativo == True
+                    ).all()]
+                    
+                    if sales_teams_data:
+                        for tid in sales_teams_data:
+                            if tid not in user_team_ids:
+                                raise ValueError("Você não tem permissão para associar este kit a uma equipe à qual não pertence.")
+                        sales_team_ids = sales_teams_data
+                    else:
+                        if len(user_team_ids) == 1:
+                            sales_team_ids = user_team_ids
+                        else:
+                            sales_team_ids = []
+                else:
+                    if sales_teams_data:
+                        active_company_teams = [r[0] for r in self.db.query(SalesTeam.id).filter(
+                            SalesTeam.company_id == comp_id,
+                            SalesTeam.ativo == True
+                        ).all()]
+                        for tid in sales_teams_data:
+                            if tid not in active_company_teams:
+                                raise ValueError(f"Equipe de vendas {tid} não encontrada ou inativa nesta empresa.")
+                        sales_team_ids = sales_teams_data
+                    else:
+                        sales_team_ids = []
+            
+            for tid in sales_team_ids:
+                link = OpportunityKitSalesTeam(
+                    opportunity_kit_id=kit.id,
+                    sales_team_id=tid
+                )
+                self.db.add(link)
+
         
         items_data = update_data.pop("items", None)
         if items_data is not None:

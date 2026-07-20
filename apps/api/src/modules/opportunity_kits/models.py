@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.own_services.models  # ensure OwnService is in registry for mapper
+from src.modules.companies.models import SalesTeam
 
 
 class OpportunityKit(Base):
@@ -105,6 +106,7 @@ class OpportunityKit(Base):
     items = relationship("OpportunityKitItem", back_populates="kit", cascade="all, delete-orphan")
     costs = relationship("OpportunityKitCost", back_populates="kit", cascade="all, delete-orphan")
     monthly_costs = relationship("OpportunityKitMonthlyCost", back_populates="kit", cascade="all, delete-orphan")
+    sales_teams = relationship("OpportunityKitSalesTeam", back_populates="kit", cascade="all, delete-orphan")
 
 
 class OpportunityKitCost(Base):
@@ -167,3 +169,20 @@ class OpportunityKitMonthlyCost(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     kit = relationship("OpportunityKit", back_populates="monthly_costs")
+
+
+class OpportunityKitSalesTeam(Base):
+    __tablename__ = "opportunity_kit_sales_teams"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    opportunity_kit_id = Column(UUID(as_uuid=True), ForeignKey("opportunity_kits.id", ondelete="CASCADE"), nullable=False)
+    sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="CASCADE"), nullable=False)
+
+    kit = relationship("OpportunityKit", back_populates="sales_teams")
+    sales_team = relationship("SalesTeam")
+
+    @property
+    def nome_equipe(self):
+        return self.sales_team.nome if self.sales_team else None
+
+
