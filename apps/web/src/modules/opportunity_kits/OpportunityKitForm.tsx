@@ -446,17 +446,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     sales_teams: [],
   });
 
-  useEffect(() => {
-    if (!isAdmin && userTeams.length === 1 && !sourceBudgetId && !form.sales_budget_id) {
-      const singleTeamId = userTeams[0].id;
-      if (!form.sales_teams?.includes(singleTeamId)) {
-        setForm(prev => ({
-          ...prev,
-          sales_teams: [singleTeamId]
-        }));
-      }
-    }
-  }, [isAdmin, userTeams, sourceBudgetId, form.sales_budget_id, form.sales_teams]);
+
 
   useEffect(() => {
     const fetchItemDetails = async () => {
@@ -2450,15 +2440,10 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <>
                     <p className="text-xs text-text-muted mb-3">
                       Defina quais equipes de venda poderão visualizar e utilizar este kit no catálogo geral.
+                      <span className="block mt-1 font-semibold text-brand-primary">Deixe todas desmarcadas para tornar este kit público (visível por todas as equipes).</span>
                     </p>
                     
-                    {!isAdmin && userTeams.length === 1 && (
-                      <div className="text-xs text-brand-primary font-medium bg-brand-primary/5 border border-brand-primary/10 rounded-lg p-3">
-                        Acesso exclusivo à sua equipe: <strong className="font-bold">{userTeams[0].nome}</strong> (configuração travada).
-                      </div>
-                    )}
-                    
-                    {(isAdmin || userTeams.length > 1) && (
+                    {(isAdmin || userTeams.length >= 1) && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {(isAdmin ? salesTeams : userTeams).map((team) => {
                           const isChecked = form.sales_teams?.includes(team.id);

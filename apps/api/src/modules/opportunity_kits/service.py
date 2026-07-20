@@ -1449,17 +1449,14 @@ class OpportunityKitService:
                     SalesTeam.ativo == True
                 ).all()]
                 
+                sales_team_ids = []
                 if data.sales_teams:
                     for tid in data.sales_teams:
                         if tid not in user_team_ids:
                             raise ValueError("Você não tem permissão para associar este kit a uma equipe à qual não pertence.")
                     sales_team_ids = data.sales_teams
-                else:
-                    if len(user_team_ids) == 1:
-                        sales_team_ids = user_team_ids
-                    else:
-                        sales_team_ids = []
             else:
+                sales_team_ids = []
                 if data.sales_teams:
                     active_company_teams = [r[0] for r in self.db.query(SalesTeam.id).filter(
                         SalesTeam.company_id == company_id,
@@ -1469,8 +1466,6 @@ class OpportunityKitService:
                         if tid not in active_company_teams:
                             raise ValueError(f"Equipe de vendas {tid} não encontrada ou inativa nesta empresa.")
                     sales_team_ids = data.sales_teams
-                else:
-                    sales_team_ids = []
 
         from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
         for tid in sales_team_ids:
@@ -1579,17 +1574,14 @@ class OpportunityKitService:
                         SalesTeam.ativo == True
                     ).all()]
                     
+                    sales_team_ids = []
                     if sales_teams_data:
                         for tid in sales_teams_data:
                             if tid not in user_team_ids:
                                 raise ValueError("Você não tem permissão para associar este kit a uma equipe à qual não pertence.")
                         sales_team_ids = sales_teams_data
-                    else:
-                        if len(user_team_ids) == 1:
-                            sales_team_ids = user_team_ids
-                        else:
-                            sales_team_ids = []
                 else:
+                    sales_team_ids = []
                     if sales_teams_data:
                         active_company_teams = [r[0] for r in self.db.query(SalesTeam.id).filter(
                             SalesTeam.company_id == comp_id,
@@ -1599,8 +1591,6 @@ class OpportunityKitService:
                             if tid not in active_company_teams:
                                 raise ValueError(f"Equipe de vendas {tid} não encontrada ou inativa nesta empresa.")
                         sales_team_ids = sales_teams_data
-                    else:
-                        sales_team_ids = []
             
             for tid in sales_team_ids:
                 link = OpportunityKitSalesTeam(

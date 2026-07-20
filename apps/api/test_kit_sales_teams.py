@@ -266,7 +266,7 @@ def run_tests():
         except ValueError as e:
             print(f"Successfully blocked Seller A selecting Team 2: {e}")
 
-        # Scenario 1.3: Seller A passes empty sales_teams list -> Auto-selects Team 1 (their only team)
+        # Scenario 1.3: Seller A passes empty sales_teams list -> Linked Teams count is 0 (public kit)
         kit3_data = OpportunityKitCreate(
             nome_kit="KIT TESTE EQUIPE 1 AUTO",
             tipo_contrato="LOCACAO",
@@ -275,8 +275,7 @@ def run_tests():
         )
         kit3 = service.create_kit(tenant_id, company_id, kit3_data, current_user=seller_a)
         print(f"Created Auto Kit successfully. Linked Teams count: {len(kit3.sales_teams)}")
-        assert len(kit3.sales_teams) == 1
-        assert kit3.sales_teams[0].sales_team_id == team1.id
+        assert len(kit3.sales_teams) == 0
 
 
         # --- TEST 2: Seller C creating a kit ---
@@ -370,7 +369,7 @@ def run_tests():
         assert "KIT TESTE TEAM 2 ONLY" in kit_names_b
         assert "KIT TESTE PUBLIC" in kit_names_b
         assert "KIT TESTE EQUIPE 1" not in kit_names_b
-        assert "KIT TESTE EQUIPE 1 AUTO" not in kit_names_b
+        assert "KIT TESTE EQUIPE 1 AUTO" in kit_names_b
 
         # Seller C (belongs to both Team 1 and Team 2) should see all
         kits_seller_c = service.list_kits(tenant_id, company_id, current_user=seller_c)
