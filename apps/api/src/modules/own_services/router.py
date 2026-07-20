@@ -14,6 +14,7 @@ from src.modules.own_services.schemas import (
     OwnServiceListItem,
     OwnServiceResponse,
     OwnServiceUpdate,
+    OwnServiceItemResponse,
     _fator_to_hhmmss,
 )
 from src.modules.users.models import User
@@ -88,6 +89,17 @@ def _to_response(svc: OwnService) -> OwnServiceResponse:
 
 def _to_list_item(svc: OwnService) -> OwnServiceListItem:
     fator_consolidado, _ = _calc_consolidated(svc.items)
+    items_out = []
+    for item in svc.items:
+        items_out.append(OwnServiceItemResponse(
+            id=item.id,
+            own_service_id=item.own_service_id,
+            role_id=item.role_id,
+            fator=float(item.fator),
+            tempo_minutos=item.tempo_minutos,
+            tempo_total_minutos=item.tempo_total_minutos,
+            role_name=item.role.name if item.role else None
+        ))
     return OwnServiceListItem(
         id=svc.id,
         nome_servico=svc.nome_servico,
@@ -97,6 +109,7 @@ def _to_list_item(svc: OwnService) -> OwnServiceListItem:
         fator_consolidado=fator_consolidado,
         tempo_consolidado_hhmmss=_fator_to_hhmmss(fator_consolidado),
         qt_cargos=len(svc.items),
+        items=items_out,
     )
 
 

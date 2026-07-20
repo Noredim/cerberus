@@ -880,61 +880,45 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     });
   };
 
-  const handleAddCost = (data: {
-    tipo_item: string;
-    product?: any;
-    own_service?: any;
-    forma_execucao?: string;
-    quantidade: number;
-    tipo_custo: string;
-    valor_unitario: number;
-    descricao_item?: string;
-  }) => {
-    setForm(prev => ({
-      ...prev,
-      costs: [
-        ...prev.costs,
-        {
-          tipo_item: data.tipo_item,
-          product_id: data.product?.id,
-          own_service_id: data.own_service?.id,
-          forma_execucao: data.forma_execucao,
-          tipo_custo: data.tipo_custo,
-          quantidade: data.quantidade,
-          valor_unitario: data.valor_unitario,
-          descricao_item: data.descricao_item || data.product?.nome || data.own_service?.nome_servico || 'Serviço',
-          product: data.product,
-          own_service: data.own_service,
-        }
-      ]
-    }));
+  const handleAddCost = (data: any) => {
+    const items = Array.isArray(data) ? data : [data];
+    setForm(prev => {
+      const newCosts = [...prev.costs];
+      items.forEach(item => {
+        newCosts.push({
+          tipo_item: item.tipo_item,
+          product_id: item.product?.id,
+          own_service_id: item.own_service?.id,
+          forma_execucao: item.forma_execucao,
+          tipo_custo: item.tipo_custo,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          descricao_item: item.descricao_item || item.product?.nome || item.own_service?.nome_servico || 'Serviço',
+          product: item.product,
+          own_service: item.own_service,
+        });
+      });
+      return { ...prev, costs: newCosts };
+    });
   };
 
-  const handleAddItemService = (data: {
-    tipo_item: string;
-    product?: any;
-    own_service?: any;
-    forma_execucao?: string;
-    quantidade: number;
-    tipo_custo: string;
-    valor_unitario: number;
-    descricao_item?: string;
-  }) => {
-    setForm(prev => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        {
-          product_id: data.product?.id || null,
-          own_service_id: data.own_service?.id || null,
-          tipo_item: data.tipo_item,
-          descricao_item: data.descricao_item || data.product?.nome || data.own_service?.nome_servico || 'Serviço Próprio',
-          quantidade_no_kit: data.quantidade,
-          product: data.product || null,
-          own_service: data.own_service || null
-        }
-      ]
-    }));
+  const handleAddItemService = (data: any) => {
+    const items = Array.isArray(data) ? data : [data];
+    setForm(prev => {
+      const newItems = [...prev.items];
+      items.forEach(item => {
+        newItems.push({
+          product_id: item.product?.id || null,
+          own_service_id: item.own_service?.id || null,
+          tipo_item: item.tipo_item,
+          descricao_item: item.descricao_item || item.product?.nome || item.own_service?.nome_servico || 'Serviço Próprio',
+          quantidade_no_kit: item.quantidade,
+          product: item.product || null,
+          own_service: item.own_service || null
+        });
+      });
+      return { ...prev, items: newItems };
+    });
   };
 
   const updateCostQuantity = (costToUpdate: any, qty: number) => {

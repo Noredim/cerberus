@@ -119,5 +119,6 @@ class OwnServiceListItem(BaseModel):
     fator_consolidado: float = 0.0
     tempo_consolidado_hhmmss: str = "00:00:00"
     qt_cargos: int = 0
+    items: List[OwnServiceItemResponse] = []
 
     model_config = {"from_attributes": True}

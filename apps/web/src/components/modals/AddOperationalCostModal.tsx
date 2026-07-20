@@ -6,16 +6,7 @@ import { Button } from '../ui/Button';
 interface AddOperationalCostModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: { 
-    tipo_item: string;
-    product?: any; 
-    own_service?: any;
-    forma_execucao?: string;
-    quantidade: number; 
-    tipo_custo: string; 
-    valor_unitario: number;
-    descricao_item?: string;
-  }) => void;
+  onConfirm: (data: any) => void;
   defaultType?: string;
   isKitBasedExecucao?: boolean;
   disabledOwnServices?: boolean;
@@ -57,7 +48,6 @@ export function AddOperationalCostModal({
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [isFetchingDetail, setIsFetchingDetail] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [manHours, setManHours] = useState<any[]>([]);
@@ -70,6 +60,26 @@ export function AddOperationalCostModal({
   const [formaExecucao, setFormaExecucao] = useState('H. NORMAL');
   const [calcError, setCalcError] = useState('');
 
+  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [markupServicos, setMarkupServicos] = useState(1.0);
+  const [prazoContrato, setPrazoContrato] = useState(36);
+
+  useEffect(() => {
+    if (salesBudgetId && isOpen) {
+      api.get(`/sales-budgets/${salesBudgetId}`)
+        .then(res => {
+          setMarkupServicos(Number(res.data.venda_markup_servicos) || 1.0);
+          setPrazoContrato(Number(res.data.prazo_contrato_meses) || 36);
+        })
+        .catch(err => {
+          console.error("Erro ao buscar detalhes do orçamento", err);
+        });
+    } else {
+      setMarkupServicos(1.0);
+      setPrazoContrato(36);
+    }
+  }, [salesBudgetId, isOpen]);
+
   // Fetch ManHours and OwnServices only once per modal open
   useEffect(() => {
     if (isOpen) {
@@ -77,6 +87,7 @@ export function AddOperationalCostModal({
       setSearchTerm('');
       setResults([]);
       setSelectedProduct(null);
+      setSelectedItems([]);
       setCalcError('');
       setFormaExecucao('H. NORMAL');
       setQuantidade(1);
@@ -135,25 +146,10 @@ export function AddOperationalCostModal({
     }
   }, [searchTerm, selectedProduct, tipoItem, ownServices, salesBudgetId, isOpen]);
 
-  const handleSelectItem = async (item: any) => {
-    if (tipoItem === 'PRODUTO') {
-      setSelectedProduct({ ...item, isOwnService: false });
-    } else {
-      setIsFetchingDetail(true);
-      try {
-        const res = await api.get(`/own-services/${item.id}`);
-        setSelectedProduct({ ...res.data, isOwnService: true });
-      } catch (err) {
-        console.error('Erro ao buscar detalhe do serviço', err);
-      } finally {
-        setIsFetchingDetail(false);
-      }
-    }
-  };
 
-  // Recalculate Logic
+
   useEffect(() => {
-    if (!selectedProduct || isFetchingDetail) return;
+    if (!selectedProduct) return;
     
     if (tipoItem === 'PRODUTO') {
       setCalcError('');
@@ -196,7 +192,59 @@ export function AddOperationalCostModal({
       setCalcError(error);
       if (!error) setValorUnitario(totalValue);
     }
-  }, [selectedProduct, tipoItem, formaExecucao, manHours, isFetchingDetail, isKitBasedExecucao]);
+  }, [selectedProduct, tipoItem, formaExecucao, manHours, isKitBasedExecucao]);
+
+  const getOwnServiceCost = (svc: any) => {
+    if (!svc.items || svc.items.length === 0) return 0;
+    const baseExecucao = isKitBasedExecucao && kitFormaExecucao ? kitFormaExecucao : formaExecucao;
+    const field = EXEC_MAP[baseExecucao] || 'hora_normal';
+    
+    let totalValue = 0;
+    for (const item of svc.items) {
+      if (!item.tempo_minutos || parseInt(item.tempo_minutos) === 0) continue;
+      const mh = manHours.find(m => m.role_id === item.role_id);
+      if (!mh || !mh[field] || parseFloat(mh[field]) === 0) continue;
+      const unitPrice = parseFloat(mh[field]);
+      totalValue += (unitPrice / 60) * parseInt(item.tempo_minutos);
+    }
+    return totalValue;
+  };
+
+  const toggleSelectItem = (item: any) => {
+    setSelectedItems(prev => {
+      const idx = prev.findIndex(i => i.id === item.id);
+      if (idx > -1) {
+        return prev.filter(i => i.id !== item.id);
+      } else {
+        return [...prev, { ...item, isOwnService: tipoItem === 'SERVICO_PROPRIO' }];
+      }
+    });
+  };
+
+  const handleConfirmSelected = () => {
+    if (selectedItems.length === 0) return;
+    
+    const mapped = selectedItems.map(item => {
+      const isOwn = item.isOwnService;
+      const cost = isOwn 
+        ? getOwnServiceCost(item) 
+        : (item.vlr_referencia_revenda || item.vlr_referencia_uso_consumo || 0);
+        
+      return {
+        tipo_item: isOwn ? 'SERVICO_PROPRIO' : 'PRODUTO',
+        product: isOwn ? undefined : item,
+        own_service: isOwn ? item : undefined,
+        forma_execucao: isOwn ? (isKitBasedExecucao && kitFormaExecucao ? kitFormaExecucao : formaExecucao) : undefined,
+        quantidade: 1,
+        tipo_custo: tipoCusto,
+        valor_unitario: cost,
+        descricao_item: isOwn ? item.nome_servico : item.nome,
+      };
+    });
+    
+    onConfirm(mapped);
+    onClose();
+  };
 
   const handleConfirm = () => {
     if (!selectedProduct || calcError) return;
@@ -251,32 +299,48 @@ export function AddOperationalCostModal({
               </div>
 
               {/* Search Input */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder={`Digite o nome do ${tipoItem === 'PRODUTO' ? 'produto' : 'serviço'}...`}
-                  className="w-full pl-10 pr-10 py-3 bg-white border border-border-subtle rounded-lg focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none transition-all text-text-primary"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                {isSearching && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-primary w-5 h-5 animate-spin" />
-                )}
-                {searchTerm && !isSearching && (
-                  <button 
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary bg-bg-deep rounded-full p-0.5"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder={`Digite o nome do ${tipoItem === 'PRODUTO' ? 'produto' : 'serviço'}...`}
+                    className="w-full pl-10 pr-10 py-3 bg-white border border-border-subtle rounded-lg focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none transition-all text-text-primary text-sm shadow-sm"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {isSearching && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-primary w-5 h-5 animate-spin" />
+                  )}
+                  {searchTerm && !isSearching && (
+                    <button 
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary bg-bg-deep rounded-full p-0.5"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {!isKitItemFlow && (
+                  <div className="w-full md:w-64 shrink-0">
+                    <select
+                      value={tipoCusto}
+                      onChange={(e) => setTipoCusto(e.target.value)}
+                      className="w-full px-3 py-3 border border-border-subtle rounded-lg bg-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/20 text-text-primary"
+                    >
+                      {COST_TYPES.map(type => (
+                        <option key={type.value} value={type.value}>{type.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
             </div>
 
             {/* Results Area */}
-            <div className="overflow-y-auto flex-1 bg-white p-4">
+            <div className="overflow-y-auto flex-1 bg-white p-4 min-h-[250px]">
               <div className="space-y-2">
                 {!searchTerm && results.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-text-muted">
@@ -285,38 +349,80 @@ export function AddOperationalCostModal({
                   </div>
                 )}
 
-                {results.map((item) => (
-                  <div 
-                    key={item.id}
-                    onClick={() => handleSelectItem(item)}
-                    className="flex items-center justify-between p-4 bg-bg-surface border border-border-subtle rounded-lg hover:border-brand-primary hover:shadow-sm cursor-pointer transition-all group"
-                  >
-                    <div className="flex flex-col overflow-hidden w-full pr-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-text-primary truncate">
-                          {tipoItem === 'PRODUTO' ? item.nome : item.nome_servico}
-                        </span>
-                        {tipoItem === 'SERVICO_PROPRIO' && (
-                          <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase">
-                            Serviço Próprio
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
-                        {tipoItem === 'PRODUTO' && (item.codigo || item.codigo_interno) && (
-                          <span className="flex items-center gap-1">
-                            <span className="font-medium">Cód:</span> {item.codigo ?? item.codigo_interno ?? "-"}
-                          </span>
-                        )}
-                        {tipoItem === 'SERVICO_PROPRIO' && (
-                          <span className="flex items-center gap-1">
-                            <span className="font-medium">Tempo Padrão:</span> {item.tempo_total_minutos} min
-                          </span>
-                        )}
+                {results.map((item) => {
+                  const isSelected = selectedItems.some(i => i.id === item.id);
+                  return (
+                    <div 
+                      key={item.id}
+                      onClick={() => toggleSelectItem(item)}
+                      className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all group ${
+                        isSelected 
+                          ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' 
+                          : 'border-border-subtle hover:border-brand-primary hover:shadow-sm bg-bg-surface'
+                      }`}
+                    >
+                      <div className="flex items-center w-full pr-4">
+                        <div className="mr-3 shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            readOnly
+                            className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col min-w-0 pr-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-text-primary break-words whitespace-normal">
+                              {tipoItem === 'PRODUTO' ? item.nome : item.nome_servico}
+                            </span>
+                            {tipoItem === 'SERVICO_PROPRIO' && (
+                              <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase">
+                                Serviço Próprio
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+                            {tipoItem === 'PRODUTO' && (item.codigo || item.codigo_interno) && (
+                              <span className="flex items-center gap-1">
+                                <span className="font-medium">Cód:</span> {item.codigo ?? item.codigo_interno ?? "-"}
+                              </span>
+                            )}
+                            {tipoItem === 'SERVICO_PROPRIO' && (
+                              <span className="flex items-center gap-1">
+                                <span className="font-medium">Tempo Padrão:</span> {item.tempo_total_minutos} min
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Calculated Prices */}
+                        {(() => {
+                          const cost = tipoItem === 'PRODUTO'
+                            ? (item.vlr_referencia_revenda || item.vlr_referencia_uso_consumo || 0)
+                            : getOwnServiceCost(item);
+                          const venda = cost * markupServicos;
+                          const comodato = venda / prazoContrato;
+                          return (
+                            <div className="flex items-center gap-6 shrink-0 text-sm">
+                              <div className="text-right">
+                                <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">P. Venda</div>
+                                <div className="font-semibold text-text-primary tabular-nums">
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(venda)}
+                                </div>
+                              </div>
+                              <div className="text-right border-l pl-6 border-border-subtle">
+                                <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">Comodato</div>
+                                <div className="font-bold text-brand-primary tabular-nums">
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(comodato)}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {searchTerm.length >= 2 && results.length === 0 && !isSearching && (
                   <div className="flex flex-col items-center justify-center py-10 text-center bg-white border border-dashed border-border-subtle rounded-lg">
@@ -325,8 +431,16 @@ export function AddOperationalCostModal({
                 )}
               </div>
             </div>
+
+            {/* Confirm Selected Footer */}
+            <div className="flex justify-end gap-3 p-4 border-t border-border-subtle bg-bg-subtle shrink-0">
+              <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+              <Button variant="primary" onClick={handleConfirmSelected} disabled={selectedItems.length === 0}>
+                Confirmar ({selectedItems.length} selecionados)
+              </Button>
+            </div>
           </>
-        ) : isFetchingDetail ? (
+        ) : false ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 text-text-muted">
             <Loader2 className="w-10 h-10 animate-spin mb-4 text-brand-primary" />
             <p className="font-medium">Carregando composição do serviço...</p>
