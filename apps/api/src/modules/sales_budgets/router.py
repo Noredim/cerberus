@@ -519,8 +519,47 @@ def delete_budget(
 
 def _budget_to_dict(budget, db: Session = None) -> dict:
     """Serialize budget to response dict."""
+    from fastapi.encoders import jsonable_encoder
+    
+    kit_service = None
+    if db:
+        try:
+            from src.modules.opportunity_kits.service import OpportunityKitService
+            kit_service = OpportunityKitService(db)
+        except Exception as e:
+            print(f"Failed to import/instantiate OpportunityKitService in _budget_to_dict: {e}")
+
     items = []
     for i in budget.items:
+        cost_comp = None
+        if db and i.product_id:
+            try:
+                cost_comp = service.calculate_product_cost_composition(
+                    db, str(i.product_id), budget.tenant_id, "REVENDA", sales_budget_id=str(budget.id)
+                )
+            except Exception:
+                pass
+                
+        kit_data = None
+        if kit_service and i.opportunity_kit_id:
+            try:
+                from src.modules.opportunity_kits.schemas import OpportunityKitResponse
+                kit_obj = kit_service.get_kit(
+                    str(i.opportunity_kit_id),
+                    budget.tenant_id,
+                    budget.company_id,
+                    sales_budget_id=str(budget.id)
+                )
+                if kit_obj:
+                    if hasattr(OpportunityKitResponse, "model_validate"):
+                        kit_data = jsonable_encoder(OpportunityKitResponse.model_validate(kit_obj))
+                    elif hasattr(OpportunityKitResponse, "from_attributes"):
+                        kit_data = jsonable_encoder(OpportunityKitResponse.from_attributes(kit_obj))
+                    else:
+                        kit_data = jsonable_encoder(OpportunityKitResponse.from_orm(kit_obj))
+            except Exception as e:
+                print(f"Error serializing kit in _budget_to_dict items loop: {e}")
+
         items.append({
             "id": i.id,
             "product_id": i.product_id,
@@ -548,10 +587,41 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
             "margem_unit": float(i.margem_unit or 0),
             "quantidade": float(i.quantidade or 1),
             "total_venda": float(i.total_venda or 0),
+            "cost_composition": cost_comp,
+            "opportunity_kit": kit_data,
         })
 
     rental_items = []
     for ri in budget.rental_items:
+        cost_comp = None
+        if db and ri.product_id:
+            try:
+                cost_comp = service.calculate_product_cost_composition(
+                    db, str(ri.product_id), budget.tenant_id, "USO_CONSUMO", sales_budget_id=str(budget.id)
+                )
+            except Exception:
+                pass
+                
+        kit_data = None
+        if kit_service and ri.opportunity_kit_id:
+            try:
+                from src.modules.opportunity_kits.schemas import OpportunityKitResponse
+                kit_obj = kit_service.get_kit(
+                    str(ri.opportunity_kit_id),
+                    budget.tenant_id,
+                    budget.company_id,
+                    sales_budget_id=str(budget.id)
+                )
+                if kit_obj:
+                    if hasattr(OpportunityKitResponse, "model_validate"):
+                        kit_data = jsonable_encoder(OpportunityKitResponse.model_validate(kit_obj))
+                    elif hasattr(OpportunityKitResponse, "from_attributes"):
+                        kit_data = jsonable_encoder(OpportunityKitResponse.from_attributes(kit_obj))
+                    else:
+                        kit_data = jsonable_encoder(OpportunityKitResponse.from_orm(kit_obj))
+            except Exception as e:
+                print(f"Error serializing kit in _budget_to_dict rental_items loop: {e}")
+
         rental_items.append({
             "id": ri.id,
             "product_id": ri.product_id,
@@ -617,6 +687,8 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
             "despesa_operacional_mensal": float(ri.despesa_operacional_mensal or 0),
             "lucro_mensal": float(ri.lucro_mensal or 0),
             "margem": float(ri.margem or 0),
+            "cost_composition": cost_comp,
+            "opportunity_kit": kit_data,
         })
 
     planning = []

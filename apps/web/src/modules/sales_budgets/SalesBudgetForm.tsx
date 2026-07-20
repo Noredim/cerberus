@@ -717,7 +717,6 @@ export function SalesBudgetForm() {
     return companyStateSigla.toUpperCase() !== customerStateSigla.toUpperCase();
   }, [companyStateSigla, customerId, customers]);
 
-  const [, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -754,16 +753,14 @@ export function SalesBudgetForm() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [custRes, prodRes, supRes, profRes, usersRes, fpRes] = await Promise.all([
+        const [custRes, supRes, profRes, usersRes, fpRes] = await Promise.all([
           api.get('/cadastro/clientes', { params: { limit: 200 } }),
-          api.get('/cadastro/produtos', { params: { limit: 500 } }),
           api.get('/cadastro/fornecedores', { params: { limit: 200 } }),
           api.get('/professionals', { params: { limit: 500 } }),
           api.get('/users', { params: { limit: 500 } }),
           api.get('/cadastro/formas-pagamento'),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
-        setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data.items || []);
         setSuppliers(Array.isArray(supRes.data) ? supRes.data : supRes.data.items || []);
         setProfessionals(Array.isArray(profRes.data) ? profRes.data : profRes.data.items || []);
         setUsers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.items || []);
@@ -1000,6 +997,44 @@ export function SalesBudgetForm() {
 
       const enrichedItemsPromises = loadedItems.map(async (item) => {
         if (item.opportunity_kit_id) {
+          const kit = (item as any).opportunity_kit || (item as any).kit_raw;
+          if (kit) {
+            const q = item.quantidade || kit.quantidade_kits || 1;
+            return {
+              type: 'kit',
+              data: {
+                opportunity_kit_id: item.opportunity_kit_id,
+                nome_kit: kit.nome_kit || 'Kit Venda',
+                quantidade: q,
+                fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+                fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+                fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+                fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+
+                custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+
+                venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+                venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+
+                faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+
+                lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+                margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+
+                lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+                margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+
+                lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
+                margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+
+                havera_manutencao: kit.havera_manutencao,
+                qtd_meses_manutencao: kit.qtd_meses_manutencao,
+                summary: kit.summary,
+                kit_raw: kit
+              }
+            };
+          }
           try {
             const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
@@ -1042,11 +1077,18 @@ export function SalesBudgetForm() {
             return null;
           }
         } else {
+          if (item.cost_composition) {
+            const cc = item.cost_composition;
+            if (cc.perfil_st_ativo === false && item.tem_st) {
+              const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
+              return { type: 'regular', data: { ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit } };
+            } else {
+              return { type: 'regular', data: { ...item, cost_composition: cc } };
+            }
+          }
           try {
             if (item.product_id) {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}${id ? `?sales_budget_id=${id}` : ''}`);
-              // When company does NOT adhere to ST (perfil_st_ativo=false),
-              // override the saved ST flag and recalculate ICMS on the sale.
               if (cc.perfil_st_ativo === false && item.tem_st) {
                 const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
                 return { type: 'regular', data: { ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit } };
@@ -1083,6 +1125,18 @@ export function SalesBudgetForm() {
       const enrichedRental = await Promise.all(
         loadedRental.map(async (item: RentalBudgetItem) => {
           if (item.product_id) {
+            if (item.cost_composition) {
+              const cc = item.cost_composition;
+              return {
+                ...item,
+                custo_aquisicao_unit: cc.base_unitario ?? item.custo_aquisicao_unit,
+                ipi_unit: cc.ipi_unitario ?? item.ipi_unit,
+                frete_unit: cc.frete_cif_unitario ?? item.frete_unit,
+                icms_st_unit: 0,
+                difal_unit: cc.difal_unitario ?? 0,
+                cost_composition: cc,
+              };
+            }
             try {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO${id ? `&sales_budget_id=${id}` : ''}`);
               return {
@@ -1096,6 +1150,55 @@ export function SalesBudgetForm() {
               };
             } catch { /* fallback */ }
           } else if (item.opportunity_kit_id) {
+            const kit = (item as any).opportunity_kit || item.kit_raw;
+            if (kit) {
+              return {
+                ...item,
+                custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
+                kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
+                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
+                ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
+                frete_unit: Number(kit.summary?.total_frete_kit || 0),
+                frete_venda_unit: Number(kit.summary?.vlt_frete_venda || 0),
+                icms_st_unit: Number(kit.summary?.total_st_kit || 0),
+                difal_unit: Number(kit.summary?.total_difal_kit || 0),
+                taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
+                kit_vlt_manut: item.kit_vlt_manut !== null && item.kit_vlt_manut !== undefined ? Number(item.kit_vlt_manut) : Number(kit.summary?.vlt_manut || 0),
+                kit_valor_mensal: item.kit_valor_mensal !== null && item.kit_valor_mensal !== undefined ? Number(item.kit_valor_mensal) : (kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0)),
+                kit_valor_impostos: item.kit_valor_impostos !== null && item.kit_valor_impostos !== undefined ? Number(item.kit_valor_impostos) : Number(kit.summary?.valor_impostos ?? 0),
+                kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
+                kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
+                kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.valor_venda_instalacao ?? kit.summary?.vlr_instal_calc ?? 0),
+                kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
+                kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
+                kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
+                kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
+                comissao_dsr: item.dsr_mensal !== null && item.dsr_mensal !== undefined && Number(item.dsr_mensal) !== 0 ? Number(item.dsr_mensal) : Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                comissao_fgts: item.fgts_mensal !== null && item.fgts_mensal !== undefined && Number(item.fgts_mensal) !== 0 ? Number(item.fgts_mensal) : Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                comissao_inss: item.inss_mensal !== null && item.inss_mensal !== undefined && Number(item.inss_mensal) !== 0 ? Number(item.inss_mensal) : Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                comissao_demais: item.demais_incidencias_mensal !== null && item.demais_incidencias_mensal !== undefined && Number(item.demais_incidencias_mensal) !== 0 ? Number(item.demais_incidencias_mensal) : Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                kit_comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                kit_comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                kit_comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                kit_comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                desp_operacional: item.desp_operacional !== null && item.desp_operacional !== undefined && Number(item.desp_operacional) !== 0
+                  ? Number(item.desp_operacional)
+                  : (item.despesa_operacional_mensal !== null && item.despesa_operacional_mensal !== undefined && Number(item.despesa_operacional_mensal) !== 0
+                    ? Number(item.despesa_operacional_mensal)
+                    : Number(kit.summary?.vlt_despesa_operacional || 0)),
+                kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
+                kit_comissionamento_detalhado: item.kit_comissionamento_detalhado || kit.comissionamento_detalhado,
+                kit_raw: kit,
+              };
+            }
             try {
               const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
               return {
@@ -2428,6 +2531,44 @@ export function SalesBudgetForm() {
 
       const enrichedItemsPromises = loadedItems.map(async (item) => {
         if (item.opportunity_kit_id) {
+          const kit = (item as any).opportunity_kit || (item as any).kit_raw;
+          if (kit) {
+            const q = item.quantidade || kit.quantidade_kits || 1;
+            return {
+              type: 'kit',
+              data: {
+                opportunity_kit_id: item.opportunity_kit_id,
+                nome_kit: kit.nome_kit || 'Kit Venda',
+                quantidade: q,
+                fator_margem_locacao: Number(kit.fator_margem_locacao || 1),
+                fator_margem_servicos_produtos: Number(kit.fator_margem_servicos_produtos || 1),
+                fator_margem_instalacao: Number(kit.fator_margem_instalacao || 1),
+                fator_margem_manutencao: Number(kit.fator_margem_manutencao || 1),
+
+                custo_aquisicao_equip_unit: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_manutencao_unit: Number(kit.summary?.vlt_manut || 0),
+
+                venda_equip_unit: Number(kit.summary?.venda_equipamentos_total ?? kit.summary?.valor_mensal_kit ?? 0),
+                venda_manut_unit: Number(kit.summary?.venda_manutencao_total ?? 0),
+
+                faturamento_total: Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0))),
+
+                lucro_venda: Number(kit.summary?.lucro_equipamentos || 0),
+                margem_venda: Number(kit.summary?.margem_equipamentos || 0),
+
+                lucro_manutencao: Number(kit.summary?.lucro_manutencao || 0),
+                margem_manutencao: Number(kit.summary?.margem_manutencao || 0),
+
+                lucro_final: Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0),
+                margem_geral: (Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) > 0 ? ((Number(kit.summary?.lucro_equipamentos || 0) + Number(kit.summary?.lucro_manutencao || 0)) / Number(kit.summary?.faturamento_total_venda ?? (Number(kit.summary?.venda_equipamentos_total || 0) + Number(kit.summary?.venda_manutencao_total || 0)))) * 100 : 0,
+
+                havera_manutencao: kit.havera_manutencao,
+                qtd_meses_manutencao: kit.qtd_meses_manutencao,
+                summary: kit.summary,
+                kit_raw: kit
+              }
+            };
+          }
           try {
             const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
             const q = item.quantidade || kit.quantidade_kits || 1;
@@ -2470,6 +2611,15 @@ export function SalesBudgetForm() {
             return null;
           }
         } else {
+          if (item.cost_composition) {
+            const cc = item.cost_composition;
+            if (cc.perfil_st_ativo === false && item.tem_st) {
+              const icmsUnit = Number(item.venda_unit) * Number(item.perc_icms) / 100;
+              return { type: 'regular', data: { ...item, cost_composition: cc, tem_st: false, icms_unit: icmsUnit } };
+            } else {
+              return { type: 'regular', data: { ...item, cost_composition: cc } };
+            }
+          }
           try {
             if (item.product_id) {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?sales_budget_id=${id}`);
@@ -2507,11 +2657,78 @@ export function SalesBudgetForm() {
       const enrichedRental = await Promise.all(
         (d.rental_items || []).map(async (item: any) => {
           if (item.product_id) {
+            if (item.cost_composition) {
+              const cc = item.cost_composition;
+              return {
+                ...item,
+                custo_aquisicao_unit: cc.base_unitario ?? item.custo_aquisicao_unit,
+                ipi_unit: cc.ipi_unitario ?? item.ipi_unit,
+                frete_unit: cc.frete_cif_unitario ?? item.frete_unit,
+                icms_st_unit: 0,
+                difal_unit: cc.difal_unitario ?? 0,
+                cost_composition: cc,
+              };
+            }
             try {
               const { data: cc } = await api.get(`/sales-budgets/product-cost-composition/${item.product_id}?tipo=USO_CONSUMO&sales_budget_id=${id}`);
-              return { ...item, cost_composition: cc };
+              return {
+                ...item,
+                custo_aquisicao_unit: cc.base_unitario ?? item.custo_aquisicao_unit,
+                ipi_unit: cc.ipi_unitario ?? item.ipi_unit,
+                frete_unit: cc.frete_cif_unitario ?? item.frete_unit,
+                icms_st_unit: 0,
+                difal_unit: cc.difal_unitario ?? 0,
+                cost_composition: cc,
+              };
             } catch { /* fallback */ }
           } else if (item.opportunity_kit_id) {
+            const kit = (item as any).opportunity_kit || item.kit_raw;
+            if (kit) {
+              return {
+                ...item,
+                custo_op_mensal_kit: Number(kit.summary?.custo_operacional_mensal_kit || 0) + Number(kit.summary?.custo_mensal_bloco_7 || 0),
+                kit_custo_produtos: Number(kit.summary?.custo_aquisicao_produtos || 0),
+                kit_custo_servicos: Number(kit.summary?.custo_aquisicao_servicos || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                custo_aquisicao_unit: Number(kit.summary?.custo_aquisicao_total || 0),
+                ipi_unit: Number(kit.summary?.total_ipi_kit || 0),
+                frete_unit: Number(kit.summary?.total_frete_kit || 0),
+                frete_venda_unit: Number(kit.summary?.vlt_frete_venda || 0),
+                icms_st_unit: Number(kit.summary?.total_st_kit || 0),
+                difal_unit: Number(kit.summary?.total_difal_kit || 0),
+                taxa_manutencao_anual_item: Number(kit.taxa_manutencao_anual || 0),
+                kit_vlt_manut: item.kit_vlt_manut !== null && item.kit_vlt_manut !== undefined ? Number(item.kit_vlt_manut) : Number(kit.summary?.vlt_manut || 0),
+                kit_valor_mensal: item.kit_valor_mensal !== null && item.kit_valor_mensal !== undefined ? Number(item.kit_valor_mensal) : (kit.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? Number(kit.summary?.venda_equipamentos_total || 0) : Number(kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0)),
+                kit_valor_impostos: item.kit_valor_impostos !== null && item.kit_valor_impostos !== undefined ? Number(item.kit_valor_impostos) : Number(kit.summary?.valor_impostos ?? 0),
+                kit_receita_liquida: item.kit_receita_liquida !== null && item.kit_receita_liquida !== undefined ? Number(item.kit_receita_liquida) : Number(kit.summary?.receita_liquida_mensal_kit || 0),
+                kit_lucro_mensal: item.kit_lucro_mensal !== null && item.kit_lucro_mensal !== undefined ? Number(item.kit_lucro_mensal) : Number(kit.summary?.lucro_mensal_kit || 0),
+                kit_faturamento_separado: Boolean(kit.faturamento_servico_separado),
+                kit_investimento_total: Number(kit.summary?.custo_aquisicao_total || 0) + Number(kit.summary?.imposto_instalacao || 0) + Number(kit.summary?.vlr_instal_calc || 0),
+                kit_imposto_instalacao: Number(kit.summary?.imposto_instalacao || 0),
+                kit_comissao: item.kit_comissao !== null && item.kit_comissao !== undefined && Number(item.kit_comissao) !== 0 ? Number(item.kit_comissao) : Number(kit.summary?.valor_comissao_locacao || 0),
+                kit_perc_comissao: item.kit_perc_comissao !== null && item.kit_perc_comissao !== undefined && Number(item.kit_perc_comissao) !== 0 ? Number(item.kit_perc_comissao) : Number(kit.perc_comissao || 0),
+                kit_despesas_adm: item.kit_despesas_adm !== null && item.kit_despesas_adm !== undefined && Number(item.kit_despesas_adm) !== 0 ? Number(item.kit_despesas_adm) : Number(kit.summary?.valor_despesas_adm_locacao || 0),
+                kit_perc_despesas_adm: item.kit_perc_despesas_adm !== null && item.kit_perc_despesas_adm !== undefined && Number(item.kit_perc_despesas_adm) !== 0 ? Number(item.kit_perc_despesas_adm) : Number(kit.perc_despesas_adm || 0),
+                kit_vlr_instal_calc: Number(kit.summary?.valor_venda_instalacao ?? kit.summary?.vlr_instal_calc ?? 0),
+                kit_parcela_locacao: item.kit_parcela_locacao !== null && item.kit_parcela_locacao !== undefined ? Number(item.kit_parcela_locacao) : Number(kit.summary?.valor_parcela_locacao || 0),
+                kit_venda_unit_monitoramento: Number(kit.summary?.venda_unit_monitoramento || 0),
+                kit_custo_monitoramento_unit: Number(kit.summary?.custo_monitoramento_unitario || kit.custo_monitoramento_unitario || 0),
+                kit_margem: item.kit_margem !== null && item.kit_margem !== undefined ? Number(item.kit_margem) : Number(kit.summary?.margem_kit || 0),
+                comissao_dsr: item.dsr_mensal !== null && item.dsr_mensal !== undefined && Number(item.dsr_mensal) !== 0 ? Number(item.dsr_mensal) : Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                comissao_fgts: item.fgts_mensal !== null && item.fgts_mensal !== undefined && Number(item.fgts_mensal) !== 0 ? Number(item.fgts_mensal) : Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                comissao_inss: item.inss_mensal !== null && item.inss_mensal !== undefined && Number(item.inss_mensal) !== 0 ? Number(item.inss_mensal) : Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                comissao_demais: item.demais_incidencias_mensal !== null && item.demais_incidencias_mensal !== undefined && Number(item.demais_incidencias_mensal) !== 0 ? Number(item.demais_incidencias_mensal) : Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                kit_comissao_dsr: Number(kit.summary?.vlt_comissao_dsr_loc || 0),
+                kit_comissao_fgts: Number(kit.summary?.vlt_comissao_fgts_loc || 0),
+                kit_comissao_inss: Number(kit.summary?.vlt_comissao_inss_loc || 0),
+                kit_comissao_demais: Number(kit.summary?.vlt_comissao_demais_loc || 0),
+                desp_operacional: item.desp_operacional !== null && item.desp_operacional !== undefined && Number(item.desp_operacional) !== 0
+                  ? Number(item.desp_operacional)
+                  : (item.despesa_operacional_mensal !== null && item.despesa_operacional_mensal !== undefined && Number(item.despesa_operacional_mensal) !== 0
+                    ? Number(item.despesa_operacional_mensal)
+                    : Number(kit.summary?.vlt_despesa_operacional || 0)),
+                kit_despesa_operacional: Number(kit.summary?.vlt_despesa_operacional || 0),
+              };
+            }
             try {
               const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true&sales_budget_id=${id}`);
               return {
