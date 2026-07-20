@@ -22,6 +22,21 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [markup, setMarkup] = useState<number>(1.0);
+
+  useEffect(() => {
+    if (salesBudgetId && isOpen) {
+      api.get(`/sales-budgets/${salesBudgetId}`)
+        .then(res => {
+          setMarkup(Number(res.data.venda_markup_produtos) || 1.0);
+        })
+        .catch(err => {
+          console.error("Erro ao buscar markup do orçamento", err);
+        });
+    } else {
+      setMarkup(1.0);
+    }
+  }, [salesBudgetId, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -140,7 +155,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                       : 'border-border-subtle hover:border-brand-primary hover:shadow-sm'
                   }`}
                 >
-                  <div className="flex items-center overflow-hidden w-full pr-4">
+                  <div className="flex items-center w-full pr-4">
                     {multiSelect && (
                       <div className="mr-3 shrink-0">
                         <input
@@ -151,9 +166,9 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                         />
                       </div>
                     )}
-                    <div className="flex flex-col overflow-hidden w-full">
+                    <div className="flex-1 flex flex-col min-w-0 pr-4">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-text-primary truncate">{product.nome}</span>
+                        <span className="font-semibold text-text-primary break-words whitespace-normal">{product.nome}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
                         {product.codigo && (
@@ -173,6 +188,27 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                         )}
                       </div>
                     </div>
+
+                    {(() => {
+                      const cost = product.vlr_referencia_revenda || product.vlr_referencia_uso_consumo || 0;
+                      const sale = cost * markup;
+                      return (
+                        <div className="flex items-center gap-6 shrink-0 text-sm">
+                          <div className="text-right">
+                            <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">P. Revenda</div>
+                            <div className="font-medium text-text-primary tabular-nums">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cost)}
+                            </div>
+                          </div>
+                          <div className="text-right border-l pl-6 border-border-subtle">
+                            <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">P. Venda</div>
+                            <div className="font-bold text-brand-primary tabular-nums">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sale)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   
                   {!multiSelect && (
