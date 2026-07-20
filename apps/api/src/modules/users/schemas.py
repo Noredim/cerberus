@@ -51,3 +51,6 @@ class UserProfilePictureUpdate(BaseModel):
 class UserPasswordUpdate(BaseModel):
     current_password: str
     new_password: str
+
+class UserPasswordResetAdmin(BaseModel):
+    new_password: str

@@ -12,10 +12,12 @@ import {
     Mail,
     Edit2,
     Trash2,
-    X
+    X,
+    Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface User {
     id: string;
@@ -270,6 +272,9 @@ const UsersList: React.FC = () => {
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+    const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(null);
+    const { user: currentUser } = useAuth();
+    const isCurrentUserAdmin = currentUser?.roles?.includes('ADMIN');
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -432,6 +437,14 @@ const UsersList: React.FC = () => {
                                                                 >
                                                                     <Edit2 className="w-4 h-4" /> Editar Usuário
                                                                 </button>
+                                                                {isCurrentUserAdmin && (
+                                                                    <button
+                                                                        onClick={() => { setOpenDropdown(null); setChangingPasswordUser(user); }}
+                                                                        className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
+                                                                    >
+                                                                        <Key className="w-4 h-4" /> Alterar Senha
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     onClick={() => { setOpenDropdown(null); handleDelete(user.id); }}
                                                                     className="flex items-center gap-2 px-4 py-2 text-sm text-brand-danger hover:bg-brand-danger/10 transition-colors w-full text-left"
@@ -468,6 +481,95 @@ const UsersList: React.FC = () => {
                 userData={editingUser}
                 onSuccess={fetchUsers}
             />
+
+            {changingPasswordUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-bg-surface border border-border-subtle rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle shrink-0">
+                            <div>
+                                <h2 className="text-base font-bold text-text-primary">
+                                    Alterar Senha
+                                </h2>
+                                <p className="text-xs text-text-muted mt-0.5">
+                                    Redefina a senha de <span className="font-semibold text-text-primary">{changingPasswordUser.name}</span>
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setChangingPasswordUser(null)}
+                                className="p-1.5 rounded-md hover:bg-bg-deep text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 flex-1">
+                            <form
+                                onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const formEl = e.currentTarget;
+                                    const pass = (formEl.elements.namedItem('new_password') as HTMLInputElement).value;
+                                    const confirm = (formEl.elements.namedItem('confirm_password') as HTMLInputElement).value;
+                                    
+                                    if (pass !== confirm) {
+                                        alert('As senhas não coincidem!');
+                                        return;
+                                    }
+                                    
+                                    try {
+                                        await api.put(`/users/${changingPasswordUser.id}/reset-password-admin`, {
+                                            new_password: pass
+                                        });
+                                        alert('Senha alterada com sucesso!');
+                                        setChangingPasswordUser(null);
+                                    } catch (err: any) {
+                                        const detail = err.response?.data?.detail || 'Erro ao alterar a senha.';
+                                        alert(detail);
+                                    }
+                                }}
+                                className="space-y-4"
+                            >
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-text-primary">Nova Senha</label>
+                                    <input
+                                        required
+                                        type="password"
+                                        name="new_password"
+                                        placeholder="Digite a nova senha de acesso"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand-primary outline-none"
+                                    />
+                                </div>
+                                
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-text-primary">Confirmar Nova Senha</label>
+                                    <input
+                                        required
+                                        type="password"
+                                        name="confirm_password"
+                                        placeholder="Confirme a nova senha de acesso"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand-primary outline-none"
+                                    />
+                                </div>
+                                
+                                <div className="flex gap-2 pt-4 border-t border-border-subtle shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setChangingPasswordUser(null)}
+                                        className="flex-1 px-4 py-2 text-sm font-medium text-text-muted hover:text-text-primary hover:bg-bg-deep rounded-md transition-colors cursor-pointer border border-border-subtle"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 px-4 py-2 text-sm font-medium bg-brand-primary text-white rounded-md hover:bg-brand-primary/90 transition-colors cursor-pointer flex items-center justify-center"
+                                    >
+                                        Confirmar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

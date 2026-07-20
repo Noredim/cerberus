@@ -6,7 +6,7 @@ from src.core.search import unaccent_ilike
 from src.core.database import get_db
 from src.core.security import get_password_hash, verify_password
 from src.modules.users.models import User, UserRole, UserRoleEnum
-from src.modules.users.schemas import UserResponse, UserCreate, UserUpdate, UserProfilePictureUpdate, UserPasswordUpdate
+from src.modules.users.schemas import UserResponse, UserCreate, UserUpdate, UserProfilePictureUpdate, UserPasswordUpdate, UserPasswordResetAdmin
 from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -203,6 +203,32 @@ def reset_my_password(
     current_user.password_hash = get_password_hash(payload.new_password)
     db.commit()
     return {"message": "Senha atualizada com sucesso"}
+
+@router.put("/{user_id}/reset-password-admin")
+def reset_password_admin(
+    user_id: str,
+    payload: UserPasswordResetAdmin,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    roles = [r.role.value for r in current_user.roles]
+    if "ADMIN" not in roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: apenas administradores podem alterar a senha de outros usuários"
+        )
+        
+    user = db.query(User).filter(User.id == user_id, User.tenant_id == current_user.tenant_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        
+    if user.email == "wars@warslab.com.br":
+        raise HTTPException(status_code=403, detail="O usuário Master Admin não pode ser alterado ou excluído.")
+        
+    user.password_hash = get_password_hash(payload.new_password)
+    db.commit()
+    return {"message": "Senha atualizada com sucesso pelo administrador"}
+
 
 @router.delete("/{user_id}")
 def delete_user(
