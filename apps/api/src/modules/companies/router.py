@@ -12,7 +12,7 @@ from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa
-from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut
+from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut, EligibleUserOut, SalesTeamCreateUpdate, SalesTeamOut, SalesTeamMemberOut, SalesTeamPolicyOut
 
 from .providers.cnpj_provider import ReceitaWsProvider
 from .services.cnpj_consultar_service import ConsultarEmpresaPorCNPJService
@@ -644,3 +644,356 @@ def delete_commercial_policy(
     db.delete(policy)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{company_id}/eligible-users", response_model=List[EligibleUserOut])
+def list_eligible_users(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from src.modules.users.models import UserCompany, User
+    from src.modules.professionals.models import Professional
+    from src.modules.roles.models import Role
+
+    # Verify company belongs to current user's tenant
+    company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    # Get all users linked to this company
+    users = db.query(User).join(UserCompany).filter(
+        UserCompany.company_id == company_id,
+        User.tenant_id == current_user.tenant_id
+    ).all()
+
+    # Get their roles (if any) via Professional
+    user_ids = [u.id for u in users]
+    professionals = db.query(Professional).options(joinedload(Professional.role)).filter(
+        Professional.user_id.in_(user_ids) if user_ids else False,
+        Professional.tenant_id == current_user.tenant_id
+    ).all()
+
+    prof_map = {p.user_id: p.role.name for p in professionals if p.role}
+
+    result = []
+    for u in users:
+        result.append(EligibleUserOut(
+            id=u.id,
+            name=u.name,
+            email=u.email,
+            role_name=prof_map.get(u.id)
+        ))
+
+    return result
+
+
+@router.get("/{company_id}/sales-teams", response_model=List[SalesTeamOut])
+def list_sales_teams(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy, CommercialPolicy
+    from src.modules.users.models import User
+
+    # Verify company belongs to current user's tenant
+    company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    teams = db.query(SalesTeam).options(
+        joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
+        joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
+    ).filter(
+        SalesTeam.company_id == company_id,
+        SalesTeam.tenant_id == current_user.tenant_id
+    ).all()
+
+    out_teams = []
+    for t in teams:
+        members_out = []
+        for m in t.members:
+            members_out.append(SalesTeamMemberOut(
+                id=m.id,
+                user_id=m.user_id,
+                cargo=m.cargo,
+                user_name=m.user.name if m.user else None,
+                user_email=m.user.email if m.user else None
+            ))
+
+        policies_out = []
+        for p in t.policies:
+            policies_out.append(SalesTeamPolicyOut(
+                id=p.id,
+                commercial_policy_id=p.commercial_policy_id,
+                nome_politica=p.policy.nome_politica if p.policy else None
+            ))
+
+        out_teams.append(SalesTeamOut(
+            id=t.id,
+            company_id=t.company_id,
+            nome=t.nome,
+            ativo=t.ativo,
+            members=members_out,
+            policies=policies_out
+        ))
+
+    return out_teams
+
+
+@router.post("/{company_id}/sales-teams", response_model=SalesTeamOut, status_code=status.HTTP_201_CREATED)
+def create_sales_team(
+    company_id: UUID,
+    payload: SalesTeamCreateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy, CommercialPolicy
+    from src.modules.users.models import UserCompany, User
+
+    # 1. Verify company belongs to current user's tenant
+    company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    # 2. Validate team members and ensure they belong to the company
+    assigned_user_ids = [m.user_id for m in payload.members]
+    if assigned_user_ids:
+        # Check company memberships
+        memberships = db.query(UserCompany).filter(
+            UserCompany.company_id == company_id,
+            UserCompany.user_id.in_(assigned_user_ids)
+        ).all()
+        valid_user_ids = {m.user_id for m in memberships}
+        for uid in assigned_user_ids:
+            if uid not in valid_user_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Usuário com ID {uid} não pertence a esta empresa."
+                )
+
+    # 3. Validate policies belong to this company and are active
+    assigned_policy_ids = [p.commercial_policy_id for p in payload.policies]
+    if assigned_policy_ids:
+        policies = db.query(CommercialPolicy).filter(
+            CommercialPolicy.company_id == company_id,
+            CommercialPolicy.id.in_(assigned_policy_ids)
+        ).all()
+        valid_policies = {p.id: p for p in policies}
+        for pid in assigned_policy_ids:
+            if pid not in valid_policies:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Política comercial com ID {pid} não pertence a esta empresa."
+                )
+            if not valid_policies[pid].ativo:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A política comercial '{valid_policies[pid].nome_politica}' está inativa e não pode ser vinculada."
+                )
+
+    # 4. Create SalesTeam
+    team = SalesTeam(
+        tenant_id=current_user.tenant_id,
+        company_id=company_id,
+        nome=payload.nome,
+        ativo=payload.ativo
+    )
+    db.add(team)
+    db.flush() # Populate team.id
+
+    # 5. Create members
+    for m in payload.members:
+        member = SalesTeamMember(
+            sales_team_id=team.id,
+            user_id=m.user_id,
+            cargo=m.cargo
+        )
+        db.add(member)
+
+    # 6. Create policies linkage
+    for p in payload.policies:
+        policy_link = SalesTeamPolicy(
+            sales_team_id=team.id,
+            commercial_policy_id=p.commercial_policy_id
+        )
+        db.add(policy_link)
+
+    db.commit()
+    db.refresh(team)
+
+    # Re-fetch with relationships populated
+    db_team = db.query(SalesTeam).options(
+        joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
+        joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
+    ).filter(SalesTeam.id == team.id).first()
+
+    members_out = [
+        SalesTeamMemberOut(
+            id=m.id,
+            user_id=m.user_id,
+            cargo=m.cargo,
+            user_name=m.user.name if m.user else None,
+            user_email=m.user.email if m.user else None
+        )
+        for m in db_team.members
+    ]
+
+    policies_out = [
+        SalesTeamPolicyOut(
+            id=p.id,
+            commercial_policy_id=p.commercial_policy_id,
+            nome_politica=p.policy.nome_politica if p.policy else None
+        )
+        for p in db_team.policies
+    ]
+
+    return SalesTeamOut(
+        id=db_team.id,
+        company_id=db_team.company_id,
+        nome=db_team.nome,
+        ativo=db_team.ativo,
+        members=members_out,
+        policies=policies_out
+    )
+
+
+@router.put("/sales-teams/{team_id}", response_model=SalesTeamOut)
+def update_sales_team(
+    team_id: UUID,
+    payload: SalesTeamCreateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy, CommercialPolicy
+    from src.modules.users.models import UserCompany, User
+
+    # 1. Fetch Sales Team and ensure it belongs to current tenant
+    team = db.query(SalesTeam).filter(
+        SalesTeam.id == team_id,
+        SalesTeam.tenant_id == current_user.tenant_id
+    ).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Equipe de vendas não encontrada.")
+
+    company_id = team.company_id
+
+    # 2. Validate team members and ensure they belong to the company
+    assigned_user_ids = [m.user_id for m in payload.members]
+    if assigned_user_ids:
+        # Check company memberships
+        memberships = db.query(UserCompany).filter(
+            UserCompany.company_id == company_id,
+            UserCompany.user_id.in_(assigned_user_ids)
+        ).all()
+        valid_user_ids = {m.user_id for m in memberships}
+        for uid in assigned_user_ids:
+            if uid not in valid_user_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Usuário com ID {uid} não pertence a esta empresa."
+                )
+
+    # 3. Validate policies belong to this company and are active
+    assigned_policy_ids = [p.commercial_policy_id for p in payload.policies]
+    if assigned_policy_ids:
+        policies = db.query(CommercialPolicy).filter(
+            CommercialPolicy.company_id == company_id,
+            CommercialPolicy.id.in_(assigned_policy_ids)
+        ).all()
+        valid_policies = {p.id: p for p in policies}
+        for pid in assigned_policy_ids:
+            if pid not in valid_policies:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Política comercial com ID {pid} não pertence a esta empresa."
+                )
+            if not valid_policies[pid].ativo:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A política comercial '{valid_policies[pid].nome_politica}' está inativa e não pode ser vinculada."
+                )
+
+    # 4. Update core attributes
+    team.nome = payload.nome
+    team.ativo = payload.ativo
+
+    # 5. Update members
+    db.query(SalesTeamMember).filter(SalesTeamMember.sales_team_id == team_id).delete()
+    for m in payload.members:
+        member = SalesTeamMember(
+            sales_team_id=team.id,
+            user_id=m.user_id,
+            cargo=m.cargo
+        )
+        db.add(member)
+
+    # 6. Update policies
+    db.query(SalesTeamPolicy).filter(SalesTeamPolicy.sales_team_id == team_id).delete()
+    for p in payload.policies:
+        policy_link = SalesTeamPolicy(
+            sales_team_id=team.id,
+            commercial_policy_id=p.commercial_policy_id
+        )
+        db.add(policy_link)
+
+    db.commit()
+    db.refresh(team)
+
+    # Re-fetch with relationships populated
+    db_team = db.query(SalesTeam).options(
+        joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
+        joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
+    ).filter(SalesTeam.id == team.id).first()
+
+    members_out = [
+        SalesTeamMemberOut(
+            id=m.id,
+            user_id=m.user_id,
+            cargo=m.cargo,
+            user_name=m.user.name if m.user else None,
+            user_email=m.user.email if m.user else None
+        )
+        for m in db_team.members
+    ]
+
+    policies_out = [
+        SalesTeamPolicyOut(
+            id=p.id,
+            commercial_policy_id=p.commercial_policy_id,
+            nome_politica=p.policy.nome_politica if p.policy else None
+        )
+        for p in db_team.policies
+    ]
+
+    return SalesTeamOut(
+        id=db_team.id,
+        company_id=db_team.company_id,
+        nome=db_team.nome,
+        ativo=db_team.ativo,
+        members=members_out,
+        policies=policies_out
+    )
+
+
+@router.delete("/sales-teams/{team_id}")
+def delete_sales_team(
+    team_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import SalesTeam
+
+    # Fetch Sales Team and ensure it belongs to current tenant
+    team = db.query(SalesTeam).filter(
+        SalesTeam.id == team_id,
+        SalesTeam.tenant_id == current_user.tenant_id
+    ).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Equipe de vendas não encontrada.")
+
+    db.delete(team)
+    db.commit()
+    return {"ok": True}
+

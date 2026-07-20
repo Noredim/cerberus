@@ -307,3 +307,58 @@ class CommercialPolicyOut(CommercialPolicyBase):
     service_commissions: List[CommercialPolicyServiceCommissionOut] = []
     model_config = ConfigDict(from_attributes=True)
 
+
+class EligibleUserOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    role_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalesTeamMemberCreate(BaseModel):
+    user_id: str
+    cargo: str = Field(..., pattern="^(GERENTE|VENDEDOR)$")
+
+
+class SalesTeamMemberOut(BaseModel):
+    id: UUID
+    user_id: str
+    cargo: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalesTeamPolicyCreate(BaseModel):
+    commercial_policy_id: UUID
+
+
+class SalesTeamPolicyOut(BaseModel):
+    id: UUID
+    commercial_policy_id: UUID
+    nome_politica: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalesTeamCreateUpdate(BaseModel):
+    nome: str = Field(..., min_length=2, max_length=100)
+    ativo: bool = True
+    members: List[SalesTeamMemberCreate] = []
+    policies: List[SalesTeamPolicyCreate] = []
+
+
+class SalesTeamOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    nome: str
+    ativo: bool
+    members: List[SalesTeamMemberOut] = []
+    policies: List[SalesTeamPolicyOut] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+

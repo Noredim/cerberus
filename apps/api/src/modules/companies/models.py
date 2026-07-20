@@ -4,6 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from src.core.base import Base
 from src.modules.tenants.models import Tenant
 from src.modules.catalog.models import State, City  # FKs: companies
+from src.modules.users.models import User
 import uuid
 from sqlalchemy.sql import func
 
@@ -65,6 +66,7 @@ class Company(Base):
     qsa = relationship("CompanyQsa", back_populates="company", cascade="all, delete-orphan")
     sales_parameters = relationship("CompanySalesParameter", back_populates="company", uselist=False, cascade="all, delete-orphan")
     commercial_policies = relationship("CommercialPolicy", back_populates="company", cascade="all, delete-orphan")
+    sales_teams = relationship("SalesTeam", back_populates="company", cascade="all, delete-orphan")
     city = relationship("City")
     state = relationship("State")
 
@@ -279,5 +281,45 @@ class CommercialPolicyServiceCommission(Base):
 
     policy = relationship("CommercialPolicy", back_populates="service_commissions")
     own_service = relationship("OwnService")
+
+
+class SalesTeam(Base):
+    __tablename__ = "company_sales_teams"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    nome = Column(String(100), nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    company = relationship("Company", back_populates="sales_teams")
+    members = relationship("SalesTeamMember", back_populates="sales_team", cascade="all, delete-orphan")
+    policies = relationship("SalesTeamPolicy", back_populates="sales_team", cascade="all, delete-orphan")
+
+
+class SalesTeamMember(Base):
+    __tablename__ = "company_sales_team_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    cargo = Column(String(20), nullable=False)  # "GERENTE" ou "VENDEDOR"
+
+    sales_team = relationship("SalesTeam", back_populates="members")
+    user = relationship("User")
+
+
+class SalesTeamPolicy(Base):
+    __tablename__ = "company_sales_team_policies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="CASCADE"), nullable=False)
+    commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="CASCADE"), nullable=False)
+
+    sales_team = relationship("SalesTeam", back_populates="policies")
+    policy = relationship("CommercialPolicy")
+
 
 

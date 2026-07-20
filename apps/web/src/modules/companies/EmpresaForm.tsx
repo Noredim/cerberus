@@ -14,7 +14,8 @@ import {
     WifiOff,
     UploadCloud,
     Edit2,
-    Shield
+    Shield,
+    Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -23,6 +24,7 @@ import { api } from '../../services/api';
 import type { CNPJLookupResult } from './types';
 import { CnaeAutocomplete } from './components/CnaeAutocomplete';
 import { CommercialPoliciesTab } from './components/CommercialPoliciesTab';
+import { SalesTeamsTab } from './components/SalesTeamsTab';
 
 interface State {
     id: string;
@@ -119,6 +121,7 @@ const EmpresaForm: React.FC = () => {
         { id: 'tax', label: 'Regime & Benefícios', icon: ShieldCheck },
         { id: 'sales_params', label: 'Parâmetros de Venda', icon: Hash },
         { id: 'policies', label: 'Políticas Comerciais', icon: Shield },
+        { id: 'sales_teams', label: 'Equipes de Venda', icon: Users },
         { id: 'qsa', label: 'Quadro de Sócios', icon: Building2 },
     ];
 
@@ -1334,6 +1337,18 @@ const EmpresaForm: React.FC = () => {
                                         className="space-y-6"
                                     >
                                         <CommercialPoliciesTab companyId={id!} isReadOnly={isReadOnly} />
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'sales_teams' && (
+                                    <motion.div
+                                        key="sales_teams"
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        className="space-y-6"
+                                    >
+                                        <SalesTeamsTab companyId={id!} isReadOnly={isReadOnly} />
                                     </motion.div>
                                 )}
 
