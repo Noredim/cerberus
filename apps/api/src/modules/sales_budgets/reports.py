@@ -847,8 +847,9 @@ class OpportunitiesReportService:
                     product_desc = f"{product_desc} (U$ {format_usd(pb_item.valor_unitario_dolar)} * Cot. R$ {format_rate(pb.valor_conversao)})"
 
                 mapped_by_supplier[supplier_id]["items"].append({
+                    "codigo_produto": pb_item.product_codigo or "",
                     "descricao": product_desc,
-                    "part_number": pb_item.product_codigo or (pb_item.product.part_number if pb_item.product else None),
+                    "part_number": pb_item.product.part_number if (pb_item.product and pb_item.product.part_number) else "",
                     "quantidade": opp_qty,
                     "valor_unitario": format_currency(val_unit),
                     "valor_total": format_currency(val_total),
@@ -1241,6 +1242,7 @@ class OpportunitiesReportService:
                 story.append(Spacer(1, 6))
 
                 table_data = [[
+                    Paragraph("Cod. produto", table_header_style),
                     Paragraph("Produto", table_header_style), 
                     Paragraph("Part Number", table_header_style), 
                     Paragraph("Qtd", table_header_style), 
@@ -1254,8 +1256,9 @@ class OpportunitiesReportService:
                 ]]
                 for item in supplier["items"]:
                     table_data.append([
+                        Paragraph(item["codigo_produto"], table_cell_style),
                         Paragraph(item["descricao"], table_cell_style),
-                        Paragraph(item["part_number"] or "-", table_cell_style),
+                        Paragraph(item["part_number"] or "", table_cell_style),
                         Paragraph(str(item["quantidade"]), table_cell_style),
                         Paragraph(f"R$ {item['valor_unitario']}", table_cell_style),
                         Paragraph(f"R$ {item['valor_total']}", table_cell_style),
@@ -1271,6 +1274,7 @@ class OpportunitiesReportService:
                     Paragraph("-", table_cell_style),
                     Paragraph("-", table_cell_style),
                     Paragraph("-", table_cell_style),
+                    Paragraph("-", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_produtos']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_st']}", table_cell_style),
                     Paragraph(f"R$ {supplier['totais']['total_difal']}", table_cell_style),
@@ -1279,7 +1283,7 @@ class OpportunitiesReportService:
                     Paragraph(f"R$ {supplier['totais']['total_geral']}", table_cell_style)
                 ])
 
-                supplier_table = Table(table_data, colWidths=[150, 70, 30, 55, 55, 55, 55, 55, 55, 70])
+                supplier_table = Table(table_data, colWidths=[50, 120, 50, 30, 55, 55, 55, 55, 55, 55, 70])
                 supplier_table.setStyle(TableStyle([
                     ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
                     ('BOTTOMPADDING', (0,0), (-1,-1), 4),

@@ -125,8 +125,9 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 18%;">Produto</th>
-                    <th style="width: 10%;">Part Number</th>
+                    <th style="width: 6%;">Cod. produto</th>
+                    <th style="width: 14%;">Produto</th>
+                    <th style="width: 8%;">Part Number</th>
                     <th class="text-center" style="width: 3%;">Qtd</th>
                     <th class="text-right" style="width: 7%;">Valor Unit.</th>
                     <th class="text-right" style="width: 7%;">Valor Total</th>
@@ -144,8 +145,9 @@
             <tbody>
                 {% for item in supplier['items'] %}
                 <tr>
+                    <td>{{ item.codigo_produto }}</td>
                     <td>{{ item.descricao }}</td>
-                    <td>{{ item.part_number or "-" }}</td>
+                    <td>{{ item.part_number or "" }}</td>
                     <td class="text-center">{{ item.quantidade }}</td>
                     <td class="text-right">R$ {{ item.valor_unitario }}</td>
                     <td class="text-right">R$ {{ item.valor_total }}</td>
@@ -189,7 +191,7 @@
                 </tr>
                 {% endfor %}
                 <tr class="total-row">
-                    <td colspan="2">TOTAL DO FORNECEDOR</td>
+                    <td colspan="3">TOTAL DO FORNECEDOR</td>
                     <td class="text-center">-</td>
                     <td class="text-right">-</td>
                     <td class="text-right">R$ {{ supplier.totais.total_produtos }}</td>
