@@ -866,6 +866,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_inss=getattr(data, "perc_inss", Decimal("0.0")),
         perc_demais_incidencias=getattr(data, "perc_demais_incidencias", Decimal("0.0")),
         perc_despesa_operacional=getattr(data, "perc_despesa_operacional", Decimal("0.0")),
+        usar_produtos_gerais=getattr(data, "usar_produtos_gerais", False),
     )
     db.add(budget)
     db.flush()
@@ -1233,6 +1234,8 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
         has_changes = True
     if data.customer_id is not None and data.customer_id != budget.customer_id:
         has_changes = True
+    if data.usar_produtos_gerais is not None and data.usar_produtos_gerais != getattr(budget, "usar_produtos_gerais", False):
+        has_changes = True
         
     if has_changes and budget.status == "APROVADO":
         is_reopened = True
@@ -1245,6 +1248,8 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
         budget.titulo = data.titulo
     if data.customer_id is not None:
         budget.customer_id = data.customer_id
+    if data.usar_produtos_gerais is not None:
+        budget.usar_produtos_gerais = data.usar_produtos_gerais
         
     recalculate_budget_total(db, budget)
     

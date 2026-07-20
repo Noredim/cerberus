@@ -540,6 +540,7 @@ export function SalesBudgetForm() {
   const [status, setStatus] = useState('EM_LANCAMENTO');
   const [numeroOrcamento, setNumeroOrcamento] = useState('');
   const [responsavelIds, setResponsavelIds] = useState<string[]>([]);
+  const [usarProdutosGerais, setUsarProdutosGerais] = useState(false);
   const [versao, setVersao] = useState(1);
   const [valorTotal, setValorTotal] = useState(0);
   const [history, setHistory] = useState<any[]>([]);
@@ -954,6 +955,7 @@ export function SalesBudgetForm() {
       setApprovals(d.approvals || []);
       setNumeroOrcamento(d.numero_orcamento || '');
       setResponsavelIds(d.responsavel_ids || []);
+      setUsarProdutosGerais(d.usar_produtos_gerais || false);
       setFormaPagamentoId(d.forma_pagamento_id || '');
       setDataVencimentoInicial(d.data_vencimento_inicial ? d.data_vencimento_inicial.slice(0, 10) : '');
       setFinancialPlanning(d.financial_planning || []);
@@ -6971,12 +6973,13 @@ export function SalesBudgetForm() {
         <OpportunityCreateModal
           isOpen={isHeaderModalOpen}
           onClose={() => setIsHeaderModalOpen(false)}
-          onSuccess={(_modId: string, newTitle?: string, newCust?: string) => {
+          onSuccess={(_modId: string, newTitle?: string, newCust?: string, newUsarProdutosGerais?: boolean) => {
             if (newTitle) setTitulo(newTitle);
             if (newCust) setCustomerId(newCust);
+            if (newUsarProdutosGerais !== undefined) setUsarProdutosGerais(newUsarProdutosGerais);
             setIsHeaderModalOpen(false);
           }}
-          initialData={{ id, titulo, customerId }}
+          initialData={{ id, titulo, customerId, usarProdutosGerais }}
         />
       )}
 

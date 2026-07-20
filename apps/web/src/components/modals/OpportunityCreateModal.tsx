@@ -9,8 +9,8 @@ import { useAuth } from '../../contexts/AuthContext';
 interface OpportunityCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (id: string, newTitulo?: string, newCustomerId?: string) => void;
-  initialData?: { id: string; titulo: string; customerId: string };
+  onSuccess: (id: string, newTitulo?: string, newCustomerId?: string, newUsarProdutosGerais?: boolean) => void;
+  initialData?: { id: string; titulo: string; customerId: string; usarProdutosGerais?: boolean };
 }
 
 export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData }: OpportunityCreateModalProps) {
@@ -18,6 +18,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
   const [titulo, setTitulo] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [vendedorId, setVendedorId] = useState('');
+  const [usarProdutosGerais, setUsarProdutosGerais] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
@@ -32,6 +33,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
       if (initialData) {
         setTitulo(initialData.titulo || '');
         setCustomerId(initialData.customerId || '');
+        setUsarProdutosGerais(initialData.usarProdutosGerais || false);
         // In edit mode we don't necessarily load original vendor, since it's immutable
         // But if we do, it won't be editable. We'll leave it empty to simplify since 
         // the form backend doesn't overwrite if omitted properly, wait actually it shouldn't clear it.
@@ -39,6 +41,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
         setTitulo('');
         setCustomerId('');
         setVendedorId('');
+        setUsarProdutosGerais(false);
       }
       setError('');
     }
@@ -87,8 +90,12 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
     try {
        if (initialData?.id) {
          // Edit mode (do not touch vendedor_id or responsavel_ids)
-         await api.patch(`/sales-budgets/${initialData.id}/header`, { titulo, customer_id: customerId });
-         onSuccess(initialData.id, titulo, customerId);
+         await api.patch(`/sales-budgets/${initialData.id}/header`, { 
+           titulo, 
+           customer_id: customerId,
+           usar_produtos_gerais: usarProdutosGerais
+         });
+         onSuccess(initialData.id, titulo, customerId, usarProdutosGerais);
        } else {
          // Create mode
          const payload = {
@@ -97,10 +104,11 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
            vendedor_id: vendedorId,
            responsavel_ids: user?.id ? [user.id] : [],
            data_orcamento: new Date().toISOString().slice(0, 10),
-           status: 'EM_LANCAMENTO'
+           status: 'EM_LANCAMENTO',
+           usar_produtos_gerais: usarProdutosGerais
          };
          const res = await api.post('/sales-budgets', payload);
-         onSuccess(res.data.id, titulo, customerId);
+         onSuccess(res.data.id, titulo, customerId, usarProdutosGerais);
        }
     } catch (err: any) {
        console.error(err);
@@ -252,6 +260,19 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                         className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-60 cursor-not-allowed"
                     />
                 </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-4 pb-2">
+              <input
+                type="checkbox"
+                id="usar_produtos_gerais"
+                checked={usarProdutosGerais}
+                onChange={e => setUsarProdutosGerais(e.target.checked)}
+                className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary cursor-pointer"
+              />
+              <label htmlFor="usar_produtos_gerais" className="text-sm font-semibold text-text-primary cursor-pointer select-none">
+                Usar Produtos Gerais
+              </label>
             </div>
 
             <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">

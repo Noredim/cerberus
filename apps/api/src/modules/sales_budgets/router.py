@@ -770,6 +770,7 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "rental_items": rental_items,
         "versao": budget.versao,
         "valor_total": float(budget.valor_total or 0),
+        "usar_produtos_gerais": bool(getattr(budget, "usar_produtos_gerais", False)),
         "history": [{
             "id": str(h.id),
             "sales_budget_id": str(h.sales_budget_id),

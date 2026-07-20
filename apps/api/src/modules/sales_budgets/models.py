@@ -28,6 +28,7 @@ class SalesBudget(Base):
     status = Column(String(20), nullable=False, default="EM_LANCAMENTO")  # EM_LANCAMENTO, ENVIADO_APROVACAO, RETORNADO_VENDEDOR, APROVADO, CANCELADO, GANHO
     versao = Column(Integer, nullable=False, default=1)
     valor_total = Column(Numeric(15, 4), nullable=False, default=0.0)
+    usar_produtos_gerais = Column(Boolean, nullable=False, default=False)
 
     # ── Sale tab defaults ──
     markup_padrao = Column(Numeric(10, 4), nullable=False, default=1.0)

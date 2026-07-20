@@ -99,14 +99,17 @@ class ProductService:
             query = query.filter(Product.company_id == company_id)
         
         if sales_budget_id:
-            from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
-            query = query.filter(
-                Product.id.in_(
-                    self.db.query(PurchaseBudgetItem.product_id)
-                    .join(PurchaseBudget)
-                    .filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+            from src.modules.sales_budgets.models import SalesBudget
+            budget = self.db.query(SalesBudget).filter(SalesBudget.id == sales_budget_id).first()
+            if not budget or not getattr(budget, "usar_produtos_gerais", False):
+                from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+                query = query.filter(
+                    Product.id.in_(
+                        self.db.query(PurchaseBudgetItem.product_id)
+                        .join(PurchaseBudget)
+                        .filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+                    )
                 )
-            )
         
         if q:
             q_clean = re.sub(r'\D', '', q)
