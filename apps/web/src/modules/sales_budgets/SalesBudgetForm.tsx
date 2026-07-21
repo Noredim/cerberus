@@ -5005,7 +5005,7 @@ export function SalesBudgetForm() {
                 <thead>
                   <tr className="border-b border-border-subtle">
                     <th className="px-1.5 py-2 text-left font-semibold text-text-muted uppercase tracking-wider">Nome do Kit</th>
-                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-12">Qtd</th>
+                    <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-28">Qtd</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Investimento Total">Custo Aquisição</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Comissão</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider">Instalação</th>
@@ -5042,7 +5042,7 @@ export function SalesBudgetForm() {
                         </td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" min="1" value={ri.quantidade} onChange={e => updateRentalItem(idx, 'quantidade', +e.target.value)} disabled={isReadonly}
-                            className="w-10 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
+                            className="w-24 px-1 py-0.5 border border-border-subtle rounded bg-bg-deep text-[11px] text-center focus:outline-none focus:ring-1 focus:ring-teal-500/40 disabled:opacity-60" />
                         </td>
                         <td className="px-1.5 py-2 whitespace-nowrap text-right text-text-muted">{fmt(ri.kit_investimento_total || 0)}</td>
                         {(() => {
