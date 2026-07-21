@@ -262,6 +262,7 @@ export function QuickProductCreateModal({
                 onChange={e => setFormData({ ...formData, part_number: e.target.value })}
                 className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 text-sm focus:border-brand-primary outline-none transition-colors h-11 font-mono"
                 placeholder="Ex: PN-12345"
+                maxLength={100}
               />
             </div>
           </div>

@@ -27,7 +27,7 @@ class Product(Base):
     marca = Column(String(100))
     fabricante = Column(String(100))
     modelo = Column(String(100))
-    part_number = Column(String(50))
+    part_number = Column(String(100))
     
     ncm_codigo = Column(String(20), index=True)
     cest_codigo = Column(String(20), index=True)

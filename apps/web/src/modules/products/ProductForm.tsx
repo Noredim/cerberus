@@ -519,7 +519,7 @@ const ProductForm: React.FC = () => {
                                             onChange={e => setFormData({ ...formData, part_number: e.target.value })}
                                             className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 h-11 text-sm focus:border-brand-primary outline-none transition-colors"
                                             placeholder="Ex: R740-1234-A/B"
-                                            maxLength={20}
+                                            maxLength={100}
                                         />
                                     </div>
                                 </div>
