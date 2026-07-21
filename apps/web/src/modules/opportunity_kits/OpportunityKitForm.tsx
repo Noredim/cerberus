@@ -68,9 +68,71 @@ const Decimal4Input = ({ value, onChange, onBlur, disabled, placeholder = "0.000
   );
 };
 
+const Decimal4QuantityInput = ({
+  value,
+  onChange,
+  className
+}: {
+  value: number;
+  onChange: (qty: number) => void;
+  className?: string;
+}) => {
+  const [localStr, setLocalStr] = useState<string>(value != null ? String(value) : '1');
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalStr(value != null ? String(value) : '1');
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(',', '.');
+    if (/^[0-9]*\.?[0-9]{0,4}$/.test(val)) {
+      setLocalStr(val);
+      const parsed = parseFloat(val);
+      if (!isNaN(parsed)) {
+        onChange(parsed);
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    let parsed = parseFloat(localStr);
+    if (isNaN(parsed) || parsed < 0) {
+      parsed = 1;
+    }
+    setLocalStr(String(parsed));
+    onChange(parsed);
+  };
+
+  return (
+    <Input
+      type="text"
+      value={localStr}
+      onChange={handleChange}
+      onFocus={() => {
+        setIsFocused(true);
+        setLocalStr(value != null ? String(value) : '');
+      }}
+      onBlur={handleBlur}
+      className={className}
+    />
+  );
+};
+
 const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: number; isST: boolean }) => {
   const fmtC = (val: number | undefined) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
+  const fmtC4 = (val: number | undefined) =>
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4
+    }).format(val || 0);
 
   const ipiPercent = summary?.ipi_percent || 0;
 
@@ -139,20 +201,20 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
           <div className="space-y-1 font-mono">
             <div className="flex justify-between font-bold text-text-primary">
               <span>Total Cotação:</span>
-              <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
+              <span>{fmtC4((summary?.base_fornecedor || 0) * qty)}</span>
             </div>
             <div className="flex justify-between text-amber-600">
               <span>Total Impostos:</span>
-              <span>+ {fmtC((summary?.icms_st_unitario || 0) * qty)}</span>
+              <span>+ {fmtC4((summary?.icms_st_unitario || 0) * qty)}</span>
             </div>
             <div className="flex justify-between text-[11px] text-text-muted pl-2">
               <span>↳ ICMS-ST total:</span>
-              <span>+ {fmtC((summary?.icms_st_unitario || 0) * qty)}</span>
+              <span>+ {fmtC4((summary?.icms_st_unitario || 0) * qty)}</span>
             </div>
             
             <div className="mt-3 p-2 bg-brand-primary/5 rounded-lg border border-brand-primary/20 flex justify-between items-center font-bold text-sm text-brand-primary">
               <span>Total Geral:</span>
-              <span>{fmtC((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
+              <span>{fmtC4((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
             </div>
           </div>
         </div>
@@ -203,21 +265,21 @@ const CostCompositionTooltip = ({ summary, qty, isST }: { summary: any; qty: num
           <div className="space-y-1 font-mono">
             <div className="flex justify-between font-bold text-text-primary">
               <span>Total da Cotação:</span>
-              <span>{fmtC((summary?.base_fornecedor || 0) * qty)}</span>
+              <span>{fmtC4((summary?.base_fornecedor || 0) * qty)}</span>
             </div>
             <div className="flex justify-between text-amber-600">
               <span>Frete CIF:</span>
-              <span>+ {fmtC((summary?.frete_cif_unit || 0) * qty)}</span>
+              <span>+ {fmtC4((summary?.frete_cif_unit || 0) * qty)}</span>
             </div>
             <div className="text-amber-600 font-bold mt-1">Total Impostos:</div>
             <div className="flex justify-between text-[11px] text-amber-600 pl-2">
               <span>– DIFAL:</span>
-              <span>+ {fmtC((summary?.difal_unitario || 0) * qty)}</span>
+              <span>+ {fmtC4((summary?.difal_unitario || 0) * qty)}</span>
             </div>
             
             <div className="mt-3 p-2 bg-brand-primary/5 rounded-lg border border-brand-primary/20 flex justify-between items-center font-bold text-sm text-brand-primary">
               <span>Total Geral:</span>
-              <span>{fmtC((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
+              <span>{fmtC4((summary?.custo_unit_final || summary?.custo_base_unitario_item || 0) * qty)}</span>
             </div>
           </div>
         </div>
@@ -1088,6 +1150,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   const fmtC = (val: number | undefined) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
+  const fmtC4 = (val: number | undefined) =>
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4
+    }).format(val || 0);
 
   const showBlock3 = form.tipo_contrato !== 'INSTALACAO' && (form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' || !!form.havera_manutencao);
   const showBlock31 = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' && !form.instalacao_inclusa;
@@ -2945,7 +3015,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <th className="px-4 py-3">Produto</th>
                       {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                         <>
-                          <th className="px-1.5 py-3 w-20 text-center">Quantidade</th>
+                          <th className="px-1.5 py-3 w-32 text-center">Quantidade</th>
                           <th className="px-1.5 py-3 text-right">Custo Un.</th>
                           <th className="px-1.5 py-3 text-right">Custo Total</th>
                           <th className="px-1.5 py-3 text-right">Fator</th>
@@ -2961,7 +3031,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                         </>
                       ) : (
                         <>
-                          <th className="px-1.5 py-3 w-20">Quantidade</th>
+                          <th className="px-1.5 py-3 w-32">Quantidade</th>
                           <th className="px-1.5 py-3 text-right">Custo Base</th>
                           {form.considerar_st_ou_difal === 'ST' ? (
                             <>
@@ -3020,10 +3090,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                             <>
                               <td className="px-1.5 py-3">
-                                <Input
-                                  type="number"
+                                <Decimal4QuantityInput
                                   value={item.quantidade_no_kit}
-                                  onChange={(e) => updateItemQty(idx, parseFloat(e.target.value) || 1)}
+                                  onChange={(qty) => updateItemQty(idx, qty)}
                                   className="w-full h-8 px-1 text-sm text-center"
                                 />
                               </td>
@@ -3050,7 +3119,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 </Tooltip>
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
-                                {fmtC((summary?.custo_base_unitario_item || 0) * item.quantidade_no_kit)}
+                                {fmtC4((summary?.custo_base_unitario_item || 0) * item.quantidade_no_kit)}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
                                 {summary?.fator_item ? Number(summary.fator_item).toFixed(2) : '-'}
@@ -3124,10 +3193,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           ) : (
                             <>
                               <td className="px-1.5 py-3">
-                                <Input
-                                  type="number"
+                                <Decimal4QuantityInput
                                   value={item.quantidade_no_kit}
-                                  onChange={(e) => updateItemQty(idx, parseFloat(e.target.value) || 1)}
+                                  onChange={(qty) => updateItemQty(idx, qty)}
                                   className="w-full h-8 text-sm"
                                 />
                               </td>
@@ -3169,13 +3237,13 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-secondary">
                                 {form.considerar_st_ou_difal === 'ST' ? (
-                                  fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
+                                  fmtC4(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
                                 ) : (
-                                  fmtC(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
+                                  fmtC4(((summary?.base_fornecedor || 0) + (summary?.ipi_unit || 0) + (summary?.frete_cif_unit || 0)) * item.quantidade_no_kit)
                                 )}
                               </td>
                               <td className="px-1.5 py-3 text-right tabular-nums text-text-primary font-medium">
-                                {fmtC(summary?.custo_total_item_no_kit)}
+                                {fmtC4(summary?.custo_total_item_no_kit)}
                               </td>
                             </>
                           )}
@@ -3199,7 +3267,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
                         <>
                           <td className="px-4 py-3"></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.custo_total_item_no_kit || 0), 0) || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{fmtC4(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.custo_total_item_no_kit || 0), 0) || 0)}</td>
                           <td className="px-4 py-3"></td>
                           <td className="px-4 py-3"></td>
                           <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.item_summaries?.reduce((a: any, b: any) => a + (b.frete_venda_item || 0), 0) || 0)}</td>
@@ -3223,15 +3291,15 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           {form.considerar_st_ou_difal === 'ST' ? (
                             <>
                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_st_kit || 0)}</td>
-                              <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_st_kit || 0))}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC4((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_st_kit || 0))}</td>
                             </>
                           ) : (
                             <>
                               <td className="px-4 py-3 text-right tabular-nums">{fmtC(financials?.summary?.total_difal_kit || 0)}</td>
-                              <td className="px-4 py-3 text-right tabular-nums">{fmtC((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_difal_kit || 0))}</td>
+                              <td className="px-4 py-3 text-right tabular-nums">{fmtC4((financials?.summary?.custo_aquisicao_kit || 0) - (financials?.summary?.total_difal_kit || 0))}</td>
                             </>
                           )}
-                          <td className="px-4 py-3 text-right tabular-nums font-bold">{fmtC(financials?.summary?.custo_aquisicao_kit || 0)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-bold">{fmtC4(financials?.summary?.custo_aquisicao_kit || 0)}</td>
                         </>
                       )}
                       <td></td>
