@@ -1645,6 +1645,7 @@ class OpportunitiesReportService:
                     "product_id": item.product_id,
                     "descricao": item_desc,
                     "fornecedor": supplier_name,
+                    "unidade_medida": item.product.unidade if (item.product and item.product.unidade) else "",
                     "quantidade": qty,
                     "custo_unitario": format_currency(custo_unit_exibido),
                     "custo_total": format_currency(custo_total_exibido),
@@ -1702,6 +1703,7 @@ class OpportunitiesReportService:
                             "product_id": None,
                             "descricao": kit.nome_kit or "Kit",
                             "fornecedor": "-",
+                            "unidade_medida": "",
                             "quantidade": kit_qty,
                             "custo_unitario": "0,00",
                             "custo_total": "0,00",
@@ -1776,6 +1778,13 @@ class OpportunitiesReportService:
                                             supplier_name = pb.supplier_nome_fantasia
                             if not supplier_name:
                                 supplier_name = "Não Cadastrado"
+                            
+                            unidade_medida = ""
+                            if p_uuid:
+                                from src.modules.products.models import Product
+                                product_obj = db.query(Product).filter(Product.id == p_uuid).first()
+                                if product_obj and product_obj.unidade:
+                                    unidade_medida = product_obj.unidade
                             
                             if p_uuid:
                                 difal_unit = float(summary.get("difal_unitario") or 0.0)
@@ -1876,6 +1885,7 @@ class OpportunitiesReportService:
                                 "product_id": p_uuid,
                                 "descricao": product_desc,
                                 "fornecedor": supplier_name,
+                                "unidade_medida": unidade_medida,
                                 "quantidade": component_qty,
                                 "custo_unitario": format_currency(custo_unit_exibido),
                                 "custo_total": format_currency(custo_total_exibido),

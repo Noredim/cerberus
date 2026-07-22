@@ -93,9 +93,10 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 22%;">Produto / Serviço</th>
-                    <th style="width: 12%;">Fornecedor</th>
+                    <th style="width: 21%;">Produto / Serviço</th>
+                    <th style="width: 11%;">Fornecedor</th>
                     <th class="text-center" style="width: 4%;">Qtd</th>
+                    <th class="text-center" style="width: 4%;">Unidade</th>
                     <th class="text-right" style="width: 8%;">Custo Unit.</th>
                     <th class="text-right" style="width: 8%;">Custo Total</th>
                     <th class="text-center" style="width: 4%;">MKP</th>
@@ -114,6 +115,7 @@
                     </td>
                     <td>{{ item.fornecedor }}</td>
                     <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-center">{{ item.unidade_medida or "" }}</td>
                     <td class="text-right">R$ {{ item.custo_unitario }}</td>
                     <td class="text-right">R$ {{ item.custo_total }}</td>
                     <td class="text-center">{% if item.markup == "-" or not item.markup %}-{% else %}{{ item.markup }}x{% endif %}</td>
@@ -131,6 +133,7 @@
                         </td>
                         <td>{{ comp.fornecedor }}</td>
                         <td class="text-center">{{ comp.quantidade }}</td>
+                        <td class="text-center">{{ comp.unidade_medida or "" }}</td>
                         <td class="text-right">R$ {{ comp.custo_unitario }}</td>
                         <td class="text-right">R$ {{ comp.custo_total }}</td>
                         <td class="text-center">{{ comp.markup }}x</td>
@@ -145,6 +148,7 @@
                 {% endfor %}
                 <tr class="total-row">
                     <td class="text-nowrap" colspan="2" style="white-space: nowrap;">TOTAL CONSOLIDADO</td>
+                    <td class="text-center text-nowrap" style="white-space: nowrap;">-</td>
                     <td class="text-center text-nowrap" style="white-space: nowrap;">-</td>
                     <td class="text-right text-nowrap" style="white-space: nowrap;">-</td>
                     <td class="text-right text-nowrap" style="white-space: nowrap;">R$ {{ kpis.custo_total_consolidado_relatorio }}</td>
