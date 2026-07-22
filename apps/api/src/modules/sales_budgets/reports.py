@@ -835,6 +835,7 @@ class OpportunitiesReportService:
                     "contato": pb.vendedor_nome,
                     "condicao_pagamento": payment_desc,
                     "prazo_medio": prazo_medio,
+                    "cotacoes": {pb.numero_orcamento} if pb.numero_orcamento else set(),
                     "items": [],
                     "totais": {
                         "total_produtos": 0.0,
@@ -845,6 +846,9 @@ class OpportunitiesReportService:
                     },
                     "parcelas": []
                 }
+            else:
+                if pb.numero_orcamento:
+                    mapped_by_supplier[supplier_id]["cotacoes"].add(pb.numero_orcamento)
 
             # Map items for this supplier budget
             for pb_item in pb.items:
@@ -881,6 +885,7 @@ class OpportunitiesReportService:
                     "codigo_produto": pb_item.product_codigo or "",
                     "descricao": product_desc,
                     "part_number": pb_item.product.part_number if (pb_item.product and pb_item.product.part_number) else "",
+                    "unidade_medida": pb_item.product.unidade if (pb_item.product and pb_item.product.unidade) else "",
                     "quantidade": opp_qty,
                     "valor_unitario": format_currency(val_unit),
                     "valor_total": format_currency(val_total),
@@ -911,6 +916,10 @@ class OpportunitiesReportService:
             if not data["items"]:
                 mapped_by_supplier.pop(supplier_id)
                 continue
+
+            # Convert set of cotacoes to a string list
+            if "cotacoes" in data:
+                data["numero_cotacao"] = ", ".join(sorted(data["cotacoes"])) if data["cotacoes"] else "Não Informado"
 
             total_prod = sum(item["_val_total"] for item in data["items"])
             total_difal = sum(item["_difal_total"] for item in data["items"])

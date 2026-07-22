@@ -117,6 +117,7 @@
             <div class="supplier-info-grid">
                 <div><strong>CNPJ:</strong> {{ supplier.cnpj or "Não Informado" }}</div>
                 <div><strong>Contato/Vendedor:</strong> {{ supplier.contato or "Não Informado" }}</div>
+                <div><strong>Nº Cotação:</strong> {{ supplier.numero_cotacao or "Não Informado" }}</div>
                 <div><strong>Condição de Pagamento:</strong> {{ supplier.condicao_pagamento }}</div>
                 <div><strong>Prazo Médio:</strong> {{ supplier.prazo_medio }} dias</div>
             </div>
@@ -126,9 +127,10 @@
             <thead>
                 <tr>
                     <th style="width: 6%;">Cod. produto</th>
-                    <th style="width: 14%;">Produto</th>
-                    <th style="width: 8%;">Part Number</th>
+                    <th style="width: 13%;">Produto</th>
+                    <th style="width: 7%;">Part Number</th>
                     <th class="text-center" style="width: 3%;">Qtd</th>
+                    <th class="text-center" style="width: 4%;">Unidade</th>
                     <th class="text-right" style="width: 7%;">Valor Unit.</th>
                     <th class="text-right" style="width: 7%;">Valor Total</th>
                     <th class="text-right" style="width: 6%;">DIFAL Unit.</th>
@@ -149,6 +151,7 @@
                     <td>{{ item.descricao }}</td>
                     <td>{{ item.part_number or "" }}</td>
                     <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-center">{{ item.unidade_medida or "" }}</td>
                     <td class="text-right">R$ {{ item.valor_unitario }}</td>
                     <td class="text-right">R$ {{ item.valor_total }}</td>
                     <td class="text-right">
@@ -192,6 +195,7 @@
                 {% endfor %}
                 <tr class="total-row">
                     <td colspan="3">TOTAL DO FORNECEDOR</td>
+                    <td class="text-center">-</td>
                     <td class="text-center">-</td>
                     <td class="text-right">-</td>
                     <td class="text-right">R$ {{ supplier.totais.total_produtos }}</td>
