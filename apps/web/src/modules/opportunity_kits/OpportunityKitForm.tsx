@@ -833,13 +833,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
   const sanitizePayload = (data: KitFormValues) => {
     const sanitizedCosts = data.costs.map(c => {
       const isKitExecType = ['VENDA_EQUIPAMENTOS', 'LOCACAO', 'COMODATO', 'INSTALACAO'].includes(data.tipo_contrato);
+      const isLocacaoOrComodato = ['LOCACAO', 'COMODATO'].includes(data.tipo_contrato);
+      const isBloco6 = c.tipo_custo !== 'INSTALACAO';
+      const shouldOverrideCost = isKitExecType && c.own_service_id && !(isLocacaoOrComodato && isBloco6);
+
       const summary = financials?.cost_summaries?.find((cs: any) =>
         (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
         cs.tipo_custo === c.tipo_custo
       );
       return {
         ...c,
-        valor_unitario: (isKitExecType && c.own_service_id && summary?.custo_base_unitario_item !== undefined)
+        valor_unitario: (shouldOverrideCost && summary?.custo_base_unitario_item !== undefined)
           ? summary.custo_base_unitario_item
           : c.valor_unitario,
         forma_execucao: (isKitExecType && c.own_service_id)
@@ -1025,6 +1029,22 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       if (idx > -1) {
         const newCosts = [...prev.costs];
         newCosts[idx].quantidade = qty;
+        return { ...prev, costs: newCosts };
+      }
+      return prev;
+    });
+  };
+
+  const updateCostUnitValue = (costToUpdate: any, value: number) => {
+    setForm(prev => {
+      const idx = prev.costs.findIndex(c =>
+        c.product_id === costToUpdate.product_id &&
+        c.own_service_id === costToUpdate.own_service_id &&
+        c.tipo_custo === costToUpdate.tipo_custo
+      );
+      if (idx > -1) {
+        const newCosts = [...prev.costs];
+        newCosts[idx].valor_unitario = value;
         return { ...prev, costs: newCosts };
       }
       return prev;
@@ -3652,7 +3672,20 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               </>
                             ) : (
                               <>
-                                <td className="px-4 py-3 text-right tabular-nums">{fmtC(custoUnit)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  {['LOCACAO', 'COMODATO'].includes(form.tipo_contrato) ? (
+                                    <Input
+                                      type="number"
+                                      step="0.0001"
+                                      min="0"
+                                      className="w-24 text-right h-8 ml-auto"
+                                      value={c.valor_unitario !== undefined && c.valor_unitario !== null ? c.valor_unitario : ''}
+                                      onChange={(e) => updateCostUnitValue(c, parseFloat(e.target.value) || 0)}
+                                    />
+                                  ) : (
+                                    fmtC(custoUnit)
+                                  )}
+                                </td>
                                 <td className="px-2 py-3 text-right tabular-nums">
                                   <Input
                                     type="number"

@@ -212,7 +212,15 @@ class OpportunityKitService:
                 vl_tot = vl_un * qtde
                 
                 # Recalculo dinamico p/ VENDA_EQUIPAMENTOS, LOCACAO, e COMODATO + SERVICO_PROPRIO + Forma de Execucao
-                if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "LOCACAO", "COMODATO", "INSTALACAO"] and getattr(cost, "own_service_id", None) and getattr(kit, "forma_execucao", None):
+                # Ignora o recalculo se for comodato/locacao e o custo nao for instalacao (Bloco 6)
+                is_locacao_or_comodato = kit.tipo_contrato in ["LOCACAO", "COMODATO"]
+                is_bloco_6 = cost_tipo_custo != "INSTALACAO"
+                if (
+                    kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "LOCACAO", "COMODATO", "INSTALACAO"]
+                    and getattr(cost, "own_service_id", None)
+                    and getattr(kit, "forma_execucao", None)
+                    and not (is_locacao_or_comodato and is_bloco_6)
+                ):
                     EXEC_MAP = {
                         'H. NORMAL': 'hora_normal',
                         'H. EXTRA': 'hora_extra',
