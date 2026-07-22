@@ -1498,8 +1498,8 @@ export function SalesBudgetForm() {
   };
 
   const handleDownloadReport = async () => {
-    if (opportunityPurchaseBudgets.length === 0) {
-      alert("Não existem orçamentos de fornecedores vinculados para gerar o relatório.");
+    if (opportunityPurchaseBudgets.length === 0 && items.length === 0 && rentalItems.length === 0) {
+      alert("Não existem itens na oportunidade ou orçamentos de fornecedores vinculados para gerar o relatório.");
       return;
     }
     setDownloadingReport(true);
@@ -3011,7 +3011,7 @@ export function SalesBudgetForm() {
                       handleDownloadReport();
                     }}
                     disabled={downloadingReport}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${opportunityPurchaseBudgets.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 ${(opportunityPurchaseBudgets.length === 0 && items.length === 0 && rentalItems.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                     Fechamento de Fornecedores

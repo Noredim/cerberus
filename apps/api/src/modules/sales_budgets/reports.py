@@ -531,12 +531,6 @@ class OpportunitiesReportService:
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
 
-        if not purchase_budgets:
-            raise HTTPException(
-                status_code=400, 
-                detail="Não existem orçamentos de fornecedores vinculados para gerar o relatório."
-            )
-
         # 3. Fetch latest approval if approved
         approval_rec = db.query(SalesBudgetApproval).filter(
             SalesBudgetApproval.sales_budget_id == opportunity_id,
@@ -611,6 +605,51 @@ class OpportunitiesReportService:
                                 "part_number": kit_item.product.part_number if kit_item.product else None,
                                 "quantidade": qty
                             })
+
+        # Build product suppliers map for lookups (including fallback budgets from historical data)
+        product_suppliers = {}
+        for pb in purchase_budgets:
+            for pb_item in pb.items:
+                if pb_item.product_id:
+                    product_suppliers[pb_item.product_id] = {
+                        "pb_item": pb_item,
+                        "pb": pb
+                    }
+
+        # For product IDs that don't have a supplier in the current opportunity's purchase budgets,
+        # find the latest PurchaseBudgetItem and its PurchaseBudget for that product under the tenant
+        all_product_ids = {item["product_id"] for item in unpacked_items if item.get("product_id")}
+        for prod_id in all_product_ids:
+            if prod_id not in product_suppliers:
+                latest_pbi = db.query(PurchaseBudgetItem).join(
+                    PurchaseBudget, PurchaseBudget.id == PurchaseBudgetItem.budget_id
+                ).filter(
+                    PurchaseBudgetItem.product_id == prod_id,
+                    PurchaseBudget.tenant_id == current_user.tenant_id
+                ).order_by(
+                    PurchaseBudget.data_orcamento.desc(),
+                    PurchaseBudget.created_at.desc()
+                ).first()
+                
+                if latest_pbi:
+                    product_suppliers[prod_id] = {
+                        "pb_item": latest_pbi,
+                        "pb": latest_pbi.budget
+                    }
+
+        all_pbs = list(purchase_budgets)
+        seen_pb_ids = {pb.id for pb in all_pbs}
+        for info in product_suppliers.values():
+            pb = info["pb"]
+            if pb.id not in seen_pb_ids:
+                all_pbs.append(pb)
+                seen_pb_ids.add(pb.id)
+
+        if not all_pbs:
+            raise HTTPException(
+                status_code=400, 
+                detail="Não existem orçamentos de fornecedores vinculados para gerar o relatório."
+            )
 
         # Build tax lookup map: product_id -> {difal, st, source}
         opp_product_taxes = {}
@@ -696,15 +735,7 @@ class OpportunitiesReportService:
                 
             return difal, st, ipi, origem
 
-        # Build product suppliers map for lookups
-        product_suppliers = {}
-        for pb in purchase_budgets:
-            for pb_item in pb.items:
-                if pb_item.product_id:
-                    product_suppliers[pb_item.product_id] = {
-                        "pb_item": pb_item,
-                        "pb": pb
-                    }
+        # (product_suppliers is already built with fallback budgets at the start of the function)
 
         # Compile product calculations from opportunity items & kits exactly as in Approval report
         product_totals = {}
@@ -778,7 +809,7 @@ class OpportunitiesReportService:
 
         # Map unpacked items to purchase budget items
         mapped_by_supplier = {}
-        for pb in purchase_budgets:
+        for pb in all_pbs:
             supplier_id = pb.supplier_id
             supplier_name = pb.supplier_nome_fantasia
             if pb.dolar_orcamento and pb.valor_conversao:
@@ -911,7 +942,7 @@ class OpportunitiesReportService:
             }
 
             # Parse payment condition dynamically
-            pb = next(pb for pb in purchase_budgets if pb.supplier_id == supplier_id)
+            pb = next(pb for pb in all_pbs if pb.supplier_id == supplier_id)
             cond_desc = "Não informado"
             if pb.forma_pagamento:
                 cond_desc = pb.forma_pagamento.descricao
