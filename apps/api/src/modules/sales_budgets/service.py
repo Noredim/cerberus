@@ -1435,7 +1435,9 @@ def list_budgets(
     limit: int = 25,
     q: Optional[str] = None,
     status: Optional[str] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    vendedor_id: Optional[str] = None,
+    responsavel_id: Optional[str] = None
 ) -> Tuple[List[SalesBudget], int]:
     from sqlalchemy import or_
     from src.modules.sales_budgets.models import SalesBudgetResponsavel
@@ -1451,6 +1453,12 @@ def list_budgets(
             
     if status:
         query = query.filter(SalesBudget.status == status)
+        
+    if vendedor_id:
+        query = query.filter(SalesBudget.vendedor_id == vendedor_id)
+        
+    if responsavel_id:
+        query = query.filter(SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == responsavel_id))
         
     if q:
         search_term = f"%{q}%"

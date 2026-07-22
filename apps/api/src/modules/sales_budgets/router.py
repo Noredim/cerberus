@@ -24,11 +24,16 @@ def list_budgets(
     limit: int = Query(25, ge=1, le=1000),
     q: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
+    vendedor_id: Optional[str] = Query(None),
+    responsavel_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
 ):
-    budgets, total = service.list_budgets(db, current_user.tenant_id, company_id, skip, limit, q, status, user_id=current_user.id)
+    budgets, total = service.list_budgets(
+        db, current_user.tenant_id, company_id, skip, limit, q, status, 
+        user_id=current_user.id, vendedor_id=vendedor_id, responsavel_id=responsavel_id
+    )
     result = []
     for b in budgets:
         lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items, db)
@@ -60,6 +65,8 @@ def list_budgets(
             "status": b.status,
             "data_orcamento": b.data_orcamento,
             "customer_nome": b.customer.nome_fantasia or b.customer.razao_social if b.customer else None,
+            "vendedor_nome": b.vendedor.name if b.vendedor else "Não atribuído",
+            "responsavel_nome": ", ".join([r.user.name for r in b.responsaveis if r.user]) if b.responsaveis else "Não atribuído",
             "total_venda": fat_venda,
             "margem_venda": mv,
             "total_faturamento_rental": total_faturamento_rental,

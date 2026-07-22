@@ -14,6 +14,8 @@ interface SalesBudgetSummary {
   status: string;
   data_orcamento: string;
   customer_nome: string;
+  vendedor_nome?: string;
+  responsavel_nome?: string;
   total_venda: number;
   margem_venda: number;
   total_faturamento_rental: number;
@@ -66,6 +68,10 @@ export function SalesBudgetList() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [vendedores, setVendedores] = useState<any[]>([]);
+  const [responsaveis, setResponsaveis] = useState<any[]>([]);
+  const [vendedorFilter, setVendedorFilter] = useState('');
+  const [responsavelFilter, setResponsavelFilter] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -77,6 +83,22 @@ export function SalesBudgetList() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
+    const loadFiltersData = async () => {
+      try {
+        const [vendedoresRes, usersRes] = await Promise.all([
+          api.get('/professionals', { params: { limit: 500 } }),
+          api.get('/users', { params: { limit: 500 } }),
+        ]);
+        setVendedores(Array.isArray(vendedoresRes.data) ? vendedoresRes.data : vendedoresRes.data.items || []);
+        setResponsaveis(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.items || []);
+      } catch (err) {
+        console.error('Erro ao carregar dados de filtros:', err);
+      }
+    };
+    loadFiltersData();
+  }, []);
+
+  useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1); // Reset to first page on new search
@@ -86,11 +108,11 @@ export function SalesBudgetList() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter]);
+  }, [statusFilter, vendedorFilter, responsavelFilter]);
 
   useEffect(() => {
     loadBudgets();
-  }, [page, debouncedSearch, statusFilter]);
+  }, [page, debouncedSearch, statusFilter, vendedorFilter, responsavelFilter]);
 
   const loadBudgets = async () => {
     setLoading(true);
@@ -102,6 +124,8 @@ export function SalesBudgetList() {
       });
       if (debouncedSearch) params.append('q', debouncedSearch);
       if (statusFilter) params.append('status', statusFilter);
+      if (vendedorFilter) params.append('vendedor_id', vendedorFilter);
+      if (responsavelFilter) params.append('responsavel_id', responsavelFilter);
 
       const res = await api.get(`/sales-budgets?${params.toString()}`);
       setBudgets(res.data.items || []);
@@ -182,6 +206,26 @@ export function SalesBudgetList() {
           <option value="GANHO">Ganho</option>
           <option value="PERDIDO">Perdido</option>
         </select>
+        <select
+          value={vendedorFilter}
+          onChange={(e) => setVendedorFilter(e.target.value)}
+          className="px-3 py-2 border border-border-subtle rounded-md bg-bg-deep text-text-primary text-sm focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-all duration-150"
+        >
+          <option value="">Todos os vendedores</option>
+          {vendedores.map((v: any) => (
+            <option key={v.id} value={v.id}>{v.name}</option>
+          ))}
+        </select>
+        <select
+          value={responsavelFilter}
+          onChange={(e) => setResponsavelFilter(e.target.value)}
+          className="px-3 py-2 border border-border-subtle rounded-md bg-bg-deep text-text-primary text-sm focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 transition-all duration-150"
+        >
+          <option value="">Todos os responsáveis</option>
+          {responsaveis.map((r: any) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -207,6 +251,8 @@ export function SalesBudgetList() {
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Oportunidade</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Cliente</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Vendedor</th>
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Responsável</th>
                 <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Venda</th>
                 <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Locação</th>
                 <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Margem Geral</th>
@@ -238,6 +284,16 @@ export function SalesBudgetList() {
                   <td className="py-4 px-5 w-40 align-middle">
                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold tracking-wide whitespace-nowrap ${statusColors[b.status] || 'bg-slate-100 text-slate-800'}`}>
                       {statusLabels[b.status] || b.status}
+                    </span>
+                  </td>
+                  <td className="py-4 px-5 align-middle max-w-[150px] truncate" title={b.vendedor_nome || 'Não atribuído'}>
+                    <span className="text-sm text-text-muted">
+                      {b.vendedor_nome || '—'}
+                    </span>
+                  </td>
+                  <td className="py-4 px-5 align-middle max-w-[180px] truncate" title={b.responsavel_nome || 'Não atribuído'}>
+                    <span className="text-sm text-text-muted">
+                      {b.responsavel_nome || '—'}
                     </span>
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
