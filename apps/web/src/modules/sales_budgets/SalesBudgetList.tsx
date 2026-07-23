@@ -46,20 +46,7 @@ const statusLabels: Record<string, string> = {
   PERDIDO: 'Perdido',
 };
 
-function MarginBadge({ margin }: { margin: number }) {
-  let cls = 'text-rose-700 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
-  if (margin >= 15) {
-    cls = 'text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
-  } else if (margin >= 5) {
-    cls = 'text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
-  }
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold tracking-wide transition-all ${cls}`}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
-      {margin.toFixed(1)}%
-    </span>
-  );
-}
+
 
 export function SalesBudgetList() {
   const navigate = useNavigate();
