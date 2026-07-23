@@ -414,22 +414,32 @@ class OpportunitiesReportService:
             add_row("(=) Total Impostos de Compra", (float(total_impostos_compra) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_compra, is_bold=True, bg_color='#f1f5f9')
                 
             # Impostos venda
-            if dre_data["header"]["is_rental"]:
-                add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+            if dre_data["header"]["is_rental"] or total_impostos_instalacao > 0:
+                total_combined_impostos = total_impostos_venda + total_impostos_instalacao + total_impostos_locacao
+                add_row("2.3 Impostos de Venda (FPV)", (float(total_combined_impostos) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_combined_impostos, is_bold=True, is_indent=True, bg_color='#f8fafc')
                 
                 # Impostos Instalacao
-                add_row("2.3.1 Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
-                for k, imp in dre_data["saidas"]["impostos_instalacao"].items():
-                    if k != "total":
-                        add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
-                add_row("(=) Total Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, bg_color='#f1f5f9')
+                if total_impostos_instalacao > 0:
+                    add_row("2.3.1 Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                    for k, imp in dre_data["saidas"]["impostos_instalacao"].items():
+                        if k != "total":
+                            add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                    add_row("(=) Total Impostos de Instalação", (float(total_impostos_instalacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_instalacao, is_bold=True, bg_color='#f1f5f9')
                 
                 # Impostos Locacao
-                add_row("2.3.2 Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
-                for k, imp in dre_data["saidas"]["impostos_locacao"].items():
-                    if k != "total":
-                        add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
-                add_row("(=) Total Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, bg_color='#f1f5f9')
+                if total_impostos_locacao > 0:
+                    add_row("2.3.2 Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                    for k, imp in dre_data["saidas"]["impostos_locacao"].items():
+                        if k != "total":
+                            add_row(f"(-) Imposto {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                    add_row("(=) Total Impostos de Locação / Comodato", (float(total_impostos_locacao) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_locacao, is_bold=True, bg_color='#f1f5f9')
+                
+                # Impostos Venda (for non-rental opportunity with installation)
+                if not dre_data["header"]["is_rental"] and total_impostos_venda > 0:
+                    add_row("2.3.2 Impostos de Venda", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
+                    for k, imp in dre_data["saidas"]["impostos_venda"].items():
+                        add_row(f"(-) Imposto de Venda {k.upper()}", float(imp.get('percent', 0.0) or 0.0), imp['valor'], is_indent=True)
+                    add_row("(=) Total Impostos de Venda", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, bg_color='#f1f5f9')
             else:
                 add_row("2.3 Impostos de Venda (FPV)", (float(total_impostos_venda) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, total_impostos_venda, is_bold=True, is_indent=True, bg_color='#f8fafc')
                 for k, imp in dre_data["saidas"]["impostos_venda"].items():

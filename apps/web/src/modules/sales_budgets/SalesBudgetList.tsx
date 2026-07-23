@@ -248,14 +248,14 @@ export function SalesBudgetList() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-bg-deep/45 text-text-muted border-b border-border-subtle/80">
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Num. opt</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Oportunidade</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Cliente</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Status</th>
-                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Vendedor</th>
                 <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Responsável</th>
-                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Venda</th>
-                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Resumo Locação</th>
-                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Margem Geral</th>
+                <th className="text-left py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Vendedor</th>
+                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Total Oport.</th>
+                <th className="text-right py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Margem</th>
                 <th className="text-center py-3.5 px-5 text-xs font-bold uppercase tracking-wider whitespace-nowrap">Ações</th>
               </tr>
             </thead>
@@ -266,75 +266,39 @@ export function SalesBudgetList() {
                   onClick={() => navigate(`/orcamentos-vendas/${b.id}`)}
                   className="group border-b border-border-subtle/50 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 cursor-pointer transition-all duration-200"
                 >
+                  <td className="py-4 px-5 align-middle font-mono text-xs font-bold tracking-wider uppercase text-text-primary whitespace-nowrap">
+                    {b.numero_orcamento || '—'}
+                  </td>
                   <td className="py-4 px-5 w-1/4 max-w-[250px] align-middle">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-semibold text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2" title={b.titulo}>
-                        {b.titulo}
-                      </span>
-                      <span className="text-[10px] font-mono text-text-muted font-bold tracking-wider uppercase">
-                        {b.numero_orcamento}
-                      </span>
-                    </div>
+                    <span className="text-sm font-semibold text-text-primary group-hover:text-brand-primary transition-colors line-clamp-2" title={b.titulo}>
+                      {b.titulo}
+                    </span>
                   </td>
                   <td className="py-4 px-5 w-1/5 max-w-[200px] align-middle">
                     <div className="text-sm text-text-muted line-clamp-2 leading-relaxed" title={b.customer_nome || '—'}>
                       {b.customer_nome || '—'}
                     </div>
                   </td>
-                  <td className="py-4 px-5 w-40 align-middle">
+                  <td className="py-4 px-5 align-middle">
                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold tracking-wide whitespace-nowrap ${statusColors[b.status] || 'bg-slate-100 text-slate-800'}`}>
                       {statusLabels[b.status] || b.status}
                     </span>
                   </td>
-                  <td className="py-4 px-5 align-middle max-w-[150px] truncate" title={b.vendedor_nome || 'Não atribuído'}>
-                    <span className="text-sm text-text-muted">
-                      {b.vendedor_nome || '—'}
-                    </span>
+                  <td className="py-4 px-5 align-middle max-w-[150px] truncate text-sm text-text-muted" title={b.responsavel_nome || 'Não atribuído'}>
+                    {b.responsavel_nome || '—'}
                   </td>
-                  <td className="py-4 px-5 align-middle max-w-[180px] truncate" title={b.responsavel_nome || 'Não atribuído'}>
-                    <span className="text-sm text-text-muted">
-                      {b.responsavel_nome || '—'}
-                    </span>
+                  <td className="py-4 px-5 align-middle max-w-[150px] truncate text-sm text-text-muted" title={b.vendedor_nome || 'Não atribuído'}>
+                    {b.vendedor_nome || '—'}
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
                     <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
-                      {b.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {(b.total_venda + b.total_faturamento_rental).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </td>
                   <td className="py-4 px-5 text-right align-middle">
-                    {b.total_faturamento_rental > 0 ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="flex items-center gap-1 justify-end">
-                          <span className="font-bold text-text-primary text-sm whitespace-nowrap tabular-nums">
-                            {b.valor_mensal_total_rental > 0 ? (
-                              <>
-                                {b.valor_mensal_total_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                <span className="text-[10px] text-text-muted font-normal ml-0.5">/mês</span>
-                              </>
-                            ) : (
-                              b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                            )}
-                          </span>
-                        </div>
-                        {b.valor_mensal_total_rental > 0 && (
-                          <span className="text-[10px] text-text-muted font-medium block whitespace-nowrap leading-tight">
-                            Total: {b.total_faturamento_rental.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ({b.prazo_max_rental}m)
-                          </span>
-                        )}
-                        <MarginBadge margin={b.margem_rental} />
-                      </div>
-                    ) : (
-                      <span className="text-text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="py-4 px-5 text-right align-middle">
-                    {b.margem_geral > 0 ? (
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded border border-border-subtle bg-bg-deep font-bold text-brand-primary text-xs tabular-nums shadow-sm">
-                        {b.margem_geral.toFixed(1)}%
-                      </span>
-                    ) : (
-                      <span className="text-text-muted">—</span>
-                    )}
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded border border-border-subtle bg-bg-deep font-bold text-brand-primary text-xs tabular-nums shadow-sm">
+                      {b.margem_geral.toFixed(1)}%
+                    </span>
                   </td>
                   <td className="py-4 px-5 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity duration-200">

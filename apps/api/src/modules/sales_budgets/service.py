@@ -2447,19 +2447,46 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             vlt_icms_val = Decimal(str(summary.get("vlt_icms", 0) or 0)) * qty
             vlt_iss_val = Decimal(str(summary.get("vlt_iss", 0) or 0)) * qty
             
-            vlt_pis += vlt_pis_val
-            vlt_cofins += vlt_cofins_val
-            vlt_csll += vlt_csll_val
-            vlt_irpj += vlt_irpj_val
-            vlt_icms += vlt_icms_val
-            vlt_iss += vlt_iss_val
+            # Kit tax rates
+            aliq_pis_dec = Decimal(str(kit.aliq_pis or 0.0)) / Decimal("100.0")
+            aliq_cofins_dec = Decimal(str(kit.aliq_cofins or 0.0)) / Decimal("100.0")
+            aliq_csll_dec = Decimal(str(kit.aliq_csll or 0.0)) / Decimal("100.0")
+            aliq_irpj_dec = Decimal(str(kit.aliq_irpj or 0.0)) / Decimal("100.0")
+            aliq_iss_dec = Decimal(str(kit.aliq_iss or 0.0)) / Decimal("100.0")
             
-            impostos_instalacao_pis += vlt_pis_val
-            impostos_instalacao_cofins += vlt_cofins_val
-            impostos_instalacao_csll += vlt_csll_val
-            impostos_instalacao_irpj += vlt_irpj_val
-            impostos_instalacao_icms += vlt_icms_val
-            impostos_instalacao_iss += vlt_iss_val
+            # Installation unit value
+            vlr_venda_inst = Decimal(str(summary.get("valor_venda_instalacao", 0) or 0))
+            
+            # Calculate sales/non-installation portion (unit value)
+            sale_pis_unit = max(Decimal("0.0"), (vlt_pis_val / qty) - (vlr_venda_inst * aliq_pis_dec))
+            sale_cofins_unit = max(Decimal("0.0"), (vlt_cofins_val / qty) - (vlr_venda_inst * aliq_cofins_dec))
+            sale_csll_unit = max(Decimal("0.0"), (vlt_csll_val / qty) - (vlr_venda_inst * aliq_csll_dec))
+            sale_irpj_unit = max(Decimal("0.0"), (vlt_irpj_val / qty) - (vlr_venda_inst * aliq_irpj_dec))
+            sale_iss_unit = max(Decimal("0.0"), (vlt_iss_val / qty) - (vlr_venda_inst * aliq_iss_dec))
+            sale_icms_unit = vlt_icms_val / qty
+            
+            # Calculate new installation portion using fixed rates (unit value)
+            inst_pis_unit = vlr_venda_inst * (Decimal("0.65") / Decimal("100.0"))
+            inst_cofins_unit = vlr_venda_inst * (Decimal("3.00") / Decimal("100.0"))
+            inst_csll_unit = vlr_venda_inst * (Decimal("1.08") / Decimal("100.0"))
+            inst_irpj_unit = vlr_venda_inst * (Decimal("2.00") / Decimal("100.0"))
+            inst_iss_unit = vlr_venda_inst * (Decimal("5.00") / Decimal("100.0"))
+            inst_icms_unit = Decimal("0.0")
+            
+            # Accumulate totals
+            vlt_pis += (sale_pis_unit + inst_pis_unit) * qty
+            vlt_cofins += (sale_cofins_unit + inst_cofins_unit) * qty
+            vlt_csll += (sale_csll_unit + inst_csll_unit) * qty
+            vlt_irpj += (sale_irpj_unit + inst_irpj_unit) * qty
+            vlt_icms += (sale_icms_unit + inst_icms_unit) * qty
+            vlt_iss += (sale_iss_unit + inst_iss_unit) * qty
+            
+            impostos_instalacao_pis += inst_pis_unit * qty
+            impostos_instalacao_cofins += inst_cofins_unit * qty
+            impostos_instalacao_csll += inst_csll_unit * qty
+            impostos_instalacao_irpj += inst_irpj_unit * qty
+            impostos_instalacao_icms += inst_icms_unit * qty
+            impostos_instalacao_iss += inst_iss_unit * qty
         
         # --- SAÍDAS: Despesas de Venda ---
         vlt_frete += Decimal(str(summary.get("vlt_frete_venda", 0) or 0)) * qty
@@ -2597,7 +2624,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 purchase_ipi += ipi_val * item_qty
                 purchase_st += st_val * item_qty
                 purchase_difal += difal_val * item_qty
-            elif item.own_service_id:
+            elif getattr(item, "own_service_id", None):
                 sup_name = "Serviços Próprios"
                 base_forn = Decimal(str(item.custo_unit_base or 0.0))
                 supplier_map[sup_name] = supplier_map.get(sup_name, Decimal("0.0")) + (base_forn * item_qty)
@@ -2608,12 +2635,20 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             total_venda += Decimal(str(item.total_venda or 0.0))
             
             # Sell-side Taxes
-            pis_direct = Decimal(str(item.pis_unit or 0.0)) * item_qty
-            cofins_direct = Decimal(str(item.cofins_unit or 0.0)) * item_qty
-            csll_direct = Decimal(str(item.csll_unit or 0.0)) * item_qty
-            irpj_direct = Decimal(str(item.irpj_unit or 0.0)) * item_qty
-            icms_direct = Decimal(str(item.icms_unit or 0.0)) * item_qty
-            iss_direct = Decimal(str(item.iss_unit or 0.0)) * item_qty
+            if item.tipo_item == "SERVICO_INSTALACAO":
+                pis_direct = Decimal(str(item.total_venda or 0.0)) * (Decimal("0.65") / Decimal("100.0"))
+                cofins_direct = Decimal(str(item.total_venda or 0.0)) * (Decimal("3.00") / Decimal("100.0"))
+                csll_direct = Decimal(str(item.total_venda or 0.0)) * (Decimal("1.08") / Decimal("100.0"))
+                irpj_direct = Decimal(str(item.total_venda or 0.0)) * (Decimal("2.00") / Decimal("100.0"))
+                iss_direct = Decimal(str(item.total_venda or 0.0)) * (Decimal("5.00") / Decimal("100.0"))
+                icms_direct = Decimal("0.0")
+            else:
+                pis_direct = Decimal(str(item.pis_unit or 0.0)) * item_qty
+                cofins_direct = Decimal(str(item.cofins_unit or 0.0)) * item_qty
+                csll_direct = Decimal(str(item.csll_unit or 0.0)) * item_qty
+                irpj_direct = Decimal(str(item.irpj_unit or 0.0)) * item_qty
+                icms_direct = Decimal(str(item.icms_unit or 0.0)) * item_qty
+                iss_direct = Decimal(str(item.iss_unit or 0.0)) * item_qty
 
             vlt_pis += pis_direct
             vlt_cofins += cofins_direct
@@ -2622,12 +2657,13 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             vlt_icms += icms_direct
             vlt_iss += iss_direct
 
-            impostos_instalacao_pis += pis_direct
-            impostos_instalacao_cofins += cofins_direct
-            impostos_instalacao_csll += csll_direct
-            impostos_instalacao_irpj += irpj_direct
-            impostos_instalacao_icms += icms_direct
-            impostos_instalacao_iss += iss_direct
+            if item.tipo_item == "SERVICO_INSTALACAO":
+                impostos_instalacao_pis += pis_direct
+                impostos_instalacao_cofins += cofins_direct
+                impostos_instalacao_csll += csll_direct
+                impostos_instalacao_irpj += irpj_direct
+                impostos_instalacao_icms += icms_direct
+                impostos_instalacao_iss += iss_direct
             
             # Expenses
             vlt_frete += Decimal(str(item.frete_venda_unit or 0.0)) * item_qty
@@ -3013,11 +3049,18 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     eff_loc_iss = aliq_iss_rental
 
     # Use nominal (registered) tax rates for instalacao
-    eff_inst_pis = pis_venda_pct
-    eff_inst_cofins = cofins_venda_pct
-    eff_inst_iss = iss_venda_pct
-    eff_inst_irpj = irpj_venda_pct
-    eff_inst_csll = csll_venda_pct
+    if is_rental_opp:
+        eff_inst_pis = pis_venda_pct
+        eff_inst_cofins = cofins_venda_pct
+        eff_inst_iss = iss_venda_pct
+        eff_inst_irpj = irpj_venda_pct
+        eff_inst_csll = csll_venda_pct
+    else:
+        eff_inst_pis = Decimal("0.65")
+        eff_inst_cofins = Decimal("3.00")
+        eff_inst_csll = Decimal("1.08")
+        eff_inst_irpj = Decimal("2.00")
+        eff_inst_iss = Decimal("5.00")
 
     return {
         "header": {
@@ -3048,13 +3091,13 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 "difal": {"percent": round(difal_compra_pct, 2), "valor": round(purchase_difal, 2)}
             },
             "impostos_venda": {
-                "pis": {"percent": round(pis_venda_pct, 2), "valor": round(vlt_pis, 2)},
-                "cofins": {"percent": round(cofins_venda_pct, 2), "valor": round(vlt_cofins, 2)},
-                "icms": {"percent": round(icms_venda_pct, 2), "valor": round(vlt_icms, 2)},
+                "pis": {"percent": round(pis_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_pis - impostos_instalacao_pis), 2)},
+                "cofins": {"percent": round(cofins_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_cofins - impostos_instalacao_cofins), 2)},
+                "icms": {"percent": round(icms_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_icms - impostos_instalacao_icms), 2)},
                 "ipi": {"percent": round(ipi_venda_pct, 2), "valor": round(vlt_ipi_venda, 2)},
-                "iss": {"percent": round(iss_venda_pct, 2), "valor": round(vlt_iss, 2)},
-                "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(vlt_irpj, 2)},
-                "csll": {"percent": round(csll_venda_pct, 2), "valor": round(vlt_csll, 2)}
+                "iss": {"percent": round(iss_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_iss - impostos_instalacao_iss), 2)},
+                "irpj": {"percent": round(irpj_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_irpj - impostos_instalacao_irpj), 2)},
+                "csll": {"percent": round(csll_venda_pct, 2), "valor": round(max(Decimal("0.0"), vlt_csll - impostos_instalacao_csll), 2)}
             },
             "impostos_instalacao": {
                 "pis": {"percent": round(eff_inst_pis, 2), "valor": round(impostos_instalacao_pis, 2)},

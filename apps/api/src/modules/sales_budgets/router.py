@@ -36,28 +36,50 @@ def list_budgets(
     )
     result = []
     for b in budgets:
-        lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items, db)
-        lucro_rental, fat_rental = _calc_margem_rental(b.rental_items, getattr(b, "prazo_instalacao_meses", 0))
-        
-        mv = float(round(lucro_venda / fat_venda * 100, 2)) if fat_venda > 0 else 0.0
-        mr = float(round(lucro_rental / fat_rental * 100, 2)) if fat_rental > 0 else 0.0
-        
-        fat_geral = fat_venda + fat_rental
-        if fat_geral > 0:
-            mg = float(round((lucro_venda + lucro_rental) / fat_geral * 100, 2))
-        else:
-            mg = 0.0
+        try:
+            dre = service.get_opportunity_dre(db, b.tenant_id, b.id, b.company_id)
+            total_entradas = float(dre["entradas"]["total_entradas"])
+            margem_liquida = float(dre["margem_liquida"])
             
-        valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
-        
-        # Adjust prazo_contrato internally for the header view
-        total_faturamento_rental = sum(float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0) * float(ri.quantidade or 1) * max(0, int(ri.prazo_contrato or 0) - int(getattr(b, "prazo_instalacao_meses", 0) or 0)) for ri in valid_rentals)
-        # Adding instalacao to the display of total faturamento rental
-        total_faturamento_rental += sum(float(getattr(ri, "kit_vlr_instal_calc", 0) or getattr(ri, "valor_instalacao_item", 0) or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
-        
-        valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
-        prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
-        
+            is_rental = dre["header"]["is_rental"]
+            valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+            
+            if is_rental:
+                fat_venda = 0.0
+                total_faturamento_rental = total_entradas
+                valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+                prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
+                mv = 0.0
+                mr = margem_liquida
+            else:
+                fat_venda = total_entradas
+                total_faturamento_rental = 0.0
+                valor_mensal_total_rental = 0.0
+                prazo_max_rental = 0
+                mv = margem_liquida
+                mr = 0.0
+                
+            mg = margem_liquida
+        except Exception:
+            lucro_venda, fat_venda = _calc_margem_venda(b.items, b.rental_items, db)
+            lucro_rental, fat_rental = _calc_margem_rental(b.rental_items, getattr(b, "prazo_instalacao_meses", 0))
+            
+            mv = float(round(lucro_venda / fat_venda * 100, 2)) if fat_venda > 0 else 0.0
+            mr = float(round(lucro_rental / fat_rental * 100, 2)) if fat_rental > 0 else 0.0
+            
+            fat_geral = fat_venda + fat_rental
+            if fat_geral > 0:
+                mg = float(round((lucro_venda + lucro_rental) / fat_geral * 100, 2))
+            else:
+                mg = 0.0
+                
+            valid_rentals = [ri for ri in b.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+            total_faturamento_rental = sum(float(ri.valor_mensal or getattr(ri, "kit_valor_mensal", 0) or 0) * float(ri.quantidade or 1) * max(0, int(ri.prazo_contrato or 0) - int(getattr(b, "prazo_instalacao_meses", 0) or 0)) for ri in valid_rentals)
+            total_faturamento_rental += sum(float(getattr(ri, "kit_vlr_instal_calc", 0) or getattr(ri, "valor_instalacao_item", 0) or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+            
+            valor_mensal_total_rental = sum(float(ri.valor_mensal or 0) * float(ri.quantidade or 1) for ri in valid_rentals)
+            prazo_max_rental = max([int(ri.prazo_contrato or 0) for ri in valid_rentals]) if valid_rentals else 0
+            
         result.append({
             "id": b.id,
             "numero_orcamento": b.numero_orcamento,
