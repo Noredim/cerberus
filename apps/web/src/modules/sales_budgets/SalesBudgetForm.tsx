@@ -490,18 +490,6 @@ export function SalesBudgetForm() {
 
   const { activeCompanyId, user } = useAuth();
 
-  const canManageParticipants = useMemo(() => {
-    if (!user) return false;
-    if (isApprover) return true;
-    const isSystemAdminOrDiretoria = user.roles && Array.isArray(user.roles) 
-      ? user.roles.some((r: string) => r === 'ADMIN' || r === 'DIRETORIA') 
-      : false;
-    if (isSystemAdminOrDiretoria) return true;
-    const isVendedor = user.id === vendedorId;
-    const isResponsible = responsavelIds.includes(user.id);
-    return isVendedor || isResponsible;
-  }, [user, isApprover, vendedorId, responsavelIds]);
-
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -734,6 +722,18 @@ export function SalesBudgetForm() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
+
+  const canManageParticipants = useMemo(() => {
+    if (!user) return false;
+    if (isApprover) return true;
+    const isSystemAdminOrDiretoria = user.roles && Array.isArray(user.roles) 
+      ? user.roles.some((r: string) => r === 'ADMIN' || r === 'DIRETORIA') 
+      : false;
+    if (isSystemAdminOrDiretoria) return true;
+    const isVendedor = user.id === vendedorId;
+    const isResponsible = responsavelIds.includes(user.id);
+    return isVendedor || isResponsible;
+  }, [user, isApprover, vendedorId, responsavelIds]);
 
   const isReadonly = status === 'ENVIADO_APROVACAO' || status === 'CANCELADO' || status === 'GANHO' || status === 'PERDIDO';
   const isFactorDisabled = isReadonly && !(status === 'ENVIADO_APROVACAO' && isApprover);
