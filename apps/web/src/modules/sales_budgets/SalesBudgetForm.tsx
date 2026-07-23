@@ -488,7 +488,19 @@ export function SalesBudgetForm() {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const isEditing = Boolean(id);
 
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
+
+  const canManageParticipants = useMemo(() => {
+    if (!user) return false;
+    if (isApprover) return true;
+    const isSystemAdminOrDiretoria = user.roles && Array.isArray(user.roles) 
+      ? user.roles.some((r: string) => r === 'ADMIN' || r === 'DIRETORIA') 
+      : false;
+    if (isSystemAdminOrDiretoria) return true;
+    const isVendedor = user.id === vendedorId;
+    const isResponsible = responsavelIds.includes(user.id);
+    return isVendedor || isResponsible;
+  }, [user, isApprover, vendedorId, responsavelIds]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3269,9 +3281,13 @@ export function SalesBudgetForm() {
           <Package className="w-4 h-4" />
           Orçamento de Compra
         </button>
+        <button onClick={() => setSearchParams({ tab: 'participantes' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'participantes' ? 'text-sky-600 border-b-2 border-sky-500' : 'text-text-muted hover:text-text-primary'}`}>
+          <UserSquare2 className="w-4 h-4" />
+          Usuários Participantes
+        </button>
         <button onClick={() => setSearchParams({ tab: 'historico' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'historico' ? 'text-slate-600 border-b-2 border-slate-500' : 'text-text-muted hover:text-text-primary'}`}>
           <History className="w-4 h-4" />
-          Histórico de Aprovação
+          Histórico da Oportunidade
         </button>
         <button onClick={() => setSearchParams({ tab: 'dre' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'dre' ? 'text-emerald-600 border-b-2 border-emerald-500' : 'text-text-muted hover:text-text-primary'}`}>
           <TrendingUp className="w-4 h-4" />
@@ -5936,7 +5952,7 @@ export function SalesBudgetForm() {
             <div>
               <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
                 <Clock className="w-5 h-5 text-slate-500" />
-                Histórico de Movimentações
+                Histórico da Oportunidade
               </h2>
               <p className="text-xs text-text-muted mt-1">Timeline completa de alterações, aprovações e controle de versões.</p>
             </div>
@@ -7149,6 +7165,105 @@ export function SalesBudgetForm() {
           </div>
         </div>
       )}
+
+      {/* ─── PARTICIPANTES TAB ─── */}
+      {activeTab === 'participantes' && (
+        <div className="bg-surface border border-border-subtle rounded-xl p-6 space-y-6">
+          <div className="flex justify-between items-center border-b border-border-subtle pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                <UserSquare2 className="w-5 h-5 text-sky-500" />
+                Usuários Participantes
+              </h2>
+              <p className="text-xs text-text-muted mt-1">
+                Gerencie os usuários que têm permissão de visualização e edição nesta oportunidade.
+              </p>
+            </div>
+          </div>
+
+          {canManageParticipants && (
+            <div className="bg-bg-deep border border-border-subtle rounded-xl p-4 space-y-3">
+              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">
+                Adicionar Participante
+              </label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  id="add-participant-select"
+                  className="flex-1 px-3 py-2 border border-border-subtle rounded-lg bg-surface text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                  defaultValue=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && !responsavelIds.includes(val)) {
+                      setResponsavelIds([...responsavelIds, val]);
+                      setHasUnsavedChanges(true);
+                      e.target.value = ""; // reset dropdown
+                    }
+                  }}
+                >
+                  <option value="" disabled>Selecione um usuário para adicionar...</option>
+                  {users
+                    .filter((u) => !responsavelIds.includes(u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+              Participantes Ativos ({responsavelIds.length})
+            </h3>
+            {responsavelIds.length === 0 ? (
+              <div className="text-center py-8 text-text-muted border border-dashed border-border-subtle rounded-xl bg-bg-deep/50 text-sm">
+                Nenhum participante adicional associado a esta oportunidade.
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {responsavelIds.map((uid) => {
+                  const participantUser = users.find((u) => u.id === uid);
+                  if (!participantUser) return null;
+                  return (
+                    <div
+                      key={uid}
+                      className="flex items-center justify-between p-4 bg-bg-deep border border-border-subtle rounded-xl transition-all hover:shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-sm uppercase shrink-0">
+                          {participantUser.name ? participantUser.name.substring(0, 2) : "US"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-text-primary truncate">
+                            {participantUser.name}
+                          </p>
+                          <p className="text-xs text-text-muted truncate">
+                            {participantUser.email}
+                          </p>
+                        </div>
+                      </div>
+                      {canManageParticipants && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResponsavelIds(responsavelIds.filter((id) => id !== uid));
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="p-1.5 hover:bg-rose-500/10 hover:text-rose-600 text-text-muted rounded-lg transition-colors shrink-0"
+                          title="Remover participante"
+                        >
+                          <Trash2 className="w-4.5 h-4.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
       {showApplyKitsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">

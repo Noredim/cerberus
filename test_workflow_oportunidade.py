@@ -851,6 +851,60 @@ def run_tests():
 
         print("Solution Analysis Purchase Budget Pricing test passed successfully!")
 
+        # --- Test 12: Participants Log Verification ---
+        print("\n--- Test 12: Participants Log and General Update Log ---")
+        current_resp_ids = [str(r.user_id) for r in sales_budget.responsaveis]
+        print(f"Initial responsibles: {current_resp_ids}")
+        
+        new_resp_ids = list(set(current_resp_ids) | {peon_user.id})
+        update_payload_add = SalesBudgetUpdate(
+            customer_id=str(sales_budget.customer_id),
+            vendedor_id=str(sales_budget.vendedor_id),
+            titulo=sales_budget.titulo,
+            observacoes=sales_budget.observacoes,
+            data_orcamento=sales_budget.data_orcamento.isoformat() if sales_budget.data_orcamento else "2026-06-02T12:00:00",
+            responsavel_ids=new_resp_ids,
+            items=[]
+        )
+        sales_budget = update_budget(db, tenant_id, str(sales_budget.id), update_payload_add, admin_user.id)
+        db.commit()
+        
+        history_add = db.query(SalesBudgetHistory).filter(
+            SalesBudgetHistory.sales_budget_id == sales_budget.id,
+            SalesBudgetHistory.descricao.like(f"%Adicionou o participante%")
+        ).first()
+        assert history_add is not None
+        print(f"Log entry for addition: {history_add.descricao}")
+        
+        new_resp_ids_rem = [rid for rid in new_resp_ids if rid != peon_user.id]
+        update_payload_rem = SalesBudgetUpdate(
+            customer_id=str(sales_budget.customer_id),
+            vendedor_id=str(sales_budget.vendedor_id),
+            titulo=sales_budget.titulo,
+            observacoes=sales_budget.observacoes,
+            data_orcamento=sales_budget.data_orcamento.isoformat() if sales_budget.data_orcamento else "2026-06-02T12:00:00",
+            responsavel_ids=new_resp_ids_rem,
+            items=[]
+        )
+        sales_budget = update_budget(db, tenant_id, str(sales_budget.id), update_payload_rem, admin_user.id)
+        db.commit()
+        
+        history_rem = db.query(SalesBudgetHistory).filter(
+            SalesBudgetHistory.sales_budget_id == sales_budget.id,
+            SalesBudgetHistory.descricao.like(f"%Removeu o participante%")
+        ).first()
+        assert history_rem is not None
+        print(f"Log entry for removal: {history_rem.descricao}")
+        
+        history_general = db.query(SalesBudgetHistory).filter(
+            SalesBudgetHistory.sales_budget_id == sales_budget.id,
+            SalesBudgetHistory.descricao == "Oportunidade atualizada e salva."
+        ).first()
+        assert history_general is not None
+        print(f"Log entry for general update: {history_general.descricao}")
+        
+        print("Participants log verification passed successfully!")
+
         print("\nALL WORKFLOW WORK PATTERNS COMPLETED SUCCESSFULLY!")
 
     finally:

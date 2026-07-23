@@ -1141,9 +1141,72 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.perc_despesa_operacional = getattr(data, "perc_despesa_operacional", Decimal("0.0"))
 
     # Update responsaveis
+    old_responsavel_ids = [str(r.user_id) for r in budget.responsaveis]
+    new_responsavel_ids = [str(uid) for uid in data.responsavel_ids]
+
     db.query(SalesBudgetResponsavel).filter(SalesBudgetResponsavel.budget_id == budget.id).delete()
     for uid in data.responsavel_ids:
         db.add(SalesBudgetResponsavel(budget_id=budget.id, user_id=uid))
+
+    # Log addition and removal of participants
+    added_ids = set(new_responsavel_ids) - set(old_responsavel_ids)
+    removed_ids = set(old_responsavel_ids) - set(new_responsavel_ids)
+
+    if user_id and (added_ids or removed_ids):
+        from src.modules.users.models import User
+        from src.modules.sales_budgets.models import SalesBudgetHistory
+
+        user_ids_to_query = list(added_ids | removed_ids)
+        user_names = {}
+        if user_ids_to_query:
+            users = db.query(User).filter(User.id.in_(user_ids_to_query)).all()
+            user_names = {str(u.id): u.name for u in users}
+
+        cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+
+        for add_id in added_ids:
+            participant_name = user_names.get(add_id, "Usuário")
+            history_entry = SalesBudgetHistory(
+                sales_budget_id=budget.id,
+                tenant_id=tenant_id,
+                versao=budget.versao,
+                status_anterior=old_status,
+                status_novo=budget.status,
+                usuario_id=user_id,
+                cargo_usuario=cargo_usuario,
+                descricao=f"Adicionou o participante {participant_name} à oportunidade."
+            )
+            db.add(history_entry)
+
+        for rem_id in removed_ids:
+            participant_name = user_names.get(rem_id, "Usuário")
+            history_entry = SalesBudgetHistory(
+                sales_budget_id=budget.id,
+                tenant_id=tenant_id,
+                versao=budget.versao,
+                status_anterior=old_status,
+                status_novo=budget.status,
+                usuario_id=user_id,
+                cargo_usuario=cargo_usuario,
+                descricao=f"Removeu o participante {participant_name} da oportunidade."
+            )
+            db.add(history_entry)
+
+    # Log general opportunity update
+    if user_id and not is_reopened:
+        from src.modules.sales_budgets.models import SalesBudgetHistory
+        cargo_usuario = get_user_role_name(db, user_id, tenant_id, budget.company_id)
+        history_entry = SalesBudgetHistory(
+            sales_budget_id=budget.id,
+            tenant_id=tenant_id,
+            versao=budget.versao,
+            status_anterior=old_status,
+            status_novo=budget.status,
+            usuario_id=user_id,
+            cargo_usuario=cargo_usuario,
+            descricao="Oportunidade atualizada e salva."
+        )
+        db.add(history_entry)
 
     # Delete old items and recalculate
     db.query(SalesBudgetItem).filter(SalesBudgetItem.budget_id == budget.id).delete()
