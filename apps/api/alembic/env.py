@@ -18,7 +18,7 @@ from src.core.base import Base  # type: ignore
 # Import all models here for Alembic auto-discovery
 from src.modules.tenants.models import Tenant, TenantCnae  # type: ignore
 from src.modules.users.models import User, UserRole  # type: ignore
-from src.modules.fiscal.models import NcmRule  # type: ignore
+from src.modules.fiscal.models import NcmRule, NfeAnalysis, FiscalDocument, FiscalDocumentItem, FiscalDocumentInstallment, FiscalDocumentPayment  # type: ignore
 from src.modules.catalog.models import State, City, IbgeSyncJob  # type: ignore
 from src.modules.utils.models.cep import CepCache  # type: ignore
 from src.modules.companies.models import Company, CompanyCnae, CompanyBenefit, CompanyCnpjQueryLog, CnpjQueryCache  # type: ignore

@@ -12,6 +12,8 @@ class UserRoleEnum(enum.Enum):
     ADMIN = "ADMIN"
     ENGENHARIA_PRECO = "ENGENHARIA_PRECO"
     DIRETORIA = "DIRETORIA"
+    FISCAL = "FISCAL"
+
 
 class UserRole(Base):
     __tablename__ = "user_roles"

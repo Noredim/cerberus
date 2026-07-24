@@ -124,7 +124,7 @@ class NcmStService:
                 item_data = {
                     "cad_ncm_st_id": header_id,
                     "item": row.get("item"),
-                    "is_active": row.get("ativo", "true").lower() == "true",
+                    "is_active": str(row.get("ativo") or "").strip().lower() in ("true", "sim", "s", "1", "") if row.get("ativo") is not None else True,
                     "ncm_sh": row.get("ncm_sh"),
                     "ncm_normalizado": row.get("ncm_normalizado"),
                     "cest": row.get("cest"),

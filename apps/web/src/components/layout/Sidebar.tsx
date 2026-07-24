@@ -31,7 +31,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         setExpandedMenus(prev => ({ ...prev, [label]: !prev[label] }));
     };
 
-    const isEngenhariaPreco = user?.roles.includes('ENGENHARIA_PRECO') && !user?.roles.includes('ADMIN');
+    const isEngenhariaPreco = user?.roles?.includes('ENGENHARIA_PRECO') && !user?.roles?.includes('ADMIN');
+    const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
 
     const rawMenuItems = [
         { icon: LayoutDashboard, label: 'Painel Geral', path: '/' },
@@ -133,8 +134,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 })
                 .filter((item): item is NonNullable<typeof item> => item !== null && (!item.subItems || item.subItems.length > 0));
         }
+        if (isFiscal) {
+            return rawMenuItems
+                .map(item => {
+                    if (['Painel Geral', 'Cadastro', 'Fiscal', 'Configurações'].includes(item.label)) {
+                        return item;
+                    }
+                    return null;
+                })
+                .filter((item): item is NonNullable<typeof item> => item !== null);
+        }
         return rawMenuItems;
-    }, [isEngenhariaPreco]);
+    }, [isEngenhariaPreco, isFiscal]);
 
     return (
         <motion.aside

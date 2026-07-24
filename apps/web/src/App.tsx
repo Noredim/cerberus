@@ -48,6 +48,9 @@ import DocumentTemplateList from './modules/document_templates/DocumentTemplateL
 import DocumentTemplateForm from './modules/document_templates/DocumentTemplateForm';
 import PWAManager from './components/pwa/PWAManager';
 import MessagingDashboard from './modules/messaging/MessagingDashboard';
+import NfeAnalysisList from './modules/fiscal/analise-nfe/NfeAnalysisList';
+import NfeAnalysisDetail from './modules/fiscal/analise-nfe/NfeAnalysisDetail';
+
 
 import { Loader2, ServerOff } from 'lucide-react';
 
@@ -103,6 +106,41 @@ const ProtectedRoute = () => {
           '/orcamentos-vendas',    // Oportunidades
           '/comercial/comparativos',// Comparativos de soluções
           '/comercial/licitacoes', // Licitações
+          '/settings',             // Configurações
+      ];
+      
+      const isAllowed = allowedPaths.some(allowed => 
+          path === allowed || path.startsWith(allowed + '/')
+      );
+      
+      if (!isAllowed) {
+          return (
+             <div className="min-h-screen bg-bg-deep flex items-center justify-center p-4 text-center">
+                 <div className="bg-bg-surface p-8 rounded-lg border border-border-subtle max-w-md">
+                     <div className="bg-brand-danger/10 p-3 rounded-full mb-4 mx-auto w-fit">
+                         <ServerOff className="w-8 h-8 text-brand-danger" />
+                     </div>
+                     <h2 className="text-xl font-bold text-text-primary mb-2">Acesso Negado</h2>
+                     <p className="text-sm text-text-muted">
+                         Você não possui permissão para acessar esta página.
+                     </p>
+                 </div>
+             </div>
+          );
+      }
+  }
+
+  // Se o usuário tem o perfil FISCAL, bloquear rotas não autorizadas (apenas acesso a Cadastro, Fiscal, Dashboard, Settings)
+  const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
+  if (isFiscal) {
+      const path = window.location.pathname;
+      const allowedPaths = [
+          '/',                     // Painel Geral / Dashboard
+          '/cadastros',            // Cadastro
+          '/cadastro',
+          '/beneficios',
+          '/ncms',
+          '/fiscal',               // Fiscal
           '/settings',             // Configurações
       ];
       
@@ -239,6 +277,9 @@ function App() {
             {/* Relatórios */}
             <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
 
+            {/* Fiscal: Análise de NF-e */}
+            <Route path="/fiscal/analise-nfe" element={<NfeAnalysisList />} />
+            <Route path="/fiscal/analise-nfe/:id" element={<NfeAnalysisDetail />} />
           </Route>
         </Routes>
       </Router>
