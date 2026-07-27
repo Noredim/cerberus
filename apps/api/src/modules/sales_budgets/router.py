@@ -716,6 +716,7 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
             "despesa_operacional_mensal": float(ri.despesa_operacional_mensal or 0),
             "lucro_mensal": float(ri.lucro_mensal or 0),
             "margem": float(ri.margem or 0),
+            "kit_comissionamento_detalhado": ri.kit_comissionamento_detalhado if hasattr(ri, 'kit_comissionamento_detalhado') else None,
             "cost_composition": cost_comp,
             "opportunity_kit": kit_data,
         })

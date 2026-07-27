@@ -204,7 +204,7 @@ def calculate_item(
 # RENTAL ITEM CALCULATION (Locação / Comodato)
 # ═══════════════════════════════════════════════════════════════════
 
-def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: dict) -> dict:
+def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: dict, db: Session = None) -> dict:
     is_kit = bool(getattr(item_data, "opportunity_kit_id", None))
     is_instalacao = bool(getattr(item_data, "is_kit_instalacao", False))
     
@@ -337,23 +337,29 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
         perc_demais = _d(rental_defaults.get("perc_demais_incidencias", 0))
         perc_desp_op = _d(rental_defaults.get("perc_despesa_operacional", 0))
 
-        com_destinado = com_val
         dsr_mensal = fgts_mensal = inss_mensal = demais_incidencias_mensal = Decimal("0.0")
 
         # Check if we can parse pre-calculated commission breakdown from kit details
         comissao_detalhada_usada = False
-        if is_kit and getattr(item_data, "kit_comissionamento_detalhado", None) is not None:
-            import json
-            raw_det = item_data.kit_comissionamento_detalhado
-            detalhes = None
-            if isinstance(raw_det, str):
-                try:
-                    detalhes = json.loads(raw_det)
-                except Exception:
-                    pass
-            elif isinstance(raw_det, dict):
-                detalhes = raw_det
+        detalhes = None
+        if is_kit:
+            if db:
+                from src.modules.opportunity_kits.models import OpportunityKit
+                kit_obj = db.query(OpportunityKit).filter(OpportunityKit.id == item_data.opportunity_kit_id).first()
+                if kit_obj and kit_obj.comissionamento_detalhado:
+                    detalhes = kit_obj.comissionamento_detalhado
                 
+            if not detalhes and getattr(item_data, "kit_comissionamento_detalhado", None) is not None:
+                import json
+                raw_det = item_data.kit_comissionamento_detalhado
+                if isinstance(raw_det, str):
+                    try:
+                        detalhes = json.loads(raw_det)
+                    except Exception:
+                        pass
+                elif isinstance(raw_det, dict):
+                    detalhes = raw_det
+                    
             if detalhes and isinstance(detalhes, dict) and "detalhamento_incidencias" in detalhes:
                 incidencias = detalhes["detalhamento_incidencias"]
                 com_val = _d(incidencias.get("comissao_efetiva", com_val))
@@ -362,6 +368,12 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
                 inss_mensal = _d(incidencias.get("inss", 0.0))
                 demais_incidencias_mensal = _d(incidencias.get("demais", 0.0))
                 comissao_detalhada_usada = True
+
+        com_destinado = com_val
+        if is_kit and getattr(item_data, "kit_comissao", None) is not None and not comissao_detalhada_usada:
+            if tipo_comissionamento == "COMISSAO_POR_DENTRO":
+                fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+                com_destinado = _round(com_val * fator_total)
 
         if not comissao_detalhada_usada:
             if tipo_comissionamento == "COMISSAO_POR_DENTRO" and com_destinado > 0:
@@ -674,7 +686,7 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
                 local_defaults["perc_demais_incidencias"] = getattr(kit, "perc_demais_incidencias", Decimal("0.0"))
                 local_defaults["perc_despesa_operacional"] = getattr(kit, "perc_despesa_operacional", Decimal("0.0"))
 
-        calc = calculate_rental_item(item_data, local_defaults)
+        calc = calculate_rental_item(item_data, local_defaults, db=db)
         db_item = RentalBudgetItem(
             budget_id=budget.id,
             product_id=item_data.product_id,
@@ -814,6 +826,22 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
     c_desp = cp.despesa_administrativa_locacao if cp and cp.despesa_administrativa_locacao is not None else data.perc_despesa_adm
     c_com = cp.comissionamento_locacao if cp and cp.comissionamento_locacao is not None else data.perc_comissao
 
+    policy = None
+    if data.commercial_policy_id:
+        from src.modules.companies.models import CommercialPolicy
+        policy = db.query(CommercialPolicy).filter(
+            CommercialPolicy.id == data.commercial_policy_id,
+            CommercialPolicy.ativo == True
+        ).first()
+        
+    if not policy and company_id:
+        from src.modules.companies.models import CommercialPolicy
+        policy = db.query(CommercialPolicy).filter(
+            CommercialPolicy.company_id == company_id,
+            CommercialPolicy.is_default == True,
+            CommercialPolicy.ativo == True
+        ).first()
+
     budget = SalesBudget(
         tenant_id=tenant_id,
         company_id=company_id,
@@ -860,12 +888,12 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_irpj_rental=data.perc_irpj_rental,
         perc_iss_rental=data.perc_iss_rental,
         perc_comissao_diretoria=data.perc_comissao_diretoria,
-        tipo_comissionamento=getattr(data, "tipo_comissionamento", "TRADICIONAL"),
-        perc_dsr=getattr(data, "perc_dsr", Decimal("0.0")),
-        perc_fgts=getattr(data, "perc_fgts", Decimal("0.0")),
-        perc_inss=getattr(data, "perc_inss", Decimal("0.0")),
-        perc_demais_incidencias=getattr(data, "perc_demais_incidencias", Decimal("0.0")),
-        perc_despesa_operacional=getattr(data, "perc_despesa_operacional", Decimal("0.0")),
+        tipo_comissionamento=data.tipo_comissionamento if "tipo_comissionamento" in data.model_fields_set else (policy.tipo_comissionamento if policy else "TRADICIONAL"),
+        perc_dsr=data.perc_dsr if "perc_dsr" in data.model_fields_set else (policy.dsr_percentual if policy else Decimal("0.0")),
+        perc_fgts=data.perc_fgts if "perc_fgts" in data.model_fields_set else (policy.fgts_percentual if policy else Decimal("0.0")),
+        perc_inss=data.perc_inss if "perc_inss" in data.model_fields_set else (policy.inss_percentual if policy else Decimal("0.0")),
+        perc_demais_incidencias=data.perc_demais_incidencias if "perc_demais_incidencias" in data.model_fields_set else (policy.demais_incidencias_percentual if policy else Decimal("0.0")),
+        perc_despesa_operacional=data.perc_despesa_operacional if "perc_despesa_operacional" in data.model_fields_set else (policy.despesa_operacional_percentual if policy else Decimal("0.0")),
         usar_produtos_gerais=getattr(data, "usar_produtos_gerais", False),
     )
     db.add(budget)
@@ -1133,12 +1161,53 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.perc_irpj_rental = data.perc_irpj_rental
     budget.perc_iss_rental = data.perc_iss_rental
     budget.perc_comissao_diretoria = data.perc_comissao_diretoria
-    budget.tipo_comissionamento = getattr(data, "tipo_comissionamento", "TRADICIONAL")
-    budget.perc_dsr = getattr(data, "perc_dsr", Decimal("0.0"))
-    budget.perc_fgts = getattr(data, "perc_fgts", Decimal("0.0"))
-    budget.perc_inss = getattr(data, "perc_inss", Decimal("0.0"))
-    budget.perc_demais_incidencias = getattr(data, "perc_demais_incidencias", Decimal("0.0"))
-    budget.perc_despesa_operacional = getattr(data, "perc_despesa_operacional", Decimal("0.0"))
+    policy = None
+    if data.commercial_policy_id:
+        from src.modules.companies.models import CommercialPolicy
+        policy = db.query(CommercialPolicy).filter(
+            CommercialPolicy.id == data.commercial_policy_id,
+            CommercialPolicy.ativo == True
+        ).first()
+        
+    if not policy and budget.company_id:
+        from src.modules.companies.models import CommercialPolicy
+        policy = db.query(CommercialPolicy).filter(
+            CommercialPolicy.company_id == budget.company_id,
+            CommercialPolicy.is_default == True,
+            CommercialPolicy.ativo == True
+        ).first()
+
+    fields = data.model_fields_set
+    
+    if "tipo_comissionamento" in fields:
+        budget.tipo_comissionamento = data.tipo_comissionamento
+    elif policy:
+        budget.tipo_comissionamento = policy.tipo_comissionamento
+        
+    if "perc_dsr" in fields:
+        budget.perc_dsr = data.perc_dsr
+    elif policy:
+        budget.perc_dsr = policy.dsr_percentual
+
+    if "perc_fgts" in fields:
+        budget.perc_fgts = data.perc_fgts
+    elif policy:
+        budget.perc_fgts = policy.fgts_percentual
+
+    if "perc_inss" in fields:
+        budget.perc_inss = data.perc_inss
+    elif policy:
+        budget.perc_inss = policy.inss_percentual
+
+    if "perc_demais_incidencias" in fields:
+        budget.perc_demais_incidencias = data.perc_demais_incidencias
+    elif policy:
+        budget.perc_demais_incidencias = policy.demais_incidencias_percentual
+
+    if "perc_despesa_operacional" in fields:
+        budget.perc_despesa_operacional = data.perc_despesa_operacional
+    elif policy:
+        budget.perc_despesa_operacional = policy.despesa_operacional_percentual
 
     # Update responsaveis
     old_responsavel_ids = [str(r.user_id) for r in budget.responsaveis]
@@ -1365,15 +1434,28 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
         tenant_id=original.tenant_id,
         company_id=original.company_id,
         customer_id=original.customer_id,
+        vendedor_id=original.vendedor_id,
+        forma_pagamento_id=original.forma_pagamento_id,
+        data_vencimento_inicial=original.data_vencimento_inicial,
+        forma_pagamento_snapshot=original.forma_pagamento_snapshot,
         numero_orcamento=get_next_numero(db, tenant_id, str(original.company_id)),
         titulo=f"{original.titulo} (Cópia)",
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
         commercial_policy_id=original.commercial_policy_id,
         status="EM_LANCAMENTO",
+        usar_produtos_gerais=original.usar_produtos_gerais,
+        valor_total=original.valor_total,
         venda_havera_manutencao=original.venda_havera_manutencao,
         venda_qtd_meses_manutencao=original.venda_qtd_meses_manutencao,
         # Sale defaults
+        markup_padrao=original.markup_padrao,
+        tipo_comissionamento=original.tipo_comissionamento,
+        perc_dsr=original.perc_dsr,
+        perc_fgts=original.perc_fgts,
+        perc_inss=original.perc_inss,
+        perc_demais_incidencias=original.perc_demais_incidencias,
+        perc_despesa_operacional=original.perc_despesa_operacional,
         perc_despesa_adm=original.perc_despesa_adm,
         perc_comissao=original.perc_comissao,
         perc_frete_venda=original.perc_frete_venda,
@@ -1393,7 +1475,9 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
         prazo_instalacao_meses=original.prazo_instalacao_meses,
         taxa_juros_mensal=original.taxa_juros_mensal,
         taxa_manutencao_anual=original.taxa_manutencao_anual,
+        tipo_receita_rental=original.tipo_receita_rental,
         fator_margem_padrao=original.fator_margem_padrao,
+        fator_manutencao_padrao=original.fator_manutencao_padrao,
         perc_instalacao_padrao=original.perc_instalacao_padrao,
         perc_comissao_rental=original.perc_comissao_rental,
         perc_pis_rental=original.perc_pis_rental,
@@ -1406,14 +1490,127 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
     db.add(new_budget)
     db.flush()
 
+    # Copy opportunity kits
+    from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem, OpportunityKitCost, OpportunityKitMonthlyCost, OpportunityKitSalesTeam
+    
+    original_kits = db.query(OpportunityKit).filter(OpportunityKit.sales_budget_id == original.id).all()
+    kit_id_map = {}
+    
+    for kit in original_kits:
+        new_kit = OpportunityKit(
+            tenant_id=kit.tenant_id,
+            company_id=kit.company_id,
+            sales_budget_id=new_budget.id,
+            sales_proposal_id=kit.sales_proposal_id,
+            licitacao_id=kit.licitacao_id,
+            licitacao_item_id=kit.licitacao_item_id,
+            commercial_policy_id=kit.commercial_policy_id,
+            comissionamento_detalhado=kit.comissionamento_detalhado,
+            nome_kit=kit.nome_kit,
+            descricao_kit=kit.descricao_kit,
+            quantidade_kits=kit.quantidade_kits,
+            tipo_contrato=kit.tipo_contrato,
+            considerar_st_ou_difal=kit.considerar_st_ou_difal,
+            forma_execucao=kit.forma_execucao,
+            prazo_contrato_meses=kit.prazo_contrato_meses,
+            prazo_instalacao_meses=kit.prazo_instalacao_meses,
+            fator_margem_locacao=kit.fator_margem_locacao,
+            taxa_juros_mensal=kit.taxa_juros_mensal,
+            taxa_manutencao_anual=kit.taxa_manutencao_anual,
+            instalacao_inclusa=kit.instalacao_inclusa,
+            percentual_instalacao=kit.percentual_instalacao,
+            manutencao_inclusa=kit.manutencao_inclusa,
+            fator_manutencao=kit.fator_manutencao,
+            fator_margem_instalacao=kit.fator_margem_instalacao,
+            fator_margem_manutencao=kit.fator_margem_manutencao,
+            fator_margem_servicos_produtos=kit.fator_margem_servicos_produtos,
+            havera_manutencao=kit.havera_manutencao,
+            qtd_meses_manutencao=kit.qtd_meses_manutencao,
+            faturamento_servico_separado=kit.faturamento_servico_separado,
+            custo_monitoramento_unitario=kit.custo_monitoramento_unitario,
+            fator_monitoramento=kit.fator_monitoramento,
+            aliq_pis=kit.aliq_pis,
+            aliq_cofins=kit.aliq_cofins,
+            aliq_csll=kit.aliq_csll,
+            aliq_irpj=kit.aliq_irpj,
+            aliq_iss=kit.aliq_iss,
+            aliq_icms=kit.aliq_icms,
+            perc_frete_venda=kit.perc_frete_venda,
+            perc_despesas_adm=kit.perc_despesas_adm,
+            perc_comissao=kit.perc_comissao,
+            tipo_comissionamento=kit.tipo_comissionamento,
+            perc_dsr=kit.perc_dsr,
+            perc_fgts=kit.perc_fgts,
+            perc_inss=kit.perc_inss,
+            perc_demais_incidencias=kit.perc_demais_incidencias,
+            perc_despesa_operacional=kit.perc_despesa_operacional,
+            custo_manut_mensal_kit=kit.custo_manut_mensal_kit,
+            custo_suporte_mensal_kit=kit.custo_suporte_mensal_kit,
+            custo_seguro_mensal_kit=kit.custo_seguro_mensal_kit,
+            custo_logistica_mensal_kit=kit.custo_logistica_mensal_kit,
+            custo_software_mensal_kit=kit.custo_software_mensal_kit,
+            custo_itens_acessorios_mensal_kit=kit.custo_itens_acessorios_mensal_kit,
+            margem_minima_desejada=kit.margem_minima_desejada,
+            fator_minimo_calculado=kit.fator_minimo_calculado,
+            valor_venda_minimo=kit.valor_venda_minimo,
+            lucro_minimo=kit.lucro_minimo,
+            margem_minima_resultante=kit.margem_minima_resultante,
+        )
+        db.add(new_kit)
+        db.flush()
+        kit_id_map[kit.id] = new_kit.id
+        
+        # Copy items
+        for kit_item in kit.items:
+            db.add(OpportunityKitItem(
+                kit_id=new_kit.id,
+                tipo_item=kit_item.tipo_item,
+                product_id=kit_item.product_id,
+                own_service_id=kit_item.own_service_id,
+                descricao_item=kit_item.descricao_item,
+                quantidade_no_kit=kit_item.quantidade_no_kit
+            ))
+            
+        # Copy costs
+        for kit_cost in kit.costs:
+            db.add(OpportunityKitCost(
+                kit_id=new_kit.id,
+                tipo_item=kit_cost.tipo_item,
+                forma_execucao=kit_cost.forma_execucao,
+                own_service_id=kit_cost.own_service_id,
+                product_id=kit_cost.product_id,
+                tipo_custo=kit_cost.tipo_custo,
+                quantidade=kit_cost.quantidade,
+                valor_unitario=kit_cost.valor_unitario
+            ))
+            
+        # Copy monthly costs
+        for kit_mcost in kit.monthly_costs:
+            db.add(OpportunityKitMonthlyCost(
+                kit_id=new_kit.id,
+                servico=kit_mcost.servico,
+                tipo_custo=kit_mcost.tipo_custo,
+                quantidade=kit_mcost.quantidade,
+                valor_unitario=kit_mcost.valor_unitario
+            ))
+            
+        # Copy sales teams
+        for link in kit.sales_teams:
+            db.add(OpportunityKitSalesTeam(
+                opportunity_kit_id=new_kit.id,
+                sales_team_id=link.sales_team_id
+            ))
+
     for resp in original.responsaveis:
         db.add(SalesBudgetResponsavel(budget_id=new_budget.id, user_id=resp.user_id))
 
     # Copy sale items
     for item in original.items:
+        new_kit_id = kit_id_map.get(item.opportunity_kit_id) if item.opportunity_kit_id else None
         new_item = SalesBudgetItem(
             budget_id=new_budget.id,
             product_id=item.product_id,
+            opportunity_kit_id=new_kit_id or item.opportunity_kit_id,
             tipo_item=item.tipo_item,
             descricao_servico=item.descricao_servico,
             usa_parametros_padrao=item.usa_parametros_padrao,
@@ -1426,9 +1623,15 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
             perc_irpj=item.perc_irpj, irpj_unit=item.irpj_unit,
             perc_icms=item.perc_icms, icms_unit=item.icms_unit,
             tem_st=item.tem_st,
+            icms_abatido_unit=item.icms_abatido_unit,
             perc_iss=item.perc_iss, iss_unit=item.iss_unit,
             perc_despesa_adm=item.perc_despesa_adm, despesa_adm_unit=item.despesa_adm_unit,
             perc_comissao=item.perc_comissao, comissao_unit=item.comissao_unit,
+            dsr_unit=item.dsr_unit,
+            fgts_unit=item.fgts_unit,
+            inss_unit=item.inss_unit,
+            demais_incidencias_unit=item.demais_incidencias_unit,
+            despesa_operacional_unit=item.despesa_operacional_unit,
             lucro_unit=item.lucro_unit, margem_unit=item.margem_unit,
             quantidade=item.quantidade, total_venda=item.total_venda,
         )
@@ -1436,10 +1639,11 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
 
     # Copy rental items
     for ri in original.rental_items:
+        new_kit_id = kit_id_map.get(ri.opportunity_kit_id) if ri.opportunity_kit_id else None
         new_ri = RentalBudgetItem(
             budget_id=new_budget.id,
             product_id=ri.product_id,
-            opportunity_kit_id=ri.opportunity_kit_id,
+            opportunity_kit_id=new_kit_id or ri.opportunity_kit_id,
             custo_op_mensal_kit=ri.custo_op_mensal_kit,
             is_kit_instalacao=ri.is_kit_instalacao,
             tipo_contrato_kit=ri.tipo_contrato_kit,
@@ -1457,6 +1661,15 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
             kit_receita_liquida=ri.kit_receita_liquida,
             kit_lucro_mensal=ri.kit_lucro_mensal,
             kit_margem=ri.kit_margem,
+            kit_faturamento_separado=ri.kit_faturamento_separado,
+            kit_investimento_total=ri.kit_investimento_total,
+            kit_comissao=ri.kit_comissao,
+            kit_perc_comissao=ri.kit_perc_comissao,
+            kit_despesas_adm=ri.kit_despesas_adm,
+            kit_perc_despesas_adm=ri.kit_perc_despesas_adm,
+            kit_vlr_instal_calc=ri.kit_vlr_instal_calc,
+            kit_parcela_locacao=ri.kit_parcela_locacao,
+            kit_venda_unit_monitoramento=ri.kit_venda_unit_monitoramento,
             quantidade=ri.quantidade,
             custo_aquisicao_unit=ri.custo_aquisicao_unit,
             ipi_unit=ri.ipi_unit, frete_unit=ri.frete_unit,
@@ -1479,6 +1692,11 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
             receita_liquida_mensal=ri.receita_liquida_mensal,
             perc_comissao=ri.perc_comissao,
             comissao_mensal=ri.comissao_mensal,
+            dsr_mensal=ri.dsr_mensal,
+            fgts_mensal=ri.fgts_mensal,
+            inss_mensal=ri.inss_mensal,
+            demais_incidencias_mensal=ri.demais_incidencias_mensal,
+            despesa_operacional_mensal=ri.despesa_operacional_mensal,
             lucro_mensal=ri.lucro_mensal,
             margem=ri.margem,
             kit_comissionamento_detalhado=ri.kit_comissionamento_detalhado,

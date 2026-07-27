@@ -838,7 +838,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       const shouldOverrideCost = isKitExecType && c.own_service_id && !(isLocacaoOrComodato && isBloco6);
 
       const summary = financials?.cost_summaries?.find((cs: any) =>
-        (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
+        ((c.product_id && cs.product_id === c.product_id) || 
+         (c.own_service_id && cs.own_service_id === c.own_service_id)) &&
         cs.tipo_custo === c.tipo_custo
       );
       return {
@@ -3386,7 +3387,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
                       {instCosts.map((c, idx) => {
                         const summary = financials?.cost_summaries?.find((cs: any) =>
-                          (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
+                          ((c.product_id && cs.product_id === c.product_id) || 
+                           (c.own_service_id && cs.own_service_id === c.own_service_id)) &&
                           cs.tipo_custo === c.tipo_custo
                         );
                         const vendaUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? c.valor_unitario * (form.fator_margem_instalacao || 1) : c.valor_unitario;
@@ -3505,7 +3507,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             <td className="px-4 py-3 text-right tabular-nums text-brand-secondary">
                               {fmtC(instCosts.reduce((acc, c) => {
                                 const summary = financials?.cost_summaries?.find((cs: any) =>
-                                  (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
+                                  ((c.product_id && cs.product_id === c.product_id) || 
+                                   (c.own_service_id && cs.own_service_id === c.own_service_id)) &&
                                   cs.tipo_custo === c.tipo_custo
                                 );
                                 const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;
@@ -3572,7 +3575,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     <tbody className="divide-y divide-border-subtle bg-bg-surface">
                       {opCosts.map((c, idx) => {
                         const summary = financials?.cost_summaries?.find((cs: any) =>
-                          (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
+                          ((c.product_id && cs.product_id === c.product_id) || 
+                           (c.own_service_id && cs.own_service_id === c.own_service_id)) &&
                           cs.tipo_custo === c.tipo_custo
                         );
                         const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;
@@ -3720,7 +3724,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <td className="px-4 py-3"></td>
                               <td className="px-4 py-3"></td>
                               <td className="px-4 py-3 text-right tabular-nums text-brand-primary font-bold">{fmtC(opCosts.reduce((acc, cost) => {
-                                const cs = financials?.cost_summaries?.find((x: any) => x.product_id === cost.product_id && x.tipo_custo === cost.tipo_custo);
+                                const cs = financials?.cost_summaries?.find((x: any) => 
+                                  ((cost.product_id && x.product_id === cost.product_id) || 
+                                   (cost.own_service_id && x.own_service_id === cost.own_service_id)) && 
+                                  x.tipo_custo === cost.tipo_custo
+                                );
                                 const vUnit = form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? cost.valor_unitario * (form.fator_margem_manutencao || 1) : cost.valor_unitario;
                                 return acc + ((cs?.venda_unitario_item || vUnit) * cost.quantidade);
                               }, 0))}</td>
@@ -3743,7 +3751,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             <td className="px-4 py-3 text-right tabular-nums text-brand-warning">
                               {fmtC(opCosts.reduce((acc, c) => {
                                 const summary = financials?.cost_summaries?.find((cs: any) =>
-                                  (cs.product_id === c.product_id || (cs.own_service_id && cs.own_service_id === c.own_service_id)) &&
+                                  ((c.product_id && cs.product_id === c.product_id) || 
+                                   (c.own_service_id && cs.own_service_id === c.own_service_id)) &&
                                   cs.tipo_custo === c.tipo_custo
                                 );
                                 const custoUnit = summary?.custo_base_unitario_item !== undefined ? summary.custo_base_unitario_item : c.valor_unitario;

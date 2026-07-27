@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Receipt, Search, Eye, Trash2 } from 'lucide-react';
+import { Plus, Receipt, Search, Eye, Trash2, Copy } from 'lucide-react';
 import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
@@ -68,6 +68,25 @@ export function SalesBudgetList() {
   const [budgetToDelete, setBudgetToDelete] = useState<SalesBudgetSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  const handleDuplicateClick = async (budget: SalesBudgetSummary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Deseja duplicar a oportunidade "${budget.titulo}"?`)) return;
+    setDuplicatingId(budget.id);
+    try {
+      const response = await api.post(`/sales-budgets/${budget.id}/duplicate`);
+      const clone = response.data;
+      alert('Oportunidade duplicada com sucesso! Redirecionando para a edição do rascunho.');
+      navigate(`/orcamentos-vendas/${clone.id}`);
+    } catch (err: any) {
+      console.error('Erro ao duplicar orçamento:', err);
+      const msg = err.response?.data?.detail || err.message || 'Erro desconhecido';
+      alert(`Falha ao duplicar orçamento: ${msg}`);
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
 
   useEffect(() => {
     const loadFiltersData = async () => {
@@ -295,6 +314,14 @@ export function SalesBudgetList() {
                         title="Visualizar"
                       >
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDuplicateClick(b, e)}
+                        disabled={duplicatingId === b.id}
+                        className="p-1.5 rounded hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary disabled:opacity-50 transition-all duration-150"
+                        title="Duplicar"
+                      >
+                        <Copy className="w-4 h-4" />
                       </button>
                       <button
                         onClick={(e) => handleDeleteClick(b, e)}

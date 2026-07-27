@@ -416,7 +416,7 @@ function calcRentalItem(item: RentalBudgetItem, rd: any): RentalBudgetItem {
   let inss_mensal = 0;
   let demais_incidencias_mensal = 0;
 
-  if (tipoComissionamento === 'POR_DENTRO') {
+  if (tipoComissionamento === 'POR_DENTRO' || tipoComissionamento === 'COMISSAO_POR_DENTRO') {
     const fatorTotal = (1 + percDsr / 100) * (1 + (percFgts + percInss + percDemais) / 100);
     const comissaoReal = +(comissao / fatorTotal).toFixed(4);
     dsr_mensal = +(comissaoReal * percDsr / 100).toFixed(4);

@@ -143,6 +143,26 @@ class OpportunityKitService:
             licitacao = self.db.query(Licitacao).filter(Licitacao.id == kit.licitacao_id).first()
             company_id = str(licitacao.company_id) if licitacao else None
 
+        # Resolve active policy early
+        policy_id = kit.commercial_policy_id or (sales_budget.commercial_policy_id if sales_budget else None)
+        policy = None
+        if policy_id:
+            from src.modules.companies.models import CommercialPolicy
+            policy = self.db.query(CommercialPolicy).filter(
+                CommercialPolicy.id == policy_id,
+                CommercialPolicy.ativo == True
+            ).first()
+            
+        if not policy:
+            from src.modules.companies.models import CommercialPolicy
+            comp_id = kit.company_id or (sales_budget.company_id if sales_budget else None)
+            if comp_id:
+                policy = self.db.query(CommercialPolicy).filter(
+                    CommercialPolicy.company_id == comp_id,
+                    CommercialPolicy.is_default == True,
+                    CommercialPolicy.ativo == True
+                ).first()
+
         # Determine if we should force 12% ICMS rate (Requirement 4)
         force_12_icms = False
         if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
@@ -180,14 +200,32 @@ class OpportunityKitService:
         
         perc_frete_venda = Decimal(str(kit.perc_frete_venda or 0)) / Decimal(100.0)
         perc_despesas_adm = Decimal(str(kit.perc_despesas_adm or 0)) / Decimal(100.0)
-        perc_comissao = Decimal(str(kit.perc_comissao or 0)) / Decimal(100.0)
         
-        tipo_com = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
-        perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
-        perc_fgts = Decimal(str(getattr(kit, "perc_fgts", 0) or 0))
-        perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
-        perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
-        perc_desp_op = Decimal(str(getattr(kit, "perc_despesa_operacional", 0) or 0))
+        # Override with sales_budget values if present, or policy values if present, else fallback to kit values
+        if sales_budget:
+            tipo_com = sales_budget.tipo_comissionamento
+            perc_dsr = sales_budget.perc_dsr
+            perc_fgts = sales_budget.perc_fgts
+            perc_inss = sales_budget.perc_inss
+            perc_demais = sales_budget.perc_demais_incidencias
+            perc_desp_op = sales_budget.perc_despesa_operacional
+            perc_comissao = Decimal(str(sales_budget.perc_comissao_rental or 0)) / Decimal(100.0)
+        elif policy:
+            tipo_com = policy.tipo_comissionamento
+            perc_dsr = policy.dsr_percentual
+            perc_fgts = policy.fgts_percentual
+            perc_inss = policy.inss_percentual
+            perc_demais = policy.demais_incidencias_percentual
+            perc_desp_op = policy.despesa_operacional_percentual
+            perc_comissao = Decimal(str(policy.comissao_percentual or 0)) / Decimal(100.0)
+        else:
+            tipo_com = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
+            perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
+            perc_fgts = Decimal(str(getattr(kit, "perc_fgts", 0) or 0))
+            perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
+            perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
+            perc_desp_op = Decimal(str(getattr(kit, "perc_despesa_operacional", 0) or 0))
+            perc_comissao = Decimal(str(kit.perc_comissao or 0)) / Decimal(100.0)
 
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
@@ -696,25 +734,7 @@ class OpportunityKitService:
                 }
             ]
             
-            # Resolve active policy
-            policy_id = kit.commercial_policy_id or (sales_budget.commercial_policy_id if sales_budget else None)
-            policy = None
-            if policy_id:
-                from src.modules.companies.models import CommercialPolicy
-                policy = self.db.query(CommercialPolicy).filter(
-                    CommercialPolicy.id == policy_id,
-                    CommercialPolicy.ativo == True
-                ).first()
-                
-            if not policy:
-                from src.modules.companies.models import CommercialPolicy
-                comp_id = kit.company_id or (sales_budget.company_id if sales_budget else None)
-                if comp_id:
-                    policy = self.db.query(CommercialPolicy).filter(
-                        CommercialPolicy.company_id == comp_id,
-                        CommercialPolicy.is_default == True,
-                        CommercialPolicy.ativo == True
-                    ).first()
+            # Active policy is already resolved at the beginning of the function
                 
             if policy and policy.service_commissions:
                 # Group active service commission rules

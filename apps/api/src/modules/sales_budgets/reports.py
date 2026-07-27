@@ -3341,6 +3341,9 @@ class OpportunitiesReportService:
             if item.opportunity_kit_id:
                 kf = kits_financials.get(item.opportunity_kit_id)
                 if kf:
+                    # Check if the kit has products (merchandise)
+                    has_products = any(c.get("product_id") is not None for c in kf.get("item_summaries", []))
+                    
                     kit_total_cost = float(item.kit_investimento_total or item.custo_total_aquisicao or 1.0)
                     # Loop over kit products/services in items
                     for c in kf.get("item_summaries", []):
@@ -3370,21 +3373,40 @@ class OpportunitiesReportService:
                                 p_name = os_obj.nome_servico or os_obj.descricao or p_name
                                 p_code = None
                                 
+                        if not has_products:
+                            instalacao_val = 0.0
+                            locacao_val = 0.0
+                            manutencao_val = 0.0
+                            monitoramento_val = 0.0
+                            fat_mensal_val = 0.0
+                            fat_mensal_total_val = 0.0
+                            vlr_total_val = 0.0
+                            impostos_val = 0.0
+                        else:
+                            instalacao_val = instalacao_item * ratio
+                            locacao_val = loc_mensal_item * ratio
+                            manutencao_val = manut_mes_item * ratio
+                            monitoramento_val = monitoramento_item * ratio
+                            fat_mensal_val = (fat_mensal_total_item * ratio) / c_qty if c_qty > 0 else 0.0
+                            fat_mensal_total_val = fat_mensal_total_item * ratio
+                            vlr_total_val = vlr_total_item * ratio
+                            impostos_val = impostos_mensal_item * ratio
+
                         components_list.append({
                             "descricao": p_name,
                             "part_number": p_code,
                             "quantidade": int(c_qty) if c_qty.is_integer() else c_qty,
                             "custo_aquisicao": format_currency(c_cost_total),
-                            "comissao": format_currency(comissao_item * ratio),
-                            "instalacao": format_currency(instalacao_item * ratio),
-                            "locacao_mensal": format_currency(loc_mensal_item * ratio),
-                            "manutencao_mes": format_currency(manut_mes_item * ratio),
-                            "monitoramento": format_currency(monitoramento_item * ratio),
-                            "fat_mensal": format_currency((fat_mensal_total_item * ratio) / c_qty if c_qty > 0 else 0.0),
-                            "fat_mensal_total": format_currency(fat_mensal_total_item * ratio),
+                            "comissao": format_currency(0.0),
+                            "instalacao": format_currency(instalacao_val),
+                            "locacao_mensal": format_currency(locacao_val),
+                            "manutencao_mes": format_currency(manutencao_val),
+                            "monitoramento": format_currency(monitoramento_val),
+                            "fat_mensal": format_currency(fat_mensal_val),
+                            "fat_mensal_total": format_currency(fat_mensal_total_val),
                             "prazo": prazo_item_raw,
-                            "vlr_total": format_currency(vlr_total_item * ratio),
-                            "impostos_mensal": format_currency(impostos_mensal_item * ratio)
+                            "vlr_total": format_currency(vlr_total_val),
+                            "impostos_mensal": format_currency(impostos_val)
                         })
                     
                     # Loop over kit costs (own services)
@@ -3402,21 +3424,40 @@ class OpportunitiesReportService:
                                 p_name = os_obj.nome_servico or os_obj.descricao or p_name
                                 p_code = None
                                 
+                            if not has_products:
+                                instalacao_val = 0.0
+                                locacao_val = 0.0
+                                manutencao_val = 0.0
+                                monitoramento_val = 0.0
+                                fat_mensal_val = 0.0
+                                fat_mensal_total_val = 0.0
+                                vlr_total_val = 0.0
+                                impostos_val = 0.0
+                            else:
+                                instalacao_val = instalacao_item * ratio
+                                locacao_val = loc_mensal_item * ratio
+                                manutencao_val = manut_mes_item * ratio
+                                monitoramento_val = monitoramento_item * ratio
+                                fat_mensal_val = (fat_mensal_total_item * ratio) / c_qty if c_qty > 0 else 0.0
+                                fat_mensal_total_val = fat_mensal_total_item * ratio
+                                vlr_total_val = vlr_total_item * ratio
+                                impostos_val = impostos_mensal_item * ratio
+
                             components_list.append({
                                 "descricao": p_name,
                                 "part_number": p_code,
                                 "quantidade": int(c_qty) if c_qty.is_integer() else c_qty,
                                 "custo_aquisicao": format_currency(c_cost_total),
-                                "comissao": format_currency(comissao_item * ratio),
-                                "instalacao": format_currency(instalacao_item * ratio),
-                                "locacao_mensal": format_currency(loc_mensal_item * ratio),
-                                "manutencao_mes": format_currency(manut_mes_item * ratio),
-                                "monitoramento": format_currency(monitoramento_item * ratio),
-                                "fat_mensal": format_currency((fat_mensal_total_item * ratio) / c_qty if c_qty > 0 else 0.0),
-                                "fat_mensal_total": format_currency(fat_mensal_total_item * ratio),
+                                "comissao": format_currency(0.0),
+                                "instalacao": format_currency(instalacao_val),
+                                "locacao_mensal": format_currency(locacao_val),
+                                "manutencao_mes": format_currency(manutencao_val),
+                                "monitoramento": format_currency(monitoramento_val),
+                                "fat_mensal": format_currency(fat_mensal_val),
+                                "fat_mensal_total": format_currency(fat_mensal_total_val),
                                 "prazo": prazo_item_raw,
-                                "vlr_total": format_currency(vlr_total_item * ratio),
-                                "impostos_mensal": format_currency(impostos_mensal_item * ratio)
+                                "vlr_total": format_currency(vlr_total_val),
+                                "impostos_mensal": format_currency(impostos_val)
                             })
 
             item_desc = item.product_nome or (item.product.nome if item.product else "Equipamento de Locação")
@@ -3847,7 +3888,7 @@ class OpportunitiesReportService:
             "total_fornecedores_produtos": format_currency(total_fornecedores_produtos),
             "total_fornecedores_impostos": format_currency(total_fornecedores_impostos),
             "custo_total_aquisicao_bruto": format_currency(total_aquisicao_sem_comissao - total_st_difal),
-            "custo_aquisicao_terceiros_str": format_currency(total_aquisicao_calc - total_own_services_cost),
+            "custo_aquisicao_terceiros_str": format_currency(total_aquisicao_calc),
             "custo_servicos_proprios_str": format_currency(investimento_instalacao),
             "custo_servicos_proprios": investimento_instalacao,
             "total_instalacao_str": format_currency(total_instalacao),

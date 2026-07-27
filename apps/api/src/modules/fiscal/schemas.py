@@ -73,6 +73,7 @@ class NfeAnalysisOut(BaseModel):
     file_name: Optional[str] = None
     file_hash: Optional[str] = None
     status: str
+    xml_content: Optional[str] = None
     error_message: Optional[str] = None
     created_by: Optional[str] = None
     created_at: datetime
