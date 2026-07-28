@@ -110,15 +110,14 @@ def create_user(
 
     user_role = UserRole(user_id=new_user.id, role=role_enum)
     db.add(user_role)
+    from src.modules.companies.models import Company
+    companies_to_assign = payload.companies if (getattr(payload, "companies", None) and len(payload.companies) > 0) else [str(c.id) for c in db.query(Company.id).filter(Company.tenant_id == current_user.tenant_id).all()]
+    is_first = True
+    for comp_id in companies_to_assign:
+        new_uc = UserCompany(user_id=new_user.id, company_id=comp_id, is_default=is_first)
+        db.add(new_uc)
+        is_first = False
     db.commit()
-
-    if getattr(payload, "companies", None):
-        is_first = True
-        for comp_id in payload.companies:
-            new_uc = UserCompany(user_id=new_user.id, company_id=comp_id, is_default=is_first)
-            db.add(new_uc)
-            is_first = False
-        db.commit()
 
     db.refresh(new_user)
 
@@ -294,16 +293,31 @@ def list_my_companies(
         UserCompany.user_id == current_user.id
     ).all()
     
+    if not user_comps:
+        companies = db.query(Company).filter(Company.tenant_id == current_user.tenant_id).all()
+        return [
+            {
+                "id": str(company.id),
+                "company_id": str(company.id),
+                "is_default": index == 0,
+                "company_name": company.razao_social,
+                "company_cnpj": company.cnpj,
+                "company_logo_url": company.logo_url
+            }
+            for index, company in enumerate(companies)
+        ]
+
     return [
         {
             "id": uc.id,
             "company_id": str(uc.company_id),
             "is_default": uc.is_default,
-            "company_name": uc.company.razao_social,
-            "company_cnpj": uc.company.cnpj,
-            "company_logo_url": uc.company.logo_url
+            "company_name": uc.company.razao_social if uc.company else "",
+            "company_cnpj": uc.company.cnpj if uc.company else "",
+            "company_logo_url": uc.company.logo_url if uc.company else None
         }
         for uc in user_comps
+        if uc.company
     ]
 
 @router.get("/{user_id}/companies", response_model=List[UserCompanyResponse])

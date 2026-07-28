@@ -96,7 +96,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                 companies: userData.companies || [],
             });
         } else {
-            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: [] });
+            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: allCompanies.map(c => c.id) });
         }
         setError(null);
     }, [userData, isOpen]);
