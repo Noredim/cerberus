@@ -3629,36 +3629,18 @@ class OpportunitiesReportService:
         
         diretor_comissao = comissao_inst_calc + (comissao_mensal_calc * prazo_fat)
 
-        # Capex & Payback
-        receita_contratada = faturamento_total_rental
+        # Centralized Financial Metrics from get_opportunity_dre for 100% consistency across UI and Reports
+        from src.modules.sales_budgets.service import get_opportunity_dre
+        dre_financials = get_opportunity_dre(db, current_user.tenant_id, opportunity_id, opportunity.company_id)
         
-        # desp_adm_instalacao_total and desp_adm_mensal_total are already computed dynamically in the loop above.
-
-        # Capex (investimento total de aquisição + comissão + impostos de instalação + despesas adm instalação + frete instalação + despesa operacional + custo de instalação)
-        investimento_total = total_aquisicao_calc + comissao_total_aquisicao + impostos_instalacao_total + desp_adm_instalacao_total + frete_instalacao_total + total_despesa_operacional + investimento_instalacao
-        
-        # Project Total Cost (Capex + Impostos + Custos Operacionais + Despesas Adm)
-        custo_total_projeto = total_aquisicao_calc + comissao_total_aquisicao + desp_adm_instalacao_total + frete_instalacao_total + impostos_totais + custo_op_total + (desp_adm_mensal_total * prazo_contrato) + total_despesa_operacional + impostos_instalacao_total + investimento_instalacao
-
-        
-        # Retorno Mensal Líquido (ebitda) = Locação Mensal - Impostos Mensais - Custo Op Mensal - Despesas Adm Mensais
-        retorno_mensal_liquido = locacao_mensal - impostos_mensal_total - custo_op_mensal_total - desp_adm_mensal_total
-        
-        # Payback in months (Simple division of Saldo Capex by Retorno Mensal Líquido as requested by user)
-        has_instalacao = any(item.is_kit_instalacao for item in opportunity.rental_items)
-        prazo_instalacao_cashflow = opportunity.prazo_instalacao_meses or (1 if has_instalacao else 0)
-
-        saldo_capex = investimento_total - total_instalacao
-        if retorno_mensal_liquido > 0.0:
-            payback_mes = saldo_capex / retorno_mensal_liquido
-            payback_meses_str = f"{payback_mes:.1f} meses"
-        else:
-            payback_mes = 0.0
-            payback_meses_str = "N/A"
-            
-        # Margem líquida = Lucro do Contrato / Faturamento Total
-        lucro_contrato = receita_contratada - custo_total_projeto
-        margem_liquida_val = (lucro_contrato / receita_contratada * 100) if receita_contratada > 0 else 0.0
+        receita_contratada = float(dre_financials["entradas"]["total_entradas"])
+        investimento_total = float(dre_financials["header"]["investimento_total"])
+        custo_total_projeto = float(dre_financials["saidas"]["total_saidas"])
+        lucro_contrato = float(dre_financials["resultado"]["resultado_liquido"])
+        margem_liquida_val = float(dre_financials["resultado"]["margem_liquida"])
+        payback_meses_str = dre_financials["resultado"]["payback_meses_str"]
+        retorno_mensal_liquido = (lucro_contrato / prazo_contrato) if prazo_contrato > 0 else 0.0
+        prazo_instalacao_cashflow = opportunity.prazo_instalacao_meses or (1 if any(item.is_kit_instalacao for item in opportunity.rental_items) else 0)
 
         # Determine tax rates based on the first item
         first_item = opportunity.rental_items[0] if opportunity.rental_items else None

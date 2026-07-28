@@ -3343,6 +3343,24 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         eff_inst_irpj = Decimal("2.00")
         eff_inst_iss = Decimal("5.00")
 
+    # Calculate Capex and Payback for unified indicators across application
+    investimento_total = total_fornecedores + purchase_ipi + purchase_st + purchase_difal
+    
+    loc_mensal_rec = (total_produtos / prazo_contrato) if (is_rental_opp and prazo_contrato > 0) else Decimal("0.0")
+    imp_mensal_loc = (total_impostos_locacao / prazo_contrato) if (is_rental_opp and prazo_contrato > 0) else Decimal("0.0")
+    custo_op_mensal = (total_custos_operacionais / prazo_contrato) if (is_rental_opp and prazo_contrato > 0) else Decimal("0.0")
+    desp_adm_mensal = (vlt_despesas_adm / prazo_contrato) if (is_rental_opp and prazo_contrato > 0) else Decimal("0.0")
+    
+    retorno_mensal_liquido = max(Decimal("0.0"), loc_mensal_rec - imp_mensal_loc - custo_op_mensal - desp_adm_mensal)
+    saldo_capex = max(Decimal("0.0"), investimento_total - total_servicos)
+    
+    if retorno_mensal_liquido > Decimal("0.0"):
+        payback_meses = float(round(saldo_capex / retorno_mensal_liquido, 1))
+        payback_meses_str = f"{payback_meses:.1f} meses"
+    else:
+        payback_meses = 0.0
+        payback_meses_str = "N/A"
+
     return {
         "header": {
             "cliente_nome": customer.nome_fantasia or customer.razao_social if customer else "Não informado",
@@ -3356,13 +3374,29 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             "has_venda": len(opportunity.items) > 0,
             "has_locacao": len(opportunity.rental_items) > 0,
             "prazo_contrato_meses": opportunity.prazo_contrato_meses,
-            "venda_markup_produtos": float(round(venda_markup, 4))
+            "venda_markup_produtos": float(round(venda_markup, 4)),
+            "investimento_total": float(round(investimento_total, 2)),
+            "custo_total_projeto": float(round(total_saidas, 2)),
+            "receita_contratada": float(round(total_entradas, 2)),
+            "lucro_liquido": float(round(lucro_ebitda, 2)),
+            "margem_liquida": float(round(margem_liquida, 2)),
+            "payback_meses": payback_meses,
+            "payback_meses_str": payback_meses_str
         },
         "entradas": {
-            "total_produtos": round(total_produtos, 2),
-            "total_servicos": round(total_servicos, 2),
-            "restituicao_icms_st": round(restituicao_icms_st, 2),
-            "total_entradas": round(total_entradas, 2)
+            "total_produtos": float(round(total_produtos, 2)),
+            "total_servicos": float(round(total_servicos, 2)),
+            "restituicao_icms_st": float(round(restituicao_icms_st, 2)),
+            "total_entradas": float(round(total_entradas, 2))
+        },
+        "resultado": {
+            "resultado_liquido": float(round(lucro_ebitda, 2)),
+            "margem_liquida": float(round(margem_liquida, 2)),
+            "investimento_total": float(round(investimento_total, 2)),
+            "custo_total_projeto": float(round(total_saidas, 2)),
+            "receita_contratada": float(round(total_entradas, 2)),
+            "payback_meses": payback_meses,
+            "payback_meses_str": payback_meses_str
         },
         "saidas": {
             "fornecedores": fornecedores,
