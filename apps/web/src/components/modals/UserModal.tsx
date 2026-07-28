@@ -13,7 +13,8 @@ interface UserModalProps {
 const ROLES = [
     { value: 'ADMIN', label: 'Administrador' },
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preços' },
-    { value: 'DIRETORIA', label: 'Diretoria' }
+    { value: 'DIRETORIA', label: 'Diretoria' },
+    { value: 'FISCAL', label: 'Fiscal' }
 ];
 
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, userData, onSuccess }) => {

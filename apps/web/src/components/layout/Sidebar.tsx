@@ -137,12 +137,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         if (isFiscal) {
             return rawMenuItems
                 .map(item => {
-                    if (['Painel Geral', 'Cadastro', 'Fiscal', 'Configurações'].includes(item.label)) {
+                    if (item.label === 'Painel Geral' || item.label === 'Configurações') {
                         return item;
+                    }
+                    if (item.label === 'Cadastro') {
+                        return {
+                            ...item,
+                            subItems: item.subItems?.filter(sub => 
+                                ['Produtos'].includes(sub.label)
+                            )
+                        };
+                    }
+                    if (item.label === 'Fiscal') {
+                        return {
+                            ...item,
+                            subItems: item.subItems?.filter(sub => 
+                                ['Análise de NF-e'].includes(sub.label)
+                            )
+                        };
                     }
                     return null;
                 })
-                .filter((item): item is NonNullable<typeof item> => item !== null);
+                .filter((item): item is NonNullable<typeof item> => item !== null && (!item.subItems || item.subItems.length > 0));
         }
         return rawMenuItems;
     }, [isEngenhariaPreco, isFiscal]);

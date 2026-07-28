@@ -34,6 +34,7 @@ const ROLE_OPTIONS = [
     { value: 'ADMIN', label: 'Administrador' },
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preço' },
     { value: 'DIRETORIA', label: 'Diretoria' },
+    { value: 'FISCAL', label: 'Fiscal' },
 ];
 
 const TriggerForm: React.FC<TriggerFormProps> = ({ trigger, onClose, onSuccess }) => {

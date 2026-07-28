@@ -33,18 +33,21 @@ const ROLE_LABELS: Record<string, string> = {
     ADMIN: 'Administrador',
     ENGENHARIA_PRECO: 'Eng. de Preços',
     DIRETORIA: 'Diretoria',
+    FISCAL: 'Fiscal',
 };
 
 const ROLE_COLORS: Record<string, string> = {
     ADMIN: 'bg-brand-primary/10 text-brand-primary',
     ENGENHARIA_PRECO: 'bg-cyan-400/10 text-cyan-400',
     DIRETORIA: 'bg-pink-400/10 text-pink-400',
+    FISCAL: 'bg-emerald-400/10 text-emerald-400',
 };
 
 const ROLES = [
     { value: 'ADMIN', label: 'Administrador' },
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preços' },
     { value: 'DIRETORIA', label: 'Diretoria' },
+    { value: 'FISCAL', label: 'Fiscal' },
 ];
 
 // ─── Inline Side Panel Form ─────────────────────────────────────────────────

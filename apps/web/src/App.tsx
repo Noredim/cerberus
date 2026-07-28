@@ -130,16 +130,14 @@ const ProtectedRoute = () => {
       }
   }
 
-  // Se o usuário tem o perfil FISCAL, bloquear rotas não autorizadas (apenas acesso a Cadastro, Fiscal, Dashboard, Settings)
+  // Se o usuário tem o perfil FISCAL, bloquear rotas não autorizadas (apenas acesso a Cadastro -> Produtos, Fiscal -> Análise NF-e, Dashboard, Settings)
   const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
   if (isFiscal) {
       const path = window.location.pathname;
       const allowedPaths = [
           '/',                     // Painel Geral / Dashboard
-          '/cadastros',            // Cadastro
-          '/cadastro',
-          '/beneficios',
-          '/ncms',
+          '/cadastro/produtos',    // Produtos
+          '/fiscal/analise-nfe',   // Análise de NF-e
           '/fiscal',               // Fiscal
           '/settings',             // Configurações
       ];

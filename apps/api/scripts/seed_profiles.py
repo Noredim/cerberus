@@ -26,6 +26,12 @@ DEFAULT_PROFILES = [
         "margin_factor_limit": 99.0,
         "view_director_consolidation": True,
         "is_protected": True
+    },
+    {
+        "name": "Fiscal",
+        "margin_factor_limit": 1.0,
+        "view_director_consolidation": False,
+        "is_protected": True
     }
 ]
 
@@ -34,10 +40,13 @@ def seed_profiles():
     try:
         tenants = db.query(Tenant).all()
         for tenant in tenants:
-            existing_count = db.query(FunctionalProfile).filter(FunctionalProfile.tenant_id == tenant.id).count()
-            if existing_count == 0:
-                print(f"Seeding defaults for tenant {tenant.id}...")
-                for p in DEFAULT_PROFILES:
+            for p in DEFAULT_PROFILES:
+                existing = db.query(FunctionalProfile).filter(
+                    FunctionalProfile.tenant_id == tenant.id,
+                    FunctionalProfile.name == p["name"]
+                ).first()
+                if not existing:
+                    print(f"Seeding profile '{p['name']}' for tenant {tenant.id}...")
                     new_profile = FunctionalProfile(
                         tenant_id=tenant.id,
                         name=p["name"],
@@ -46,9 +55,7 @@ def seed_profiles():
                         is_protected=p["is_protected"]
                     )
                     db.add(new_profile)
-                db.commit()
-            else:
-                print(f"Tenant {tenant.id} already has profiles. Skipping.")
+            db.commit()
     finally:
         db.close()
 
