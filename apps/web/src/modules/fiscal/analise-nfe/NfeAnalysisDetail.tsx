@@ -133,6 +133,12 @@ const NfeAnalysisDetail: React.FC = () => {
     const [loadingTaxData, setLoadingTaxData] = useState(false);
     const [expandedCalcItem, setExpandedCalcItem] = useState<string | null>(null);
 
+    // Report states
+    const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportAnalysisType, setReportAnalysisType] = useState<'DIFAL' | 'ICMS_ST'>('DIFAL');
+    const [generatingPdf, setGeneratingPdf] = useState(false);
+
     // Fetch analysis details
     useEffect(() => {
         const fetchDetail = async () => {
@@ -322,6 +328,37 @@ const NfeAnalysisDetail: React.FC = () => {
         URL.revokeObjectURL(url);
     };
 
+    // Download Analysis PDF
+    const downloadAnalysisReport = async () => {
+        try {
+            setGeneratingPdf(true);
+            const companyId = sessionStorage.getItem('@Cerberus:companyId') || '';
+            const response = await api.get(`/fiscal/analise-nfe/${id}/pdf`, {
+                params: {
+                    type: reportAnalysisType,
+                    company_id: companyId || undefined
+                },
+                responseType: 'blob'
+            });
+            
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `analise-compra-nfe-${analysis?.fiscal_document?.nNF || 'report'}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            setShowReportModal(false);
+        } catch (error) {
+            console.error('Error downloading analysis report PDF:', error);
+            alert('Erro ao gerar relatório PDF. Verifique se a API está respondendo normalmente.');
+        } finally {
+            setGeneratingPdf(false);
+        }
+    };
+
     // Calculate tax totals from JSONB fields on items
     const calculateTaxesSum = () => {
         let icmsSum = 0;
@@ -407,6 +444,29 @@ const NfeAnalysisDetail: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Relatório Dropdown */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setReportDropdownOpen(!reportDropdownOpen)}
+                            className="flex items-center gap-1.5 border border-border-subtle bg-surface hover:bg-bg-deep text-text-primary px-3 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer"
+                        >
+                            Relatório <ChevronDown className="w-4 h-4" />
+                        </button>
+                        {reportDropdownOpen && (
+                            <div className="absolute right-0 mt-1 w-48 bg-surface border border-border-subtle rounded shadow-lg z-50">
+                                <button
+                                    onClick={() => {
+                                        setShowReportModal(true);
+                                        setReportDropdownOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary cursor-pointer transition-colors"
+                                >
+                                    ANALÍTICO DE COMPRA
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={downloadXml}
                         className="flex items-center gap-1.5 border border-border-subtle bg-surface hover:bg-bg-deep text-text-primary px-3 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer"
@@ -1243,6 +1303,77 @@ const NfeAnalysisDetail: React.FC = () => {
                                 </div>
                             );
                         })()}
+                    </div>
+                )}
+                {/* Modal para geração de relatório */}
+                {showReportModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-surface border border-border-subtle rounded-lg max-w-md w-full overflow-hidden shadow-xl">
+                            <header className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-deep">
+                                <h3 className="font-bold text-text-primary">Gerar Relatório Analítico de Compra</h3>
+                                <button 
+                                    onClick={() => setShowReportModal(false)}
+                                    className="text-text-muted hover:text-text-primary cursor-pointer text-xl"
+                                >
+                                    &times;
+                                </button>
+                            </header>
+                            <div className="p-6 space-y-4">
+                                <p className="text-sm text-text-secondary">
+                                    Selecione o cenário tributário para a memória de cálculo de compra no relatório PDF (orientação paisagem):
+                                </p>
+                                <div className="space-y-3">
+                                    <label className="flex items-center gap-3 p-3 border border-border-subtle rounded cursor-pointer hover:bg-bg-deep/40 transition-colors">
+                                        <input 
+                                            type="radio" 
+                                            name="reportTaxType" 
+                                            checked={reportAnalysisType === 'DIFAL'} 
+                                            onChange={() => setReportAnalysisType('DIFAL')}
+                                            className="text-brand-primary focus:ring-brand-primary"
+                                        />
+                                        <div>
+                                            <span className="text-sm font-bold text-text-primary block">Ativo Imobilizado (DIFAL)</span>
+                                            <span className="text-xs text-text-secondary block">Simula o diferencial de alíquotas para uso/consumo ou ativo imobilizado.</span>
+                                        </div>
+                                    </label>
+                                    <label className="flex items-center gap-3 p-3 border border-border-subtle rounded cursor-pointer hover:bg-bg-deep/40 transition-colors">
+                                        <input 
+                                            type="radio" 
+                                            name="reportTaxType" 
+                                            checked={reportAnalysisType === 'ICMS_ST'} 
+                                            onChange={() => setReportAnalysisType('ICMS_ST')}
+                                            className="text-brand-primary focus:ring-brand-primary"
+                                        />
+                                        <div>
+                                            <span className="text-sm font-bold text-text-primary block">ICMS Substituição Tributária (ICMS ST)</span>
+                                            <span className="text-xs text-text-secondary block">Simula o recolhimento por substituição tributária (revenda) com MVA e BIT.</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <footer className="px-6 py-4 border-t border-border-subtle bg-bg-deep flex items-center justify-end gap-3">
+                                <button
+                                    onClick={() => setShowReportModal(false)}
+                                    className="px-4 py-2 border border-border-subtle bg-surface hover:bg-bg-deep text-text-primary text-sm font-medium rounded transition-colors cursor-pointer"
+                                    disabled={generatingPdf}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={downloadAnalysisReport}
+                                    className="px-4 py-2 bg-brand-primary hover:bg-brand-primary/95 text-white text-sm font-semibold rounded flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                                    disabled={generatingPdf}
+                                >
+                                    {generatingPdf ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" /> Gerando...
+                                        </>
+                                    ) : (
+                                        'Gerar PDF'
+                                    )}
+                                </button>
+                            </footer>
+                        </div>
                     </div>
                 )}
             </div>

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, check_not_engenharia_preco
@@ -99,3 +99,21 @@ def delete_analysis(
             detail="Análise de NF-e não encontrada."
         )
     return {"message": "Análise excluída com sucesso", "id": analysis_id}
+
+
+@router.get("/analise-nfe/{analysis_id}/pdf")
+def download_analysis_report(
+    analysis_id: UUID,
+    type: str = Query("DIFAL", description="Tipo de análise: DIFAL ou ICMS_ST"),
+    company_id: Optional[UUID] = Query(None, description="ID da empresa para consulta MVA/Benefícios"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .reports import NfeReportsService
+    return NfeReportsService.generate_analise_compra_pdf(
+        db=db,
+        analysis_id=analysis_id,
+        current_user=current_user,
+        tax_type=type,
+        company_id=company_id
+    )
