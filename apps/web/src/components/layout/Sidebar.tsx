@@ -153,7 +153,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                         return {
                             ...item,
                             subItems: item.subItems?.filter(sub => 
-                                ['Análise de NF-e'].includes(sub.label)
+                                ['Análise de NF-e', 'Acompanhamento Mensal'].includes(sub.label)
                             )
                         };
                     }
