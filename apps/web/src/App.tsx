@@ -50,6 +50,8 @@ import PWAManager from './components/pwa/PWAManager';
 import MessagingDashboard from './modules/messaging/MessagingDashboard';
 import NfeAnalysisList from './modules/fiscal/analise-nfe/NfeAnalysisList';
 import NfeAnalysisDetail from './modules/fiscal/analise-nfe/NfeAnalysisDetail';
+import { NfeMonthlyTrackerList } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyTrackerList';
+import { NfeMonthlyDetailView } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyDetailView';
 
 
 import { Loader2, ServerOff } from 'lucide-react';
@@ -275,9 +277,12 @@ function App() {
             {/* Relatórios */}
             <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
 
-            {/* Fiscal: Análise de NF-e */}
+            {/* Fiscal: Análise de NF-e e Acompanhamento Mensal */}
             <Route path="/fiscal/analise-nfe" element={<NfeAnalysisList />} />
             <Route path="/fiscal/analise-nfe/:id" element={<NfeAnalysisDetail />} />
+            <Route path="/fiscal/acompanhamento-nfe" element={<NfeMonthlyTrackerList />} />
+            <Route path="/fiscal/acompanhamento-nfe/:id" element={<NfeMonthlyDetailView />} />
+
           </Route>
         </Routes>
       </Router>

@@ -100,6 +100,16 @@ def run():
         cur.execute(sql5)
         print("V005__tipi_implementation.sql executed successfully.")
 
+        # 6. Run V006
+        print("Running SQL migration V006__nfe_monthly_tracker_fields.sql...")
+        v006_path = os.path.join(os.path.dirname(__file__), 'apps', 'api', 'migrations', 'V006__nfe_monthly_tracker_fields.sql')
+        if not os.path.exists(v006_path):
+            v006_path = os.path.join(os.path.dirname(__file__), 'migrations', 'V006__nfe_monthly_tracker_fields.sql')
+        with open(v006_path, 'r', encoding='utf-8') as f:
+            sql6 = f.read()
+        cur.execute(sql6)
+        print("V006__nfe_monthly_tracker_fields.sql executed successfully.")
+
         # 6. Configure database timezone dynamically
         print("Configuring database timezone to America/Manaus...")
         cur.execute("SELECT current_database();")

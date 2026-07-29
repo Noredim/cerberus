@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -72,7 +73,8 @@ def find_node(node, name):
 
 def extract_uf_from_xml(xml_content: str, section: str) -> str:
     try:
-        root = ET.fromstring(xml_content)
+        content = xml_content.lstrip("\ufeff").encode("utf-8") if isinstance(xml_content, str) else xml_content
+        root = ET.fromstring(content)
         inf_nfe = find_node(root, "infNFe")
         if inf_nfe is not None:
             section_node = find_node(inf_nfe, section)
@@ -86,7 +88,8 @@ def extract_uf_from_xml(xml_content: str, section: str) -> str:
 
 def extract_nat_op_from_xml(xml_content: str) -> str:
     try:
-        root = ET.fromstring(xml_content)
+        content = xml_content.lstrip("\ufeff").encode("utf-8") if isinstance(xml_content, str) else xml_content
+        root = ET.fromstring(content)
         inf_nfe = find_node(root, "infNFe")
         if inf_nfe is not None:
             nat_op_node = find_node(inf_nfe, "natOp")
@@ -717,3 +720,412 @@ class NfeReportsService:
                     "Content-Disposition": f"attachment; filename=analise-compra-nfe-{doc.nNF or 'report'}.pdf"
                 }
             )
+
+    @staticmethod
+    def generate_acompanhamento_nfe_pdf(
+        db: Session,
+        current_user: User,
+        competencia: Optional[str] = None,
+        recipient_cnpj: Optional[str] = None
+    ) -> StreamingResponse:
+        """
+        Gera relatório em formato PDF nativo (A4 Paisagem) do Acompanhamento Mensal de NF-e,
+        incluindo a logo da empresa no cabeçalho e os dados do sistema/usuário no rodapé.
+        """
+        from src.modules.fiscal.rules import APLICACAO_LABELS, TRIBUTACAO_LABELS
+        from src.modules.companies.models import Company
+
+        # 1. Resolve a logo da empresa (do destinatário ou do tenant)
+        company_logo = None
+        company_name = None
+        company = None
+        if recipient_cnpj and recipient_cnpj != 'ALL':
+            company = db.query(Company).filter(
+                Company.cnpj == recipient_cnpj,
+                Company.tenant_id == current_user.tenant_id
+            ).first()
+
+        if not company:
+            company = db.query(Company).filter(Company.tenant_id == current_user.tenant_id).first()
+
+        if company:
+            company_name = company.razao_social or company.nome_fantasia
+            if company.logo_url:
+                base_dir_calc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                base_dir_root = os.path.dirname(os.path.dirname(base_dir_calc))
+                clean_path = company.logo_url.lstrip("/")
+                abs_logo_path = os.path.join(base_dir_root, clean_path)
+                if os.path.exists(abs_logo_path):
+                    normalized_path = abs_logo_path.replace("\\", "/")
+                    company_logo = f"file:///{normalized_path}"
+
+        query = db.query(FiscalDocument).filter(FiscalDocument.tenant_id == current_user.tenant_id)
+        if competencia and competencia != 'ALL':
+            query = query.filter(FiscalDocument.competencia == competencia)
+        if recipient_cnpj and recipient_cnpj != 'ALL':
+            query = query.filter(
+                or_(
+                    FiscalDocument.recipient_cnpj == recipient_cnpj,
+                    FiscalDocument.recipient_cnpj.is_(None)
+                )
+            )
+
+        docs = query.order_by(FiscalDocument.created_at.desc()).all()
+
+        # Determina a etiqueta amigável da competência
+        if not competencia or competencia == 'ALL':
+            comp_label = "Todas as Competências"
+        else:
+            try:
+                parts = competencia.split('-')
+                months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+                m_idx = int(parts[1]) - 1
+                comp_label = f"{months[m_idx]} / {parts[0]}"
+            except Exception:
+                comp_label = competencia
+
+        # Determina os dados do destinatário para o cabeçalho
+        recipient_name = None
+        recipient_uf = None
+        if recipient_cnpj and recipient_cnpj != 'ALL':
+            if company:
+                recipient_name = company.razao_social or company.nome_fantasia
+                recipient_uf = getattr(company, 'uf', None)
+            for d in docs:
+                if d.recipient_cnpj == recipient_cnpj and d.recipient_name:
+                    recipient_name = d.recipient_name
+                    recipient_uf = d.uf_dest or recipient_uf
+                    break
+
+        if recipient_cnpj and recipient_cnpj != 'ALL':
+            dest_header = f"{recipient_name or 'Destinatário'} — CNPJ: {recipient_cnpj}"
+            if recipient_uf:
+                dest_header += f" ({recipient_uf})"
+        else:
+            dest_header = "Todas as Empresas Destinatárias"
+
+        # Totais
+        total_vBC = sum(d.vBC or 0 for d in docs)
+        total_vICMS = sum(d.vICMS or 0 for d in docs)
+        total_vBCST = sum(d.vBCST or 0 for d in docs)
+        total_vICMSST = sum(d.vICMSST or 0 for d in docs)
+        total_vProd = sum(d.vProd or 0 for d in docs)
+        total_vFrete = sum(d.vFrete or 0 for d in docs)
+        total_vNF = sum(d.vNF or 0 for d in docs)
+
+        rows_html = ""
+        for idx, doc in enumerate(docs):
+            bg_class = "bg-alt" if idx % 2 == 1 else ""
+            app_label = APLICACAO_LABELS.get(doc.aplicacao, doc.aplicacao or 'Pendente')
+            trib_label = TRIBUTACAO_LABELS.get(doc.tipo_tributacao, doc.tipo_tributacao or 'Pendente')
+            dh_str = doc.dhRecbto.strftime("%d/%m/%Y, %H:%M:%S") if doc.dhRecbto else ""
+            
+            is_cancelled = (
+                doc.status_importacao in ('CANCELADA', 'RESUMIDA_EVENTO') or
+                doc.aplicacao == 'CANCELAMENTO' or
+                doc.tipo_tributacao == 'CANCELAMENTO' or
+                doc.criada_por_evento or
+                str(doc.cStat or '') in ('101', '135', '155')
+            )
+
+            status_badge_class = "badge-status-cancelled" if is_cancelled else "badge-status"
+            if is_cancelled:
+                cstat_str = f"{doc.cStat or '101'} - {doc.xMotivo or 'NF-e Cancelada'}"
+            else:
+                cstat_str = f"{doc.cStat} - {doc.xMotivo or 'Autorizado'}" if doc.cStat else "100 - Autorizada"
+
+            rows_html += f"""
+            <tr class="{bg_class}">
+                <td class="font-mono">
+                    <div class="bold text-main">Nº {doc.nNF or '-'}</div>
+                    <div class="badge-key font-mono">{doc.access_key}</div>
+                </td>
+                <td>
+                    <div class="bold">{app_label}</div>
+                    <div class="text-brand bold">{trib_label}</div>
+                </td>
+                <td class="center bold">{doc.serie or '1'}</td>
+                <td class="wrap-col">{doc.natOp or '-'}</td>
+                <td class="font-mono">
+                    <div class="bold">{doc.nProt or '-'}</div>
+                    <div class="text-muted text-xs">{dh_str}</div>
+                    <div class="{status_badge_class}">{cstat_str}</div>
+                </td>
+                <td>
+                    <div class="bold">{doc.issuer_name or '-'}</div>
+                    <div class="tags flex">
+                        <span className="tag tag-uf">{doc.uf_emit or 'UF'}</span>
+                        <span className="tag tag-cnpj">{doc.issuer_cnpj or '-'}</span>
+                        <span className="tag tag-ie">IE: {doc.issuer_ie or 'ISENTO'}</span>
+                    </div>
+                </td>
+                <td class="right font-mono">{format_currency(doc.vBC)}</td>
+                <td class="right font-mono">{format_currency(doc.vICMS)}</td>
+                <td class="right font-mono">{format_currency(doc.vBCST) if doc.vBCST else '-'}</td>
+                <td class="right font-mono bold">{format_currency(doc.vICMSST) if doc.vICMSST else '-'}</td>
+                <td class="right font-mono">{format_currency(doc.vProd)}</td>
+                <td class="right font-mono">{format_currency(doc.vFrete) if doc.vFrete else '-'}</td>
+                <td class="right font-mono bold text-main">{format_currency(doc.vNF)}</td>
+            </tr>
+            """
+
+        generated_at = datetime.datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
+        user_display_name = getattr(current_user, 'full_name', None) or current_user.email
+        user_info_str = f"{user_display_name} ({current_user.email})"
+
+        logo_html = ""
+        if company_logo:
+            logo_html = f'<img src="{company_logo}" alt="Logo Empresa" style="max-height: 42px; max-width: 220px; display: block; margin-bottom: 6px;" />'
+
+        html_template = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Relatório Acompanhamento Mensal de NF-e</title>
+            <style>
+                @page {{
+                    size: A4 landscape;
+                    margin-top: 8mm;
+                    margin-left: 6mm;
+                    margin-right: 6mm;
+                    margin-bottom: 12mm;
+                    @bottom-left {{
+                        content: "CERBERUS — SISTEMA OPERACIONAL FISCAL  |  Usuário: {user_info_str}  |  Gerado em: {generated_at}";
+                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                        font-size: 7pt;
+                        color: #64748b;
+                        border-top: 1px solid #cbd5e1;
+                        padding-top: 4px;
+                    }}
+                    @bottom-right {{
+                        content: "Página " counter(page) " de " counter(pages);
+                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                        font-size: 7pt;
+                        color: #64748b;
+                        border-top: 1px solid #cbd5e1;
+                        padding-top: 4px;
+                    }}
+                }}
+                body {{
+                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    font-size: 8px;
+                    color: #0f172a;
+                    margin: 0;
+                    padding: 0;
+                    background-color: #ffffff;
+                }}
+                .header-container {{
+                    border-bottom: 2px solid #0f172a;
+                    padding-bottom: 6px;
+                    margin-bottom: 8px;
+                }}
+                .header-flex {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                }}
+                .system-title {{
+                    font-size: 8px;
+                    font-weight: bold;
+                    color: #64748b;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }}
+                .report-title {{
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: #0f172a;
+                    margin: 2px 0 4px 0;
+                    text-transform: uppercase;
+                }}
+                .info-badge {{
+                    background-color: #f1f5f9;
+                    border: 1px solid #cbd5e1;
+                    padding: 3px 6px;
+                    border-radius: 4px;
+                    display: inline-block;
+                    margin-top: 2px;
+                    font-size: 8.5px;
+                }}
+                .meta-info {{
+                    text-align: right;
+                    font-size: 8px;
+                    color: #475569;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 7.5px;
+                }}
+                th {{
+                    background-color: #0f172a;
+                    color: #ffffff;
+                    text-transform: uppercase;
+                    font-size: 7px;
+                    font-weight: bold;
+                    padding: 5px 4px;
+                    border: 1px solid #334155;
+                    text-align: left;
+                }}
+                td {{
+                    padding: 4px;
+                    border: 1px solid #e2e8f0;
+                    vertical-align: top;
+                }}
+                tr.bg-alt {{
+                    background-color: #f8fafc;
+                }}
+                .font-mono {{ font-family: 'Courier', monospace; }}
+                .bold {{ font-weight: bold; }}
+                .center {{ text-align: center; }}
+                .right {{ text-align: right; }}
+                .text-main {{ color: #0f172a; }}
+                .text-brand {{ color: #4f46e5; }}
+                .text-muted {{ color: #64748b; font-size: 7px; }}
+                .badge-key {{
+                    background-color: #f1f5f9;
+                    border: 1px solid #cbd5e1;
+                    padding: 1px 3px;
+                    border-radius: 3px;
+                    font-size: 6.5px;
+                    word-break: break-all;
+                    margin-top: 2px;
+                    letter-spacing: -0.2px;
+                }}
+                .badge-status {{
+                    background-color: #ecfdf5;
+                    color: #065f46;
+                    border: 1px solid #a7f3d0;
+                    padding: 1px 3px;
+                    border-radius: 3px;
+                    font-size: 6.5px;
+                    font-weight: bold;
+                    margin-top: 2px;
+                    display: inline-block;
+                }}
+                .badge-status-cancelled {{
+                    background-color: #fef2f2;
+                    color: #991b1b;
+                    border: 1px solid #fecaca;
+                    padding: 1px 3px;
+                    border-radius: 3px;
+                    font-size: 6.5px;
+                    font-weight: bold;
+                    margin-top: 2px;
+                    display: inline-block;
+                }}
+                .wrap-col {{
+                    word-wrap: break-word;
+                    white-space: normal;
+                    max-width: 110px;
+                }}
+                .tag {{
+                    padding: 1px 3px;
+                    border-radius: 2px;
+                    font-size: 6.5px;
+                    font-family: 'Courier', monospace;
+                    margin-right: 2px;
+                }}
+                .tag-uf {{ background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: bold; }}
+                .tag-cnpj {{ background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }}
+                .tag-ie {{ background-color: #faf5ff; color: #7e22ce; border: 1px solid #e9d5ff; }}
+                tfoot tr {{
+                    background-color: #0f172a;
+                    color: #ffffff;
+                    font-weight: bold;
+                    font-size: 8px;
+                }}
+                tfoot td {{
+                    border: 1px solid #334155;
+                    padding: 5px 4px;
+                }}
+                .text-accent {{ color: #fbbf24; }}
+                .footer-bar {{
+                    margin-top: 15px;
+                    padding-top: 6px;
+                    border-top: 1px solid #cbd5e1;
+                    font-size: 7px;
+                    color: #64748b;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header-container">
+                <div class="header-flex">
+                    <div>
+                        {logo_html}
+                        <div class="report-title">RELATÓRIO ACOMPANHAMENTO MENSAL DE NF-E</div>
+                        <div>Competência: <strong>{comp_label}</strong></div>
+                        <div class="info-badge">
+                            <strong>Empresa Destinatária:</strong> {dest_header}
+                        </div>
+                    </div>
+                    <div class="meta-info">
+                        <div>Total de Registros: <strong>{len(docs)}</strong></div>
+                        <div>Gerado em: <strong>{generated_at}</strong></div>
+                        <div>Formato A4 Paisagem</div>
+                    </div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nº NF / Chave</th>
+                        <th>Aplicação / Tributação</th>
+                        <th style="text-align: center;">Série</th>
+                        <th>Nat. Operação</th>
+                        <th>Protocolo / Autorização / Situação</th>
+                        <th>Fornecedor (Origem / CNPJ / I.E)</th>
+                        <th style="text-align: right;">Base ICMS</th>
+                        <th style="text-align: right;">Valor ICMS</th>
+                        <th style="text-align: right;">Base ST</th>
+                        <th style="text-align: right;">ICMS ST</th>
+                        <th style="text-align: right;">Valor Prod</th>
+                        <th style="text-align: right;">Frete</th>
+                        <th style="text-align: right;">Valor Total NF</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" style="text-align: right; font-weight: bold;">TOTAIS AGREGADOS DO RELATÓRIO:</td>
+                        <td style="text-align: right;" class="font-mono">{format_currency(total_vBC)}</td>
+                        <td style="text-align: right;" class="font-mono">{format_currency(total_vICMS)}</td>
+                        <td style="text-align: right;" class="font-mono">{format_currency(total_vBCST)}</td>
+                        <td style="text-align: right;" class="font-mono text-accent">{format_currency(total_vICMSST)}</td>
+                        <td style="text-align: right;" class="font-mono">{format_currency(total_vProd)}</td>
+                        <td style="text-align: right;" class="font-mono">{format_currency(total_vFrete)}</td>
+                        <td style="text-align: right;" class="font-mono text-accent">{format_currency(total_vNF)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </body>
+        </html>
+        """
+
+        try:
+            from weasyprint import HTML
+            pdf_bytes = HTML(string=html_template).write_pdf()
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=relatorio-acompanhamento-nfe-{competencia or 'geral'}.pdf"
+                }
+            )
+        except Exception as weasy_err:
+            print(f"[Warning] WeasyPrint failed for Acompanhamento NF-e report. Error: {weasy_err}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro ao gerar relatório em PDF via WeasyPrint: {str(weasy_err)}"
+            )
+
+

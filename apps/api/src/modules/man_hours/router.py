@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,7 +18,7 @@ router = APIRouter(
 )
 
 
-def _load_with_role(item_id: str, db: Session) -> ManHour | None:
+def _load_with_role(item_id: str, db: Session) -> Optional[ManHour]:
     """Re-query a record eagerly loading the role relationship."""
     return (
         db.query(ManHour)

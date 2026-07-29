@@ -88,6 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             path: '/fiscal',
             subItems: [
                 { label: 'Análise de NF-e', path: '/fiscal/analise-nfe' },
+                { label: 'Acompanhamento Mensal', path: '/fiscal/acompanhamento-nfe' },
             ]
         },
         {

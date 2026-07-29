@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,7 +27,7 @@ router = APIRouter(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _require_company(company_id: str | None) -> str:
+def _require_company(company_id: Optional[str]) -> str:
     if not company_id:
         raise HTTPException(status_code=400, detail="Empresa ativa não informada.")
     return company_id
