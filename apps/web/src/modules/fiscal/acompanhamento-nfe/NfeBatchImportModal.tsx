@@ -47,6 +47,8 @@ interface NfePreviewItem {
     }>;
     item_count: number;
     is_duplicate: boolean;
+    is_from_analise_nfe?: boolean;
+    info_message?: string;
     existing_imported_at?: string;
     existing_imported_by?: string;
     xml_content: string;
@@ -593,6 +595,17 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
                                                 <strong className="block font-bold">Nota Fiscal Duplicada Detectada!</strong>
                                                 Esta NF-e (Chave {currentPreview.access_key}) já foi importada anteriormente no sistema
                                                 {currentPreview.existing_imported_at && ` em ${new Date(currentPreview.existing_imported_at).toLocaleString('pt-BR')}`}.
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Info message for notes from Analise NFE */}
+                                    {currentPreview.info_message && (
+                                        <div className="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-lg flex items-start gap-3 text-xs text-blue-600 dark:text-blue-400">
+                                            <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                                            <div>
+                                                <strong className="block font-bold">Nota Localizada na Análise de NF-e!</strong>
+                                                {currentPreview.info_message}
                                             </div>
                                         </div>
                                     )}

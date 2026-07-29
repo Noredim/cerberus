@@ -110,15 +110,22 @@ class NfeAnalysisService:
         )
 
         is_duplicate = False
+        is_from_analise_nfe = False
+        info_message = None
         existing_imported_at = None
         existing_imported_by = None
 
         if existing_doc:
             if doc_type == "NFE" and not existing_doc.criada_por_evento:
-                is_duplicate = True
-                existing_imported_at = existing_doc.created_at
-                if existing_doc.analysis and existing_doc.analysis.created_by:
-                    existing_imported_by = existing_doc.analysis.created_by
+                if existing_doc.origem_importacao == "ANALISE_NFE":
+                    is_duplicate = False
+                    is_from_analise_nfe = True
+                    info_message = "Nota fiscal cadastrada previamente na Análise de NF-e. Ela será incorporada ao Acompanhamento Mensal."
+                else:
+                    is_duplicate = True
+                    existing_imported_at = existing_doc.created_at
+                    if existing_doc.analysis and existing_doc.analysis.created_by:
+                        existing_imported_by = existing_doc.analysis.created_by
             elif doc_type == "NFE_EVENT":
                 existing_event = (
                     db.query(FiscalDocumentEvent)
@@ -175,6 +182,8 @@ class NfeAnalysisService:
                 "item_count": 0,
                 "items": [],
                 "is_duplicate": is_duplicate,
+                "is_from_analise_nfe": is_from_analise_nfe,
+                "info_message": info_message,
                 "is_event": True,
                 "event_type": parsed.get("event_type"),
                 "event_description": parsed.get("event_description"),
@@ -238,6 +247,8 @@ class NfeAnalysisService:
             "item_count": len(clean_items),
             "items": clean_items,
             "is_duplicate": is_duplicate,
+            "is_from_analise_nfe": is_from_analise_nfe,
+            "info_message": info_message,
             "is_event": False,
             "existing_imported_at": existing_imported_at,
             "existing_imported_by": existing_imported_by,
@@ -622,6 +633,43 @@ class NfeAnalysisService:
                         errors.append({"file_name": file_name, "access_key": access_key, "reason": str(comp_err)})
                         continue
 
+                elif existing_doc.origem_importacao == "ANALISE_NFE":
+                    try:
+                        existing_doc.origem_importacao = "ACOMPANHAMENTO_MENSAL"
+                        if aplicacao:
+                            existing_doc.aplicacao = aplicacao
+                        if tipo_tributacao:
+                            existing_doc.tipo_tributacao = tipo_tributacao
+                        existing_doc.status_classificacao = "CLASSIFICADO"
+                        existing_doc.data_classificacao = datetime.now()
+                        existing_doc.usuario_classificacao_id = user_id
+                        existing_doc.observacao_classificacao = observacao
+
+                        history = FiscalNfeHistory(
+                            fiscal_document_id=existing_doc.id,
+                            tenant_id=tenant_id,
+                            user_id=user_id,
+                            action="INCORPORADO_ACOMPANHAMENTO_MENSAL",
+                            justification="Nota fiscal cadastrada previamente na Análise de NF-e foi incorporada ao Acompanhamento Mensal.",
+                            new_values={
+                                "origem_importacao": "ACOMPANHAMENTO_MENSAL",
+                                "aplicacao": aplicacao,
+                                "tipo_tributacao": tipo_tributacao,
+                            }
+                        )
+                        db.add(history)
+                        db.commit()
+
+                        imported_count += 1
+                        classified_count += 1
+                        imported_ids.append(str(existing_doc.id))
+                        continue
+                    except Exception as inc_err:
+                        db.rollback()
+                        rejected_count += 1
+                        errors.append({"file_name": file_name, "access_key": access_key, "reason": str(inc_err)})
+                        continue
+
                 elif not force_reprocess:
                     duplicate_count += 1
                     errors.append(
@@ -677,6 +725,7 @@ class NfeAnalysisService:
                     usuario_classificacao_id=user_id,
                     observacao_classificacao=observacao,
                     divergencia_flag=False,
+                    origem_importacao="ACOMPANHAMENTO_MENSAL",
                     vProd=parsed.get("vProd", Decimal(0)),
                     vNF=parsed.get("vNF", Decimal(0)),
                     vBC=parsed.get("vBC", Decimal(0)),
@@ -799,7 +848,10 @@ class NfeAnalysisService:
         Retorna consulta paginada de documentos fiscais por competência mensal
         junto com indicadores agregados (cards resumidos).
         """
-        query = db.query(FiscalDocument).filter(FiscalDocument.tenant_id == tenant_id)
+        query = db.query(FiscalDocument).filter(
+            FiscalDocument.tenant_id == tenant_id,
+            FiscalDocument.origem_importacao != "ANALISE_NFE"
+        )
 
         if competencia:
             query = query.filter(FiscalDocument.competencia == competencia)
@@ -1274,6 +1326,7 @@ class NfeAnalysisService:
             tipo_tributacao=None,
             status_classificacao="PENDENTE",
             divergencia_flag=False,
+            origem_importacao="ANALISE_NFE",
             vProd=parsed.get("vProd", Decimal(0)),
             vNF=parsed.get("vNF", Decimal(0)),
             vBC=parsed.get("vBC", Decimal(0)),

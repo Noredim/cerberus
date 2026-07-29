@@ -191,6 +191,8 @@ class NfePreviewSingleOut(BaseModel):
     item_count: int = 0
     items: List[NfePreviewItemOut] = []
     is_duplicate: bool = False
+    is_from_analise_nfe: bool = False
+    info_message: Optional[str] = None
     is_event: bool = False
     event_type: Optional[str] = None
     event_description: Optional[str] = None
