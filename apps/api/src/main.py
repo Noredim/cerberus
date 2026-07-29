@@ -40,6 +40,24 @@ from src.modules.notifications.router import router as notifications_router
 from src.modules.licitacoes.router import router as licitacoes_router
 from src.modules.messaging.router import router as messaging_router
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Executar migrações do Alembic automaticamente ao iniciar a aplicação
+    try:
+        from alembic.config import Config
+        from alembic import command
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        alembic_ini_path = os.path.join(root_dir, "alembic.ini")
+        if os.path.exists(alembic_ini_path):
+            alembic_cfg = Config(alembic_ini_path)
+            command.upgrade(alembic_cfg, "head")
+            print("[MIGRATION] Alembic migrations applied successfully.")
+    except Exception as e:
+        print(f"[MIGRATION WARNING] Error applying alembic migrations: {e}")
+    yield
+
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -53,6 +71,7 @@ app = FastAPI(
     title="Cerberus - Sales Engine API",
     description="Backend Multi-Tenant Services",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Servir arquivos estáticos (Uploads da Logo e afins)
