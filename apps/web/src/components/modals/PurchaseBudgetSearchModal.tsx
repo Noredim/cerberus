@@ -21,15 +21,66 @@ export function PurchaseBudgetSearchModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const [hoveredBudgetId, setHoveredBudgetId] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const leaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
       setTimeout(() => inputRef.current?.focus(), 100);
     }
+    return () => {
+      if (leaveTimeoutRef.current) {
+        clearTimeout(leaveTimeoutRef.current);
+      }
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleRowMouseEnter = (e: React.MouseEvent<HTMLTableRowElement>, budgetId: string) => {
+    if (leaveTimeoutRef.current) {
+      clearTimeout(leaveTimeoutRef.current);
+      leaveTimeoutRef.current = null;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 440;
+    const tooltipHeight = 250;
+
+    let x = e.clientX + 15;
+    if (x + tooltipWidth > window.innerWidth - 20) {
+      x = rect.left - tooltipWidth + 100;
+      if (x < 20) x = 20;
+    }
+
+    let y = rect.bottom + 5;
+    if (y + tooltipHeight > window.innerHeight - 20) {
+      y = rect.top - tooltipHeight - 5;
+      if (y < 20) y = Math.max(20, rect.top - 100);
+    }
+
+    setTooltipPosition({ x, y });
+    setHoveredBudgetId(budgetId);
+  };
+
+  const handleRowMouseLeave = () => {
+    leaveTimeoutRef.current = setTimeout(() => {
+      setHoveredBudgetId(null);
+    }, 250);
+  };
+
+  const handleTooltipMouseEnter = () => {
+    if (leaveTimeoutRef.current) {
+      clearTimeout(leaveTimeoutRef.current);
+      leaveTimeoutRef.current = null;
+    }
+  };
+
+  const handleTooltipMouseLeave = () => {
+    leaveTimeoutRef.current = setTimeout(() => {
+      setHoveredBudgetId(null);
+    }, 200);
+  };
 
   const filteredResults = availableBudgets.filter(b => {
     const term = searchTerm.toLowerCase();
@@ -118,27 +169,8 @@ export function PurchaseBudgetSearchModal({
                         onSelect(budget);
                         onClose();
                       }}
-                      onMouseEnter={() => {
-                        setHoveredBudgetId(budget.id);
-                      }}
-                      onMouseMove={(e) => {
-                        const tooltipWidth = 420;
-                        const tooltipHeight = 220;
-                        let x = e.clientX + 15;
-                        let y = e.clientY + 15;
-
-                        if (x + tooltipWidth > window.innerWidth) {
-                          x = e.clientX - tooltipWidth - 15;
-                        }
-                        if (y + tooltipHeight > window.innerHeight) {
-                          y = e.clientY - tooltipHeight - 15;
-                        }
-
-                        setTooltipPosition({ x, y });
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredBudgetId(null);
-                      }}
+                      onMouseEnter={(e) => handleRowMouseEnter(e, budget.id)}
+                      onMouseLeave={handleRowMouseLeave}
                     >
                       <td className="px-4 py-3.5 font-medium text-text-primary">
                         Nº {budget.numero_orcamento || 'Sem Número'}
@@ -182,7 +214,10 @@ export function PurchaseBudgetSearchModal({
         const items = budget.items || [];
         return (
           <div 
-            className="fixed z-[200] w-[420px] bg-slate-900/95 backdrop-blur-sm text-white rounded-lg p-3 shadow-xl border border-slate-700 pointer-events-none text-xs flex flex-col gap-2 font-sans transition-all duration-75"
+            onMouseEnter={handleTooltipMouseEnter}
+            onMouseLeave={handleTooltipMouseLeave}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-[200] w-[440px] bg-slate-900/95 backdrop-blur-md text-white rounded-xl p-3.5 shadow-2xl border border-slate-700/80 pointer-events-auto text-xs flex flex-col gap-2 font-sans transition-all duration-150 animate-in fade-in zoom-in-95"
             style={{ left: `${tooltipPosition.x}px`, top: `${tooltipPosition.y}px` }}
           >
             <div className="font-semibold text-orange-400 border-b border-slate-700 pb-1 flex justify-between items-center">
