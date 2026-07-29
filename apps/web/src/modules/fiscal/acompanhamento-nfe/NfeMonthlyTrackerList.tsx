@@ -393,6 +393,14 @@ export const NfeMonthlyTrackerList: React.FC = () => {
 
                     <div className="w-px h-4 bg-border-subtle mx-1" />
 
+                    <button
+                        onClick={() => changeCompetenciaMonth(-1)}
+                        className="p-1 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                        title="Mês Anterior"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+
                     <select
                         value={currentCompetencia}
                         onChange={e => {
@@ -411,6 +419,14 @@ export const NfeMonthlyTrackerList: React.FC = () => {
                             ))
                         )}
                     </select>
+
+                    <button
+                        onClick={() => changeCompetenciaMonth(1)}
+                        className="p-1 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                        title="Próximo Mês"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
 
