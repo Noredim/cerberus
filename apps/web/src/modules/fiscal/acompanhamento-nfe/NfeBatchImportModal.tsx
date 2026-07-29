@@ -47,11 +47,13 @@ interface NfePreviewItem {
     }>;
     item_count: number;
     is_duplicate: boolean;
-    file_name?: string;
     existing_imported_at?: string;
     existing_imported_by?: string;
     xml_content: string;
     error?: string;
+    is_event?: boolean;
+    document_type?: string;
+    justification?: string;
 }
 
 interface NfeBatchImportModalProps {
