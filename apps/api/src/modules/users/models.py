@@ -49,3 +49,6 @@ class User(Base):
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     companies = relationship("UserCompany", back_populates="user", cascade="all, delete-orphan")
+
+from src.modules.companies.models import Company  # noqa: F401
+

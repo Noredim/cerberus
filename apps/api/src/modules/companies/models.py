@@ -321,5 +321,9 @@ class SalesTeamPolicy(Base):
     sales_team = relationship("SalesTeam", back_populates="policies")
     policy = relationship("CommercialPolicy")
 
+from src.modules.own_services.models import OwnService  # noqa: F401
+
+
+
 
 

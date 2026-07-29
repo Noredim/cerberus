@@ -41,9 +41,16 @@ from src.modules.licitacoes.router import router as licitacoes_router
 from src.modules.messaging.router import router as messaging_router
 
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import configure_mappers
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Configurar todos os mappers do SQLAlchemy após importação de todos os roteadores/modelos
+    try:
+        configure_mappers()
+    except Exception as map_err:
+        print(f"[MAPPER WARNING] Error configuring ORM mappers: {map_err}")
+
     # Executar migrações do Alembic automaticamente ao iniciar a aplicação
     try:
         from alembic.config import Config
