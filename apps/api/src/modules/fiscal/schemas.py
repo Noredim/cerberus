@@ -130,23 +130,14 @@ class NfeAnalysisOut(BaseModel):
     id: UUID
     tenant_id: str
     name: str
+    xml_content: Optional[str] = None
     file_name: Optional[str] = None
     file_hash: Optional[str] = None
     status: str
-    imported_at: datetime
     error_message: Optional[str] = None
-    
-    # DANFE Headers & Totals
-    access_key: Optional[str] = None
-    nNF: Optional[str] = None
-    serie: Optional[str] = None
-    dhEmi: Optional[datetime] = None
-    issuer_cnpj: Optional[str] = None
-    issuer_name: Optional[str] = None
-    recipient_cnpj: Optional[str] = None
-    recipient_name: Optional[str] = None
-    vNF: Optional[float] = 0.0
-    vProd: Optional[float] = 0.0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    fiscal_document: Optional[FiscalDocumentOut] = None
 
     class Config:
         from_attributes = True

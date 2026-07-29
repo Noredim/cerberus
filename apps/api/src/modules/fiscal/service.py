@@ -1181,6 +1181,162 @@ class NfeAnalysisService:
         return True
 
     @staticmethod
+    def list_analyses(db: Session, tenant_id: str) -> List[NfeAnalysis]:
+        return (
+            db.query(NfeAnalysis)
+            .filter(NfeAnalysis.tenant_id == tenant_id)
+            .order_by(desc(NfeAnalysis.created_at))
+            .all()
+        )
+
+    @staticmethod
+    def get_analysis(db: Session, tenant_id: str, analysis_id: UUID) -> Optional[NfeAnalysis]:
+        return (
+            db.query(NfeAnalysis)
+            .filter(NfeAnalysis.tenant_id == tenant_id, NfeAnalysis.id == analysis_id)
+            .first()
+        )
+
+    @staticmethod
+    def create_analysis(
+        db: Session,
+        tenant_id: str,
+        name: str,
+        xml_content: str,
+        file_name: str,
+        user_id: Optional[str] = None,
+        force_reprocess: bool = False,
+    ) -> NfeAnalysis:
+        file_hash = NfeAnalysisService.calculate_hash(xml_content)
+        parsed = NFeXmlParser.parse_xml(xml_content)
+        access_key = parsed["access_key"]
+
+        existing_doc = (
+            db.query(FiscalDocument)
+            .filter(FiscalDocument.tenant_id == tenant_id, FiscalDocument.access_key == access_key)
+            .first()
+        )
+
+        if existing_doc:
+            if not force_reprocess:
+                existing_analysis = existing_doc.analysis
+                imported_at_str = (
+                    existing_analysis.created_at.isoformat()
+                    if existing_analysis and existing_analysis.created_at
+                    else ""
+                )
+                name_str = existing_analysis.name if existing_analysis else ""
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "message": "Nota fiscal já importada anteriormente.",
+                        "access_key": access_key,
+                        "name": name_str,
+                        "imported_at": imported_at_str,
+                    },
+                )
+            else:
+                if existing_doc.analysis:
+                    db.delete(existing_doc.analysis)
+                db.delete(existing_doc)
+                db.flush()
+
+        analysis = NfeAnalysis(
+            tenant_id=tenant_id,
+            name=name,
+            xml_content=xml_content,
+            file_name=file_name,
+            file_hash=file_hash,
+            status="PROCESSED",
+            created_by=user_id,
+        )
+        db.add(analysis)
+        db.flush()
+
+        doc = FiscalDocument(
+            tenant_id=tenant_id,
+            nfe_analysis_id=analysis.id,
+            access_key=access_key,
+            nNF=parsed.get("nNF"),
+            serie=parsed.get("serie"),
+            mod=parsed.get("mod"),
+            natOp=parsed.get("natOp"),
+            dhEmi=parsed.get("dhEmi"),
+            competencia=parsed.get("competencia"),
+            issuer_cnpj=parsed.get("issuer_cnpj"),
+            issuer_name=parsed.get("issuer_name"),
+            issuer_ie=parsed.get("issuer_ie"),
+            uf_emit=parsed.get("uf_emit"),
+            recipient_cnpj=parsed.get("recipient_cnpj"),
+            recipient_name=parsed.get("recipient_name"),
+            uf_dest=parsed.get("uf_dest"),
+            aplicacao=None,
+            tipo_tributacao=None,
+            status_classificacao="PENDENTE",
+            divergencia_flag=False,
+            vProd=parsed.get("vProd", Decimal(0)),
+            vNF=parsed.get("vNF", Decimal(0)),
+            vBC=parsed.get("vBC", Decimal(0)),
+            vICMS=parsed.get("vICMS", Decimal(0)),
+            vBCST=parsed.get("vBCST", Decimal(0)),
+            vICMSST=parsed.get("vICMSST", Decimal(0)),
+            vFCP=parsed.get("vFCP", Decimal(0)),
+            vFCPST=parsed.get("vFCPST", Decimal(0)),
+            vIPI=parsed.get("vIPI", Decimal(0)),
+            vPIS=parsed.get("vPIS", Decimal(0)),
+            vCOFINS=parsed.get("vCOFINS", Decimal(0)),
+            vFrete=parsed.get("vFrete", Decimal(0)),
+            vSeg=parsed.get("vSeg", Decimal(0)),
+            vDesc=parsed.get("vDesc", Decimal(0)),
+            vOutro=parsed.get("vOutro", Decimal(0)),
+            cStat=parsed.get("cStat"),
+            xMotivo=parsed.get("xMotivo"),
+            nProt=parsed.get("nProt"),
+            dhRecbto=parsed.get("dhRecbto"),
+            xml_version=parsed.get("xml_version"),
+            xml_raw=xml_content,
+        )
+        db.add(doc)
+        db.flush()
+
+        for item_data in parsed.get("items", []):
+            item_obj = FiscalDocumentItem(
+                fiscal_document_id=doc.id,
+                nItem=item_data["nItem"],
+                cProd=item_data["cProd"],
+                xProd=item_data["xProd"],
+                NCM=item_data["NCM"],
+                CFOP=item_data["CFOP"],
+                uCom=item_data["uCom"],
+                qCom=item_data["qCom"],
+                vUnCom=item_data["vUnCom"],
+                vProd=item_data["vProd"],
+                tributos=item_data["tributos"],
+            )
+            db.add(item_obj)
+
+        for inst_data in parsed.get("installments", []):
+            inst_obj = FiscalDocumentInstallment(
+                fiscal_document_id=doc.id,
+                nDup=inst_data["nDup"],
+                dVenc=inst_data["dVenc"],
+                vDup=inst_data["vDup"],
+            )
+            db.add(inst_obj)
+
+        for pay_data in parsed.get("payments", []):
+            pay_obj = FiscalDocumentPayment(
+                fiscal_document_id=doc.id,
+                tPag=pay_data["tPag"],
+                vPag=pay_data["vPag"],
+            )
+            db.add(pay_obj)
+
+        db.commit()
+        db.refresh(analysis)
+        return analysis
+
+    @staticmethod
     def delete_analysis(db: Session, tenant_id: str, analysis_id: UUID) -> bool:
         analysis = (
             db.query(NfeAnalysis)
