@@ -143,13 +143,6 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
     const [forceReprocess, setForceReprocess] = useState(false);
     const [allowEventWithoutInvoice, setAllowEventWithoutInvoice] = useState(true);
     const [importing, setImporting] = useState(false);
-
-    const abortControllerRef = useRef<AbortController | null>(null);
-
-    if (!isOpen) return null;
-
-    const DRAFT_STORAGE_KEY = 'cerberus_nfe_batch_import_draft';
-
     const [importProgress, setImportProgress] = useState<{
         currentBatch: number;
         totalBatches: number;
@@ -157,6 +150,12 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
         rejectedTotal: number;
         duplicateTotal: number;
     } | null>(null);
+
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    if (!isOpen) return null;
+
+    const DRAFT_STORAGE_KEY = 'cerberus_nfe_batch_import_draft';
 
     const saveDraft = (classData: Record<number, { aplicacao: string; tipo_tributacao: string; observacao: string }>) => {
         try {
