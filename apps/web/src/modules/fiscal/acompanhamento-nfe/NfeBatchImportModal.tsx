@@ -177,6 +177,117 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
         } catch (e) {}
     };
 
+    const handleDrag = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === 'dragenter' || e.type === 'dragover') {
+            setDragActive(true);
+        } else if (e.type === 'dragleave') {
+            setDragActive(false);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const xmlFiles = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.xml'));
+            if (xmlFiles.length === 0) {
+                alert('Nenhum arquivo .xml foi encontrado nos arquivos arrastados.');
+                return;
+            }
+            setFiles(prev => [...prev, ...xmlFiles]);
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const xmlFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.xml'));
+            setFiles(prev => [...prev, ...xmlFiles]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const clearFiles = () => {
+        setFiles([]);
+        setPreviews([]);
+        setCurrentIndex(0);
+        setClassifications({});
+        setReviewedIndices({});
+    };
+
+    const handleStartPreview = async () => {
+        if (files.length === 0) return;
+        setPreviewing(true);
+
+        try {
+            const formData = new FormData();
+            files.forEach(file => formData.append('files', file));
+            formData.append('allow_event_without_invoice', String(allowEventWithoutInvoice));
+
+            const response = await api.post('/fiscal/acompanhamento-nfe/preview-lote', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            const previewData: NfePreviewItem[] = response.data.items || [];
+            setPreviews(previewData);
+
+            if (previewData.length === 0) {
+                alert('Nenhuma nota válida foi encontrada para prévia.');
+                setPreviewing(false);
+                return;
+            }
+
+            const initialClass: Record<number, { aplicacao: string; tipo_tributacao: string; observacao: string }> = {};
+            previewData.forEach((item, idx) => {
+                const defaultApp = item.is_event || item.document_type === 'CANCELAMENTO' ? 'CANCELAMENTO' : 'REVENDA';
+                const permitidas = COMPATIBILIDADE_TRIBUTACAO[defaultApp] || [];
+                const defaultTrib = permitidas.length > 0 ? permitidas[0].value : (defaultApp === 'CANCELAMENTO' ? 'CANCELAMENTO' : 'ICMS_ST');
+                initialClass[idx] = {
+                    aplicacao: defaultApp,
+                    tipo_tributacao: defaultTrib,
+                    observacao: ''
+                };
+            });
+
+            try {
+                const draftRaw = localStorage.getItem(DRAFT_STORAGE_KEY);
+                if (draftRaw) {
+                    const draft = JSON.parse(draftRaw);
+                    if (draft && draft.classifications) {
+                        Object.keys(draft.classifications).forEach((k) => {
+                            const idx = Number(k);
+                            if (initialClass[idx] && draft.classifications[idx]) {
+                                initialClass[idx] = {
+                                    ...initialClass[idx],
+                                    ...draft.classifications[idx]
+                                };
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('Erro ao carregar rascunho de importação:', e);
+            }
+
+            setClassifications(initialClass);
+            setCurrentIndex(0);
+            setReviewedIndices({ 0: true });
+            setStep('classify');
+        } catch (err: any) {
+            console.error('Erro ao ler prévia dos XMLs:', err);
+            const msg = err.response?.data?.detail || 'Erro ao processar prévia dos arquivos XML.';
+            alert(typeof msg === 'string' ? msg : 'Erro ao processar prévia.');
+        } finally {
+            setPreviewing(false);
+        }
+    };
+
     const handleCancelOrClose = () => {
         if (step === 'classify' && Object.keys(classifications).length > 0) {
             if (!window.confirm('Você possui classificações em andamento no lote. Deseja fechar o assistente? (Suas preferências foram salvas em rascunho local).')) {
