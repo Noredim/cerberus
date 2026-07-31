@@ -148,7 +148,41 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
 
     if (!isOpen) return null;
 
+    const DRAFT_STORAGE_KEY = 'cerberus_nfe_batch_import_draft';
+
+    const [importProgress, setImportProgress] = useState<{
+        currentBatch: number;
+        totalBatches: number;
+        importedTotal: number;
+        rejectedTotal: number;
+        duplicateTotal: number;
+    } | null>(null);
+
+    const saveDraft = (classData: Record<number, { aplicacao: string; tipo_tributacao: string; observacao: string }>) => {
+        try {
+            if (Object.keys(classData).length > 0) {
+                localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    classifications: classData
+                }));
+            }
+        } catch (e) {
+            console.warn('Erro ao salvar rascunho de importação:', e);
+        }
+    };
+
+    const clearDraft = () => {
+        try {
+            localStorage.removeItem(DRAFT_STORAGE_KEY);
+        } catch (e) {}
+    };
+
     const handleCancelOrClose = () => {
+        if (step === 'classify' && Object.keys(classifications).length > 0) {
+            if (!window.confirm('Você possui classificações em andamento no lote. Deseja fechar o assistente? (Suas preferências foram salvas em rascunho local).')) {
+                return;
+            }
+        }
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -159,133 +193,35 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
         onClose();
     };
 
-    const handleDrag = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true);
-        } else if (e.type === 'dragleave') {
-            setDragActive(false);
-        }
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const selectedFiles = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.xml'));
-            setFiles(prev => [...prev, ...selectedFiles]);
-        }
-    };
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const selectedFiles = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.xml'));
-            setFiles(prev => [...prev, ...selectedFiles]);
-        }
-    };
-
-    const removeFile = (index: number) => {
-        setFiles(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const clearFiles = () => {
-        setFiles([]);
-        setPreviews([]);
-        setClassifications({});
-        setReviewedIndices({});
-        setStep('upload');
-        setCurrentIndex(0);
-    };
-
-    const handleStartPreview = async () => {
-        if (files.length === 0) return;
-
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-
-        setPreviewing(true);
-        try {
-            const formData = new FormData();
-            files.forEach(f => formData.append('files', f));
-
-            const response = await api.post('/fiscal/acompanhamento-nfe/preview', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                signal: controller.signal
-            });
-
-            const erroredItems = response.data.previews.filter((p: NfePreviewItem) => !!p.error);
-            const validItems: NfePreviewItem[] = response.data.previews.filter((p: NfePreviewItem) => !p.error);
-            setPreviews(validItems);
-
-            if (erroredItems.length > 0 && validItems.length === 0) {
-                const errorMsgs = erroredItems.map((p: NfePreviewItem) => `- ${p.file_name}: ${p.error}`).join('\n');
-                alert(`Nenhum arquivo XML válido foi identificado para importação:\n${errorMsgs}`);
-                setPreviewing(false);
-                return;
-            }
-
-            if (validItems.length === 0) {
-                alert('Nenhum arquivo XML válido foi identificado para importação.');
-                setPreviewing(false);
-                return;
-            }
-
-            // Inicializar classificações padrão (se for evento de cancelamento, pré-selecionar CANCELAMENTO / CANCELAMENTO)
-            const initialClass: Record<number, { aplicacao: string; tipo_tributacao: string; observacao: string }> = {};
-            validItems.forEach((prev, idx) => {
-                if (prev.is_event || prev.document_type === 'NFE_EVENT') {
-                    initialClass[idx] = {
-                        aplicacao: 'CANCELAMENTO',
-                        tipo_tributacao: 'CANCELAMENTO',
-                        observacao: prev.justification || 'Evento de Cancelamento'
-                    };
-                } else {
-                    initialClass[idx] = { aplicacao: 'REVENDA', tipo_tributacao: 'ICMS_ST', observacao: '' };
-                }
-            });
-            setClassifications(initialClass);
-            setReviewedIndices({ 0: true });
-            setStep('classify');
-            setCurrentIndex(0);
-        } catch (err: any) {
-            if (axios.isCancel(err) || err?.name === 'CanceledError' || err?.name === 'AbortError') {
-                console.log('Leitura prévia de XMLs cancelada pelo usuário.');
-                return;
-            }
-            console.error('Erro ao realizar leitura prévia dos XMLs:', err);
-            alert(err.response?.data?.detail || 'Falha ao ler arquivos XML.');
-        } finally {
-            setPreviewing(false);
-            abortControllerRef.current = null;
-        }
-    };
-
     const handleAplicacaoChange = (index: number, aplicacao: string) => {
         const permitidas = COMPATIBILIDADE_TRIBUTACAO[aplicacao] || [];
         const defaultTrib = permitidas.length > 0 ? permitidas[0].value : '';
-        setClassifications(prev => ({
-            ...prev,
-            [index]: {
-                ...prev[index],
-                aplicacao,
-                tipo_tributacao: defaultTrib
-            }
-        }));
+        setClassifications(prev => {
+            const next = {
+                ...prev,
+                [index]: {
+                    ...prev[index],
+                    aplicacao,
+                    tipo_tributacao: defaultTrib
+                }
+            };
+            saveDraft(next);
+            return next;
+        });
     };
 
     const handleTributacaoChange = (index: number, tipo_tributacao: string) => {
-        setClassifications(prev => ({
-            ...prev,
-            [index]: {
-                ...prev[index],
-                tipo_tributacao
-            }
-        }));
+        setClassifications(prev => {
+            const next = {
+                ...prev,
+                [index]: {
+                    ...prev[index],
+                    tipo_tributacao
+                }
+            };
+            saveDraft(next);
+            return next;
+        });
     };
 
     const applyToAll = () => {
@@ -299,6 +235,7 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
         });
         setClassifications(newClass);
         setReviewedIndices(newReviewed);
+        saveDraft(newClass);
         alert('Classificação aplicada para todas as notas do lote!');
     };
 
@@ -326,33 +263,61 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
         abortControllerRef.current = controller;
 
         setImporting(true);
+
+        const payloadNotes = previews.map((prev, idx) => ({
+            file_name: prev.file_name || 'nota.xml',
+            xml_content: prev.xml_content,
+            aplicacao: classifications[idx]?.aplicacao || 'CANCELAMENTO',
+            tipo_tributacao: classifications[idx]?.tipo_tributacao || 'CANCELAMENTO',
+            observacao_classificacao: classifications[idx]?.observacao || ''
+        }));
+
+        const BATCH_SIZE = 20;
+        const totalBatches = Math.ceil(payloadNotes.length / BATCH_SIZE);
+
+        let importedTotal = 0;
+        let duplicateTotal = 0;
+        let rejectedTotal = 0;
+        const allErrors: any[] = [];
+
         try {
-            const payloadNotes = previews.map((prev, idx) => ({
-                file_name: prev.file_name || 'nota.xml',
-                xml_content: prev.xml_content,
-                aplicacao: classifications[idx]?.aplicacao || 'CANCELAMENTO',
-                tipo_tributacao: classifications[idx]?.tipo_tributacao || 'CANCELAMENTO',
-                observacao_classificacao: classifications[idx]?.observacao || ''
-            }));
+            for (let i = 0; i < totalBatches; i++) {
+                const chunk = payloadNotes.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+                setImportProgress({
+                    currentBatch: i + 1,
+                    totalBatches,
+                    importedTotal,
+                    rejectedTotal,
+                    duplicateTotal
+                });
 
-            const response = await api.post(
-                '/fiscal/acompanhamento-nfe/importar',
-                {
-                    notes: payloadNotes,
-                    force_reprocess_duplicates: forceReprocess,
-                    allow_event_without_invoice: allowEventWithoutInvoice
-                },
-                { signal: controller.signal }
-            );
+                const response = await api.post(
+                    '/fiscal/acompanhamento-nfe/importar',
+                    {
+                        notes: chunk,
+                        force_reprocess_duplicates: forceReprocess,
+                        allow_event_without_invoice: allowEventWithoutInvoice
+                    },
+                    { signal: controller.signal }
+                );
 
-            const summary = response.data;
+                const summary = response.data;
+                importedTotal += summary.imported_count || 0;
+                duplicateTotal += summary.duplicate_count || 0;
+                rejectedTotal += summary.rejected_count || 0;
+                if (summary.errors && summary.errors.length > 0) {
+                    allErrors.push(...summary.errors);
+                }
+            }
+
             alert(
-                `Importação concluída com sucesso!\n` +
-                `- Importadas/Classificadas: ${summary.imported_count}\n` +
-                `- Duplicadas: ${summary.duplicate_count}\n` +
-                `- Rejeitadas/Erros: ${summary.rejected_count}`
+                `Importação em Lote Concluída!\n` +
+                `- Importadas/Classificadas: ${importedTotal}\n` +
+                `- Duplicadas: ${duplicateTotal}\n` +
+                `- Rejeitadas/Erros: ${rejectedTotal}`
             );
 
+            clearDraft();
             onImportSuccess();
             onClose();
             clearFiles();
@@ -370,6 +335,7 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
             alert(detailMsg);
         } finally {
             setImporting(false);
+            setImportProgress(null);
             abortControllerRef.current = null;
         }
     };
@@ -821,7 +787,9 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
                                 {importing ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        Salvação e Importação...
+                                        {importProgress
+                                            ? `Enviando Lote ${importProgress.currentBatch}/${importProgress.totalBatches}...`
+                                            : 'Gravando Importação...'}
                                     </>
                                 ) : showImportButton ? (
                                     <>

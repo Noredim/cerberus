@@ -288,8 +288,14 @@ def get_cbs_info(tributos):
     if isinstance(gcbs, dict) and "vCBS" in gcbs:
         valor = gcbs["vCBS"]
         
+    cst = "-"
+    if isinstance(ibscbs, dict):
+        cst = ibscbs.get("CST")
+    if not cst and isinstance(gibscbs, dict):
+        cst = gibscbs.get("CST")
+
     return {
-        "cst": "-",
+        "cst": str(cst or "-"),
         "base": float(base or 0.0),
         "aliq": float(aliq or 0.0),
         "valor": float(valor or 0.0)

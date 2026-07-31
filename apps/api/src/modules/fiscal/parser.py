@@ -186,7 +186,9 @@ class NFeXmlParser:
         return None
 
     @staticmethod
-    def clean_tag(tag: str) -> str:
+    def clean_tag(tag: Optional[str]) -> str:
+        if not tag or not isinstance(tag, str):
+            return ""
         if tag.startswith("{"):
             return tag.split("}", 1)[1]
         return tag
@@ -213,6 +215,8 @@ class NFeXmlParser:
 
         # Helper functions to locate tags ignoring namespaces
         def find_node_by_local_name(node, local_name):
+            if node is None:
+                return None
             if NFeXmlParser.clean_tag(node.tag) == local_name:
                 return node
             for child in node:
@@ -222,6 +226,8 @@ class NFeXmlParser:
             return None
 
         def find_all_nodes_by_local_name(parent, local_name):
+            if parent is None:
+                return []
             matches = []
             for child in parent:
                 if NFeXmlParser.clean_tag(child.tag) == local_name:
@@ -341,48 +347,129 @@ class NFeXmlParser:
                 icms_group = find_node_by_local_name(imposto_node, "ICMS")
                 if icms_group is not None and len(icms_group) > 0:
                     icms_child = icms_group[0]
-                    tributos_item["ICMS"] = {
-                        "tipo": NFeXmlParser.clean_tag(icms_child.tag),
-                        "orig": get_child_text(icms_child, "orig"),
-                        "CST": get_child_text(icms_child, "CST") or get_child_text(icms_child, "CSOSN"),
-                        "vBC": float(to_dec(get_child_text(icms_child, "vBC"))),
-                        "pICMS": float(to_dec(get_child_text(icms_child, "pICMS"))),
-                        "vICMS": float(to_dec(get_child_text(icms_child, "vICMS"))),
-                        "vBCST": float(to_dec(get_child_text(icms_child, "vBCST"))),
-                        "pST": float(to_dec(get_child_text(icms_child, "pST"))),
-                        "vICMSST": float(to_dec(get_child_text(icms_child, "vICMSST")))
+                    icms_tag_name = NFeXmlParser.clean_tag(icms_child.tag)
+                    orig_val = get_child_text(icms_child, "orig")
+                    cst_val = get_child_text(icms_child, "CST") or get_child_text(icms_child, "CSOSN")
+                    csosn_val = get_child_text(icms_child, "CSOSN")
+                    vbc_val = float(to_dec(get_child_text(icms_child, "vBC")))
+                    picms_val = float(to_dec(get_child_text(icms_child, "pICMS")))
+                    vicms_val = float(to_dec(get_child_text(icms_child, "vICMS")))
+                    vbcst_val = float(to_dec(get_child_text(icms_child, "vBCST")))
+                    pst_val = float(to_dec(get_child_text(icms_child, "pST")))
+                    vicmsst_val = float(to_dec(get_child_text(icms_child, "vICMSST")))
+
+                    icms_dict = {
+                        "tipo": icms_tag_name,
+                        "orig": orig_val,
+                        "CST": cst_val,
+                        "CSOSN": csosn_val,
+                        "vBC": vbc_val,
+                        "pICMS": picms_val,
+                        "vICMS": vicms_val,
+                        "vBCST": vbcst_val,
+                        "pST": pst_val,
+                        "vICMSST": vicmsst_val
                     }
+                    tributos_item["ICMS"] = {icms_tag_name: icms_dict}
+                    tributos_item["vICMS"] = vicms_val
+                    tributos_item["pICMS"] = picms_val
+                    tributos_item["vBC"] = vbc_val
 
                 ipi_group = find_node_by_local_name(imposto_node, "IPI")
                 if ipi_group is not None:
                     ipi_trib = find_node_by_local_name(ipi_group, "IPITrib") or find_node_by_local_name(ipi_group, "IPINT")
                     if ipi_trib is not None:
-                        tributos_item["IPI"] = {
-                            "CST": get_child_text(ipi_trib, "CST"),
-                            "vBC": float(to_dec(get_child_text(ipi_trib, "vBC"))),
-                            "pIPI": float(to_dec(get_child_text(ipi_trib, "pIPI"))),
-                            "vIPI": float(to_dec(get_child_text(ipi_trib, "vIPI")))
+                        ipi_tag_name = NFeXmlParser.clean_tag(ipi_trib.tag)
+                        cst_ipi = get_child_text(ipi_trib, "CST")
+                        vbc_ipi = float(to_dec(get_child_text(ipi_trib, "vBC")))
+                        pipi_val = float(to_dec(get_child_text(ipi_trib, "pIPI")))
+                        vipi_val = float(to_dec(get_child_text(ipi_trib, "vIPI")))
+
+                        ipi_dict = {
+                            "CST": cst_ipi,
+                            "vBC": vbc_ipi,
+                            "pIPI": pipi_val,
+                            "vIPI": vipi_val
                         }
+                        tributos_item["IPI"] = {ipi_tag_name: ipi_dict}
+                        tributos_item["vIPI"] = vipi_val
+                        tributos_item["pIPI"] = pipi_val
 
                 pis_group = find_node_by_local_name(imposto_node, "PIS")
                 if pis_group is not None and len(pis_group) > 0:
                     pis_child = pis_group[0]
-                    tributos_item["PIS"] = {
-                        "CST": get_child_text(pis_child, "CST"),
-                        "vBC": float(to_dec(get_child_text(pis_child, "vBC"))),
-                        "pPIS": float(to_dec(get_child_text(pis_child, "pPIS"))),
-                        "vPIS": float(to_dec(get_child_text(pis_child, "vPIS")))
+                    pis_tag_name = NFeXmlParser.clean_tag(pis_child.tag)
+                    cst_pis = get_child_text(pis_child, "CST")
+                    vbc_pis = float(to_dec(get_child_text(pis_child, "vBC")))
+                    ppis_val = float(to_dec(get_child_text(pis_child, "pPIS")))
+                    vpis_val = float(to_dec(get_child_text(pis_child, "vPIS")))
+
+                    pis_dict = {
+                        "CST": cst_pis,
+                        "vBC": vbc_pis,
+                        "pPIS": ppis_val,
+                        "vPIS": vpis_val
                     }
+                    tributos_item["PIS"] = {pis_tag_name: pis_dict}
+                    tributos_item["vPIS"] = vpis_val
+                    tributos_item["pPIS"] = ppis_val
 
                 cofins_group = find_node_by_local_name(imposto_node, "COFINS")
                 if cofins_group is not None and len(cofins_group) > 0:
                     cofins_child = cofins_group[0]
-                    tributos_item["COFINS"] = {
-                        "CST": get_child_text(cofins_child, "CST"),
-                        "vBC": float(to_dec(get_child_text(cofins_child, "vBC"))),
-                        "pCOFINS": float(to_dec(get_child_text(cofins_child, "pCOFINS"))),
-                        "vCOFINS": float(to_dec(get_child_text(cofins_child, "vCOFINS")))
+                    cofins_tag_name = NFeXmlParser.clean_tag(cofins_child.tag)
+                    cst_cofins = get_child_text(cofins_child, "CST")
+                    vbc_cofins = float(to_dec(get_child_text(cofins_child, "vBC")))
+                    pcofins_val = float(to_dec(get_child_text(cofins_child, "pCOFINS")))
+                    vcofins_val = float(to_dec(get_child_text(cofins_child, "vCOFINS")))
+
+                    cofins_dict = {
+                        "CST": cst_cofins,
+                        "vBC": vbc_cofins,
+                        "pCOFINS": pcofins_val,
+                        "vCOFINS": vcofins_val
                     }
+                    tributos_item["COFINS"] = {cofins_tag_name: cofins_dict}
+                    tributos_item["vCOFINS"] = vcofins_val
+                    tributos_item["pCOFINS"] = pcofins_val
+
+                ibscbs_group = find_node_by_local_name(imposto_node, "IBSCBS")
+                if ibscbs_group is not None:
+                    gibscbs_node = find_node_by_local_name(ibscbs_group, "gIBSCBS")
+                    gibsuf_node = find_node_by_local_name(gibscbs_node, "gIBSUF") if gibscbs_node is not None else None
+                    gcbs_node = find_node_by_local_name(gibscbs_node, "gCBS") if gibscbs_node is not None else None
+
+                    cst_ibscbs = get_child_text(ibscbs_group, "CST")
+                    cclass_trib = get_child_text(ibscbs_group, "cClassTrib")
+                    vbc_ibscbs = float(to_dec(get_child_text(gibscbs_node, "vBC")))
+                    p_ibs_val = float(to_dec(get_child_text(gibsuf_node, "pIBSUF")))
+                    v_ibs_val = float(to_dec(get_child_text(gibscbs_node, "vIBS") or get_child_text(gibsuf_node, "vIBSUF")))
+                    p_cbs_val = float(to_dec(get_child_text(gcbs_node, "pCBS")))
+                    v_cbs_val = float(to_dec(get_child_text(gcbs_node, "vCBS")))
+
+                    tributos_item["IBSCBS"] = {
+                        "CST": cst_ibscbs,
+                        "cClassTrib": cclass_trib,
+                        "vBC": vbc_ibscbs,
+                        "gIBSCBS": {
+                            "vBC": vbc_ibscbs,
+                            "vIBS": v_ibs_val,
+                            "pIBS": p_ibs_val,
+                            "gIBSUF": {
+                                "pIBSUF": p_ibs_val,
+                                "vIBSUF": v_ibs_val
+                            },
+                            "gCBS": {
+                                "vBC": vbc_ibscbs,
+                                "pCBS": p_cbs_val,
+                                "vCBS": v_cbs_val
+                            }
+                        }
+                    }
+                    tributos_item["vIBS"] = v_ibs_val
+                    tributos_item["pIBS"] = p_ibs_val
+                    tributos_item["vCBS"] = v_cbs_val
+                    tributos_item["pCBS"] = p_cbs_val
 
             items.append({
                 "nItem": nItem,

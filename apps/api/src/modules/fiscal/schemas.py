@@ -249,7 +249,13 @@ class ClassificationUpdateInput(BaseModel):
 
 
 class BatchClassificationInput(BaseModel):
-    document_ids: List[UUID]
+    document_ids: Optional[List[UUID]] = None
+    select_all_matching: Optional[bool] = False
+    competencia: Optional[str] = None
+    search: Optional[str] = None
+    status_classificacao: Optional[str] = None
+    uf_emit: Optional[str] = None
+    divergencia_flag: Optional[bool] = None
     aplicacao: str
     tipo_tributacao: str
     observacao_classificacao: Optional[str] = None

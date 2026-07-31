@@ -633,7 +633,7 @@ class NfeAnalysisService:
                         errors.append({"file_name": file_name, "access_key": access_key, "reason": str(comp_err)})
                         continue
 
-                elif existing_doc.origem_importacao == "ANALISE_NFE":
+                elif existing_doc.origem_importacao == "ANALISE_NFE" and not force_reprocess:
                     try:
                         existing_doc.origem_importacao = "ACOMPANHAMENTO_MENSAL"
                         if aplicacao:
@@ -1052,22 +1052,46 @@ class NfeAnalysisService:
     def batch_update_classification(
         db: Session,
         tenant_id: str,
-        document_ids: List[UUID],
-        aplicacao: str,
-        tipo_tributacao: str,
+        document_ids: Optional[List[UUID]] = None,
+        select_all_matching: bool = False,
+        competencia: Optional[str] = None,
+        search: Optional[str] = None,
+        status_classificacao: Optional[str] = None,
+        uf_emit: Optional[str] = None,
+        divergencia_flag: Optional[bool] = None,
+        aplicacao: str = "REVENDA",
+        tipo_tributacao: str = "ICMS_ST",
         observacao: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         validate_classification(aplicacao, tipo_tributacao)
 
-        docs = (
-            db.query(FiscalDocument)
-            .filter(
-                FiscalDocument.tenant_id == tenant_id,
-                FiscalDocument.id.in_(document_ids),
-            )
-            .all()
-        )
+        query = db.query(FiscalDocument).filter(FiscalDocument.tenant_id == tenant_id)
+
+        if select_all_matching:
+            if competencia and competencia != "ALL":
+                query = query.filter(FiscalDocument.competencia == competencia)
+            if search:
+                term = f"%{search.strip()}%"
+                query = query.filter(
+                    or_(
+                        FiscalDocument.access_key.ilike(term),
+                        FiscalDocument.nNF.ilike(term),
+                        FiscalDocument.issuer_name.ilike(term),
+                        FiscalDocument.issuer_cnpj.ilike(term),
+                    )
+                )
+            if status_classificacao:
+                query = query.filter(FiscalDocument.status_classificacao == status_classificacao)
+            if uf_emit:
+                query = query.filter(FiscalDocument.uf_emit == uf_emit)
+            if divergencia_flag is not None:
+                query = query.filter(FiscalDocument.divergencia_flag == divergencia_flag)
+            docs = query.all()
+        elif document_ids:
+            docs = query.filter(FiscalDocument.id.in_(document_ids)).all()
+        else:
+            docs = []
 
         updated_count = 0
         for doc in docs:
@@ -1097,7 +1121,7 @@ class NfeAnalysisService:
         db.commit()
 
         return {
-            "total_requested": len(document_ids),
+            "total_requested": len(docs),
             "updated_count": updated_count,
             "aplicacao": aplicacao,
             "tipo_tributacao": tipo_tributacao,

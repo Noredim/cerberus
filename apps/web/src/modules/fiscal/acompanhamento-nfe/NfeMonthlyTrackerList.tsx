@@ -175,6 +175,7 @@ export const NfeMonthlyTrackerList: React.FC = () => {
 
     // Selection for Batch actions
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [selectAllMatching, setSelectAllMatching] = useState(false);
 
     // Modals
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -211,12 +212,16 @@ export const NfeMonthlyTrackerList: React.FC = () => {
     };
 
     useEffect(() => {
+        setSelectedIds([]);
+        setSelectAllMatching(false);
         fetchDocuments();
     }, [currentCompetencia, page, selectedAplicacao, selectedTributacao, selectedStatus, selectedUf, onlyDivergences]);
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
+        setSelectedIds([]);
+        setSelectAllMatching(false);
         fetchDocuments();
     };
 
@@ -242,6 +247,7 @@ export const NfeMonthlyTrackerList: React.FC = () => {
         setCurrentCompetencia(newComp);
         setPage(1);
         setSelectedIds([]);
+        setSelectAllMatching(false);
     };
 
     const formatCompetenciaLabel = (compStr: string) => {
@@ -264,13 +270,18 @@ export const NfeMonthlyTrackerList: React.FC = () => {
             setSelectedIds(documents.map(d => d.id));
         } else {
             setSelectedIds([]);
+            setSelectAllMatching(false);
         }
     };
 
     const toggleSelectId = (id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
+        setSelectedIds(prev => {
+            const next = prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id];
+            if (next.length !== documents.length) {
+                setSelectAllMatching(false);
+            }
+            return next;
+        });
     };
 
     const handleDelete = async (id: string) => {
@@ -293,6 +304,8 @@ export const NfeMonthlyTrackerList: React.FC = () => {
         setSelectedUf('');
         setOnlyDivergences(false);
         setPage(1);
+        setSelectedIds([]);
+        setSelectAllMatching(false);
     };
 
     return (
@@ -319,12 +332,12 @@ export const NfeMonthlyTrackerList: React.FC = () => {
                     </button>
 
                     <button
-                        disabled={selectedIds.length === 0}
+                        disabled={selectedIds.length === 0 && !selectAllMatching}
                         onClick={() => setIsClassifyModalOpen(true)}
                         className="flex items-center gap-2 border border-border-subtle bg-surface hover:bg-bg-deep disabled:opacity-40 text-text-primary px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer"
                     >
                         <Layers className="w-4 h-4 text-brand-primary" />
-                        Classificar em Lote ({selectedIds.length})
+                        Classificar em Lote ({selectAllMatching ? metrics.total_notes : selectedIds.length})
                     </button>
 
                     {/* Menu Dropdown de Relatórios */}
@@ -548,6 +561,24 @@ export const NfeMonthlyTrackerList: React.FC = () => {
                     </div>
                 ) : (
                     <>
+                        {selectedIds.length === documents.length && metrics.total_notes > documents.length && (
+                            <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-lg p-3 mx-4 mt-3 flex items-center justify-between text-xs text-text-primary">
+                                <span>
+                                    {selectAllMatching ? (
+                                        <>Todas as <strong>{metrics.total_notes}</strong> notas desta competência estão selecionadas para classificação em lote.</>
+                                    ) : (
+                                        <>Você selecionou <strong>{documents.length}</strong> notas desta página. Deseja selecionar todas as <strong>{metrics.total_notes}</strong> notas da competência?</>
+                                    )}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectAllMatching(prev => !prev)}
+                                    className="font-bold text-brand-primary underline hover:text-brand-primary/80 cursor-pointer ml-4 whitespace-nowrap"
+                                >
+                                    {selectAllMatching ? 'Limpar Seleção Global' : `Selecionar todas as ${metrics.total_notes} notas`}
+                                </button>
+                            </div>
+                        )}
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead className="bg-bg-deep border-b border-border-subtle text-xs text-text-muted uppercase font-semibold">
@@ -747,10 +778,22 @@ export const NfeMonthlyTrackerList: React.FC = () => {
             <NfeBatchClassifyModal
                 isOpen={isClassifyModalOpen}
                 selectedIds={selectedIds}
+                selectAllMatching={selectAllMatching}
+                totalMatchingCount={metrics.total_notes}
+                filterParams={{
+                    competencia: currentCompetencia,
+                    search: searchTerm,
+                    aplicacao: selectedAplicacao,
+                    tipo_tributacao: selectedTributacao,
+                    status_classificacao: selectedStatus,
+                    uf_emit: selectedUf,
+                    divergencia_flag: onlyDivergences
+                }}
                 onClose={() => setIsClassifyModalOpen(false)}
                 onSuccess={() => {
                     fetchDocuments();
                     setSelectedIds([]);
+                    setSelectAllMatching(false);
                 }}
             />
 

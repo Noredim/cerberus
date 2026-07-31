@@ -5,6 +5,9 @@ import { api } from '../../../services/api';
 interface NfeBatchClassifyModalProps {
     isOpen: boolean;
     selectedIds: string[];
+    selectAllMatching?: boolean;
+    totalMatchingCount?: number;
+    filterParams?: Record<string, any>;
     onClose: () => void;
     onSuccess: () => void;
 }
@@ -75,6 +78,9 @@ const COMPATIBILIDADE_TRIBUTACAO: Record<string, { value: string; label: string 
 export const NfeBatchClassifyModal: React.FC<NfeBatchClassifyModalProps> = ({
     isOpen,
     selectedIds,
+    selectAllMatching = false,
+    totalMatchingCount = 0,
+    filterParams = {},
     onClose,
     onSuccess
 }) => {
@@ -93,19 +99,36 @@ export const NfeBatchClassifyModal: React.FC<NfeBatchClassifyModalProps> = ({
         }
     };
 
+    const countToUpdate = selectAllMatching ? totalMatchingCount : selectedIds.length;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (selectedIds.length === 0) return;
+        if (!selectAllMatching && selectedIds.length === 0) return;
 
         setSubmitting(true);
         try {
-            await api.put('/fiscal/acompanhamento-nfe/classificacao/lote', {
-                document_ids: selectedIds,
+            const payload: Record<string, any> = {
                 aplicacao,
                 tipo_tributacao: tipoTributacao,
                 observacao_classificacao: observacao
-            });
-            alert(`Classificação atualizada com sucesso para ${selectedIds.length} notas!`);
+            };
+
+            if (selectAllMatching) {
+                payload.select_all_matching = true;
+                if (filterParams.competencia && filterParams.competencia !== 'ALL') {
+                    payload.competencia = filterParams.competencia;
+                }
+                if (filterParams.search) payload.search = filterParams.search;
+                if (filterParams.aplicacao) payload.status_classificacao = filterParams.status_classificacao;
+                if (filterParams.uf_emit) payload.uf_emit = filterParams.uf_emit;
+                if (filterParams.divergencia_flag) payload.divergencia_flag = filterParams.divergencia_flag;
+            } else {
+                payload.document_ids = selectedIds;
+            }
+
+            const res = await api.put('/fiscal/acompanhamento-nfe/classificacao/lote', payload);
+            const updated = res.data?.updated_count ?? countToUpdate;
+            alert(`Classificação atualizada com sucesso para ${updated} notas!`);
             onSuccess();
             onClose();
         } catch (err: any) {
@@ -128,7 +151,7 @@ export const NfeBatchClassifyModal: React.FC<NfeBatchClassifyModalProps> = ({
                             Classificação em Lote
                         </h2>
                         <p className="text-xs text-text-muted mt-0.5">
-                            Aplicar classificação para {selectedIds.length} notas selecionadas
+                            Aplicar classificação para {countToUpdate} notas {selectAllMatching ? 'da competência (todas as páginas)' : 'selecionadas'}
                         </p>
                     </div>
                     <button
@@ -209,7 +232,7 @@ export const NfeBatchClassifyModal: React.FC<NfeBatchClassifyModalProps> = ({
                             ) : (
                                 <>
                                     <CheckCircle2 className="w-4 h-4" />
-                                    Aplicar Classificação ({selectedIds.length})
+                                    Aplicar Classificação ({countToUpdate})
                                 </>
                             )}
                         </button>
