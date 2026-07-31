@@ -67,6 +67,9 @@ def seed_ncm_st():
             db.commit()
             db.refresh(state_mt)
 
+        # Carregar conjunto de IDs de itens já existentes no banco globalmente
+        existing_db_ids = {item_id for (item_id,) in db.query(NcmStItem.id).all()}
+
         for tenant in tenants:
             logger.info(f"Processando NCM ST para o Tenant: {tenant.razao_social} ({tenant.id})")
 
@@ -91,9 +94,10 @@ def seed_ncm_st():
             else:
                 logger.info(f"Cabeçalho existente encontrado ID: {header.id}")
 
-            # Mapear itens existentes por ncm_normalizado + cest_normalizado + item para upsert
+            # Mapear itens existentes para este cabeçalho por ID e por (ncm_normalizado, cest_normalizado, item)
             existing_items = db.query(NcmStItem).filter(NcmStItem.cad_ncm_st_id == header.id).all()
-            existing_map = {
+            existing_by_id = {item.id: item for item in existing_items}
+            existing_by_key = {
                 f"{item.ncm_normalizado or ''}_{item.cest_normalizado or ''}_{item.item or ''}": item
                 for item in existing_items
             }
@@ -103,7 +107,8 @@ def seed_ncm_st():
 
             for raw in items_data:
                 key = f"{raw.get('ncm_normalizado') or ''}_{raw.get('cest_normalizado') or ''}_{raw.get('item') or ''}"
-                existing = existing_map.get(key)
+                raw_id = raw.get('id')
+                existing = existing_by_id.get(raw_id) or existing_by_key.get(key)
 
                 v_inicio = datetime.fromisoformat(raw['vigencia_inicio']) if raw.get('vigencia_inicio') else None
                 v_fim = datetime.fromisoformat(raw['vigencia_fim']) if raw.get('vigencia_fim') else None
@@ -112,7 +117,9 @@ def seed_ncm_st():
                     existing.item = raw.get('item')
                     existing.is_active = raw.get('is_active', True)
                     existing.ncm_sh = raw.get('ncm_sh')
+                    existing.ncm_normalizado = raw.get('ncm_normalizado')
                     existing.cest = raw.get('cest')
+                    existing.cest_normalizado = raw.get('cest_normalizado')
                     existing.descricao = raw.get('descricao')
                     existing.observacoes = raw.get('observacoes')
                     existing.vigencia_inicio = v_inicio
@@ -122,8 +129,10 @@ def seed_ncm_st():
                     existing.vigencia_fim = v_fim
                     updated_count += 1
                 else:
+                    target_id = raw_id if (raw_id and raw_id not in existing_db_ids) else str(uuid.uuid4())
+                    existing_db_ids.add(target_id)
                     new_item = NcmStItem(
-                        id=raw.get('id') or str(uuid.uuid4()),
+                        id=target_id,
                         cad_ncm_st_id=header.id,
                         item=raw.get('item'),
                         is_active=raw.get('is_active', True),
