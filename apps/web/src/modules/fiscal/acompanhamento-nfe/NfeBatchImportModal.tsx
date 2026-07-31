@@ -229,11 +229,11 @@ export const NfeBatchImportModal: React.FC<NfeBatchImportModalProps> = ({
             files.forEach(file => formData.append('files', file));
             formData.append('allow_event_without_invoice', String(allowEventWithoutInvoice));
 
-            const response = await api.post('/fiscal/acompanhamento-nfe/preview-lote', formData, {
+            const response = await api.post('/fiscal/acompanhamento-nfe/preview', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            const previewData: NfePreviewItem[] = response.data.items || [];
+            const previewData: NfePreviewItem[] = response.data.previews || response.data.items || [];
             setPreviews(previewData);
 
             if (previewData.length === 0) {
