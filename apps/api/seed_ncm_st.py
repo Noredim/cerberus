@@ -13,8 +13,11 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from src.core.config import settings
+from src.modules.users.models import User, UserRole, UserRoleEnum, UserCompany
+from src.modules.companies.models import Company
+from src.modules.own_services.models import OwnService
 from src.modules.tenants.models import Tenant
-from src.modules.catalog.models import State
+from src.modules.catalog.models import State, IbgeSyncJob
 from src.modules.ncm_st.models import NcmStHeader, NcmStItem
 
 logging.basicConfig(level=logging.INFO)
