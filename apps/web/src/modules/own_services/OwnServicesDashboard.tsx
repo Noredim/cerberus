@@ -156,7 +156,7 @@ const OwnServicesDashboard: React.FC = () => {
                         {r.tempo_consolidado_hhmmss || '—'}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="px-5 py-3 text-right relative">
                       <button
                         onClick={() => setOpenDropdown(openDropdown === r.id ? null : r.id)}
                         className="p-2 rounded-md hover:bg-surface text-text-muted hover:text-text-primary transition-all"
@@ -167,7 +167,7 @@ const OwnServicesDashboard: React.FC = () => {
                       {openDropdown === r.id && (
                         <>
                           <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                          <div className="fixed right-8 w-48 bg-surface rounded-md shadow-lg z-20 border border-border-subtle">
+                          <div className="absolute right-5 top-10 w-48 bg-surface rounded-md shadow-lg z-20 border border-border-subtle overflow-hidden">
                             <div className="py-1 flex flex-col">
                               <button
                                 onClick={() => openModal('view', r.id)}
