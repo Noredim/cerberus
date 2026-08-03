@@ -22,7 +22,7 @@
                     {% elif company_name %}
                         <div class="company-name-text">{{ company_name }}</div>
                     {% endif %}
-                    <div class="report-title">RELATÓRIO ANALÍTICO DE COMPRA</div>
+                    <div class="report-title">{% if report_type == 'SINTETICO' %}RELATÓRIO SINTÉTICO DE COMPRA{% else %}RELATÓRIO ANALÍTICO DE COMPRA{% endif %}</div>
                     <div style="font-size: 7.5pt; color: #475569;">
                         Análise de NF-e: <strong>{{ analysis.name }}</strong>
                     </div>
@@ -56,6 +56,90 @@
             </div>
         </div>
     </div>
+
+{% if report_type == 'SINTETICO' %}
+
+    <!-- VISÃO SINTÉTICA -->
+    <div class="section-title">
+        Relatório Sintético de Compra - Cenário: 
+        {% if selected_tax_type == 'DIFAL' %}
+            ATIVO IMOBILIZADO (DIFAL)
+        {% else %}
+            ICMS SUBSTITUIÇÃO TRIBUTÁRIA (ICMS ST)
+        {% endif %}
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width: 3%; text-align: center;">Item</th>
+                <th style="width: 28%;">Produto</th>
+                <th style="width: 8%; text-align: center;">NCM</th>
+                {% if selected_tax_type == 'DIFAL' %}
+                    <th style="width: 7%; text-align: center;">UF Origem</th>
+                {% else %}
+                    <th style="width: 7%; text-align: center;">MVA %</th>
+                    <th style="width: 5%; text-align: center;">BIT</th>
+                {% endif %}
+                <th style="width: 6%; text-align: right;">Qtd</th>
+                <th style="width: 9%; text-align: right;">{% if selected_tax_type == 'ICMS_ST' %}Vlr Unitário{% else %}Valor Unit{% endif %}</th>
+                <th style="width: 7%; text-align: right;">Alíq. Origem</th>
+                <th style="width: 9%; text-align: right;">{% if selected_tax_type == 'DIFAL' %}DIFAL Unit{% else %}ICMS ST Unit{% endif %}</th>
+                <th style="width: 10%; text-align: right;">{% if selected_tax_type == 'DIFAL' %}DIFAL Total{% else %}ICMS ST Total{% endif %}</th>
+                <th style="width: 10%; text-align: right;">Custo Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for calculated in calculated_items %}
+                {% set item = calculated.item %}
+                <tr class="avoid-break {% if loop.index0 % 2 == 1 %}even{% endif %}">
+                    <td class="text-center font-mono">{{ item.nItem }}</td>
+                    <td><span class="bold">{{ item.xProd }}</span></td>
+                    <td class="text-center font-mono">{{ item.NCM }}</td>
+                    {% if selected_tax_type == 'DIFAL' %}
+                        <td class="text-center font-mono bold">{{ uf_origem }}</td>
+                    {% else %}
+                        <td class="text-center font-mono">{% if calculated.mvaPercent > 0 %}{{ "%.2f"|format(calculated.mvaPercent) }}%{% else %}-{% endif %}</td>
+                        <td class="text-center font-mono bold">{% if calculated.bitFlag %}SIM{% else %}NÃO{% endif %}</td>
+                    {% endif %}
+                    <td class="text-right font-mono">{{ format_number(calculated.qty) }}</td>
+                    <td class="text-right font-mono">R$ {{ format_currency(calculated.unitValue) }}</td>
+                    <td class="text-right font-mono">{{ calculated.aliquotaOrcamento }}%</td>
+                    <td class="text-right font-mono bold" style="color: #1e3a8a;">R$ {{ format_currency(calculated.calculatedTax) }}</td>
+                    <td class="text-right font-mono bold" style="color: #1e3a8a;">R$ {{ format_currency(calculated.calculatedTax * calculated.qty) }}</td>
+                    <td class="text-right font-mono bold" style="color: #15803d;">R$ {{ format_currency(calculated.total_cost) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+                <td colspan="{% if selected_tax_type == 'DIFAL' %}4{% else %}5{% endif %}" style="text-align: right; text-transform: uppercase;">Totais:</td>
+                <td class="text-right font-mono">{{ format_number(calculated_items|sum(attribute='qty')) }}</td>
+                <td class="text-right font-mono">-</td>
+                <td class="text-right font-mono">-</td>
+                <td class="text-right font-mono">-</td>
+                <td class="text-right font-mono" style="color: #1e3a8a;">R$ {{ format_currency(total_tax_amount) }}</td>
+                <td class="text-right font-mono" style="color: #15803d;">R$ {{ format_currency(total_simulated_cost) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="totals-panel avoid-break" style="margin-top: 12px;">
+        <div class="totals-card" style="width: 33%; padding: 8px;">
+            <span class="totals-label">Valor Total da Nota</span>
+            <span class="totals-value" style="font-size: 11pt; color: #1e293b;">R$ {{ format_currency(doc.vNF) }}</span>
+        </div>
+        <div class="totals-card highlight" style="width: 33%; padding: 8px;">
+            <span class="totals-label">Total Imposto ({% if selected_tax_type == 'DIFAL' %}DIFAL{% else %}ICMS ST{% endif %})</span>
+            <span class="totals-value primary" style="font-size: 12pt;">R$ {{ format_currency(total_tax_amount) }}</span>
+        </div>
+        <div class="totals-card success" style="width: 34%; padding: 8px;">
+            <span class="totals-label">Custo Total Simulado</span>
+            <span class="totals-value success" style="font-size: 12pt;">R$ {{ format_currency(total_simulated_cost) }}</span>
+        </div>
+    </div>
+
+{% else %}
 
     <!-- TOTAIS DA NOTA -->
     <div class="section-title">Valores de Fechamento da Nota</div>
@@ -322,6 +406,8 @@
             <span class="totals-value success" style="font-size: 13pt;">R$ {{ format_currency(total_simulated_cost) }}</span>
         </div>
     </div>
+
+{% endif %}
 
 </body>
 </html>

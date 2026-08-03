@@ -117,6 +117,7 @@ def delete_analysis(
 def download_analysis_report(
     analysis_id: UUID,
     type: str = Query("DIFAL", description="Tipo de análise: DIFAL ou ICMS_ST"),
+    report_type: str = Query("ANALITICO", description="Tipo de relatório: ANALITICO ou SINTETICO"),
     company_id: Optional[UUID] = Query(None, description="ID da empresa para consulta MVA/Benefícios"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -127,6 +128,7 @@ def download_analysis_report(
         analysis_id=analysis_id,
         current_user=current_user,
         tax_type=type,
+        report_type=report_type,
         company_id=company_id
     )
 

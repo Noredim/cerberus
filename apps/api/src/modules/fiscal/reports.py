@@ -308,7 +308,8 @@ class NfeReportsService:
         analysis_id: UUID,
         current_user: User,
         tax_type: str,
-        company_id: Optional[UUID]
+        company_id: Optional[UUID] = None,
+        report_type: str = "ANALITICO"
     ) -> StreamingResponse:
         # 1. Fetch analysis
         analysis = db.query(NfeAnalysis).filter(
@@ -566,6 +567,7 @@ class NfeReportsService:
             tax_sums=tax_sums,
             calculated_items=calculated_items,
             selected_tax_type=tax_type,
+            report_type=report_type,
             total_tax_amount=total_tax_amount,
             total_simulated_cost=total_simulated_cost,
             format_currency=format_currency,

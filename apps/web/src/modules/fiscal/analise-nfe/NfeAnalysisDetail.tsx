@@ -137,6 +137,7 @@ const NfeAnalysisDetail: React.FC = () => {
     const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportAnalysisType, setReportAnalysisType] = useState<'DIFAL' | 'ICMS_ST'>('DIFAL');
+    const [reportMode, setReportMode] = useState<'ANALITICO' | 'SINTETICO'>('ANALITICO');
     const [generatingPdf, setGeneratingPdf] = useState(false);
 
     // Fetch analysis details
@@ -336,6 +337,7 @@ const NfeAnalysisDetail: React.FC = () => {
             const response = await api.get(`/fiscal/analise-nfe/${id}/pdf`, {
                 params: {
                     type: reportAnalysisType,
+                    report_type: reportMode,
                     company_id: companyId || undefined
                 },
                 responseType: 'blob'
@@ -1318,37 +1320,73 @@ const NfeAnalysisDetail: React.FC = () => {
                                     &times;
                                 </button>
                             </header>
-                            <div className="p-6 space-y-4">
-                                <p className="text-sm text-text-secondary">
-                                    Selecione o cenário tributário para a memória de cálculo de compra no relatório PDF (orientação paisagem):
-                                </p>
-                                <div className="space-y-3">
-                                    <label className="flex items-center gap-3 p-3 border border-border-subtle rounded cursor-pointer hover:bg-bg-deep/40 transition-colors">
-                                        <input 
-                                            type="radio" 
-                                            name="reportTaxType" 
-                                            checked={reportAnalysisType === 'DIFAL'} 
-                                            onChange={() => setReportAnalysisType('DIFAL')}
-                                            className="text-brand-primary focus:ring-brand-primary"
-                                        />
-                                        <div>
-                                            <span className="text-sm font-bold text-text-primary block">Ativo Imobilizado (DIFAL)</span>
-                                            <span className="text-xs text-text-secondary block">Simula o diferencial de alíquotas para uso/consumo ou ativo imobilizado.</span>
-                                        </div>
+                            <div className="p-6 space-y-5">
+                                <div>
+                                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-2">
+                                        Modalidade do Relatório
                                     </label>
-                                    <label className="flex items-center gap-3 p-3 border border-border-subtle rounded cursor-pointer hover:bg-bg-deep/40 transition-colors">
-                                        <input 
-                                            type="radio" 
-                                            name="reportTaxType" 
-                                            checked={reportAnalysisType === 'ICMS_ST'} 
-                                            onChange={() => setReportAnalysisType('ICMS_ST')}
-                                            className="text-brand-primary focus:ring-brand-primary"
-                                        />
-                                        <div>
-                                            <span className="text-sm font-bold text-text-primary block">ICMS Substituição Tributária (ICMS ST)</span>
-                                            <span className="text-xs text-text-secondary block">Simula o recolhimento por substituição tributária (revenda) com MVA e BIT.</span>
-                                        </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <label className={`flex items-start gap-2.5 p-3 border rounded cursor-pointer transition-colors ${reportMode === 'ANALITICO' ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' : 'border-border-subtle hover:bg-bg-deep/40'}`}>
+                                            <input 
+                                                type="radio" 
+                                                name="reportMode" 
+                                                checked={reportMode === 'ANALITICO'} 
+                                                onChange={() => setReportMode('ANALITICO')}
+                                                className="text-brand-primary focus:ring-brand-primary mt-0.5"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-bold text-text-primary block">Analítica</span>
+                                                <span className="text-[11px] text-text-muted block leading-tight">Memória de cálculo completa e tributos detalhados.</span>
+                                            </div>
+                                        </label>
+                                        <label className={`flex items-start gap-2.5 p-3 border rounded cursor-pointer transition-colors ${reportMode === 'SINTETICO' ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' : 'border-border-subtle hover:bg-bg-deep/40'}`}>
+                                            <input 
+                                                type="radio" 
+                                                name="reportMode" 
+                                                checked={reportMode === 'SINTETICO'} 
+                                                onChange={() => setReportMode('SINTETICO')}
+                                                className="text-brand-primary focus:ring-brand-primary mt-0.5"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-bold text-text-primary block">Sintética</span>
+                                                <span className="text-[11px] text-text-muted block leading-tight">Grade simplificada com totais dos impostos.</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-2">
+                                        Cenário Tributário
                                     </label>
+                                    <div className="space-y-3">
+                                        <label className={`flex items-center gap-3 p-3 border rounded cursor-pointer transition-colors ${reportAnalysisType === 'DIFAL' ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' : 'border-border-subtle hover:bg-bg-deep/40'}`}>
+                                            <input 
+                                                type="radio" 
+                                                name="reportTaxType" 
+                                                checked={reportAnalysisType === 'DIFAL'} 
+                                                onChange={() => setReportAnalysisType('DIFAL')}
+                                                className="text-brand-primary focus:ring-brand-primary"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-bold text-text-primary block">Ativo Imobilizado (DIFAL)</span>
+                                                <span className="text-xs text-text-secondary block">Simula o diferencial de alíquotas para uso/consumo ou ativo imobilizado.</span>
+                                            </div>
+                                        </label>
+                                        <label className={`flex items-center gap-3 p-3 border rounded cursor-pointer transition-colors ${reportAnalysisType === 'ICMS_ST' ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' : 'border-border-subtle hover:bg-bg-deep/40'}`}>
+                                            <input 
+                                                type="radio" 
+                                                name="reportTaxType" 
+                                                checked={reportAnalysisType === 'ICMS_ST'} 
+                                                onChange={() => setReportAnalysisType('ICMS_ST')}
+                                                className="text-brand-primary focus:ring-brand-primary"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-bold text-text-primary block">ICMS Substituição Tributária (ICMS ST)</span>
+                                                <span className="text-xs text-text-secondary block">Simula o recolhimento por substituição tributária (revenda) com MVA e BIT.</span>
+                                            </div>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                             <footer className="px-6 py-4 border-t border-border-subtle bg-bg-deep flex items-center justify-end gap-3">
