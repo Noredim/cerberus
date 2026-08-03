@@ -49,6 +49,12 @@ class OwnService(Base):
         cascade="all, delete-orphan",
         order_by="OwnServiceItem.id",
     )
+    history = relationship(
+        "OwnServiceHistory",
+        back_populates="service",
+        cascade="all, delete-orphan",
+        order_by="OwnServiceHistory.created_at.desc()",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -91,3 +97,31 @@ class OwnServiceItem(Base):
             name="uq_own_service_items_service_role",
         ),
     )
+
+
+class OwnServiceHistory(Base):
+    """Audit log for OwnService changes (creation, updates, deletion/deactivation)."""
+
+    __tablename__ = "own_service_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    own_service_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("own_services.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_name = Column(String(255), nullable=True)
+    user_email = Column(String(255), nullable=True)
+    
+    acao = Column(String(50), nullable=False)  # CRIACAO, EDICAO, EXCLUSAO
+    detalhes_alteracao = Column(Text, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    service = relationship("OwnService", back_populates="history")
+    user = relationship("User")
+

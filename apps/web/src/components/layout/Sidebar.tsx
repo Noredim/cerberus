@@ -111,7 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                         return {
                             ...item,
                             subItems: item.subItems?.filter(sub => 
-                                ['Produtos'].includes(sub.label)
+                                ['Produtos', 'Serviços Próprios'].includes(sub.label)
                             )
                         };
                     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -120,5 +121,18 @@ class OwnServiceListItem(BaseModel):
     tempo_consolidado_hhmmss: str = "00:00:00"
     qt_cargos: int = 0
     items: List[OwnServiceItemResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class OwnServiceHistoryResponse(BaseModel):
+    id: UUID
+    own_service_id: UUID
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    acao: str
+    detalhes_alteracao: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}

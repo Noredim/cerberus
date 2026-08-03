@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ClipboardList, Edit2, Eye, MoreVertical, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Edit2, Eye, History, MoreVertical, Plus, Trash2 } from 'lucide-react';
 import { ownServicesApi } from '../../services/ownServicesApi';
 import type { OwnServiceListItem } from '../../services/ownServicesApi';
 import OwnServicesModal from './OwnServicesModal';
+import { OwnServiceHistoryModal } from './OwnServiceHistoryModal';
 
 type ModalMode = 'create' | 'edit' | 'view';
 
@@ -17,6 +18,11 @@ const OwnServicesDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, mode: 'create', serviceId: null });
+  const [historyModal, setHistoryModal] = useState<{ open: boolean; serviceId: string | null; serviceName: string }>({
+    open: false,
+    serviceId: null,
+    serviceName: '',
+  });
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -38,6 +44,11 @@ const OwnServicesDashboard: React.FC = () => {
   const openModal = (mode: ModalMode, serviceId: string | null = null) => {
     setOpenDropdown(null);
     setModal({ open: true, mode, serviceId });
+  };
+
+  const openHistory = (serviceId: string, serviceName: string) => {
+    setOpenDropdown(null);
+    setHistoryModal({ open: true, serviceId, serviceName });
   };
 
   const closeModal = () => setModal((prev) => ({ ...prev, open: false }));
@@ -156,7 +167,7 @@ const OwnServicesDashboard: React.FC = () => {
                       {openDropdown === r.id && (
                         <>
                           <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                          <div className="fixed right-8 w-44 bg-surface rounded-md shadow-lg z-20 border border-border-subtle">
+                          <div className="fixed right-8 w-48 bg-surface rounded-md shadow-lg z-20 border border-border-subtle">
                             <div className="py-1 flex flex-col">
                               <button
                                 onClick={() => openModal('view', r.id)}
@@ -169,6 +180,12 @@ const OwnServicesDashboard: React.FC = () => {
                                 className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep w-full text-left transition-colors"
                               >
                                 <Edit2 className="w-4 h-4" /> Editar
+                              </button>
+                              <button
+                                onClick={() => openHistory(r.id, r.nome_servico)}
+                                className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep w-full text-left transition-colors"
+                              >
+                                <History className="w-4 h-4 text-brand-primary" /> Histórico
                               </button>
                               <button
                                 onClick={() => handleDeactivate(r.id, r.nome_servico)}
@@ -197,6 +214,14 @@ const OwnServicesDashboard: React.FC = () => {
           onClose={closeModal}
         />
       )}
+
+      {/* Modal de Histórico */}
+      <OwnServiceHistoryModal
+        isOpen={historyModal.open}
+        serviceId={historyModal.serviceId}
+        serviceName={historyModal.serviceName}
+        onClose={() => setHistoryModal({ open: false, serviceId: null, serviceName: '' })}
+      />
     </div>
   );
 };

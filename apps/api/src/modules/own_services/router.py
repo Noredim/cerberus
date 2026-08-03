@@ -7,14 +7,15 @@ from sqlalchemy import exc
 from sqlalchemy.orm import Session, joinedload
 
 from src.core.database import get_db
-from src.modules.auth.dependencies import get_active_company, get_current_user, check_not_engenharia_preco
-from src.modules.own_services.models import OwnService, OwnServiceItem
+from src.modules.auth.dependencies import get_active_company, get_current_user
+from src.modules.own_services.models import OwnService, OwnServiceItem, OwnServiceHistory
 from src.modules.own_services.schemas import (
     OwnServiceCreate,
     OwnServiceListItem,
     OwnServiceResponse,
     OwnServiceUpdate,
     OwnServiceItemResponse,
+    OwnServiceHistoryResponse,
     _fator_to_hhmmss,
 )
 from src.modules.users.models import User
@@ -71,6 +72,28 @@ def _build_items(service_id, items_data) -> list:
         )
         for item in items_data
     ]
+
+
+def _add_history(
+    db: Session,
+    tenant_id: str,
+    service_id: _uuid.UUID,
+    user: User,
+    acao: str,
+    detalhes: str
+):
+    user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email or user.id
+    log = OwnServiceHistory(
+        id=_uuid.uuid4(),
+        tenant_id=tenant_id,
+        own_service_id=service_id,
+        user_id=user.id,
+        user_name=user_name,
+        user_email=user.email,
+        acao=acao,
+        detalhes_alteracao=detalhes,
+    )
+    db.add(log)
 
 
 def _to_response(svc: OwnService) -> OwnServiceResponse:
@@ -155,7 +178,28 @@ def get_own_service(
     return _to_response(svc)
 
 
-@router.post("", response_model=OwnServiceResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
+@router.get("/{service_id}/historico", response_model=List[OwnServiceHistoryResponse])
+def get_own_service_history(
+    service_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company),
+):
+    company_id = _require_company(company_id)
+    svc = _load_service(service_id, company_id, current_user.tenant_id, db)
+    history_logs = (
+        db.query(OwnServiceHistory)
+        .filter(
+            OwnServiceHistory.own_service_id == svc.id,
+            OwnServiceHistory.tenant_id == current_user.tenant_id,
+        )
+        .order_by(OwnServiceHistory.created_at.desc())
+        .all()
+    )
+    return [OwnServiceHistoryResponse.model_validate(h) for h in history_logs]
+
+
+@router.post("", response_model=OwnServiceResponse, status_code=status.HTTP_201_CREATED)
 def create_own_service(
     payload: OwnServiceCreate,
     db: Session = Depends(get_db),
@@ -172,6 +216,7 @@ def create_own_service(
         tenant_id=current_user.tenant_id,
         company_id=company_id,
         nome_servico=payload.nome_servico,
+        unidade=payload.unidade,
         vigencia=payload.vigencia,
         descricao=payload.descricao,
         tempo_total_minutos=total_minutos,
@@ -185,6 +230,9 @@ def create_own_service(
     for item in _build_items(new_id, payload.items):
         db.add(item)
 
+    detalhes = f"Serviço Próprio '{payload.nome_servico}' criado com {len(payload.items)} cargo(s). Vigência: {payload.vigencia}, Unidade: '{payload.unidade or 'UN'}'."
+    _add_history(db, current_user.tenant_id, new_id, current_user, "CRIACAO", detalhes)
+
     try:
         db.commit()
     except exc.IntegrityError:
@@ -195,7 +243,7 @@ def create_own_service(
     return _to_response(saved)
 
 
-@router.put("/{service_id}", response_model=OwnServiceResponse, dependencies=[Depends(check_not_engenharia_preco)])
+@router.put("/{service_id}", response_model=OwnServiceResponse)
 def update_own_service(
     service_id: str,
     payload: OwnServiceUpdate,
@@ -208,6 +256,18 @@ def update_own_service(
 
     if not svc.ativo:
         raise HTTPException(status_code=400, detail="Não é possível editar um serviço inativo.")
+
+    changes = []
+    if payload.nome_servico is not None and payload.nome_servico != svc.nome_servico:
+        changes.append(f"Nome alterado de '{svc.nome_servico}' para '{payload.nome_servico}'.")
+    if payload.vigencia is not None and payload.vigencia != svc.vigencia:
+        changes.append(f"Vigência alterada de {svc.vigencia} para {payload.vigencia}.")
+    if payload.unidade is not None and payload.unidade != svc.unidade:
+        changes.append(f"Unidade alterada de '{svc.unidade or 'UN'}' para '{payload.unidade}'.")
+    if payload.descricao is not None and payload.descricao != svc.descricao:
+        changes.append("Descrição atualizada.")
+    if payload.items is not None:
+        changes.append(f"Composição de cargos atualizada para {len(payload.items)} cargo(s).")
 
     update_data = payload.model_dump(exclude_unset=True, exclude={"items"})
     for field, value in update_data.items():
@@ -225,6 +285,9 @@ def update_own_service(
         _, total_minutos = _calc_consolidated(payload.items)
         svc.tempo_total_minutos = total_minutos
 
+    detalhes = " | ".join(changes) if changes else "Serviço próprio atualizado."
+    _add_history(db, current_user.tenant_id, svc.id, current_user, "EDICAO", detalhes)
+
     try:
         db.commit()
     except exc.IntegrityError:
@@ -235,7 +298,7 @@ def update_own_service(
     return _to_response(refreshed)
 
 
-@router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(check_not_engenharia_preco)])
+@router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 def deactivate_own_service(
     service_id: str,
     db: Session = Depends(get_db),
@@ -244,7 +307,11 @@ def deactivate_own_service(
 ):
     company_id = _require_company(company_id)
     svc = _load_service(service_id, company_id, current_user.tenant_id, db)
+    
+    _add_history(db, current_user.tenant_id, svc.id, current_user, "EXCLUSAO", "Serviço próprio inativado/excluído.")
+    
     svc.ativo = False
     svc.updated_by = current_user.id
     svc.updated_at = datetime.utcnow()
     db.commit()
+
