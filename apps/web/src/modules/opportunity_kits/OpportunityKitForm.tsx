@@ -337,6 +337,7 @@ interface KitFormValues {
     own_service_id?: string;
     descricao_item: string;
     quantidade_no_kit: number;
+    unidade?: string;
     product?: any;
     own_service?: any;
   }>;
@@ -3093,9 +3094,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <div className="flex items-center gap-2">
                                 <span className="truncate">{item.descricao_item}</span>
                                 {item.tipo_item === 'SERVICO_PROPRIO' && (
-                                  <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase whitespace-nowrap">
-                                    Serviço Próprio
-                                  </span>
+                                  <div className="flex flex-col gap-0.5 items-start shrink-0">
+                                    <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase whitespace-nowrap">
+                                      Serviço Próprio
+                                    </span>
+                                    <span className="flex-none px-2 py-0.5 text-[10px] bg-bg-deep text-text-primary rounded font-semibold border border-border-subtle uppercase whitespace-nowrap">
+                                      UN: {item.own_service?.unidade || item.unidade || 'UN'}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                               {(item as any).product?.codigo && (

@@ -376,9 +376,14 @@ export function AddOperationalCostModal({
                               {tipoItem === 'PRODUTO' ? item.nome : item.nome_servico}
                             </span>
                             {tipoItem === 'SERVICO_PROPRIO' && (
-                              <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase">
-                                Serviço Próprio
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className="flex-none px-2 py-0.5 text-[10px] bg-brand-primary/10 text-brand-primary rounded font-semibold border border-brand-primary/20 uppercase">
+                                  Serviço Próprio
+                                </span>
+                                <span className="flex-none px-2 py-0.5 text-[10px] bg-bg-deep text-text-primary rounded font-semibold border border-border-subtle uppercase">
+                                  UN: {item.unidade || 'UN'}
+                                </span>
+                              </div>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
