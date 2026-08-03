@@ -16,6 +16,7 @@ import Modal from '../../components/modals/Modal';
 import { BudgetImportModal } from '../purchase_budgets/components/BudgetImportModal';
 import { BudgetReconciliationModal } from '../purchase_budgets/components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
+import { SupplierCombobox } from '../../components/ui/SupplierCombobox';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 import { RentalROIAnalysis } from './components/RentalROIAnalysis';
 
@@ -5587,15 +5588,13 @@ export function SalesBudgetForm() {
                         <Plus className="w-3 h-3" /> Novo
                       </button>
                     </div>
-                    <select 
-                      className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" 
-                      value={purchaseSupplierId} 
-                      onChange={e => setPurchaseSupplierId(e.target.value)}
+                    <SupplierCombobox
+                      suppliers={suppliers}
+                      value={purchaseSupplierId}
+                      onChange={(val) => setPurchaseSupplierId(val)}
                       disabled={isReadonly}
-                    >
-                      <option value="">Selecione um fornecedor...</option>
-                      {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.razao_social || s.nome_fantasia}</option>)}
-                    </select>
+                      onOpenQuickModal={() => setIsQuickSupplierModalOpen(true)}
+                    />
                   </div>
                   
                   <div className="lg:col-span-2">

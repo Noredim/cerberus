@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
-import { Save, ArrowLeft, Upload, Loader2, Download, Plus, FileText, UserSquare2, Truck as TruckIcon, BadgeDollarSign, Building2 } from 'lucide-react';
+import { Save, ArrowLeft, Upload, Loader2, Download, Plus, FileText, UserSquare2, Truck as TruckIcon, BadgeDollarSign } from 'lucide-react';
 import { BudgetItemsGrid } from './components/BudgetItemsGrid';
 import type { BudgetItem } from './components/BudgetItemsGrid';
 import { BudgetImportModal } from './components/BudgetImportModal';
 import { BudgetReconciliationModal } from './components/BudgetReconciliationModal';
 import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierCreateModal';
+import { SupplierCombobox } from '../../components/ui/SupplierCombobox';
 import { api } from '../../services/api';
 
 export function BudgetForm() {
@@ -335,15 +336,12 @@ export function BudgetForm() {
                   <Plus className="w-3 h-3" /> Novo
                 </button>
               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Building2 className="h-4 w-4 text-text-muted" />
-                </div>
-                <select className="input-primary w-full pl-10" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
-                  <option value="">Selecione um fornecedor...</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.razao_social || s.nome_fantasia}</option>)}
-                </select>
-              </div>
+              <SupplierCombobox
+                suppliers={suppliers}
+                value={supplierId}
+                onChange={(val) => setSupplierId(val)}
+                onOpenQuickModal={() => setIsQuickSupplierModalOpen(true)}
+              />
             </div>
             
             <div className="lg:col-span-2">
