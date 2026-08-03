@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Clock, Loader2, Minus, Plus, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, Clock, DollarSign, Loader2, Minus, Plus, X } from 'lucide-react';
 import type { OwnServiceResponse, OwnServiceItemCreate } from '../../services/ownServicesApi';
 import { ownServicesApi, fatorToHHMMSS, calcFatorConsolidado } from '../../services/ownServicesApi';
 import { api } from '../../services/api';
@@ -9,6 +9,16 @@ import { api } from '../../services/api';
 interface Role {
   id: string;
   name: string;
+}
+
+interface ManHourItem {
+  role_id: string;
+  vigencia: number;
+  hora_normal: number;
+  hora_extra: number;
+  hora_extra_adicional_noturno: number;
+  hora_extra_domingos_feriados: number;
+  hora_extra_domingos_feriados_noturno: number;
 }
 
 type ModalMode = 'create' | 'edit' | 'view';
@@ -42,6 +52,14 @@ const TITLE: Record<ModalMode, string> = {
   view:   'Visualizar Serviço Próprio',
 };
 
+const formatCurrency = (val?: number) => {
+  if (val === undefined || val === null) return 'R$ 0,00';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(val);
+};
+
 function newRow(): ItemRow {
   return { _key: crypto.randomUUID(), role_id: '', fator: '' };
 }
@@ -68,12 +86,14 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
 
   // Remote data
   const [roles, setRoles] = useState<Role[]>([]);
+  const [manHours, setManHours] = useState<ManHourItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
 
-  // ── Load roles ──────────────────────────────────────────────────────────────
+  // ── Load roles & man-hours ──────────────────────────────────────────────────
   useEffect(() => {
     api.get('/roles').then((r: any) => setRoles(r.data)).catch(() => setRoles([]));
+    api.get('/man-hours').then((r: any) => setManHours(r.data)).catch(() => setManHours([]));
   }, []);
 
   // ── Load existing record ────────────────────────────────────────────────────
@@ -129,6 +149,38 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
     .filter((f) => f > 0);
 
   const consolidado = calcFatorConsolidado(validFatores);
+
+  const calculatedRates = useMemo(() => {
+    let hn = 0;
+    let he = 0;
+    let headn = 0;
+    let hedf = 0;
+    let hedfn = 0;
+
+    const yearNum = parseInt(vigencia, 10) || new Date().getFullYear();
+
+    rows.forEach((row) => {
+      if (!row.role_id) return;
+      const fator = parseFator(row.fator);
+      if (fator <= 0) return;
+
+      const matches = manHours.filter((m) => m.role_id === row.role_id);
+      if (matches.length === 0) return;
+
+      const exactMatch = matches.find((m) => m.vigencia === yearNum);
+      const mh = exactMatch || [...matches].sort((a, b) => b.vigencia - a.vigencia)[0];
+
+      if (mh) {
+        hn += fator * Number(mh.hora_normal || 0);
+        he += fator * Number(mh.hora_extra || 0);
+        headn += fator * Number(mh.hora_extra_adicional_noturno || 0);
+        hedf += fator * Number(mh.hora_extra_domingos_feriados || 0);
+        hedfn += fator * Number(mh.hora_extra_domingos_feriados_noturno || 0);
+      }
+    });
+
+    return { hn, he, headn, hedf, hedfn };
+  }, [rows, manHours, vigencia]);
 
   // ── Validation ──────────────────────────────────────────────────────────────
   const validate = (): boolean => {
@@ -460,6 +512,52 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                       <Clock className="w-4 h-4 opacity-70" />
                       {validFatores.length > 0 ? consolidado.hhmmss : '—'}
                     </span>
+                  </div>
+                </div>
+
+                {/* Valores por Faixa de Hora/Homem */}
+                <div className="mt-4 p-4 rounded-lg bg-bg-deep/60 border border-border-subtle space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-emerald-500" />
+                      Valores Calculados por Faixa de Hora/Homem
+                    </h4>
+                    <span className="text-[11px] text-text-muted">
+                      Soma acumulada (fator × valor da hora do cargo)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    <div className="p-2.5 rounded-md bg-surface border border-border-subtle flex flex-col">
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">H. Normal</span>
+                      <span className="font-mono text-sm font-bold text-text-primary mt-1">
+                        {formatCurrency(calculatedRates.hn)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-md bg-surface border border-border-subtle flex flex-col">
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">H. Extra</span>
+                      <span className="font-mono text-sm font-bold text-text-primary mt-1">
+                        {formatCurrency(calculatedRates.he)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-md bg-surface border border-border-subtle flex flex-col">
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">H.E. Ad. Noturno</span>
+                      <span className="font-mono text-sm font-bold text-text-primary mt-1">
+                        {formatCurrency(calculatedRates.headn)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-md bg-surface border border-border-subtle flex flex-col">
+                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">H.E. Dom./Fer.</span>
+                      <span className="font-mono text-sm font-bold text-text-primary mt-1">
+                        {formatCurrency(calculatedRates.hedf)}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-md bg-surface border border-border-subtle flex flex-col col-span-2 md:col-span-1">
+                      <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">H.E. Dom./Fer. Not.</span>
+                      <span className="font-mono text-sm font-bold text-text-primary mt-1">
+                        {formatCurrency(calculatedRates.hedfn)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

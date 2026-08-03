@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_active_company, get_current_user
+from src.modules.man_hours.models import ManHour
 from src.modules.own_services.models import OwnService, OwnServiceItem, OwnServiceHistory
 from src.modules.own_services.schemas import (
     OwnServiceCreate,
@@ -16,6 +17,7 @@ from src.modules.own_services.schemas import (
     OwnServiceUpdate,
     OwnServiceItemResponse,
     OwnServiceHistoryResponse,
+    OwnServiceValoresFaixa,
     _fator_to_hhmmss,
 )
 from src.modules.users.models import User
@@ -74,6 +76,69 @@ def _build_items(service_id, items_data) -> list:
     ]
 
 
+def _calc_valores_faixa(services: list[OwnService], tenant_id: str, company_id: str, db: Session) -> dict[str, OwnServiceValoresFaixa]:
+    if not services:
+        return {}
+
+    role_ids = set()
+    for svc in services:
+        for item in svc.items:
+            if item.role_id:
+                role_ids.add(str(item.role_id))
+
+    if not role_ids:
+        return {str(svc.id): OwnServiceValoresFaixa() for svc in services}
+
+    man_hours = (
+        db.query(ManHour)
+        .filter(
+            ManHour.tenant_id == tenant_id,
+            ManHour.company_id == company_id,
+            ManHour.role_id.in_(role_ids),
+            ManHour.ativo.is_(True),
+        )
+        .order_by(ManHour.vigencia.desc())
+        .all()
+    )
+
+    mh_by_role_year = {}
+    mh_by_role_latest = {}
+    for mh in man_hours:
+        r_id = str(mh.role_id)
+        if r_id not in mh_by_role_latest:
+            mh_by_role_latest[r_id] = mh
+        mh_by_role_year[(r_id, mh.vigencia)] = mh
+
+    result = {}
+    for svc in services:
+        val_hn = 0.0
+        val_he = 0.0
+        val_headn = 0.0
+        val_hedf = 0.0
+        val_hedfn = 0.0
+
+        for item in svc.items:
+            r_id = str(item.role_id)
+            fator = float(item.fator or 0)
+            mh = mh_by_role_year.get((r_id, svc.vigencia)) or mh_by_role_latest.get(r_id)
+            if mh:
+                val_hn += fator * float(mh.hora_normal or 0)
+                val_he += fator * float(mh.hora_extra or 0)
+                val_headn += fator * float(mh.hora_extra_adicional_noturno or 0)
+                val_hedf += fator * float(mh.hora_extra_domingos_feriados or 0)
+                val_hedfn += fator * float(mh.hora_extra_domingos_feriados_noturno or 0)
+
+        result[str(svc.id)] = OwnServiceValoresFaixa(
+            hora_normal=round(val_hn, 2),
+            hora_extra=round(val_he, 2),
+            hora_extra_adicional_noturno=round(val_headn, 2),
+            hora_extra_domingos_feriados=round(val_hedf, 2),
+            hora_extra_domingos_feriados_noturno=round(val_hedfn, 2),
+        )
+
+    return result
+
+
 def _add_history(
     db: Session,
     tenant_id: str,
@@ -96,11 +161,13 @@ def _add_history(
     db.add(log)
 
 
-def _to_response(svc: OwnService) -> OwnServiceResponse:
+def _to_response(svc: OwnService, valores_faixa: Optional[OwnServiceValoresFaixa] = None) -> OwnServiceResponse:
     resp = OwnServiceResponse.model_validate(svc)
     fator_consolidado, _ = _calc_consolidated(svc.items)
     resp.fator_consolidado = fator_consolidado
     resp.tempo_consolidado_hhmmss = _fator_to_hhmmss(fator_consolidado)
+    if valores_faixa:
+        resp.valores_faixa = valores_faixa
 
     for r_schema, r_orm in zip(resp.items, svc.items):
         r_schema.role_name = r_orm.role.name if r_orm.role else None
@@ -110,7 +177,7 @@ def _to_response(svc: OwnService) -> OwnServiceResponse:
     return resp
 
 
-def _to_list_item(svc: OwnService) -> OwnServiceListItem:
+def _to_list_item(svc: OwnService, valores_faixa: Optional[OwnServiceValoresFaixa] = None) -> OwnServiceListItem:
     fator_consolidado, _ = _calc_consolidated(svc.items)
     items_out = []
     for item in svc.items:
@@ -133,6 +200,7 @@ def _to_list_item(svc: OwnService) -> OwnServiceListItem:
         tempo_consolidado_hhmmss=_fator_to_hhmmss(fator_consolidado),
         qt_cargos=len(svc.items),
         items=items_out,
+        valores_faixa=valores_faixa or OwnServiceValoresFaixa(),
     )
 
 
@@ -154,7 +222,7 @@ def list_own_services(
     company_id = _require_company(company_id)
     services = (
         db.query(OwnService)
-        .options(joinedload(OwnService.items))
+        .options(joinedload(OwnService.items).joinedload(OwnServiceItem.role))
         .filter(
             OwnService.tenant_id == current_user.tenant_id,
             OwnService.company_id == company_id,
@@ -163,7 +231,8 @@ def list_own_services(
         .order_by(OwnService.vigencia.desc(), OwnService.nome_servico)
         .all()
     )
-    return [_to_list_item(s) for s in services]
+    valores_map = _calc_valores_faixa(services, current_user.tenant_id, company_id, db)
+    return [_to_list_item(s, valores_map.get(str(s.id))) for s in services]
 
 
 @router.get("/{service_id}", response_model=OwnServiceResponse)
@@ -175,7 +244,8 @@ def get_own_service(
 ):
     company_id = _require_company(company_id)
     svc = _load_service(service_id, company_id, current_user.tenant_id, db)
-    return _to_response(svc)
+    valores_map = _calc_valores_faixa([svc], current_user.tenant_id, company_id, db)
+    return _to_response(svc, valores_map.get(str(svc.id)))
 
 
 @router.get("/{service_id}/historico", response_model=List[OwnServiceHistoryResponse])

@@ -27,6 +27,14 @@ export interface OwnServiceCreate {
 
 export type OwnServiceUpdate = Partial<OwnServiceCreate>;
 
+export interface OwnServiceValoresFaixa {
+  hora_normal: number;
+  hora_extra: number;
+  hora_extra_adicional_noturno: number;
+  hora_extra_domingos_feriados: number;
+  hora_extra_domingos_feriados_noturno: number;
+}
+
 export interface OwnServiceResponse {
   id: string;
   tenant_id: string;
@@ -40,6 +48,7 @@ export interface OwnServiceResponse {
   tempo_consolidado_hhmmss: string;
   ativo: boolean;
   items: OwnServiceItem[];
+  valores_faixa?: OwnServiceValoresFaixa;
 }
 
 export interface OwnServiceListItem {
@@ -51,6 +60,7 @@ export interface OwnServiceListItem {
   fator_consolidado: number;
   tempo_consolidado_hhmmss: string;
   qt_cargos: number;
+  valores_faixa?: OwnServiceValoresFaixa;
 }
 
 const BASE = '/own-services';

@@ -93,6 +93,16 @@ class OwnServiceUpdate(BaseModel):
         return items
 
 
+class OwnServiceValoresFaixa(BaseModel):
+    hora_normal: float = 0.0
+    hora_extra: float = 0.0
+    hora_extra_adicional_noturno: float = 0.0
+    hora_extra_domingos_feriados: float = 0.0
+    hora_extra_domingos_feriados_noturno: float = 0.0
+
+    model_config = {"from_attributes": True}
+
+
 class OwnServiceResponse(BaseModel):
     id: UUID
     tenant_id: str
@@ -106,6 +116,7 @@ class OwnServiceResponse(BaseModel):
     tempo_consolidado_hhmmss: str = "00:00:00"
     ativo: bool
     items: List[OwnServiceItemResponse] = []
+    valores_faixa: OwnServiceValoresFaixa = Field(default_factory=OwnServiceValoresFaixa)
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +132,7 @@ class OwnServiceListItem(BaseModel):
     tempo_consolidado_hhmmss: str = "00:00:00"
     qt_cargos: int = 0
     items: List[OwnServiceItemResponse] = []
+    valores_faixa: OwnServiceValoresFaixa = Field(default_factory=OwnServiceValoresFaixa)
 
     model_config = {"from_attributes": True}
 
