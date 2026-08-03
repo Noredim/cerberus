@@ -8,7 +8,9 @@ import {
     FileSpreadsheet,
     Calendar,
     Settings,
-    MoreHorizontal
+    Plus,
+    Edit2,
+    Trash2
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -18,6 +20,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import NcmStImportModal from './components/NcmStImportModal';
+import NcmStItemModal from './components/NcmStItemModal';
 
 const NcmStDetails: React.FC = () => {
     const navigate = useNavigate();
@@ -32,6 +35,8 @@ const NcmStDetails: React.FC = () => {
     const [page, setPage] = useState(0);
     const [pageSize] = useState(25);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+    const [selectedItemToEdit, setSelectedItemToEdit] = useState<NcmStItem | null>(null);
     const [importSummary, setImportSummary] = useState<any>(null);
 
     // Debounce search term
@@ -90,6 +95,34 @@ const NcmStDetails: React.FC = () => {
         fetchItems();
         // Clear summary after 10 seconds
         setTimeout(() => setImportSummary(null), 10000);
+    };
+
+    const handleCreateItem = () => {
+        setSelectedItemToEdit(null);
+        setIsItemModalOpen(true);
+    };
+
+    const handleEditItem = (item: NcmStItem) => {
+        setSelectedItemToEdit(item);
+        setIsItemModalOpen(true);
+    };
+
+    const handleDeleteItem = async (item: NcmStItem) => {
+        if (!id) return;
+        if (!window.confirm(`Tem certeza que deseja excluir o item NCM ${item.ncm_normalizado || item.ncm_sh}?`)) return;
+        try {
+            await api.delete(`/cadastro/ncm-st/${id}/itens/${item.id}`);
+            fetchItems();
+            fetchDetails();
+        } catch (error) {
+            console.error('Erro ao excluir item:', error);
+            alert('Erro ao excluir o item.');
+        }
+    };
+
+    const handleItemSuccess = () => {
+        fetchItems();
+        fetchDetails();
     };
 
     const handleDownloadTemplate = async () => {
@@ -159,7 +192,21 @@ const NcmStDetails: React.FC = () => {
                             </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                            onClick={handleCreateItem}
+                            className="bg-brand-primary hover:shadow-lg hover:shadow-brand-primary/20 flex items-center gap-2 h-12 px-6"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Novo Item Manual
+                        </Button>
+                        <Button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="bg-surface border border-border-subtle text-text-primary hover:bg-bg-deep flex items-center gap-2 h-12 px-6"
+                        >
+                            <Upload className="w-5 h-5 text-brand-primary" />
+                            Importar CSV
+                        </Button>
                         <Button
                             variant="ghost"
                             onClick={handleDownloadTemplate}
@@ -167,13 +214,6 @@ const NcmStDetails: React.FC = () => {
                         >
                             <Download className="w-5 h-5" />
                             Baixar Modelo
-                        </Button>
-                        <Button
-                            onClick={() => setIsImportModalOpen(true)}
-                            className="bg-brand-primary hover:shadow-lg hover:shadow-brand-primary/20 flex items-center gap-2 h-12 px-6"
-                        >
-                            <Upload className="w-5 h-5" />
-                            Importar CSV
                         </Button>
                     </div>
                 </div>
@@ -240,31 +280,54 @@ const NcmStDetails: React.FC = () => {
                                         <td colSpan={7} className="px-6 py-20 text-center text-text-muted">
                                             <div className="max-w-xs mx-auto space-y-4">
                                                 <FileSpreadsheet className="w-12 h-12 mx-auto opacity-20" />
-                                                <p>{debouncedSearch ? 'Nenhum item encontrado para esta busca.' : 'Nenhum item importado ainda para este cadastro.'}</p>
+                                                <p>{debouncedSearch ? 'Nenhum item encontrado para esta busca.' : 'Nenhum item cadastrado ainda para esta tabela.'}</p>
                                                 {!debouncedSearch && (
-                                                    <Button variant="ghost" className="text-brand-primary" onClick={() => setIsImportModalOpen(true)}>
-                                                        Importar Itens Agora
-                                                    </Button>
+                                                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                                                        <Button onClick={handleCreateItem} className="bg-brand-primary flex items-center gap-2">
+                                                            <Plus className="w-4 h-4" />
+                                                            Cadastrar Item Manualmente
+                                                        </Button>
+                                                        <Button variant="ghost" className="text-brand-primary" onClick={() => setIsImportModalOpen(true)}>
+                                                            Importar CSV
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>
                                     </tr>
                                 ) : items.map((item) => (
                                     <tr key={item.id} className="hover:bg-bg-deep/50 transition-colors">
-                                        <td className="px-4 py-3 font-mono text-sm text-text-primary">{item.ncm_normalizado}</td>
-                                        <td className="px-4 py-3 font-mono text-xs text-text-muted">{item.cest_normalizado}</td>
+                                        <td className="px-4 py-3 font-mono text-sm text-text-primary">{item.ncm_normalizado || item.ncm_sh}</td>
+                                        <td className="px-4 py-3 font-mono text-xs text-text-muted">{item.cest_normalizado || item.cest || '-'}</td>
                                         <td className="px-4 py-3 text-sm truncate max-w-xs" title={item.descricao}>{item.descricao}</td>
-                                        <td className="px-4 py-3 text-xs text-text-muted">{item.segmento_anexo}</td>
+                                        <td className="px-4 py-3 text-xs text-text-muted">{item.segmento_anexo || '-'}</td>
                                         <td className="px-4 py-3 font-bold text-brand-primary">
-                                            {item.mva_percent ? `${Number(item.mva_percent).toFixed(2)}%` : '-'}
+                                            {item.mva_percent != null ? `${Number(item.mva_percent).toFixed(2)}%` : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-xs text-text-muted">
                                             {item.vigencia_inicio ? new Date(item.vigencia_inicio).toLocaleDateString('pt-BR') : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-right">
-                                            <button className="p-1.5 rounded-full hover:bg-bg-deep text-text-muted transition-colors">
-                                                <MoreHorizontal className="w-4 h-4" />
-                                            </button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => handleEditItem(item)}
+                                                    title="Editar MVA%, CEST e NCM"
+                                                    className="text-brand-primary hover:bg-brand-primary/10"
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => handleDeleteItem(item)}
+                                                    title="Excluir Item"
+                                                    className="text-brand-danger hover:bg-brand-danger/10"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -305,6 +368,14 @@ const NcmStDetails: React.FC = () => {
                 onClose={() => setIsImportModalOpen(false)}
                 headerId={header.id}
                 onSuccess={handleImportSuccess}
+            />
+
+            <NcmStItemModal
+                isOpen={isItemModalOpen}
+                onClose={() => setIsItemModalOpen(false)}
+                headerId={header.id}
+                itemToEdit={selectedItemToEdit}
+                onSuccess={handleItemSuccess}
             />
         </div>
     );

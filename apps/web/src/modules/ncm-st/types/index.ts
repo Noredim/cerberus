@@ -44,6 +44,22 @@ export type NcmStItem = {
     updated_at: string;
 }
 
+export type NcmStItemCreate = {
+    item?: string;
+    is_active?: boolean;
+    ncm_sh?: string;
+    cest?: string;
+    descricao?: string;
+    observacoes?: string;
+    vigencia_inicio?: string;
+    fundamento?: string;
+    segmento_anexo?: string;
+    mva_percent?: number | null;
+    vigencia_fim?: string;
+}
+
+export type NcmStItemUpdate = Partial<NcmStItemCreate>;
+
 export type ImportSummary = {
     total_processed: number;
     success_count: number;

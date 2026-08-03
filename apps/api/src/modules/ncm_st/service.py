@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 import datetime
 from decimal import Decimal
 from typing import List, Optional, Tuple
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, delete, func
 from src.core.search import unaccent_ilike
 from .models import NcmStHeader, NcmStItem
-from .schemas import NcmStHeaderCreate, NcmStHeaderUpdate, NcmStItemCreate
+from .schemas import NcmStHeaderCreate, NcmStHeaderUpdate, NcmStItemCreate, NcmStItemUpdate
 from src.modules.catalog.models import State
 
 class NcmStService:
@@ -99,6 +100,55 @@ class NcmStService:
             )
             
         return query.scalar()
+
+    @staticmethod
+    def _normalize_code(val: Optional[str]) -> Optional[str]:
+        if not val:
+            return None
+        return re.sub(r'\D', '', val)
+
+    @staticmethod
+    def create_item(db: Session, header_id: str, item_in: NcmStItemCreate):
+        data = item_in.model_dump()
+        data["cad_ncm_st_id"] = header_id
+        if data.get("ncm_sh"):
+            data["ncm_normalizado"] = NcmStService._normalize_code(data["ncm_sh"])
+        if data.get("cest"):
+            data["cest_normalizado"] = NcmStService._normalize_code(data["cest"])
+        
+        db_item = NcmStItem(**data)
+        db.add(db_item)
+        db.commit()
+        db.refresh(db_item)
+        return db_item
+
+    @staticmethod
+    def update_item(db: Session, header_id: str, item_id: str, item_in: NcmStItemUpdate):
+        db_item = db.query(NcmStItem).filter(NcmStItem.id == item_id, NcmStItem.cad_ncm_st_id == header_id).first()
+        if not db_item:
+            return None
+        
+        update_data = item_in.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(db_item, field, value)
+        
+        if "ncm_sh" in update_data:
+            db_item.ncm_normalizado = NcmStService._normalize_code(db_item.ncm_sh)
+        if "cest" in update_data:
+            db_item.cest_normalizado = NcmStService._normalize_code(db_item.cest)
+            
+        db.commit()
+        db.refresh(db_item)
+        return db_item
+
+    @staticmethod
+    def delete_item(db: Session, header_id: str, item_id: str):
+        db_item = db.query(NcmStItem).filter(NcmStItem.id == item_id, NcmStItem.cad_ncm_st_id == header_id).first()
+        if db_item:
+            db.delete(db_item)
+            db.commit()
+            return True
+        return False
 
     @staticmethod
     def import_csv(db: Session, header_id: str, csv_content: str, strategy: str = "REPLACE") -> Tuple[int, int, int]:

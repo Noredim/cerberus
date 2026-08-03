@@ -6,7 +6,7 @@ from src.modules.auth.dependencies import get_current_user, check_not_engenharia
 from src.modules.users.models import User
 from .schemas import (
     NcmStHeaderResponse, NcmStHeaderCreate, NcmStHeaderUpdate,
-    NcmStItemResponse, NcmStImportRequest, ImportSummary
+    NcmStItemResponse, NcmStItemCreate, NcmStItemUpdate, NcmStImportRequest, ImportSummary
 )
 from .service import NcmStService
 
@@ -104,6 +104,49 @@ def list_items(
         "skip": skip,
         "limit": limit
     }
+
+@router.post("/{header_id}/itens", response_model=NcmStItemResponse)
+def create_item(
+    header_id: str,
+    payload: NcmStItemCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    header = NcmStService.get_header(db, header_id, current_user.tenant_id)
+    if not header:
+        raise HTTPException(status_code=404, detail="Cadastro NCM ST não encontrado")
+    return NcmStService.create_item(db, header_id, payload)
+
+@router.put("/{header_id}/itens/{item_id}", response_model=NcmStItemResponse)
+def update_item(
+    header_id: str,
+    item_id: str,
+    payload: NcmStItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    header = NcmStService.get_header(db, header_id, current_user.tenant_id)
+    if not header:
+        raise HTTPException(status_code=404, detail="Cadastro NCM ST não encontrado")
+    item = NcmStService.update_item(db, header_id, item_id, payload)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item NCM ST não encontrado")
+    return item
+
+@router.delete("/{header_id}/itens/{item_id}")
+def delete_item(
+    header_id: str,
+    item_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    header = NcmStService.get_header(db, header_id, current_user.tenant_id)
+    if not header:
+        raise HTTPException(status_code=404, detail="Cadastro NCM ST não encontrado")
+    success = NcmStService.delete_item(db, header_id, item_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Item NCM ST não encontrado")
+    return {"message": "Item excluído com sucesso"}
 
 def sanitize_csv_quotes(csv_text: str) -> str:
     chars = list(csv_text)

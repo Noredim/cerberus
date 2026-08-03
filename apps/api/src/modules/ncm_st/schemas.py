@@ -21,6 +21,22 @@ class NcmStItemBase(BaseModel):
 class NcmStItemCreate(NcmStItemBase):
     pass
 
+class NcmStItemUpdate(BaseModel):
+    item: Optional[str] = None
+    is_active: Optional[bool] = None
+    ncm_sh: Optional[str] = None
+    ncm_normalizado: Optional[str] = None
+    cest: Optional[str] = None
+    descricao: Optional[str] = None
+    observacoes: Optional[str] = None
+    vigencia_inicio: Optional[datetime] = None
+    fundamento: Optional[str] = None
+    segmento_anexo: Optional[str] = None
+    cest_normalizado: Optional[str] = None
+    mva_percent: Optional[Decimal] = None
+    vigencia_fim: Optional[datetime] = None
+
+
 class NcmStItemResponse(NcmStItemBase):
     id: str
     cad_ncm_st_id: str
