@@ -12,7 +12,6 @@ from src.modules.roles.schemas import RoleCreate, RoleUpdate, RoleResponse
 router = APIRouter(
     prefix="/roles", 
     tags=["Roles"],
-    dependencies=[Depends(check_not_engenharia_preco)]
 )
 
 @router.get("", response_model=List[RoleResponse])
@@ -20,7 +19,7 @@ def get_roles(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     roles = db.query(Role).filter(Role.tenant_id == current_user.tenant_id).all()
     return roles
 
-@router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(check_not_engenharia_preco)])
 def create_role(role_in: RoleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Optional: Verify company_id exists and belongs to tenant
     new_role = Role(
@@ -35,7 +34,7 @@ def create_role(role_in: RoleCreate, db: Session = Depends(get_db), current_user
     db.refresh(new_role)
     return new_role
 
-@router.put("/{role_id}", response_model=RoleResponse)
+@router.put("/{role_id}", response_model=RoleResponse, dependencies=[Depends(check_not_engenharia_preco)])
 def update_role(role_id: str, role_in: RoleUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     role = db.query(Role).filter(Role.id == role_id, Role.tenant_id == current_user.tenant_id).first()
     if not role:
@@ -49,7 +48,7 @@ def update_role(role_id: str, role_in: RoleUpdate, db: Session = Depends(get_db)
     db.refresh(role)
     return role
 
-@router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(check_not_engenharia_preco)])
 def delete_role(role_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     role = db.query(Role).filter(Role.id == role_id, Role.tenant_id == current_user.tenant_id).first()
     if not role:
