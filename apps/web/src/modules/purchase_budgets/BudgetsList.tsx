@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
-import { Plus, Edit2, Loader2, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, FileText, Search, AlertTriangle, X } from 'lucide-react';
 import { api } from '../../services/api';
 
 
@@ -27,31 +27,69 @@ export function BudgetsList() {
   const pageSize = 25;
   const [budgets, setBudgets] = useState<PurchaseBudget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [blockedModal, setBlockedModal] = useState<{ isOpen: boolean; message: string } | null>(null);
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/purchase-budgets', {
+        params: {
+          skip: (page - 1) * pageSize,
+          limit: pageSize,
+          q: debouncedSearch || undefined
+        }
+      });
+      setBudgets(response.data as PurchaseBudget[]);
+      const count = parseInt(response.headers['x-total-count'] || '0', 10);
+      setTotalCount(count);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, pageSize, debouncedSearch]);
 
   useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      try {
-        const response = await api.get('/purchase-budgets', {
-          params: { skip: (page - 1) * pageSize, limit: pageSize }
-        });
-        setBudgets(response.data as PurchaseBudget[]);
-        const count = parseInt(response.headers['x-total-count'] || '0', 10);
-        setTotalCount(count);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
     load();
-  }, [page, pageSize]);
+  }, [load]);
+
+  const handleDeleteBudget = async (row: PurchaseBudget) => {
+    if (!window.confirm(`Deseja realmente excluir a cotação ${row.numero_orcamento || row.id}?`)) {
+      return;
+    }
+    try {
+      setIsDeleting(row.id);
+      await api.delete(`/purchase-budgets/${row.id}`);
+      load();
+    } catch (err: any) {
+      console.error('Erro ao excluir orçamento:', err);
+      const errorMsg = err.response?.data?.detail || 'Erro ao excluir orçamento de compras.';
+      setBlockedModal({
+        isOpen: true,
+        message: errorMsg
+      });
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <div className="space-y-6 w-full">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
            <h1 className="text-3xl font-display font-bold text-text-primary tracking-tight">
                Orçamentos de <span className="text-brand-primary">Compra</span>
@@ -68,6 +106,21 @@ export function BudgetsList() {
           </button>
         </div>
       </header>
+
+      {/* Bar de Busca */}
+      <div className="card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Buscar cotação por nome do fornecedor ou num. da cotação..."
+            className="w-full bg-bg-deep border border-border-subtle rounded-md pl-10 pr-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="card w-full overflow-hidden">
         <div className="min-h-[200px] overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -121,13 +174,23 @@ export function BudgetsList() {
                       {formatCurrency(row.valor_total || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => navigate(`/orcamentos-compras/${row.id}`)}
-                        className="p-2 rounded-md hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary transition-all cursor-pointer"
-                        title="Ver/Editar"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => navigate(`/orcamentos-compras/${row.id}`)}
+                          className="p-2 rounded-md hover:bg-brand-primary/10 text-text-muted hover:text-brand-primary transition-all cursor-pointer"
+                          title="Ver/Editar"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBudget(row)}
+                          disabled={isDeleting === row.id}
+                          className="p-2 rounded-md hover:bg-brand-danger/10 text-text-muted hover:text-brand-danger transition-all cursor-pointer disabled:opacity-50"
+                          title="Excluir Cotação"
+                        >
+                          <Trash2 className="w-4 h-4 text-brand-danger" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -202,6 +265,41 @@ export function BudgetsList() {
           </div>
         )}
       </div>
+
+      {/* Modal de Aviso: Oportunidade Vinculada */}
+      {blockedModal?.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="card w-full max-w-md shadow-2xl border-none p-6 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-brand-danger/10 flex items-center justify-center text-brand-danger shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-text-primary">Não é possível excluir</h3>
+                <p className="text-sm text-text-muted mt-2 leading-relaxed">
+                  {blockedModal.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setBlockedModal(null)}
+                className="text-text-muted hover:text-text-primary p-1 rounded-full hover:bg-bg-deep transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setBlockedModal(null)}
+                className="bg-brand-primary text-white px-5 py-2 rounded-md font-medium text-sm hover:bg-brand-primary/90 transition-colors shadow-sm cursor-pointer"
+              >
+                Compreendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

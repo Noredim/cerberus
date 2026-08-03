@@ -18,7 +18,22 @@ import openpyxl
 
 class PurchaseBudgetService:
     @staticmethod
-    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None):
+    def _apply_search_filter(query, q: Optional[str]):
+        if not q or not q.strip():
+            return query
+        from src.core.search import unaccent_ilike
+        from src.modules.suppliers.models import Supplier
+        search_term = q.strip()
+        query = query.outerjoin(Supplier, PurchaseBudget.supplier_id == Supplier.id)
+        return query.filter(
+            unaccent_ilike(PurchaseBudget.numero_orcamento, search_term) |
+            unaccent_ilike(PurchaseBudget.vendedor_nome, search_term) |
+            unaccent_ilike(Supplier.nome_fantasia, search_term) |
+            unaccent_ilike(Supplier.razao_social, search_term)
+        )
+
+    @staticmethod
+    def get_budgets(db: Session, tenant_id: str, skip: int = 0, limit: int = 100, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None, q: Optional[str] = None):
         # returns budgets with nested supplier and items
         query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
         if company_id:
@@ -29,10 +44,11 @@ class PurchaseBudgetService:
             query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
         if licitacao_id:
             query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
+        query = PurchaseBudgetService._apply_search_filter(query, q)
         return query.order_by(PurchaseBudget.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
-    def get_budgets_count(db: Session, tenant_id: str, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None):
+    def get_budgets_count(db: Session, tenant_id: str, supplier_id: Optional[str] = None, sales_budget_id: Optional[UUID] = None, company_id: Optional[str] = None, licitacao_id: Optional[UUID] = None, q: Optional[str] = None):
         query = db.query(PurchaseBudget).filter(PurchaseBudget.tenant_id == tenant_id)
         if company_id:
             query = query.filter(PurchaseBudget.company_id == company_id)
@@ -42,6 +58,7 @@ class PurchaseBudgetService:
             query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
         if licitacao_id:
             query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
+        query = PurchaseBudgetService._apply_search_filter(query, q)
         return query.count()
 
     @staticmethod
@@ -776,33 +793,79 @@ class PurchaseBudgetService:
     def delete_budget(db: Session, tenant_id: str, budget_id: UUID, company_id: Optional[str] = None) -> bool:
         budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, company_id)
         
-        # Check if linked to an opportunity and if any product is in exclusive kit
+        # 1. Check direct link to SalesBudget (Oportunidade)
         if budget.sales_budget_id:
+            from src.modules.sales_budgets.models import SalesBudget
+            sb = db.query(SalesBudget).filter(SalesBudget.id == budget.sales_budget_id).first()
+            opp_name = (sb.numero_orcamento or sb.titulo) if sb else str(budget.sales_budget_id)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
+            )
+
+        # 2. Check direct link to Licitacao (Licitação)
+        if budget.licitacao_id:
+            from src.modules.licitacoes.models import Licitacao
+            lic = db.query(Licitacao).filter(Licitacao.id == budget.licitacao_id).first()
+            opp_name = (lic.numero_edital or lic.objeto) if lic else str(budget.licitacao_id)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
+            )
+
+        # 3. Check products linked via OpportunityKit or OpportunityKitCost
+        product_ids = [item.product_id for item in budget.items if item.product_id]
+        if product_ids:
             from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem, OpportunityKitCost
-            product_ids = [item.product_id for item in budget.items]
-            if product_ids:
-                # Check kits items
-                linked_item = db.query(OpportunityKitItem).join(OpportunityKit).filter(
-                    OpportunityKit.sales_budget_id == budget.sales_budget_id,
-                    OpportunityKitItem.product_id.in_(product_ids)
-                ).first()
-                if linked_item:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Não é possível excluir o orçamento de compra pois há produtos vinculados em kit exclusivo."
-                    )
-                
-                # Check operational costs
-                linked_cost = db.query(OpportunityKitCost).join(OpportunityKit).filter(
-                    OpportunityKit.sales_budget_id == budget.sales_budget_id,
-                    OpportunityKitCost.product_id.in_(product_ids)
-                ).first()
-                if linked_cost:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Não é possível excluir o orçamento de compra pois há produtos vinculados em custos operacionais do kit exclusivo."
-                    )
-        
+            from src.modules.sales_budgets.models import SalesBudget
+
+            linked_item = db.query(OpportunityKitItem, SalesBudget).join(
+                OpportunityKit, OpportunityKitItem.opportunity_kit_id == OpportunityKit.id
+            ).join(
+                SalesBudget, OpportunityKit.sales_budget_id == SalesBudget.id
+            ).filter(
+                OpportunityKitItem.product_id.in_(product_ids)
+            ).first()
+            if linked_item:
+                sb = linked_item[1]
+                opp_name = sb.numero_orcamento or sb.titulo or str(sb.id)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
+                )
+
+            linked_cost = db.query(OpportunityKitCost, SalesBudget).join(
+                OpportunityKit, OpportunityKitCost.opportunity_kit_id == OpportunityKit.id
+            ).join(
+                SalesBudget, OpportunityKit.sales_budget_id == SalesBudget.id
+            ).filter(
+                OpportunityKitCost.product_id.in_(product_ids)
+            ).first()
+            if linked_cost:
+                sb = linked_cost[1]
+                opp_name = sb.numero_orcamento or sb.titulo or str(sb.id)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
+                )
+
+        # 4. Check SolutionAnalysis
+        from src.modules.solution_analysis.models import SolutionAnalysisItem, SolutionAnalysis
+        sol_analysis = db.query(SolutionAnalysis).join(
+            SolutionAnalysisItem, SolutionAnalysisItem.analise_id == SolutionAnalysis.id
+        ).filter(
+            (SolutionAnalysisItem.budget_a_id == budget_id) |
+            (SolutionAnalysisItem.budget_b_id == budget_id) |
+            (SolutionAnalysisItem.budget_c_id == budget_id)
+        ).first()
+
+        if sol_analysis:
+            opp_name = sol_analysis.titulo or str(sol_analysis.id)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
+            )
+
         db.delete(budget)
         db.commit()
         return True

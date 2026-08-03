@@ -40,6 +40,7 @@ class PurchaseBudget(Base):
     # Relationships
     supplier = relationship("Supplier")
     forma_pagamento = relationship("FormaPagamento")
+    sales_budget = relationship("SalesBudget")
     licitacao = relationship("Licitacao", back_populates="purchase_budgets")
     items = relationship("PurchaseBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     negotiations = relationship("PurchaseBudgetNegotiation", back_populates="budget", cascade="all, delete-orphan")
