@@ -147,7 +147,7 @@ def _add_history(
     acao: str,
     detalhes: str
 ):
-    user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email or user.id
+    user_name = getattr(user, "name", None) or getattr(user, "email", None) or str(getattr(user, "id", ""))
     log = OwnServiceHistory(
         id=_uuid.uuid4(),
         tenant_id=tenant_id,
