@@ -101,6 +101,7 @@ const ProtectedRoute = () => {
       const allowedPaths = [
           '/',                     // Painel Geral / Dashboard
           '/cadastro/produtos',    // Produtos
+          '/cadastros/servicos-proprios', // Serviços Próprios
           '/cadastros/clientes',   // Clientes
           '/cadastros/fornecedores',// Fornecedores
           '/cadastros/kits',       // Kits (oportunidades)
