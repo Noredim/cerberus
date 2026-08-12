@@ -1,5 +1,12 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    HAS_APSCHEDULER = True
+except ImportError:
+    HAS_APSCHEDULER = False
+    AsyncIOScheduler = None
+    CronTrigger = None
+
 from sqlalchemy.orm import Session
 import traceback
 
@@ -7,8 +14,9 @@ from src.core.database import SessionLocal
 from src.modules.backup.models import BackupSettings
 from src.modules.backup.services import run_backup_now, get_or_create_settings
 
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler() if HAS_APSCHEDULER else None
 JOB_ID = "scheduled_db_backup"
+
 
 
 def execute_scheduled_backup():
@@ -25,6 +33,10 @@ def execute_scheduled_backup():
 
 
 def update_scheduler_job(db: Session = None):
+    if not HAS_APSCHEDULER or scheduler is None:
+        print("[SCHEDULER WARNING] APScheduler não instalado. Pule agendamento.")
+        return
+
     close_db = False
     if db is None:
         db = SessionLocal()
@@ -59,6 +71,9 @@ def update_scheduler_job(db: Session = None):
 
 
 def start_backup_scheduler():
+    if not HAS_APSCHEDULER or scheduler is None:
+        print("[SCHEDULER WARNING] APScheduler não está disponível. Agendador desativado.")
+        return
     if not scheduler.running:
         scheduler.start()
         print("[SCHEDULER] Scheduler do APScheduler iniciado.")
@@ -66,6 +81,9 @@ def start_backup_scheduler():
 
 
 def stop_backup_scheduler():
+    if not HAS_APSCHEDULER or scheduler is None:
+        return
     if scheduler.running:
         scheduler.shutdown(wait=False)
         print("[SCHEDULER] Scheduler do APScheduler finalizado.")
+
