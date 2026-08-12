@@ -45,6 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Perfil', path: '/seguranca/perfil' },
                 { label: 'Empresas', path: '/empresas' },
                 { label: 'Mensageria', path: '/seguranca/mensageria' },
+                { label: 'Backup do Sistema', path: '/seguranca/backup' },
             ]
         },
         {

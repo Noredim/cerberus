@@ -39,6 +39,8 @@ from src.modules.document_templates.router import router as document_templates_r
 from src.modules.notifications.router import router as notifications_router
 from src.modules.licitacoes.router import router as licitacoes_router
 from src.modules.messaging.router import router as messaging_router
+from src.modules.backup.router import router as backup_router
+from src.modules.backup.scheduler import start_backup_scheduler, stop_backup_scheduler
 
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import configure_mappers
@@ -63,7 +65,21 @@ async def lifespan(app: FastAPI):
             print("[MIGRATION] Alembic migrations applied successfully.")
     except Exception as e:
         print(f"[MIGRATION WARNING] Error applying alembic migrations: {e}")
+
+    # Inicializar o agendador de backups
+    try:
+        start_backup_scheduler()
+    except Exception as sched_err:
+        print(f"[BACKUP SCHEDULER WARNING] Error starting backup scheduler: {sched_err}")
+
     yield
+
+    # Encerrar o agendador de backups
+    try:
+        stop_backup_scheduler()
+    except Exception as sched_close_err:
+        print(f"[BACKUP SCHEDULER WARNING] Error stopping backup scheduler: {sched_close_err}")
+
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -198,3 +214,5 @@ app.include_router(document_templates_router)
 app.include_router(notifications_router)
 app.include_router(licitacoes_router)
 app.include_router(messaging_router)
+app.include_router(backup_router)
+

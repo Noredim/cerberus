@@ -12,6 +12,7 @@ import EmpresaForm from './modules/companies/EmpresaForm';
 import TaxBenefitsList from './modules/tax-benefits/TaxBenefitsList';
 import TaxBenefitForm from './modules/tax-benefits/TaxBenefitForm';
 import ProfileDashboard from './modules/profiles/ProfileDashboard';
+import BackupDashboard from './modules/security/backup/BackupDashboard';
 import NcmList from './modules/ncm/NcmList';
 import NcmForm from './modules/ncm/NcmForm';
 import { TipiList } from './modules/ncm-tipi/TipiList';
@@ -194,6 +195,8 @@ function App() {
             <Route path="/cadastros/servicos-proprios" element={<OwnServicesDashboard />} />
             <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
             <Route path="/seguranca/mensageria" element={<MessagingDashboard />} />
+            <Route path="/seguranca/backup" element={<BackupDashboard />} />
+
 
             {/* Empresas */}
             <Route path="/empresas" element={<EmpresasList />} />

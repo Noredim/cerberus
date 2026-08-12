@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 \
     libglib2.0-0 \
     shared-mime-info \
+    openssh-client \
+    sshpass \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 

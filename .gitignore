@@ -85,6 +85,11 @@ tmp/
 roles_map.txt
 implementation_plan.md
 scratch/
+# --- Temporary / Backup Files --------------------------------------------------
+backups/
+*.sql.gz
 *.pdf
+
+
 
 
