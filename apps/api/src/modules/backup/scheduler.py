@@ -1,10 +1,10 @@
 try:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
     HAS_APSCHEDULER = True
 except ImportError:
     HAS_APSCHEDULER = False
-    AsyncIOScheduler = None
+    BackgroundScheduler = None
     CronTrigger = None
 
 from sqlalchemy.orm import Session
@@ -14,8 +14,9 @@ from src.core.database import SessionLocal
 from src.modules.backup.models import BackupSettings
 from src.modules.backup.services import run_backup_now, get_or_create_settings
 
-scheduler = AsyncIOScheduler() if HAS_APSCHEDULER else None
+scheduler = BackgroundScheduler() if HAS_APSCHEDULER else None
 JOB_ID = "scheduled_db_backup"
+
 
 
 
