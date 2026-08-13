@@ -77,7 +77,7 @@ def upgrade():
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tax_recovery_document_id UUID NOT NULL REFERENCES tax_recovery_documents(id) ON DELETE CASCADE,
         fiscal_document_item_id UUID NOT NULL REFERENCES fiscal_document_items(id) ON DELETE CASCADE,
-        nItem INT NOT NULL,
+        "nItem" INT NOT NULL,
         status VARCHAR(30) NOT NULL DEFAULT 'SEM_DIFERENCA',
         
         icms_st_original NUMERIC(19, 4) DEFAULT 0,
@@ -100,6 +100,16 @@ def upgrade():
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'tax_recovery_item_results' AND column_name = 'nitem'
+        ) THEN
+            ALTER TABLE tax_recovery_item_results RENAME COLUMN nitem TO "nItem";
+        END IF;
+    END $$;
 
     CREATE INDEX IF NOT EXISTS ix_tax_recovery_item_results_doc_id ON tax_recovery_item_results(tax_recovery_document_id);
     CREATE INDEX IF NOT EXISTS ix_tax_recovery_item_results_item_id ON tax_recovery_item_results(fiscal_document_item_id);
