@@ -90,6 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             subItems: [
                 { label: 'Análise de NF-e', path: '/fiscal/analise-nfe' },
                 { label: 'Acompanhamento Mensal', path: '/fiscal/acompanhamento-nfe' },
+                { label: 'Recuperação de Impostos', path: '/fiscal/recuperacao-impostos' },
             ]
         },
         {
@@ -154,7 +155,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                         return {
                             ...item,
                             subItems: item.subItems?.filter(sub => 
-                                ['Análise de NF-e', 'Acompanhamento Mensal'].includes(sub.label)
+                                ['Análise de NF-e', 'Acompanhamento Mensal', 'Recuperação de Impostos'].includes(sub.label)
                             )
                         };
                     }

@@ -40,6 +40,7 @@ from src.modules.notifications.router import router as notifications_router
 from src.modules.licitacoes.router import router as licitacoes_router
 from src.modules.messaging.router import router as messaging_router
 from src.modules.backup.router import router as backup_router
+from src.modules.tax_recovery.router import router as tax_recovery_router
 from src.modules.backup.scheduler import start_backup_scheduler, stop_backup_scheduler
 
 from contextlib import asynccontextmanager
@@ -215,4 +216,5 @@ app.include_router(notifications_router)
 app.include_router(licitacoes_router)
 app.include_router(messaging_router)
 app.include_router(backup_router)
+app.include_router(tax_recovery_router)
 

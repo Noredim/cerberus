@@ -3,7 +3,6 @@ import {
     ArrowLeft,
     Save,
     Check,
-    Eye,
     Loader2,
     Code,
     Sparkles,
@@ -24,7 +23,8 @@ import {
     ListOrdered
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, resolveHtmlMediaUrls } from '../../services/api';
+import { letterheadApi, type Letterhead } from '../../services/letterheadApi';
 
 interface VariableCatalogItem {
     nome: string;
@@ -63,6 +63,7 @@ interface DocumentTemplate {
     nome: string;
     tipo_documento: string;
     modulo_origem: string;
+    papel_timbrado_id?: string | null;
     status: 'RASCUNHO' | 'VIGENTE' | 'INATIVO';
     versao: number;
     conteudo_html: string;
@@ -86,6 +87,8 @@ const DocumentTemplateForm: React.FC = () => {
     const [nome, setNome] = useState('');
     const [tipoDocumento, setTipoDocumento] = useState('PROPOSTA_COMERCIAL');
     const [moduloOrigem, setModuloOrigem] = useState('OPORTUNIDADE');
+    const [papelTimbradoId, setPapelTimbradoId] = useState<string>('');
+    const [letterheads, setLetterheads] = useState<Letterhead[]>([]);
     const [descricao, setDescricao] = useState('');
     const [status, setStatus] = useState<'RASCUNHO' | 'VIGENTE' | 'INATIVO'>('RASCUNHO');
     const [versao, setVersao] = useState(1);
@@ -97,6 +100,28 @@ const DocumentTemplateForm: React.FC = () => {
     // Editor Mode: 'visual' or 'html'
     const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
     const editorRef = useRef<HTMLDivElement>(null);
+    const savedRangeRef = useRef<Range | null>(null);
+    const lastTextAreaPosRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+    const saveSelection = () => {
+        if (editorMode === 'visual') {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0 && editorRef.current) {
+                const range = sel.getRangeAt(0);
+                if (editorRef.current.contains(range.commonAncestorContainer)) {
+                    savedRangeRef.current = range.cloneRange();
+                }
+            }
+        }
+    };
+
+    const updateTextareaPos = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+        const target = e.currentTarget;
+        lastTextAreaPosRef.current = {
+            start: target.selectionStart,
+            end: target.selectionEnd,
+        };
+    };
 
     // Preview/Render Modal
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -105,6 +130,21 @@ const DocumentTemplateForm: React.FC = () => {
     const [renderedHtml, setRenderedHtml] = useState('');
     const [rendering, setRendering] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+
+    // Fetch active letterheads
+    const fetchLetterheads = React.useCallback(async () => {
+        try {
+            const data = await letterheadApi.listLetterheads({ is_active: true });
+            setLetterheads(data);
+            // If new template and default letterhead exists, auto-select it
+            if (isNew) {
+                const def = data.find(l => l.is_default);
+                if (def) setPapelTimbradoId(def.id);
+            }
+        } catch (err) {
+            console.error('Erro ao buscar papéis timbrados:', err);
+        }
+    }, [isNew]);
 
     // Fetch variables catalog
     const fetchCatalog = React.useCallback(async () => {
@@ -126,6 +166,7 @@ const DocumentTemplateForm: React.FC = () => {
             setNome(data.nome);
             setTipoDocumento(data.tipo_documento);
             setModuloOrigem(data.modulo_origem);
+            setPapelTimbradoId(data.papel_timbrado_id || '');
             setDescricao(data.descricao || '');
             setStatus(data.status);
             setVersao(data.versao);
@@ -143,15 +184,18 @@ const DocumentTemplateForm: React.FC = () => {
 
     useEffect(() => {
         fetchCatalog();
+        fetchLetterheads();
         loadTemplate();
-    }, [fetchCatalog, loadTemplate]);
+    }, [fetchCatalog, fetchLetterheads, loadTemplate]);
 
-    // Handle editor view synchronization when loading
+    // Handle editor view synchronization when mode/tab changes
     useEffect(() => {
         if (editorRef.current && editorMode === 'visual') {
-            editorRef.current.innerHTML = conteudoHtml;
+            if (editorRef.current.innerHTML !== conteudoHtml) {
+                editorRef.current.innerHTML = conteudoHtml;
+            }
         }
-    }, [conteudoHtml, editorMode, activeTab]);
+    }, [editorMode, activeTab]);
 
     // Load opportunities for preview
     const loadOpportunities = React.useCallback(async () => {
@@ -220,57 +264,76 @@ const DocumentTemplateForm: React.FC = () => {
         return variablesList.filter(v => v.obrigatoria && !isVariablePresent(v.nome));
     };
 
-    // Insert variable token into current cursor position inside contentEditable
+    // Insert variable token into current cursor position inside contentEditable or textarea
     const insertVariable = (varName: string) => {
-        if (status === 'VIGENTE' || status === 'INATIVO') return;
+        if (status === 'INATIVO') return;
         const token = `{{${varName}}}`;
-        
+
         if (editorMode === 'visual') {
             if (editorRef.current) {
                 editorRef.current.focus();
             }
             const selection = window.getSelection();
+            let range: Range | null = null;
+
             if (selection && selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                if (editorRef.current?.contains(range.commonAncestorContainer)) {
-                    range.deleteContents();
-                    const textNode = document.createTextNode(token);
-                    range.insertNode(textNode);
-                    
-                    // Place cursor after inserted token
-                    range.setStartAfter(textNode);
-                    range.setEndAfter(textNode);
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                    
-                    setConteudoHtml(editorRef.current.innerHTML);
-                    return;
+                const currentRange = selection.getRangeAt(0);
+                if (editorRef.current?.contains(currentRange.commonAncestorContainer)) {
+                    range = currentRange;
                 }
             }
-            
-            // Fallback: append
-            if (editorRef.current) {
-                editorRef.current.innerHTML += token;
-                setConteudoHtml(editorRef.current.innerHTML);
+
+            if (!range && savedRangeRef.current && editorRef.current?.contains(savedRangeRef.current.commonAncestorContainer)) {
+                range = savedRangeRef.current;
+            }
+
+            if (range && selection) {
+                range.deleteContents();
+                const textNode = document.createTextNode(token);
+                range.insertNode(textNode);
+
+                // Place cursor after inserted token
+                const newRange = document.createRange();
+                newRange.setStartAfter(textNode);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+                savedRangeRef.current = newRange;
+
+                if (editorRef.current) {
+                    setConteudoHtml(editorRef.current.innerHTML);
+                }
+            } else {
+                setConteudoHtml(prev => prev + token);
             }
         } else {
-            // HTML mode (textarea)
-            const textarea = document.getElementById('html-textarea') as HTMLTextAreaElement;
-            if (textarea) {
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const text = textarea.value;
-                const before = text.substring(0, start);
-                const after = text.substring(end, text.length);
-                const newContent = before + token + after;
-                setConteudoHtml(newContent);
-                // Update selection coordinates after state render
+            const el = document.getElementById('html-textarea') as HTMLTextAreaElement;
+            if (el) {
+                const startPos = el.selectionStart ?? lastTextAreaPosRef.current.start ?? el.value.length;
+                const endPos = el.selectionEnd ?? startPos;
+                const newText = el.value.substring(0, startPos) + token + el.value.substring(endPos);
+                setConteudoHtml(newText);
                 setTimeout(() => {
-                    textarea.focus();
-                    textarea.selectionStart = textarea.selectionEnd = start + token.length;
+                    el.focus();
+                    const nextPos = startPos + token.length;
+                    el.setSelectionRange(nextPos, nextPos);
+                    lastTextAreaPosRef.current = { start: nextPos, end: nextPos };
                 }, 0);
+            } else {
+                setConteudoHtml(prev => prev + token);
             }
         }
+    };
+
+    // Client-side PDF preview modal renderer
+    const renderPreviewHTML = () => {
+        const papelTimbradoObj = letterheads.find(l => l.id === papelTimbradoId);
+        if (!papelTimbradoObj) return conteudoHtml;
+        const bodyContent = `<div class="letterhead-wrapper">${conteudoHtml}</div>`;
+        if (papelTimbradoObj.conteudo_html?.includes('{{conteudo}}') || papelTimbradoObj.conteudo_html?.includes('{{content}}')) {
+            return papelTimbradoObj.conteudo_html.replace(/\{\{(conteudo|content)\}\}/g, bodyContent);
+        }
+        return papelTimbradoObj.conteudo_html + bodyContent;
     };
 
     // Save Template (Draft or Update)
@@ -289,9 +352,10 @@ const DocumentTemplateForm: React.FC = () => {
                 nome,
                 tipo_documento: tipoDocumento,
                 modulo_origem: moduloOrigem,
+                papel_timbrado_id: papelTimbradoId || null,
                 conteudo_html: conteudoHtml,
                 descricao,
-                variables: [] // Variables catalog automatically resolved in backend
+                variables: []
             };
 
             let savedTemplate;
@@ -307,7 +371,7 @@ const DocumentTemplateForm: React.FC = () => {
                 await api.post(`/document-templates/${savedTemplate.id}/publish`);
                 alert('Modelo salvo e publicado com sucesso!');
             } else {
-                alert('Rascunho salvo com sucesso!');
+                alert(status === 'VIGENTE' ? 'Modelo atualizado com sucesso!' : 'Rascunho salvo com sucesso!');
             }
             navigate('/cadastros/modelos-documentos');
         } catch (err) {
@@ -322,15 +386,44 @@ const DocumentTemplateForm: React.FC = () => {
 
     // Client-side PDF print triggers
     const handlePrintPDF = () => {
-        if (iframeRef.current && iframeRef.current.contentWindow) {
-            iframeRef.current.contentWindow.focus();
-            iframeRef.current.contentWindow.print();
-        }
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+        const fullContent = renderPreviewHTML();
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${nome || 'Modelo_Documento'}</title>
+                <style>
+                    @page { size: A4; margin: 0; }
+                    body { margin: 0; padding: 0; font-family: sans-serif; background: #fff; }
+                    .letterhead-wrapper { padding: 20mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 100vh; box-sizing: border-box; }
+                    .letterhead-wrapper > *:last-child, .footer { margin-top: auto; }
+                    @media print {
+                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    }
+                </style>
+            </head>
+            <body>
+                ${fullContent}
+                <script>
+                    window.onload = function() {
+                        window.print();
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
     };
 
-    // Client-side DOCX export
-    const handleExportDOCX = () => {
-        const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><title>Document</title><style>body { font-family: Arial, sans-serif; line-height: 1.5; padding: 20px; }</style></head><body>";
+    // Export HTML to .doc (Word format)
+    const handleExportWord = () => {
+        const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' "+
+            "xmlns:w='urn:schemas-microsoft-com:office:word' "+
+            "xmlns='http://www.w3.org/TR/REC-html40'>"+
+            "<head><meta charset='utf-8'><title>Export Word</title></head><body>";
+        const renderedHtml = renderPreviewHTML();
         const footer = "</body></html>";
         const sourceHTML = header + renderedHtml + footer;
         
@@ -348,7 +441,7 @@ const DocumentTemplateForm: React.FC = () => {
         URL.revokeObjectURL(url);
     };
 
-    const isReadonly = status === 'VIGENTE' || status === 'INATIVO';
+    const isReadonly = status === 'INATIVO';
 
     if (loading) {
         return (
@@ -379,35 +472,27 @@ const DocumentTemplateForm: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {!isNew && (
-                        <button
-                            onClick={() => setIsPreviewOpen(true)}
-                            className="flex items-center gap-2 bg-bg-surface text-text-primary border border-border-subtle px-4 py-2 rounded-md font-medium hover:bg-bg-deep transition-colors min-h-[40px] cursor-pointer shadow-sm"
-                        >
-                            <Eye className="w-5 h-5" />
-                            Visualizar & Imprimir
-                        </button>
-                    )}
-
                     {!isReadonly && (
                         <>
                             <button
                                 onClick={() => handleSave(false)}
                                 disabled={saving}
-                                className="flex items-center gap-2 bg-bg-surface text-text-primary border border-border-subtle px-4 py-2 rounded-md font-medium hover:bg-bg-deep transition-colors min-h-[40px] cursor-pointer shadow-sm"
-                            >
-                                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                                Salvar Rascunho
-                            </button>
-
-                            <button
-                                onClick={() => handleSave(true)}
-                                disabled={saving}
                                 className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm"
                             >
-                                <Check className="w-5 h-5" />
-                                Salvar & Publicar
+                                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                {status === 'VIGENTE' ? 'Salvar Alterações' : 'Salvar Rascunho'}
                             </button>
+
+                            {status === 'RASCUNHO' && (
+                                <button
+                                    onClick={() => handleSave(true)}
+                                    disabled={saving}
+                                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-md font-medium hover:bg-emerald-700 transition-colors min-h-[40px] cursor-pointer shadow-sm"
+                                >
+                                    <Check className="w-5 h-5" />
+                                    Salvar & Publicar
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
@@ -418,9 +503,9 @@ const DocumentTemplateForm: React.FC = () => {
                 <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg p-4 flex gap-3 items-start">
                     <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                     <div>
-                        <h4 className="font-semibold text-sm">Modelo {status} (Sem Edição)</h4>
+                        <h4 className="font-semibold text-sm">Modelo INATIVO (Sem Edição)</h4>
                         <p className="text-xs text-text-muted mt-0.5">
-                            Este modelo já foi publicado e não pode ser editado. Para fazer alterações, use a ação <strong>"Criar Nova Versão"</strong> na listagem para gerar um rascunho mutável.
+                            Este modelo está inativo e não pode ser editado.
                         </p>
                     </div>
                 </div>
@@ -494,6 +579,26 @@ const DocumentTemplateForm: React.FC = () => {
                                 <option value="OPORTUNIDADE">Oportunidade (Comercial)</option>
                             </select>
                         </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-semibold text-text-primary flex items-center justify-between">
+                                <span>Papel Timbrado (Identidade Visual)</span>
+                                <span className="text-[11px] font-normal text-text-muted">Opcional</span>
+                            </label>
+                            <select
+                                value={papelTimbradoId}
+                                onChange={(e) => setPapelTimbradoId(e.target.value)}
+                                disabled={isReadonly}
+                                className="bg-bg-deep border border-border-subtle rounded-md py-2 px-3 text-sm text-text-primary focus:border-brand-primary outline-none transition-colors disabled:opacity-60"
+                            >
+                                <option value="">Nenhum (Sem papel timbrado)</option>
+                                {letterheads.map((lh) => (
+                                    <option key={lh.id} value={lh.id}>
+                                        {lh.nome} {lh.is_default ? '(Padrão)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5 font-sans">
@@ -519,6 +624,7 @@ const DocumentTemplateForm: React.FC = () => {
                         <div className="bg-[#f8f9fa] dark:bg-bg-deep border-b border-border-subtle px-4 py-2 flex items-center justify-between flex-wrap gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('bold')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Negrito"
@@ -527,6 +633,7 @@ const DocumentTemplateForm: React.FC = () => {
                                     <Bold className="w-4 h-4" />
                                 </button>
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('italic')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Itálico"
@@ -535,6 +642,7 @@ const DocumentTemplateForm: React.FC = () => {
                                     <Italic className="w-4 h-4" />
                                 </button>
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('underline')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Sublinhado"
@@ -544,6 +652,7 @@ const DocumentTemplateForm: React.FC = () => {
                                 </button>
                                 <span className="w-[1px] h-6 bg-border-subtle mx-1" />
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('justifyLeft')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Alinhar à Esquerda"
@@ -552,6 +661,7 @@ const DocumentTemplateForm: React.FC = () => {
                                     <AlignLeft className="w-4 h-4" />
                                 </button>
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('justifyCenter')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Centralizar"
@@ -560,6 +670,7 @@ const DocumentTemplateForm: React.FC = () => {
                                     <AlignCenter className="w-4 h-4" />
                                 </button>
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('justifyRight')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Alinhar à Direita"
@@ -569,6 +680,7 @@ const DocumentTemplateForm: React.FC = () => {
                                 </button>
                                 <span className="w-[1px] h-6 bg-border-subtle mx-1" />
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('insertUnorderedList')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Marcadores"
@@ -577,6 +689,7 @@ const DocumentTemplateForm: React.FC = () => {
                                     <List className="w-4 h-4" />
                                 </button>
                                 <button
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('insertOrderedList')}
                                     disabled={editorMode !== 'visual' || isReadonly}
                                     title="Numeração"
@@ -614,7 +727,12 @@ const DocumentTemplateForm: React.FC = () => {
                                 <div
                                     ref={editorRef}
                                     contentEditable={!isReadonly}
+                                    onKeyUp={saveSelection}
+                                    onMouseUp={saveSelection}
+                                    onFocus={saveSelection}
+                                    onInput={saveSelection}
                                     onBlur={() => {
+                                        saveSelection();
                                         if (editorRef.current) {
                                             setConteudoHtml(editorRef.current.innerHTML);
                                         }
@@ -626,7 +744,15 @@ const DocumentTemplateForm: React.FC = () => {
                                 <textarea
                                     id="html-textarea"
                                     value={conteudoHtml}
-                                    onChange={(e) => setConteudoHtml(e.target.value)}
+                                    onChange={(e) => {
+                                        setConteudoHtml(e.target.value);
+                                        updateTextareaPos(e);
+                                    }}
+                                    onKeyUp={updateTextareaPos}
+                                    onMouseUp={updateTextareaPos}
+                                    onSelect={updateTextareaPos}
+                                    onFocus={updateTextareaPos}
+                                    onBlur={updateTextareaPos}
                                     disabled={isReadonly}
                                     className="w-full min-h-[460px] bg-bg-deep border border-border-subtle rounded-md p-3 text-xs font-mono text-text-primary focus:border-brand-primary outline-none transition-colors resize-y disabled:opacity-60"
                                 />
@@ -649,6 +775,7 @@ const DocumentTemplateForm: React.FC = () => {
                                 return (
                                     <div
                                         key={v.nome}
+                                        onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => insertVariable(v.nome)}
                                         className={`group p-2.5 rounded-md border flex flex-col gap-1 transition-all text-left ${isReadonly ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-brand-primary/40 hover:bg-brand-primary/5'} ${present ? 'border-brand-success/20 bg-brand-success/5' : 'border-border-subtle bg-bg-deep'}`}
                                     >
@@ -795,7 +922,7 @@ const DocumentTemplateForm: React.FC = () => {
                                 </button>
 
                                 <button
-                                    onClick={handleExportDOCX}
+                                    onClick={handleExportWord}
                                     disabled={rendering}
                                     className="flex items-center gap-1.5 bg-bg-surface text-text-primary border border-border-subtle px-3 py-1.5 rounded text-xs font-semibold hover:bg-bg-deep transition-colors cursor-pointer"
                                 >
@@ -832,13 +959,25 @@ const DocumentTemplateForm: React.FC = () => {
                                         <html>
                                             <head>
                                                 <style>
+                                                    html, body {
+                                                        height: 100%;
+                                                        margin: 0;
+                                                    }
                                                     body {
                                                         font-family: 'Inter', system-ui, -apple-system, sans-serif;
-                                                        padding: 40px;
+                                                        padding: 20mm;
+                                                        box-sizing: border-box;
                                                         background-color: white;
                                                         color: #333333;
                                                         line-height: 1.6;
                                                         font-size: 14px;
+                                                        display: flex;
+                                                        flex-direction: column;
+                                                        justify-content: space-between;
+                                                        min-height: 100vh;
+                                                    }
+                                                    .footer, [class*="footer"] {
+                                                        margin-top: auto;
                                                     }
                                                     h1, h2, h3, h4 { color: #111111; margin-top: 1.5em; margin-bottom: 0.5em; }
                                                     p { margin-bottom: 1em; }
@@ -852,7 +991,7 @@ const DocumentTemplateForm: React.FC = () => {
                                                 </style>
                                             </head>
                                             <body>
-                                                ${renderedHtml}
+                                                ${resolveHtmlMediaUrls(renderedHtml)}
                                             </body>
                                         </html>
                                     `}

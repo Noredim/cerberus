@@ -17,6 +17,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 
+import LetterheadList from './LetterheadList';
+
 export interface DocumentVariable {
     id: string;
     modelo_id: string;
@@ -43,6 +45,7 @@ export interface DocumentTemplate {
 
 const DocumentTemplateList: React.FC = () => {
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<'templates' | 'letterheads'>('templates');
     const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -147,24 +150,53 @@ const DocumentTemplateList: React.FC = () => {
 
     return (
         <div className="space-y-6 w-full">
-            <header className="flex items-center justify-between">
+            <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-text-primary tracking-tight">
-                        Modelos de <span className="text-brand-primary">Documentos</span>
+                        Modelos e <span className="text-brand-primary">Documentos</span>
                     </h1>
-                    <p className="text-text-muted mt-1">Gerencie modelos de CGF, Contratos e Propostas com variáveis dinâmicas.</p>
+                    <p className="text-text-muted mt-1">Gerencie modelos de CGF, Contratos, Propostas e Papéis Timbrados da empresa.</p>
                 </div>
 
-                <button
-                    onClick={() => navigate('/cadastros/modelos-documentos/novo')}
-                    className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm"
-                >
-                    <Plus className="w-5 h-5" />
-                    Novo Modelo
-                </button>
+                {activeTab === 'templates' && (
+                    <button
+                        onClick={() => navigate('/cadastros/modelos-documentos/novo')}
+                        className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Novo Modelo
+                    </button>
+                )}
             </header>
 
-            <div className="bg-surface rounded-lg border border-border-subtle shadow-sm flex flex-col">
+            {/* Navegação por Abas */}
+            <div className="border-b border-border-subtle flex gap-6">
+                <button
+                    onClick={() => setActiveTab('templates')}
+                    className={`pb-3 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+                        activeTab === 'templates'
+                            ? 'border-brand-primary text-brand-primary'
+                            : 'border-transparent text-text-muted hover:text-text-primary'
+                    }`}
+                >
+                    Modelos de Documentos
+                </button>
+                <button
+                    onClick={() => setActiveTab('letterheads')}
+                    className={`pb-3 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+                        activeTab === 'letterheads'
+                            ? 'border-brand-primary text-brand-primary'
+                            : 'border-transparent text-text-muted hover:text-text-primary'
+                    }`}
+                >
+                    Papéis Timbrados (Identidade Visual)
+                </button>
+            </div>
+
+            {activeTab === 'letterheads' ? (
+                <LetterheadList />
+            ) : (
+                <div className="bg-surface rounded-lg border border-border-subtle shadow-sm flex flex-col">
                 {/* Filtros */}
                 <div className="p-5 border-b border-border-subtle flex flex-wrap items-center justify-between bg-surface gap-4">
                     <div className="relative flex-1 min-w-[280px] max-w-md">
@@ -294,13 +326,13 @@ const DocumentTemplateList: React.FC = () => {
                                                                 }}
                                                                 className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
                                                             >
-                                                                {template.status === 'RASCUNHO' ? (
+                                                                {template.status === 'INATIVO' ? (
                                                                     <>
-                                                                        <Edit2 className="w-4 h-4" /> Editar Rascunho
+                                                                        <Eye className="w-4 h-4" /> Visualizar Modelo
                                                                     </>
                                                                 ) : (
                                                                     <>
-                                                                        <Eye className="w-4 h-4" /> Visualizar Modelo
+                                                                        <Edit2 className="w-4 h-4" /> Editar Modelo
                                                                     </>
                                                                 )}
                                                             </button>
@@ -350,6 +382,7 @@ const DocumentTemplateList: React.FC = () => {
                     </table>
                 </div>
             </div>
+            )}
         </div>
     );
 };

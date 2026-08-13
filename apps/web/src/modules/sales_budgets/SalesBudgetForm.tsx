@@ -1426,11 +1426,6 @@ export function SalesBudgetForm() {
 
   const handleAddKitVenda = (kit: any) => {
     if (!kit) return;
-    const allowed = ['VENDA_EQUIPAMENTOS', 'INSTALACAO'];
-    if (!allowed.includes(kit.tipo_contrato)) {
-      alert(`Não é possível adicionar este kit na aba de Venda. O kit selecionado é do tipo "${kit.tipo_contrato}". Tipos permitidos nesta aba: Venda de Equipamentos e Apenas Instalação.`);
-      return;
-    }
     setHasUnsavedChanges(true);
     const q = Number(kit.quantidade_kits || 1);
     const newKit: VendaKitItem = {
@@ -1466,6 +1461,44 @@ export function SalesBudgetForm() {
     };
     setVendaKits(prev => [...prev, newKit]);
     setShowKitSearchVenda(false);
+  };
+
+  const handleConvertVendaToRental = (vendaIdx: number) => {
+    setHasUnsavedChanges(true);
+    const item = vendaKits[vendaIdx];
+    if (!item) return;
+    const kitData = item.kit_raw || {
+      id: item.opportunity_kit_id,
+      nome_kit: item.nome_kit,
+      tipo_contrato: 'COMODATO',
+      summary: item.summary
+    };
+    handleAddKit({
+      ...kitData,
+      tipo_contrato: 'COMODATO'
+    });
+    setVendaKits(prev => prev.filter((_, i) => i !== vendaIdx));
+  };
+
+  const handleConvertRentalToVenda = (rentalIdx: number) => {
+    setHasUnsavedChanges(true);
+    const item = rentalItems[rentalIdx];
+    if (!item || !item.opportunity_kit_id) return;
+    const kitData = item.kit_raw || {
+      id: item.opportunity_kit_id,
+      nome_kit: item.product_nome?.replace(/^Kit:\s*/, '') || 'Kit Venda',
+      tipo_contrato: 'VENDA_EQUIPAMENTOS',
+      summary: {
+        custo_aquisicao_total: item.custo_aquisicao_unit,
+        venda_equipamentos_total: item.kit_valor_mensal,
+        vlt_manut: item.kit_vlt_manut
+      }
+    };
+    handleAddKitVenda({
+      ...kitData,
+      tipo_contrato: 'VENDA_EQUIPAMENTOS'
+    });
+    setRentalItems(prev => prev.filter((_, i) => i !== rentalIdx));
   };
 
   const updateRentalItem = (idx: number, field: string, value: any) => {
@@ -4168,10 +4201,24 @@ export function SalesBudgetForm() {
                     return (
                       <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
                         {/* Nome do Kit */}
-                        <td className="px-1.5 py-3 whitespace-nowrap max-w-[200px] pl-4">
+                        <td className="px-1.5 py-3 whitespace-nowrap max-w-[220px] pl-4">
                           <div className="flex flex-col truncate">
                             <span className="font-semibold text-text-primary truncate">{item.nome_kit}</span>
-                            <span className="text-[10px] font-mono text-text-muted">ID: {item.opportunity_kit_id.split('-')[0]}...</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <select
+                                value="VENDA"
+                                onChange={(e) => {
+                                  if (e.target.value === 'COMODATO') {
+                                    handleConvertVendaToRental(idx);
+                                  }
+                                }}
+                                disabled={isReadonly}
+                                className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded focus:outline-none cursor-pointer disabled:opacity-60"
+                              >
+                                <option value="VENDA">Modelo: Venda</option>
+                                <option value="COMODATO">Modelo: Comodato / Locação</option>
+                              </select>
+                            </div>
                           </div>
                         </td>
 
@@ -5089,7 +5136,7 @@ export function SalesBudgetForm() {
                     return (
                       <tr key={ri.id || idx} className="hover:bg-bg-deep/50 transition-colors">
                         <td className="px-1.5 py-2">
-                          <div className="max-w-[150px] font-medium text-text-primary flex items-center gap-2">
+                          <div className="max-w-[180px] font-medium text-text-primary flex items-center gap-2">
                             <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>
                             {ri.opportunity_kit_id && (
                               <button
@@ -5102,7 +5149,25 @@ export function SalesBudgetForm() {
                               </button>
                             )}
                           </div>
-                          <div className="text-[10px] text-brand-primary font-mono">{ri.product_codigo}</div>
+                          {ri.opportunity_kit_id ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <select
+                                value="COMODATO"
+                                onChange={(e) => {
+                                  if (e.target.value === 'VENDA') {
+                                    handleConvertRentalToVenda(idx);
+                                  }
+                                }}
+                                disabled={isReadonly}
+                                className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded focus:outline-none cursor-pointer disabled:opacity-60"
+                              >
+                                <option value="COMODATO">Modelo: Comodato / Locação</option>
+                                <option value="VENDA">Modelo: Venda</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-brand-primary font-mono">{ri.product_codigo}</div>
+                          )}
                         </td>
                         <td className="px-1.5 py-2 text-center">
                           <input type="number" min="1" value={ri.quantidade} onChange={e => updateRentalItem(idx, 'quantidade', +e.target.value)} disabled={isReadonly}
@@ -6996,11 +7061,10 @@ export function SalesBudgetForm() {
       {showKitSearchModal && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchModal}
-          allowedTypes={['LOCACAO', 'COMODATO', 'INSTALACAO']}
           salesBudgetId={id}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
-          title="Buscar Kit de Locação / Comodato / Instalação"
+          title="Buscar Kit para Comodato / Locação"
         />
       )}
 
@@ -7008,11 +7072,10 @@ export function SalesBudgetForm() {
       {showKitSearchVenda && (
         <OpportunityKitSearchModal
           isOpen={showKitSearchVenda}
-          allowedTypes={['VENDA_EQUIPAMENTOS', 'INSTALACAO']}
           salesBudgetId={id}
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
-          title="Buscar Kit de Venda / Instalação"
+          title="Buscar Kit para Venda"
         />
       )}
 

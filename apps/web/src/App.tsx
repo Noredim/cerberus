@@ -53,6 +53,8 @@ import NfeAnalysisList from './modules/fiscal/analise-nfe/NfeAnalysisList';
 import NfeAnalysisDetail from './modules/fiscal/analise-nfe/NfeAnalysisDetail';
 import { NfeMonthlyTrackerList } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyTrackerList';
 import { NfeMonthlyDetailView } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyDetailView';
+import { TaxRecoveryList } from './modules/fiscal/recuperacao-impostos/TaxRecoveryList';
+import { TaxRecoveryDetail } from './modules/fiscal/recuperacao-impostos/TaxRecoveryDetail';
 
 
 import { Loader2, ServerOff } from 'lucide-react';
@@ -282,11 +284,13 @@ function App() {
             {/* Relatórios */}
             <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
 
-            {/* Fiscal: Análise de NF-e e Acompanhamento Mensal */}
+            {/* Fiscal: Análise de NF-e, Acompanhamento Mensal e Recuperação de Impostos */}
             <Route path="/fiscal/analise-nfe" element={<NfeAnalysisList />} />
             <Route path="/fiscal/analise-nfe/:id" element={<NfeAnalysisDetail />} />
             <Route path="/fiscal/acompanhamento-nfe" element={<NfeMonthlyTrackerList />} />
             <Route path="/fiscal/acompanhamento-nfe/:id" element={<NfeMonthlyDetailView />} />
+            <Route path="/fiscal/recuperacao-impostos" element={<TaxRecoveryList />} />
+            <Route path="/fiscal/recuperacao-impostos/:id" element={<TaxRecoveryDetail />} />
 
           </Route>
         </Routes>

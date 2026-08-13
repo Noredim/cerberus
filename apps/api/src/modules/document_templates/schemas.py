@@ -4,6 +4,39 @@ from uuid import UUID
 from datetime import datetime
 
 
+class LetterheadBase(BaseModel):
+    nome: str
+    descricao: Optional[str] = None
+    conteudo_html: str
+    conteudo_css: Optional[str] = None
+    is_active: bool = True
+    is_default: bool = False
+
+
+class LetterheadCreate(LetterheadBase):
+    pass
+
+
+class LetterheadUpdate(LetterheadBase):
+    pass
+
+
+class LetterheadOut(LetterheadBase):
+    id: UUID
+    tenant_id: str
+    company_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LetterheadPreviewRequest(BaseModel):
+    conteudo_html: str
+    conteudo_css: Optional[str] = None
+    sample_content: Optional[str] = None
+
+
 class VariableBase(BaseModel):
     nome: str
     origem: str
@@ -29,6 +62,7 @@ class TemplateBase(BaseModel):
     modulo_origem: str
     conteudo_html: str
     descricao: Optional[str] = None
+    papel_timbrado_id: Optional[UUID] = None
 
 
 class TemplateCreate(TemplateBase):
@@ -66,6 +100,8 @@ class TemplateOut(TemplateBase):
     company_id: UUID
     status: str
     versao: int
+    papel_timbrado_id: Optional[UUID] = None
+    letterhead: Optional[LetterheadOut] = None
     variables: List[VariableOut] = []
     versions: List[VersionOut] = []
     audits: List[AuditOut] = []
@@ -80,3 +116,4 @@ class DocumentRenderRequest(BaseModel):
     # For future extensions
     contrato_id: Optional[str] = None
     ordem_servico_id: Optional[str] = None
+

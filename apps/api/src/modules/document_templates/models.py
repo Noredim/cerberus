@@ -6,12 +6,34 @@ from sqlalchemy.sql import func
 from src.core.base import Base
 
 
+class Letterhead(Base):
+    __tablename__ = "papel_timbrado"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    nome = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=True)
+    conteudo_html = Column(Text, nullable=False)
+    conteudo_css = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_default = Column(Boolean, nullable=False, default=False)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    # Relationships
+    company = relationship("Company")
+
+
 class DocumentTemplate(Base):
     __tablename__ = "documento_modelo"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    papel_timbrado_id = Column(UUID(as_uuid=True), ForeignKey("papel_timbrado.id", ondelete="SET NULL"), nullable=True, index=True)
     
     nome = Column(String(255), nullable=False)
     tipo_documento = Column(String(100), nullable=False)  # CGF, CONTRATO, PROPOSTA_COMERCIAL, etc.
@@ -26,9 +48,11 @@ class DocumentTemplate(Base):
 
     # Relationships
     company = relationship("Company")
+    letterhead = relationship("Letterhead")
     versions = relationship("DocumentVersion", back_populates="template", cascade="all, delete-orphan", order_by="DocumentVersion.versao.desc()")
     variables = relationship("DocumentVariable", back_populates="template", cascade="all, delete-orphan")
     audits = relationship("DocumentAudit", back_populates="template", cascade="all, delete-orphan", order_by="DocumentAudit.data_hora.desc()")
+
 
 
 class DocumentVersion(Base):

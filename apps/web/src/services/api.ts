@@ -7,6 +7,29 @@ export const api = axios.create({
     },
 });
 
+export const resolveMediaUrl = (url?: string | null): string => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    const apiBase = api.defaults.baseURL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+    const cleanBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
+    return `${cleanBase}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+export const resolveHtmlMediaUrls = (html?: string | null): string => {
+    if (!html) return '';
+    const apiBase = api.defaults.baseURL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+    const cleanBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
+    
+    if (!cleanBase) return html;
+    
+    return html.replace(/src=["'](\/uploads\/[^"']+)["']/g, (_match, p1) => {
+        return `src="${cleanBase}${p1}"`;
+    });
+};
+
+
 // Request Interceptor: Inject Authorization and Context Headers
 api.interceptors.request.use(
     (config) => {
