@@ -377,7 +377,7 @@ class TaxRecoveryService:
                     NcmStHeader.is_active == True,
                     NcmStItem.is_active == True,
                     func.length(NcmStItem.ncm_normalizado) >= 4,
-                    literal_column(f"'{ncm_clean}'").like(NcmStItem.ncm_normalizado + '%')
+                    literal_column(f"'{ncm_clean}'").like(func.concat(NcmStItem.ncm_normalizado, '%'))
                 ).order_by(desc(func.length(NcmStItem.ncm_normalizado))).first()
 
                 if match and match.mva_percent is not None:
@@ -404,7 +404,7 @@ class TaxRecoveryService:
             NcmStHeader.is_active == True,
             NcmStItem.is_active == True,
             func.length(NcmStItem.ncm_normalizado) >= 4,
-            literal_column(f"'{ncm_clean}'").like(NcmStItem.ncm_normalizado + '%')
+            literal_column(f"'{ncm_clean}'").like(func.concat(NcmStItem.ncm_normalizado, '%'))
         ).order_by(desc(func.length(NcmStItem.ncm_normalizado))).first()
 
         if match_fallback and match_fallback.mva_percent is not None:
