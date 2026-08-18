@@ -365,6 +365,7 @@ interface KitFormValues {
   fator_monitoramento: number;
   licitacao_id?: string;
   licitacao_item_id?: string;
+  commercial_policy_id?: string;
   margem_minima_desejada?: number | '';
 }
 
