@@ -895,8 +895,8 @@ export function SalesBudgetForm() {
 
       // Fetch Commercial Policies scoped to salesTeamId if selected
       const policiesUrl = salesTeamId
-        ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}`
-        : `/companies/commercial-policies/me`;
+        ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}&include_all=true`
+        : `/companies/commercial-policies/me?include_all=true`;
 
       api.get(policiesUrl).then(res => {
         const policies = res.data || [];
@@ -971,8 +971,8 @@ export function SalesBudgetForm() {
   useEffect(() => {
     if (!activeCompanyId) return;
     const policiesUrl = salesTeamId
-      ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}`
-      : `/companies/commercial-policies/me`;
+      ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}&include_all=true`
+      : `/companies/commercial-policies/me?include_all=true`;
 
     api.get(policiesUrl).then(res => {
       const policies = res.data || [];

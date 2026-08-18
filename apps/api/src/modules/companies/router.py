@@ -269,6 +269,8 @@ async def upload_company_logo(
 @router.get("/commercial-policies/me", response_model=List[CommercialPolicyOut])
 def get_my_commercial_policies(
     sales_team_id: Optional[UUID] = Query(None),
+    include_policy_id: Optional[UUID] = Query(None),
+    include_all: Optional[bool] = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     active_company_id: str = Depends(get_active_company)
@@ -280,9 +282,23 @@ def get_my_commercial_policies(
     """
     from .models import CommercialPolicy, CommercialPolicyRole, SalesTeamPolicy
     from src.modules.professionals.models import Professional
+    from sqlalchemy.orm import selectinload
+    from .models import CommercialPolicyServiceCommission
 
     if not active_company_id:
         return []
+
+    # Base query for all active policies in the active company
+    base_query = db.query(CommercialPolicy).options(
+        joinedload(CommercialPolicy.roles),
+        selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
+    ).filter(
+        CommercialPolicy.company_id == active_company_id,
+        CommercialPolicy.ativo == True
+    )
+
+    if include_all:
+        return base_query.all()
 
     # If sales_team_id is provided, filter policies strictly to those linked to the sales team
     team_policy_ids = None
@@ -291,7 +307,7 @@ def get_my_commercial_policies(
             SalesTeamPolicy.sales_team_id == sales_team_id
         ).all()
         team_policy_ids = [r[0] for r in team_policy_rows]
-        if not team_policy_ids:
+        if not team_policy_ids and not include_policy_id:
             # Sales team has no linked policies -> return empty list
             return []
 
@@ -301,37 +317,32 @@ def get_my_commercial_policies(
         Professional.tenant_id == current_user.tenant_id
     ).first()
 
-    from sqlalchemy.orm import selectinload
-    from .models import CommercialPolicyServiceCommission
-
     if not professional or not professional.role_id:
-        # No role assigned — return all active policies for the company
-        # so the UI can still display them (read-only info)
-        query = db.query(CommercialPolicy).options(
+        query = base_query
+        if team_policy_ids is not None:
+            query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
+        policies = query.all()
+    else:
+        query = db.query(CommercialPolicy).join(
+            CommercialPolicyRole
+        ).options(
             joinedload(CommercialPolicy.roles),
             selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
         ).filter(
             CommercialPolicy.company_id == active_company_id,
-            CommercialPolicy.ativo == True
+            CommercialPolicy.ativo == True,
+            CommercialPolicyRole.role_id == professional.role_id
         )
         if team_policy_ids is not None:
             query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
-        return query.all()
+        policies = query.all()
 
-    # Filter policies linked to the user's role
-    query = db.query(CommercialPolicy).join(
-        CommercialPolicyRole
-    ).options(
-        joinedload(CommercialPolicy.roles),
-        selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
-    ).filter(
-        CommercialPolicy.company_id == active_company_id,
-        CommercialPolicy.ativo == True,
-        CommercialPolicyRole.role_id == professional.role_id
-    )
-    if team_policy_ids is not None:
-        query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
-    return query.all()
+    if include_policy_id and not any(p.id == include_policy_id for p in policies):
+        extra_policy = base_query.filter(CommercialPolicy.id == include_policy_id).first()
+        if extra_policy:
+            policies.append(extra_policy)
+
+    return policies
 
 @router.get("/{company_id}", response_model=CompanyOut)
 def get_company(
