@@ -1375,13 +1375,21 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               const taxFields = ['pis', 'cofins', 'csll', 'irpj', 'icms', 'iss'] as const;
               
               // ── Impostos Kit de Venda (B4)
-              const taxLabelB4: Record<string, { label: string; total: number }> = {};
+              const taxLabelB4: Record<string, { label: string; total: number; percent: number }> = {};
               itemSums.forEach((s: any) => {
                 taxFields.forEach(t => {
                   const unit = s[`${t}_unit`] || 0;
-                  const qty = s.quantidade_no_kit || s.quantidade || 1;
-                  if (!taxLabelB4[t]) taxLabelB4[t] = { label: t.toUpperCase(), total: 0 };
-                  taxLabelB4[t].total += unit * qty;
+                  let pct = 0;
+                  if (s[`perc_${t}`] !== undefined && s[`perc_${t}`] !== null && Number(s[`perc_${t}`]) > 0) {
+                    pct = Number(s[`perc_${t}`]);
+                  } else if (t === 'icms') {
+                    pct = isInterstate ? 12 : (Number(form.aliq_icms) || 0);
+                  } else {
+                    pct = Number(form[`aliq_${t}` as keyof typeof form]) || 0;
+                  }
+                  if (!taxLabelB4[t]) taxLabelB4[t] = { label: t.toUpperCase(), total: 0, percent: pct };
+                  taxLabelB4[t].total += unit;
+                  if (pct > 0 && !taxLabelB4[t].percent) taxLabelB4[t].percent = pct;
                 });
               });
               let impostosB4 = Object.values(taxLabelB4).reduce((a, b) => a + b.total, 0);
@@ -1391,7 +1399,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               }
 
               // ── Impostos Instalação (B5)
-              const taxLabelB5: Record<string, { label: string; total: number }> = {};
+              const taxLabelB5: Record<string, { label: string; total: number; percent: number }> = {};
               if (form.instalacao_inclusa && vendaB5 > 0) {
                 const aliqPis = Number(form.aliq_pis) || 0;
                 const aliqCofins = Number(form.aliq_cofins) || 0;
@@ -1399,18 +1407,19 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 const aliqIrpj = Number(form.aliq_irpj) || 0;
                 const aliqIss = Number(form.aliq_iss) || 0;
 
-                taxLabelB5['pis'] = { label: 'PIS', total: vendaB5 * (aliqPis / 100) };
-                taxLabelB5['cofins'] = { label: 'COFINS', total: vendaB5 * (aliqCofins / 100) };
-                taxLabelB5['csll'] = { label: 'CSLL', total: vendaB5 * (aliqCsll / 100) };
-                taxLabelB5['irpj'] = { label: 'IRPJ', total: vendaB5 * (aliqIrpj / 100) };
-                taxLabelB5['iss'] = { label: 'ISS', total: vendaB5 * (aliqIss / 100) };
+                taxLabelB5['pis'] = { label: 'PIS', total: vendaB5 * (aliqPis / 100), percent: aliqPis };
+                taxLabelB5['cofins'] = { label: 'COFINS', total: vendaB5 * (aliqCofins / 100), percent: aliqCofins };
+                taxLabelB5['csll'] = { label: 'CSLL', total: vendaB5 * (aliqCsll / 100), percent: aliqCsll };
+                taxLabelB5['irpj'] = { label: 'IRPJ', total: vendaB5 * (aliqIrpj / 100), percent: aliqIrpj };
+                taxLabelB5['iss'] = { label: 'ISS', total: vendaB5 * (aliqIss / 100), percent: aliqIss };
               } else {
                 instSums.forEach((s: any) => {
                   taxFields.forEach(t => {
                     const unit = s[`${t}_unit`] || 0;
-                    const qty = s.quantidade_no_kit || s.quantidade || 1;
-                    if (!taxLabelB5[t]) taxLabelB5[t] = { label: t.toUpperCase(), total: 0 };
-                    taxLabelB5[t].total += unit * qty;
+                    let pct = s[`perc_${t}`] !== undefined && s[`perc_${t}`] !== null ? Number(s[`perc_${t}`]) : (Number(form[`aliq_${t}` as keyof typeof form]) || 0);
+                    if (!taxLabelB5[t]) taxLabelB5[t] = { label: t.toUpperCase(), total: 0, percent: pct };
+                    taxLabelB5[t].total += unit;
+                    if (pct > 0 && !taxLabelB5[t].percent) taxLabelB5[t].percent = pct;
                   });
                 });
               }
@@ -1419,25 +1428,27 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               const impostosB45 = impostosB4 + impostosB5;
 
               // Reconstruct taxLabelB45 for backward compatibility with other elements
-              const taxLabelB45: Record<string, { label: string; total: number }> = {};
+              const taxLabelB45: Record<string, { label: string; total: number; percent: number }> = {};
               taxFields.forEach(t => {
                 const b4Val = taxLabelB4[t]?.total || 0;
                 const b5Val = taxLabelB5[t]?.total || 0;
+                const pct = taxLabelB4[t]?.percent || taxLabelB5[t]?.percent || 0;
                 if (b4Val > 0 || b5Val > 0) {
-                  taxLabelB45[t] = { label: t.toUpperCase(), total: b4Val + b5Val };
+                  taxLabelB45[t] = { label: t.toUpperCase(), total: b4Val + b5Val, percent: pct };
                 }
               });
 
               // ── Impostos B6 discriminados (mensal e total)
-              const taxLabelB6: Record<string, { label: string; mensal: number; total: number }> = {};
+              const taxLabelB6: Record<string, { label: string; mensal: number; total: number; percent: number }> = {};
               if (form.havera_manutencao) {
                 opSums.forEach((s: any) => {
                   taxFields.forEach(t => {
                     const unit = s[`${t}_unit`] || 0;
-                    const qty = s.quantidade || 1;
-                    if (!taxLabelB6[t]) taxLabelB6[t] = { label: t.toUpperCase(), mensal: 0, total: 0 };
-                    taxLabelB6[t].mensal += unit * qty;
-                    taxLabelB6[t].total += unit * qty * qtdMeses;
+                    let pct = s[`perc_${t}`] !== undefined && s[`perc_${t}`] !== null ? Number(s[`perc_${t}`]) : (Number(form[`aliq_${t}` as keyof typeof form]) || 0);
+                    if (!taxLabelB6[t]) taxLabelB6[t] = { label: t.toUpperCase(), mensal: 0, total: 0, percent: pct };
+                    taxLabelB6[t].mensal += unit;
+                    taxLabelB6[t].total += unit * qtdMeses;
+                    if (pct > 0 && !taxLabelB6[t].percent) taxLabelB6[t].percent = pct;
                   });
                 });
               }
@@ -1632,10 +1643,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               <div className="space-y-1">
                                 <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Kit de Venda (Itens)</div>
                                 {Object.values(taxLabelB4).filter(t => t.total > 0).map(t => {
-                                  const label = t.label === 'ICMS' && isInterstate ? 'icms 12% Venda' : t.label;
+                                  const isIcms12 = t.label === 'ICMS' && isInterstate;
+                                  const label = isIcms12 ? 'icms 12% Venda' : t.label;
+                                  const pctStr = t.percent > 0 && !isIcms12 ? ` (${t.percent.toFixed(2)}%)` : '';
                                   return (
                                     <div key={t.label} className="flex justify-between text-xs pl-2">
-                                      <span>{label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                      <span>{label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
                                     </div>
                                   );
                                 })}
@@ -1653,11 +1666,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                             {impostosB5 > 0 && (
                               <div className="space-y-1 pt-2 border-t border-border-subtle/50">
                                 <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Instalação</div>
-                                {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => (
-                                  <div key={t.label} className="flex justify-between text-xs pl-2">
-                                    <span>{t.label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
-                                  </div>
-                                ))}
+                                {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => {
+                                  const pctStr = t.percent > 0 ? ` (${t.percent.toFixed(2)}%)` : '';
+                                  return (
+                                    <div key={t.label} className="flex justify-between text-xs pl-2">
+                                      <span>{t.label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                    </div>
+                                  );
+                                })}
                                 <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
                                   <span>Subtotal Inst.</span><span>{fmtC(impostosB5)}</span>
                                 </div>
@@ -1748,10 +1764,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                                 <div className="space-y-1">
                                   <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Kit de Venda (Itens)</div>
                                   {Object.values(taxLabelB4).filter(t => t.total > 0).map(t => {
-                                    const label = t.label === 'ICMS' && isInterstate ? 'icms 12% Venda' : t.label;
+                                    const isIcms12 = t.label === 'ICMS' && isInterstate;
+                                    const label = isIcms12 ? 'icms 12% Venda' : t.label;
+                                    const pctStr = t.percent > 0 && !isIcms12 ? ` (${t.percent.toFixed(2)}%)` : '';
                                     return (
                                       <div key={t.label} className="flex justify-between text-xs pl-2">
-                                        <span>{label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                        <span>{label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
                                       </div>
                                     );
                                   })}
@@ -1769,11 +1787,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                               {impostosB5 > 0 && (
                                 <div className="space-y-1 pt-2 border-t border-border-subtle/50">
                                   <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Instalação</div>
-                                  {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => (
-                                    <div key={t.label} className="flex justify-between text-xs pl-2">
-                                      <span>{t.label}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
-                                    </div>
-                                  ))}
+                                  {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => {
+                                    const pctStr = t.percent > 0 ? ` (${t.percent.toFixed(2)}%)` : '';
+                                    return (
+                                      <div key={t.label} className="flex justify-between text-xs pl-2">
+                                        <span>{t.label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                      </div>
+                                    );
+                                  })}
                                   <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
                                     <span>Subtotal Inst.</span><span>{fmtC(impostosB5)}</span>
                                   </div>
