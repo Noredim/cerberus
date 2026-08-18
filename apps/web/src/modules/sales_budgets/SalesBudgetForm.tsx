@@ -1366,12 +1366,32 @@ export function SalesBudgetForm() {
 
     let match = null;
 
-    // 1. Explicit Commercial Policy ID (from budget or loaded kit)
-    if (loadedCommercialPolicyId) {
-      match = userPolicies.find((p: any) => p.id === loadedCommercialPolicyId);
+    // 0. Check if any kit item in items or rentalItems has an explicit commercial policy ID or policy data
+    const kitWithPolicy = items.find(i => i.opportunity_kit_id && (i.kit_raw?.commercial_policy_id || (i as any).commercial_policy_id)) ||
+                          rentalItems.find(ri => ri.opportunity_kit_id && (ri.kit_raw?.commercial_policy_id || (ri as any).commercial_policy_id));
+
+    const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || (kitWithPolicy as any).commercial_policy_id) : null;
+
+    // 1. Explicit Commercial Policy ID (from kit or budget)
+    const effectivePolicyId = kitPolicyId || loadedCommercialPolicyId;
+    if (effectivePolicyId) {
+      match = userPolicies.find((p: any) => p.id === effectivePolicyId);
     }
 
-    // 2. Match by commission & despesa operacional
+    // 2. Check if kit has specific commission / despesa_operacional
+    if (!match && kitWithPolicy) {
+      const kitRaw = kitWithPolicy.kit_raw || kitWithPolicy;
+      const kComm = Number(kitRaw.perc_comissao ?? kitRaw.summary?.perc_comissao ?? 0);
+      const kDesp = Number(kitRaw.perc_despesa_operacional ?? kitRaw.summary?.perc_despesa_operacional ?? 0);
+      if (kComm > 0 || kDesp > 0) {
+        match = userPolicies.find((p: any) => 
+          Math.abs(Number(p.comissao_percentual || 0) - kComm) < 0.001 &&
+          Math.abs(Number(p.despesa_operacional_percentual || 0) - kDesp) < 0.001
+        );
+      }
+    }
+
+    // 3. Match by commission & despesa operacional from state
     if (!match && (percComissao !== undefined || percDespesaOperacional !== undefined)) {
       match = userPolicies.find((p: any) => 
         Math.abs(Number(p.comissao_percentual || 0) - Number(percComissao || 0)) < 0.001 &&
@@ -1379,9 +1399,13 @@ export function SalesBudgetForm() {
       );
     }
 
-    // 3. Fallback: match by current markup factor
+    // 4. Fallback: match by current markup factor or effective kit factor
     if (!match) {
-      const currentMkp = Number(markupPadrao || 1.0);
+      let currentMkp = Number(markupPadrao || 1.0);
+      if (kitWithPolicy) {
+        const kFator = Number(kitWithPolicy.fator_margem_locacao || kitWithPolicy.fator_margem_servicos_produtos || kitWithPolicy.fator_margem || 0);
+        if (kFator > 0) currentMkp = kFator;
+      }
       const applicable = userPolicies
         .filter((p: any) => Number(p.fator_limite) <= currentMkp + 0.0001)
         .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
@@ -1399,7 +1423,7 @@ export function SalesBudgetForm() {
         setPercComissao(Number(match.comissao_percentual));
       }
     }
-  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao]);
+  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, rentalItems]);
 
 
 
