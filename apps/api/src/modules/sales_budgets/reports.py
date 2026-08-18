@@ -1417,6 +1417,7 @@ class OpportunitiesReportService:
 
     @staticmethod
     def generate_venda_approval_pdf(db: Session, opportunity_id: UUID, current_user: User) -> StreamingResponse:
+        from src.modules.opportunity_kits.models import OpportunityKit
         # 1. Fetch Opportunity
         opportunity = db.query(SalesBudget).filter(
             SalesBudget.id == opportunity_id,
@@ -2395,10 +2396,14 @@ class OpportunitiesReportService:
         
         # If not explicit on opportunity, check items / kits
         if not policy_obj:
+            from src.modules.opportunity_kits.models import OpportunityKit
+            from src.modules.companies.models import CommercialPolicy
             for item in list(opportunity.items) + list(opportunity.rental_items):
                 kit = getattr(item, 'opportunity_kit', None)
+                kit_id = getattr(item, 'opportunity_kit_id', None)
+                if not kit and kit_id:
+                    kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
                 if kit and kit.commercial_policy_id:
-                    from src.modules.companies.models import CommercialPolicy
                     policy_obj = db.query(CommercialPolicy).filter(CommercialPolicy.id == kit.commercial_policy_id).first()
                     if policy_obj:
                         break
@@ -2426,12 +2431,16 @@ class OpportunitiesReportService:
                 
                 # Check items/kits if opportunity fields are 0
                 if act_comm == 0 and act_desp == 0:
+                    from src.modules.opportunity_kits.models import OpportunityKit
                     for item in list(opportunity.items) + list(opportunity.rental_items):
                         kit = getattr(item, 'opportunity_kit', None)
+                        kit_id = getattr(item, 'opportunity_kit_id', None)
+                        if not kit and kit_id:
+                            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
                         if kit:
-                            if getattr(kit, 'perc_comissao', None) is not None:
+                            if getattr(kit, 'perc_comissao', None) is not None and float(kit.perc_comissao) > 0:
                                 act_comm = float(kit.perc_comissao)
-                            if getattr(kit, 'perc_despesa_operacional', None) is not None:
+                            if getattr(kit, 'perc_despesa_operacional', None) is not None and float(kit.perc_despesa_operacional) > 0:
                                 act_desp = float(kit.perc_despesa_operacional)
 
                 # 1. Exact match by commission and operational expense
