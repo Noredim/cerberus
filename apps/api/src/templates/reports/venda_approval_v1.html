@@ -47,6 +47,12 @@
                         <strong>Tipo da Venda:</strong> {{ tipo_venda }} &nbsp;|&nbsp;
                         <strong>Forma de Compra (Impostos):</strong> {{ forma_compra }}
                     </div>
+                    <div style="margin-top: 2px; font-size: 8pt; color: #0f172a;">
+                        <strong>Política Aplicada:</strong> <span style="font-weight: bold; color: #1e40af;">{{ policy_info.nome }}</span> &nbsp;|&nbsp;
+                        <strong>Comissão:</strong> {{ policy_info.comissao }} &nbsp;|&nbsp;
+                        <strong>Desp. Op:</strong> {{ policy_info.despesa_op }} &nbsp;|&nbsp;
+                        <strong>Fator Mín:</strong> {{ policy_info.fator_min }}
+                    </div>
                 </td>
             </tr>
         </table>
@@ -273,6 +279,42 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <!-- BLOCO: FORMA DE PAGAMENTO E PARCELAMENTO DA VENDA -->
+    <div class="avoid-break" style="margin-top: 12px;">
+        <div class="section-title">Forma de Pagamento e Planejamento Financeiro</div>
+        <div style="margin-top: 4px; font-size: 8.5pt; color: #0f172a; margin-bottom: 4px;">
+            <strong>Forma de Pagamento Selecionada:</strong> <span style="font-weight: bold; color: #1e40af;">{{ payment_info.forma_pagamento_nome }}</span> {% if payment_info.is_default %}<span style="font-size: 7.5pt; color: #475569;">(Padrão)</span>{% endif %}
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 18%;">Parcela</th>
+                    <th style="width: 37%;">Descrição / Condição</th>
+                    <th class="text-center" style="width: 20%;">Vencimento Previsto</th>
+                    <th class="text-right" style="width: 25%;">Valor Previsto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if payment_info.planning %}
+                    {% for p in payment_info.planning %}
+                    <tr>
+                        <td class="font-bold">{{ p.parcela }}</td>
+                        <td>{{ p.descricao }}</td>
+                        <td class="text-center">{{ p.data_prevista }}</td>
+                        <td class="text-right font-bold" style="color: #0284c7;">R$ {{ p.valor }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted" style="padding: 8px; color: #64748b;">
+                            Nenhuma forma de pagamento selecionada ou parcelas não geradas.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
     </div>
 
     <!-- BLOCO 2: FECHAMENTO E TOTALIZADOR POR FORNECEDOR -->

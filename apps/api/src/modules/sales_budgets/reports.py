@@ -2383,6 +2383,112 @@ class OpportunitiesReportService:
             "total": format_currency(desp_adm_total + frete_total)
         }
 
+        # 4.6. Active Commercial Policy Resolution
+        policy_info = {
+            "nome": "NÃO DEFINIDA",
+            "comissao": f"{float(opportunity.perc_comissao or 0):.2f}%",
+            "despesa_op": f"{float(opportunity.perc_despesa_operacional or 0):.2f}%",
+            "fator_min": f"{float(opportunity.markup_padrao or 1.0):.4f}"
+        }
+
+        policy_obj = opportunity.commercial_policy
+        if not policy_obj and opportunity.company_id:
+            from src.modules.companies.models import CommercialPolicy, SalesTeamPolicy
+            query = db.query(CommercialPolicy).filter(
+                CommercialPolicy.company_id == opportunity.company_id,
+                CommercialPolicy.ativo == True
+            )
+            if opportunity.sales_team_id:
+                team_policy_rows = db.query(SalesTeamPolicy.commercial_policy_id).filter(
+                    SalesTeamPolicy.sales_team_id == opportunity.sales_team_id
+                ).all()
+                team_policy_ids = [r[0] for r in team_policy_rows]
+                if team_policy_ids:
+                    query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
+            
+            policies = query.all()
+            if policies:
+                current_mkp = float(opportunity.markup_padrao or 1.0)
+                applicable = sorted(
+                    [p for p in policies if float(p.fator_limite) <= current_mkp + 0.0001],
+                    key=lambda p: float(p.fator_limite),
+                    reverse=True
+                )
+                if applicable:
+                    policy_obj = applicable[0]
+                else:
+                    default_p = next((p for p in policies if p.is_default), None)
+                    policy_obj = default_p or policies[0]
+
+        if policy_obj:
+            policy_info = {
+                "nome": policy_obj.nome_politica,
+                "comissao": f"{float(policy_obj.comissao_percentual or 0):.2f}%",
+                "despesa_op": f"{float(policy_obj.despesa_operacional_percentual or 0):.2f}%",
+                "fator_min": f"{float(policy_obj.fator_limite or 1.0):.4f}"
+            }
+
+        # 4.7. Payment Method & Financial Planning / Installments
+        payment_info = {
+            "forma_pagamento_nome": "Sem forma de pagamento selecionada",
+            "is_default": False,
+            "planning": []
+        }
+
+        if opportunity.forma_pagamento_id:
+            from src.modules.payment_methods.models import FormaPagamento
+            fp = db.query(FormaPagamento).filter(FormaPagamento.id == opportunity.forma_pagamento_id).first()
+            if fp:
+                payment_info["forma_pagamento_nome"] = fp.descricao
+                payment_info["is_default"] = getattr(fp, 'is_default', False)
+        elif opportunity.forma_pagamento_snapshot:
+            payment_info["forma_pagamento_nome"] = opportunity.forma_pagamento_snapshot.get('descricao', 'Sem forma de pagamento selecionada')
+
+        from src.modules.payment_methods.models import PlanejamentoFinanceiro
+        planning_rows = db.query(PlanejamentoFinanceiro).filter(
+            PlanejamentoFinanceiro.origem_id == opportunity.id,
+            PlanejamentoFinanceiro.origem_tipo == 'SALES_BUDGET'
+        ).order_by(PlanejamentoFinanceiro.data_prevista.asc(), PlanejamentoFinanceiro.numero_parcela.asc()).all()
+
+        if planning_rows:
+            num_planning = len(planning_rows)
+            for p in planning_rows:
+                payment_info["planning"].append({
+                    "parcela": f"Parcela {p.numero_parcela}/{num_planning}",
+                    "descricao": p.descricao or f"Parcela {p.numero_parcela}",
+                    "data_prevista": p.data_prevista.strftime("%d/%m/%Y") if p.data_prevista else "-",
+                    "valor": format_currency(float(p.valor_previsto or 0)),
+                    "tipo": p.tipo_movimento or "RECEBIMENTO"
+                })
+        elif opportunity.forma_pagamento_id:
+            from src.modules.payment_methods.models import FormaPagamento
+            fp = db.query(FormaPagamento).filter(FormaPagamento.id == opportunity.forma_pagamento_id).first()
+            if fp and fp.parcelas:
+                venda_total_val = float(venda_consolidada)
+                num_parcelas = len(fp.parcelas)
+                sorted_parcs = sorted(fp.parcelas, key=lambda x: x.sequencia or 1)
+                for p_idx, parc in enumerate(sorted_parcs, 1):
+                    if parc.percentual and float(parc.percentual) > 0:
+                        vlr = venda_total_val * (float(parc.percentual) / 100.0)
+                    elif parc.valor_fixo and float(parc.valor_fixo) > 0:
+                        vlr = float(parc.valor_fixo)
+                    else:
+                        vlr = venda_total_val / num_parcelas if num_parcelas > 0 else 0.0
+                    
+                    data_prev = "-"
+                    d_base = opportunity.data_vencimento_inicial or opportunity.data_orcamento
+                    if d_base:
+                        d_target = d_base + datetime.timedelta(days=int(parc.intervalo_dias or 0))
+                        data_prev = d_target.strftime("%d/%m/%Y")
+
+                    payment_info["planning"].append({
+                        "parcela": f"Parcela {p_idx}/{num_parcelas}",
+                        "descricao": parc.descricao or f"{parc.intervalo_dias} dias",
+                        "data_prevista": data_prev,
+                        "valor": format_currency(vlr),
+                        "tipo": "RECEBIMENTO"
+                    })
+
         # 5. Opportunity dict
         status_labels = {
             "EM_LANCAMENTO": "RASCUNHO",
@@ -2453,6 +2559,8 @@ class OpportunitiesReportService:
             kpis=kpis,
             tipo_venda=tipo_venda,
             forma_compra=forma_compra,
+            policy_info=policy_info,
+            payment_info=payment_info,
             items_details=items_details,
             supplier_summaries=supplier_summaries,
             supplier_totals=supplier_totals,
