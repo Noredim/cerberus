@@ -1369,11 +1369,15 @@ export function SalesBudgetForm() {
 
     let match = null;
 
-    // 0. Check if any kit item in items or rentalItems has an explicit commercial policy ID or policy data
-    const allItems: any[] = [...items, ...rentalItems];
-    const kitWithPolicy = allItems.find(i => i.opportunity_kit_id && (i.kit_raw?.commercial_policy_id || i.commercial_policy_id));
+    // 0. Check if any kit item in vendaKits, items or rentalItems has an explicit commercial policy ID or policy data
+    const allItems: any[] = [
+      ...vendaKits.map(vk => ({ ...vk, opportunity_kit_id: vk.opportunity_kit_id || (vk as any).data?.opportunity_kit_id })),
+      ...items,
+      ...rentalItems
+    ];
+    const kitWithPolicy = allItems.find(i => (i.opportunity_kit_id || i.data?.opportunity_kit_id) && (i.kit_raw?.commercial_policy_id || i.commercial_policy_id || i.summary?.commercial_policy_id));
 
-    const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || kitWithPolicy.commercial_policy_id) : null;
+    const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || kitWithPolicy.commercial_policy_id || kitWithPolicy.summary?.commercial_policy_id) : null;
 
     // 1. Explicit Commercial Policy ID (from kit or budget)
     const effectivePolicyId = kitPolicyId || loadedCommercialPolicyId;
@@ -1426,7 +1430,7 @@ export function SalesBudgetForm() {
         setPercComissao(Number(match.comissao_percentual));
       }
     }
-  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, rentalItems]);
+  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, vendaKits, rentalItems]);
 
 
 
