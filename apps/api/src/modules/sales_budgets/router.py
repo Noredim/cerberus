@@ -1008,8 +1008,15 @@ def download_opportunity_dre_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from src.modules.sales_budgets.reports import OpportunitiesReportService
-    return OpportunitiesReportService.generate_dre_pdf(db, opportunity_id, current_user)
+    try:
+        from src.modules.sales_budgets.reports import OpportunitiesReportService
+        return OpportunitiesReportService.generate_dre_pdf(db, opportunity_id, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar relatório DRV: {str(e)}")
 
 
 @router.get("/{budget_id}/historico")

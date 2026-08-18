@@ -168,8 +168,12 @@ class OpportunityKitService:
                         Decimal(str(getattr(kit, 'fator_margem_instalacao', None) or 1))
                     ]
                     for item in (getattr(kit, 'items', []) or []):
-                        if getattr(item, 'fator_margem', None) is not None:
-                            factors.append(Decimal(str(item.fator_margem)))
+                        fm = getattr(item, 'fator_margem', None)
+                        if fm is not None:
+                            try:
+                                factors.append(Decimal(str(fm)))
+                            except Exception:
+                                pass
                     current_factor = max(factors)
                     matched = None
                     for p in policies:
