@@ -2392,21 +2392,25 @@ class OpportunitiesReportService:
             "fator_min": f"{float(opportunity.markup_padrao or 1.0):.4f}"
         }
 
-        policy_obj = opportunity.commercial_policy
+        policy_obj = None
         
-        # If not explicit on opportunity, check items / kits
+        # 1. Check if any Kit item inside opportunity has an explicit commercial_policy_id or policy
+        from src.modules.opportunity_kits.models import OpportunityKit
+        from src.modules.companies.models import CommercialPolicy
+        for item in list(opportunity.items) + list(opportunity.rental_items):
+            kit = getattr(item, 'opportunity_kit', None)
+            kit_id = getattr(item, 'opportunity_kit_id', None)
+            if not kit and kit_id:
+                kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit and kit.commercial_policy_id:
+                p = db.query(CommercialPolicy).filter(CommercialPolicy.id == kit.commercial_policy_id).first()
+                if p:
+                    policy_obj = p
+                    break
+
+        # 2. If no kit policy, check explicit opportunity.commercial_policy
         if not policy_obj:
-            from src.modules.opportunity_kits.models import OpportunityKit
-            from src.modules.companies.models import CommercialPolicy
-            for item in list(opportunity.items) + list(opportunity.rental_items):
-                kit = getattr(item, 'opportunity_kit', None)
-                kit_id = getattr(item, 'opportunity_kit_id', None)
-                if not kit and kit_id:
-                    kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
-                if kit and kit.commercial_policy_id:
-                    policy_obj = db.query(CommercialPolicy).filter(CommercialPolicy.id == kit.commercial_policy_id).first()
-                    if policy_obj:
-                        break
+            policy_obj = opportunity.commercial_policy
 
         # If still not set, resolve dynamically by matching against company/sales team policies
         if not policy_obj and opportunity.company_id:
