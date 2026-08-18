@@ -736,7 +736,11 @@ def check_user_has_budget_access(db: Session, user_id: str, tenant_id: str, budg
     if is_approver:
         return True
     
-    # 2. Check if user is in responsaveis
+    # 2. Check if user is the assigned vendedor
+    if budget.vendedor_id and str(budget.vendedor_id) == str(user_id):
+        return True
+
+    # 3. Check if user is in responsaveis
     from src.modules.sales_budgets.models import SalesBudgetResponsavel
     is_responsible = db.query(SalesBudgetResponsavel).filter(
         SalesBudgetResponsavel.budget_id == budget.id,
@@ -1733,7 +1737,12 @@ def list_budgets(
     if user_id:
         is_approver, _ = check_is_approver(db, user_id, tenant_id, company_id)
         if not is_approver:
-            query = query.filter(SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == user_id))
+            query = query.filter(
+                or_(
+                    SalesBudget.vendedor_id == user_id,
+                    SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == user_id)
+                )
+            )
             
     if status:
         query = query.filter(SalesBudget.status == status)
@@ -2011,10 +2020,10 @@ def check_is_approver(db: Session, user_id: str, tenant_id: str, company_id: Any
         except ValueError:
             pass
 
-    # 1. Check system roles first (ADMIN or DIRETORIA on UserRole)
+    # 1. Check system roles first (ADMIN, DIRETORIA or ENGENHARIA_PRECO on UserRole)
     user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
     for ur in user_roles:
-        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA):
+        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA, UserRoleEnum.ENGENHARIA_PRECO):
             return True, ur.role.value
 
     # 2. Check Professional role in active company (GERENTE or DIRETOR)
