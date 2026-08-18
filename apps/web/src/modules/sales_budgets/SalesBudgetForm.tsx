@@ -1385,34 +1385,35 @@ export function SalesBudgetForm() {
       match = userPolicies.find((p: any) => p.id === effectivePolicyId);
     }
 
+    // Compute current effective markup factor of the sale
+    let currentMkp = Number(markupPadrao || 1.0);
+    const custoAqTotal = (totals?.custoAquisicaoLimpo || 0) + (totals?.freteCompra || 0);
+    if (custoAqTotal > 0 && (totals?.totalVenda || 0) > 0) {
+      currentMkp = totals.totalVenda / custoAqTotal;
+    }
+    if (kitWithPolicy) {
+      const kFator = Number(kitWithPolicy.fator_margem_locacao || kitWithPolicy.fator_margem_servicos_produtos || kitWithPolicy.fator_margem || 0);
+      if (kFator > 0) currentMkp = kFator;
+    }
+
     // 2. Check if kit has specific commission / despesa_operacional
     if (!match && kitWithPolicy) {
       const kitRaw = kitWithPolicy.kit_raw || kitWithPolicy;
       const kComm = Number(kitRaw.perc_comissao ?? kitRaw.summary?.perc_comissao ?? 0);
       const kDesp = Number(kitRaw.perc_despesa_operacional ?? kitRaw.summary?.perc_despesa_operacional ?? 0);
       if (kComm > 0 || kDesp > 0) {
-        match = userPolicies.find((p: any) => 
+        const candidate = userPolicies.find((p: any) => 
           Math.abs(Number(p.comissao_percentual || 0) - kComm) < 0.001 &&
           Math.abs(Number(p.despesa_operacional_percentual || 0) - kDesp) < 0.001
         );
+        if (candidate && Number(candidate.fator_limite) <= currentMkp + 0.0001) {
+          match = candidate;
+        }
       }
     }
 
-    // 3. Match by commission & despesa operacional from state
-    if (!match && (percComissao !== undefined || percDespesaOperacional !== undefined)) {
-      match = userPolicies.find((p: any) => 
-        Math.abs(Number(p.comissao_percentual || 0) - Number(percComissao || 0)) < 0.001 &&
-        Math.abs(Number(p.despesa_operacional_percentual || 0) - Number(percDespesaOperacional || 0)) < 0.001
-      );
-    }
-
-    // 4. Fallback: match by current markup factor or effective kit factor
+    // 3. Fallback: match by effective markup factor (highest policy with fator_limite <= currentMkp)
     if (!match) {
-      let currentMkp = Number(markupPadrao || 1.0);
-      if (kitWithPolicy) {
-        const kFator = Number(kitWithPolicy.fator_margem_locacao || kitWithPolicy.fator_margem_servicos_produtos || kitWithPolicy.fator_margem || 0);
-        if (kFator > 0) currentMkp = kFator;
-      }
       const applicable = userPolicies
         .filter((p: any) => Number(p.fator_limite) <= currentMkp + 0.0001)
         .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
@@ -1430,7 +1431,7 @@ export function SalesBudgetForm() {
         setPercComissao(Number(match.comissao_percentual));
       }
     }
-  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, vendaKits, rentalItems]);
+  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, vendaKits, rentalItems, totals?.totalVenda, totals?.custoAquisicaoLimpo, totals?.freteCompra]);
 
 
 

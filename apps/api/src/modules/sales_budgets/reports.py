@@ -2446,16 +2446,16 @@ class OpportunitiesReportService:
                             act_desp = float(kit.perc_despesa_operacional)
                         break
 
-                # 1. Exact match by commission and operational expense
+                # 1. Exact match by commission and operational expense (validating that the sale factor satisfies the policy limit)
+                effective_factor = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else float(opportunity.markup_padrao or 1.0)
                 exact_p = next(
-                    (p for p in policies if abs(float(p.comissao_percentual or 0) - act_comm) < 0.001 and abs(float(p.despesa_operacional_percentual or 0) - act_desp) < 0.001),
+                    (p for p in policies if abs(float(p.comissao_percentual or 0) - act_comm) < 0.001 and abs(float(p.despesa_operacional_percentual or 0) - act_desp) < 0.001 and float(p.fator_limite) <= effective_factor + 0.0001),
                     None
                 )
                 if exact_p:
                     policy_obj = exact_p
                 else:
                     # 2. Match by effective sale markup factor (venda_consolidada / total_custo_aquisicao)
-                    effective_factor = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else float(opportunity.markup_padrao or 1.0)
                     applicable = sorted(
                         [p for p in policies if float(p.fator_limite) <= effective_factor + 0.0001],
                         key=lambda p: float(p.fator_limite),
