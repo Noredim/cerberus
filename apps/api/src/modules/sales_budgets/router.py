@@ -748,6 +748,8 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "customer_state_sigla": budget.customer.state.sigla if budget.customer and budget.customer.state else None,
         "company_state_sigla": budget.company.state.sigla if budget.company and budget.company.state else None,
         "vendedor_id": str(budget.vendedor_id) if budget.vendedor_id else None,
+        "sales_team_id": str(budget.sales_team_id) if budget.sales_team_id else None,
+        "sales_team_nome": budget.sales_team.nome if budget.sales_team else None,
         "forma_pagamento_id": str(budget.forma_pagamento_id) if budget.forma_pagamento_id else None,
         "data_vencimento_inicial": budget.data_vencimento_inicial.isoformat() if budget.data_vencimento_inicial else None,
         "forma_pagamento_snapshot": budget.forma_pagamento_snapshot,

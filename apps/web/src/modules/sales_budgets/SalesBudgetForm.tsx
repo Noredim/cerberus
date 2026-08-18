@@ -724,6 +724,7 @@ export function SalesBudgetForm() {
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
   const [salesTeamId, setSalesTeamId] = useState('');
+  const [salesTeams, setSalesTeams] = useState<any[]>([]);
   const [generatingProposal, setGeneratingProposal] = useState(false);
   const [noDocumentRuleModalOpen, setNoDocumentRuleModalOpen] = useState(false);
 
@@ -961,6 +962,13 @@ export function SalesBudgetForm() {
         }).catch(err => console.error('Failed to fetch states for company UF resolution:', err));
       }
     }).catch(err => console.error('Failed to fetch company details:', err));
+
+    api.get(`/companies/${activeCompanyId}/sales-teams`)
+      .then(res => {
+        const activeTeams = (res.data || []).filter((team: any) => team.ativo);
+        setSalesTeams(activeTeams);
+      })
+      .catch(err => console.error("Erro ao buscar equipes de venda:", err));
   }, [activeCompanyId, isEditing]);
 
   // Re-fetch commercial policies whenever salesTeamId changes
@@ -3459,8 +3467,24 @@ export function SalesBudgetForm() {
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-text-muted mb-1">Equipe de Venda</label>
+                <select
+                  value={salesTeamId}
+                  onChange={e => { setSalesTeamId(e.target.value); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60 font-medium"
+                >
+                  <option value="">Sem equipe de venda selecionada</option>
+                  {salesTeams.map(st => (
+                    <option key={st.id} value={st.id}>
+                      {st.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-text-muted mb-1">Forma de Pagamento</label>
                 <select
                   value={formaPagamentoId}

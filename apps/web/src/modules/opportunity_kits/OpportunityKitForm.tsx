@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2, Users } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -540,12 +540,25 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     fetchItemDetails();
   }, [form.licitacao_id, form.licitacao_item_id]);
 
+  const [opportunitySalesTeamNome, setOpportunitySalesTeamNome] = useState<string | null>(null);
+
   const budgetIdToQuery = sourceBudgetId || form.sales_budget_id;
   useEffect(() => {
     if (budgetIdToQuery) {
       api.get(`/sales-budgets/${budgetIdToQuery}`).then(res => {
         if (res.data) {
           setOpportunityCustomerName(res.data.customer_nome || 'Cliente');
+          if (res.data.sales_team_id) {
+            setOpportunitySalesTeamId(res.data.sales_team_id);
+            setForm(prev => ({
+              ...prev,
+              sales_team_id: res.data.sales_team_id,
+              sales_teams: [res.data.sales_team_id]
+            }));
+          }
+          if (res.data.sales_team_nome) {
+            setOpportunitySalesTeamNome(res.data.sales_team_nome);
+          }
           const companyState = res.data.company_state_sigla;
           const customerState = res.data.customer_state_sigla;
           if (companyState && customerState && companyState !== customerState) {
@@ -1280,6 +1293,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <span className="text-xs text-text-muted flex items-center gap-1 font-medium mt-1">
                     <Building2 className="w-3.5 h-3.5 text-brand-primary" />
                     Cliente: <strong className="text-text-secondary">{opportunityCustomerName}</strong>
+                  </span>
+                )}
+                {opportunitySalesTeamNome && (
+                  <span className="text-xs text-text-muted flex items-center gap-1 font-medium mt-0.5">
+                    <Users className="w-3.5 h-3.5 text-brand-primary" />
+                    Equipe de Venda: <strong className="text-primary-700 bg-primary-50 border border-primary-200 px-2 py-0.5 rounded font-semibold">{opportunitySalesTeamNome}</strong>
                   </span>
                 )}
               </div>
