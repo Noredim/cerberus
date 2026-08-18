@@ -915,17 +915,9 @@ export function SalesBudgetForm() {
           setItems(prev => prev.map(i => (i.markup && i.markup > 0 && i.markup < minVal) ? { ...i, markup: minVal } : i));
           setRentalItems(prev => prev.map(ri => (ri.fator_margem && ri.fator_margem > 0 && ri.fator_margem < minVal) ? { ...ri, fator_margem: minVal } : ri));
 
-          // Set active policy (highest satisfied)
-          // We'll use the main markupPadrao to decide which policy is "active" at load
-          const currentMkp = markupPadrao;
-          const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
-            .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
-          
-          const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
-          setActivePolicy(applicable || defaultPolicy);
-
-          if (!isEditing) {
-            setPercDespesaOperacional(Number(applicable?.despesa_operacional_percentual ?? defaultPolicy?.despesa_operacional_percentual ?? 0));
+          if (!isEditing && !activePolicy) {
+            const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
+            setPercDespesaOperacional(Number(defaultPolicy?.despesa_operacional_percentual ?? 0));
           }
         } else {
           setUserPolicies([]);
@@ -986,15 +978,9 @@ export function SalesBudgetForm() {
         const minVal = Math.min(...policies.map((p: any) => Number(p.fator_limite)));
         setMinFatorAllowed(minVal);
 
-        const currentMkp = markupPadrao;
-        const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
-          .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
-        
-        const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
-        setActivePolicy(applicable || defaultPolicy);
-
-        if (!isEditing) {
-          setPercDespesaOperacional(Number(applicable?.despesa_operacional_percentual ?? defaultPolicy?.despesa_operacional_percentual ?? 0));
+        if (!isEditing && !activePolicy) {
+          const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
+          setPercDespesaOperacional(Number(defaultPolicy?.despesa_operacional_percentual ?? 0));
         }
       } else {
         setUserPolicies([]);
@@ -1009,8 +995,18 @@ export function SalesBudgetForm() {
     setLoading(true);
     api.get(`/sales-budgets/${id}`).then(async (res) => {
       const d = res.data;
-      if (d.commercial_policy_id) {
-        setLoadedCommercialPolicyId(d.commercial_policy_id);
+      let polId = d.commercial_policy_id || null;
+      if (!polId && d.items && d.items.length > 0) {
+        for (const item of d.items) {
+          const k = (item as any).opportunity_kit || (item as any).kit_raw;
+          if (k && k.commercial_policy_id) {
+            polId = k.commercial_policy_id;
+            break;
+          }
+        }
+      }
+      if (polId) {
+        setLoadedCommercialPolicyId(polId);
       }
       if (d.company_state_sigla) {
         setCompanyStateSigla(d.company_state_sigla);
@@ -1357,13 +1353,38 @@ export function SalesBudgetForm() {
   }, [id]);
 
   useEffect(() => {
-    if (userPolicies.length > 0 && loadedCommercialPolicyId) {
-      const match = userPolicies.find((p: any) => p.id === loadedCommercialPolicyId);
-      if (match) {
-        setActivePolicy(match);
-      }
+    if (userPolicies.length === 0) return;
+
+    let match = null;
+
+    // 1. Explicit Commercial Policy ID (from budget or loaded kit)
+    if (loadedCommercialPolicyId) {
+      match = userPolicies.find((p: any) => p.id === loadedCommercialPolicyId);
     }
-  }, [userPolicies, loadedCommercialPolicyId]);
+
+    // 2. Match by commission & despesa operacional
+    if (!match && (percComissao !== undefined || percDespesaOperacional !== undefined)) {
+      match = userPolicies.find((p: any) => 
+        Math.abs(Number(p.comissao_percentual || 0) - Number(percComissao || 0)) < 0.001 &&
+        Math.abs(Number(p.despesa_operacional_percentual || 0) - Number(percDespesaOperacional || 0)) < 0.001
+      );
+    }
+
+    // 3. Fallback: match by current markup factor
+    if (!match) {
+      const currentMkp = Number(markupPadrao || 1.0);
+      const applicable = userPolicies
+        .filter((p: any) => Number(p.fator_limite) <= currentMkp + 0.0001)
+        .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+
+      const defaultPolicy = userPolicies.find((p: any) => p.is_default) || userPolicies[0];
+      match = applicable || defaultPolicy;
+    }
+
+    if (match) {
+      setActivePolicy(match);
+    }
+  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao]);
 
 
 
