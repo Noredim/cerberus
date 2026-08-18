@@ -224,6 +224,7 @@ class SalesBudgetBase(BaseModel):
     data_vencimento_inicial: Optional[datetime] = None
     forma_pagamento_snapshot: Optional[dict] = None
     commercial_policy_id: Optional[UUID] = None
+    sales_team_id: Optional[UUID] = None
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime
@@ -318,6 +319,7 @@ class SalesBudgetUpdate(SalesBudgetBase):
 class SalesBudgetHeaderUpdate(BaseModel):
     titulo: Optional[str] = None
     customer_id: Optional[str] = None
+    sales_team_id: Optional[UUID] = None
     usar_produtos_gerais: Optional[bool] = None
 
 

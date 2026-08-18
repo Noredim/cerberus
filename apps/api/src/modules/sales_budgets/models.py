@@ -20,6 +20,7 @@ class SalesBudget(Base):
     data_vencimento_inicial = Column(DateTime(timezone=True), nullable=True)
     forma_pagamento_snapshot = Column(JSONB, nullable=True)
     commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="SET NULL"), nullable=True, index=True)
+    sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="SET NULL"), nullable=True, index=True)
 
     numero_orcamento = Column(String(50), nullable=True)
     titulo = Column(String(255), nullable=False)
@@ -88,6 +89,7 @@ class SalesBudget(Base):
     history = relationship("SalesBudgetHistory", back_populates="budget", cascade="all, delete-orphan", order_by="SalesBudgetHistory.data_movimentacao.desc()")
     approvals = relationship("SalesBudgetApproval", back_populates="budget", cascade="all, delete-orphan")
     commercial_policy = relationship("CommercialPolicy")
+    sales_team = relationship("SalesTeam")
 
 
 class SalesBudgetResponsavel(Base):

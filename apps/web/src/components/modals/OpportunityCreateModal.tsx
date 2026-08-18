@@ -18,53 +18,115 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
   const [titulo, setTitulo] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [vendedorId, setVendedorId] = useState('');
+  const [salesTeamId, setSalesTeamId] = useState('');
+  const [userSalesTeams, setUserSalesTeams] = useState<any[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
   const [usarProdutosGerais, setUsarProdutosGerais] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
   const [error, setError] = useState('');
-  const { user } = useAuth();
+  const [allCompanyTeams, setAllCompanyTeams] = useState<any[]>([]);
+  const { user, activeCompanyId, userCompanies } = useAuth();
+  const currentCompanyId = activeCompanyId || localStorage.getItem('company_id') || userCompanies[0]?.company_id;
 
   useEffect(() => {
-    if (isOpen) {
-      loadCustomers();
-      loadProfessionals();
-      // Reset state or set initialData
-      if (initialData) {
-        setTitulo(initialData.titulo || '');
-        setCustomerId(initialData.customerId || '');
-        setUsarProdutosGerais(initialData.usarProdutosGerais || false);
-        // In edit mode we don't necessarily load original vendor, since it's immutable
-        // But if we do, it won't be editable. We'll leave it empty to simplify since 
-        // the form backend doesn't overwrite if omitted properly, wait actually it shouldn't clear it.
-      } else {
-        setTitulo('');
-        setCustomerId('');
-        setVendedorId('');
-        setUsarProdutosGerais(false);
+    if (!isOpen) return;
+
+    if (initialData) {
+      setTitulo(initialData.titulo || '');
+      setCustomerId(initialData.customerId || '');
+      setUsarProdutosGerais(initialData.usarProdutosGerais || false);
+    } else {
+      setTitulo('');
+      setCustomerId('');
+      setVendedorId('');
+      setSalesTeamId('');
+      setUsarProdutosGerais(false);
+    }
+    setError('');
+
+    const loadModalData = async () => {
+      setLoadingTeams(true);
+      try {
+        const [custRes, profRes, teamsRes] = await Promise.all([
+          api.get('/cadastro/clientes', { params: { limit: 500 } }),
+          api.get('/professionals', { params: { limit: 500 } }),
+          currentCompanyId ? api.get(`/companies/${currentCompanyId}/sales-teams`) : Promise.resolve({ data: [] })
+        ]);
+
+        const custItems = Array.isArray(custRes.data) ? custRes.data : custRes.data.items || [];
+        setCustomers(custItems);
+
+        const profItems = Array.isArray(profRes.data) ? profRes.data : profRes.data.items || [];
+        const validSellers = profItems.filter((p: any) => p.role?.can_perform_sale === true);
+        setProfessionals(validSellers);
+
+        const teamsList = Array.isArray(teamsRes.data) ? teamsRes.data : [];
+        const activeTeams = teamsList.filter((t: any) => t.ativo);
+        setAllCompanyTeams(activeTeams);
+
+        let selectedVId = vendedorId;
+        if (!selectedVId && !initialData?.id && user?.id) {
+          const myProf = validSellers.find((p: any) => p.user_id === user.id || p.id === user.id);
+          if (myProf) {
+            selectedVId = myProf.id;
+            setVendedorId(myProf.id);
+          }
+        }
+
+        if (selectedVId) {
+          const prof = validSellers.find((p: any) => p.id === selectedVId);
+          const targetUserId = prof?.user_id || prof?.id || selectedVId;
+          const matched = activeTeams.filter((t: any) =>
+            Array.isArray(t.members) && t.members.some((m: any) =>
+              (targetUserId && m.user_id === targetUserId) ||
+              (selectedVId && m.user_id === selectedVId)
+            )
+          );
+          setUserSalesTeams(matched);
+          if (matched.length === 1) {
+            setSalesTeamId(matched[0].id);
+          } else if (matched.length > 1) {
+            setSalesTeamId(matched[0].id);
+          } else if (activeTeams.length > 0) {
+            setSalesTeamId(activeTeams[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados da modal de oportunidade:', err);
+      } finally {
+        setLoadingTeams(false);
       }
-      setError('');
-    }
-  }, [isOpen, initialData]);
+    };
 
-  const loadCustomers = async () => {
-    try {
-      const { data } = await api.get('/cadastro/clientes', { params: { limit: 500 } });
-      setCustomers(Array.isArray(data) ? data : data.items || []);
-    } catch (err) {
-      console.error('Falha ao carregar clientes:', err);
-    }
-  };
+    loadModalData();
+  }, [isOpen, currentCompanyId, initialData]);
 
-  const loadProfessionals = async () => {
-    try {
-      const { data } = await api.get('/professionals', { params: { limit: 500 } });
-      const items = Array.isArray(data) ? data : data.items || [];
-      // Filtrar profissionais cujo cargo permite realizar venda
-      const validSellers = items.filter((p: any) => p.role?.can_perform_sale === true);
-      setProfessionals(validSellers);
-    } catch (err) {
-      console.error('Falha ao carregar profissionais:', err);
+  const handleVendedorChange = (newVId: string) => {
+    setVendedorId(newVId);
+    if (!newVId) {
+      setUserSalesTeams([]);
+      setSalesTeamId('');
+      return;
+    }
+    const prof = professionals.find(p => p.id === newVId);
+    const targetUserId = prof?.user_id || prof?.id || newVId;
+    const matched = allCompanyTeams.filter((t: any) =>
+      Array.isArray(t.members) && t.members.some((m: any) =>
+        (targetUserId && m.user_id === targetUserId) ||
+        (newVId && m.user_id === newVId)
+      )
+    );
+    setUserSalesTeams(matched);
+    if (matched.length === 1) {
+      setSalesTeamId(matched[0].id);
+    } else if (matched.length > 1) {
+      setSalesTeamId(matched[0].id);
+    } else if (allCompanyTeams.length > 0) {
+      setSalesTeamId(allCompanyTeams[0].id);
+    } else {
+      setSalesTeamId('');
     }
   };
 
@@ -88,28 +150,30 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
     setLoading(true);
     
     try {
-       if (initialData?.id) {
-         // Edit mode (do not touch vendedor_id or responsavel_ids)
-         await api.patch(`/sales-budgets/${initialData.id}/header`, { 
-           titulo, 
-           customer_id: customerId,
-           usar_produtos_gerais: usarProdutosGerais
-         });
-         onSuccess(initialData.id, titulo, customerId, usarProdutosGerais);
-       } else {
-         // Create mode
-         const payload = {
-           titulo,
-           customer_id: customerId,
-           vendedor_id: vendedorId,
-           responsavel_ids: user?.id ? [user.id] : [],
-           data_orcamento: new Date().toISOString().slice(0, 10),
-           status: 'EM_LANCAMENTO',
-           usar_produtos_gerais: usarProdutosGerais
-         };
-         const res = await api.post('/sales-budgets', payload);
-         onSuccess(res.data.id, titulo, customerId, usarProdutosGerais);
-       }
+        if (initialData?.id) {
+          // Edit mode (do not touch vendedor_id or responsavel_ids)
+          await api.patch(`/sales-budgets/${initialData.id}/header`, { 
+            titulo, 
+            customer_id: customerId,
+            sales_team_id: salesTeamId || null,
+            usar_produtos_gerais: usarProdutosGerais
+          });
+          onSuccess(initialData.id, titulo, customerId, usarProdutosGerais);
+        } else {
+          // Create mode
+          const payload = {
+            titulo,
+            customer_id: customerId,
+            vendedor_id: vendedorId,
+            sales_team_id: salesTeamId || null,
+            responsavel_ids: user?.id ? [user.id] : [],
+            data_orcamento: new Date().toISOString().slice(0, 10),
+            status: 'EM_LANCAMENTO',
+            usar_produtos_gerais: usarProdutosGerais
+          };
+          const res = await api.post('/sales-budgets', payload);
+          onSuccess(res.data.id, titulo, customerId, usarProdutosGerais);
+        }
     } catch (err: any) {
        console.error(err);
        setError(`Falha ao ${initialData?.id ? 'editar' : 'criar'} oportunidade: ` + (err.response?.data?.detail || err.message));
@@ -235,7 +299,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                         required={!initialData?.id}
                         disabled={!!initialData?.id}
                         value={vendedorId}
-                        onChange={e => setVendedorId(e.target.value)}
+                        onChange={e => handleVendedorChange(e.target.value)}
                         className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary h-11 disabled:opacity-60"
                     >
                         {!!initialData?.id ? (
@@ -260,6 +324,66 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                         className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-60 cursor-not-allowed"
                     />
                 </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-sm font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
+                <span>Equipe de Venda *</span>
+                {vendedorId && userSalesTeams.length > 1 && (
+                  <span className="text-[10px] text-brand-primary font-bold">
+                    ({userSalesTeams.length} equipes disponíveis)
+                  </span>
+                )}
+              </label>
+
+              {!vendedorId ? (
+                <select
+                  disabled
+                  className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-60 cursor-not-allowed"
+                >
+                  <option value="">Selecione um vendedor primeiro...</option>
+                </select>
+              ) : loadingTeams ? (
+                <div className="flex items-center gap-2 py-2.5 px-4 bg-bg-deep border border-border-subtle rounded-md text-xs text-text-muted h-11">
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-primary" />
+                  <span>Buscando equipes de venda...</span>
+                </div>
+              ) : userSalesTeams.length > 1 ? (
+                <select
+                  required
+                  value={salesTeamId}
+                  onChange={e => setSalesTeamId(e.target.value)}
+                  className="w-full bg-bg-deep border border-brand-primary/50 rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary h-11 font-semibold"
+                >
+                  <option value="">Selecione a equipe de venda...</option>
+                  {userSalesTeams.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+              ) : userSalesTeams.length === 1 ? (
+                <select
+                  disabled
+                  value={userSalesTeams[0].id}
+                  className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none text-sm text-text-primary h-11 disabled:opacity-80 cursor-not-allowed font-medium"
+                >
+                  <option value={userSalesTeams[0].id}>{userSalesTeams[0].nome}</option>
+                </select>
+              ) : allCompanyTeams.length > 0 ? (
+                <select
+                  value={salesTeamId}
+                  onChange={e => setSalesTeamId(e.target.value)}
+                  className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary text-sm text-text-primary h-11"
+                >
+                  <option value="">Selecione uma equipe da empresa...</option>
+                  {allCompanyTeams.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/30 rounded-md text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+                  Nenhuma equipe de vendas cadastrada para esta empresa.
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 pt-4 pb-2">

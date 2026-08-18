@@ -847,6 +847,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         company_id=company_id,
         customer_id=data.customer_id,
         vendedor_id=data.vendedor_id,
+        sales_team_id=data.sales_team_id,
         forma_pagamento_id=data.forma_pagamento_id,
         data_vencimento_inicial=data.data_vencimento_inicial,
         forma_pagamento_snapshot=data.forma_pagamento_snapshot,
@@ -1380,6 +1381,8 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
         budget.titulo = data.titulo
     if data.customer_id is not None:
         budget.customer_id = data.customer_id
+    if data.sales_team_id is not None:
+        budget.sales_team_id = data.sales_team_id
     if data.usar_produtos_gerais is not None:
         budget.usar_produtos_gerais = data.usar_produtos_gerais
         

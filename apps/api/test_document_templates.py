@@ -59,24 +59,21 @@ try:
         db.add(user)
         db.flush()
 
-    print("--- Test 1: Validation of Missing Mandatory Variables ---")
-    # For OPORTUNIDADE, the mandatory variables in VARIABLES_CATALOG are:
-    # 'cliente_nome', 'empresa_nome', 'valor_proposta'
-    # Let's try creating a template missing 'valor_proposta'
-    invalid_data = TemplateCreate(
-        nome="CGF Invalido",
+    print("--- Test 1: Creation of Template Without Any Variables ---")
+    # All variables are optional now. Creating a template without any variables must succeed.
+    no_var_data = TemplateCreate(
+        nome="CGF Sem Variaveis",
         tipo_documento="CGF",
         modulo_origem="OPORTUNIDADE",
-        conteudo_html="Este documento pertence ao cliente {{cliente_nome}} da empresa {{empresa_nome}}.",
-        descricao="Modelo teste sem valor da proposta",
+        conteudo_html="Este documento não possui nenhuma variável de mesclagem.",
+        descricao="Modelo teste sem variáveis",
         variables=[]
     )
     
-    try:
-        service.create_template(db, tenant_id, str(company_id), invalid_data, user_id)
-        assert False, "Should have failed validation because 'valor_proposta' is missing!"
-    except ValueError as e:
-        print(f"Test 1 Passed! Threw expected validation error: {e}")
+    t1 = service.create_template(db, tenant_id, str(company_id), no_var_data, user_id)
+    assert t1 is not None
+    assert t1.id is not None
+    print(f"Test 1 Passed! Template created without variables with ID {t1.id}.")
 
     print("\n--- Test 2: Successful Creation with All Mandatory Variables ---")
     valid_data = TemplateCreate(
@@ -96,7 +93,7 @@ try:
     
     # Verify that variable entities were generated automatically from catalog
     variables = db.query(DocumentVariable).filter(DocumentVariable.modelo_id == template.id).all()
-    assert len(variables) == 7 # the count of OPORTUNIDADE catalog variables
+    assert len(variables) == len(service.VARIABLES_CATALOG["OPORTUNIDADE"])
     print(f"Test 2 Passed! Template created with ID {template.id} and {len(variables)} variables.")
 
     print("\n--- Test 3: Edit/Update Template Draft ---")
@@ -125,12 +122,14 @@ try:
     assert versions[0].conteudo_html == published.conteudo_html
     print("Test 4 Passed!")
 
-    print("\n--- Test 5: Prevent Editing Vigent Templates ---")
+    print("\n--- Test 5: Prevent Editing Inactive Templates ---")
+    template.status = "INATIVO"
     try:
         service.update_template(db, tenant_id, str(company_id), str(template.id), update_data, user_id)
-        assert False, "Should have failed because editing published/vigent template is prohibited!"
+        assert False, "Should have failed because editing inactive template is prohibited!"
     except ValueError as e:
         print(f"Test 5 Passed! Threw expected error: {e}")
+    template.status = "VIGENTE"
 
     print("\n--- Test 6: Duplicate/Version Published Template ---")
     # Duplicating a vigent template creates a new rascunho version incremented by 1
@@ -198,6 +197,64 @@ try:
         assert formatted_val in rendered_content
     print("Test 8 Passed! Rendered HTML content:")
     print(rendered_content)
+
+    print("\n--- Test 9: Render Template with Synthetic & Analytical Tables ---")
+    table_template_data = TemplateCreate(
+        nome="Proposta Completa Com Tabelas",
+        tipo_documento="PROPOSTA_COMERCIAL",
+        modulo_origem="OPORTUNIDADE",
+        conteudo_html="""
+        <h2>PROPOSTA COMERCIAL</h2>
+        <p>Cliente: {{cliente_nome}} | CNPJ: {{cliente_cnpj}}</p>
+        <h3>Tabela Sintética:</h3>
+        {{tabela_itens_sintetica}}
+        <h3>Tabela Analítica:</h3>
+        {{tabela_itens_analitica}}
+        {{resumo_condicoes_comerciais}}
+        """,
+        descricao="Modelo com tabelas sintetica e analitica",
+        variables=[]
+    )
+    t_tables = service.create_template(db, tenant_id, str(company_id), table_template_data, user_id)
+    t_tables_pub = service.publish_template(db, tenant_id, str(company_id), str(t_tables.id), user_id)
+    
+    rendered_tables = service.render_template(db, tenant_id, str(company_id), str(t_tables_pub.id), render_req, user_id)
+    assert rendered_tables is not None
+    assert "tabela-itens-sintetica" in rendered_tables
+    assert "tabela-itens-analitica" in rendered_tables
+    assert "resumo-condicoes-comerciais" in rendered_tables
+    print("Test 9 Passed! Synthetic & Analytical tables rendered successfully.")
+
+    print("\n--- Test 10: Render RentalBudgetItem Kits in Tables ---")
+    from src.modules.opportunity_kits.models import OpportunityKit
+    from src.modules.sales_budgets.models import RentalBudgetItem
+
+    opp_kit = OpportunityKit(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        company_id=company_id,
+        nome_kit="Kit Teste STELSEG Vision",
+        descricao_kit="Kit de Monitoramento e Alarme",
+        tipo_contrato="LOCACAO",
+        prazo_contrato_meses=36
+    )
+    db.add(opp_kit)
+    db.flush()
+
+    rental_item = RentalBudgetItem(
+        id=uuid.uuid4(),
+        budget_id=budget.id,
+        opportunity_kit_id=opp_kit.id,
+        quantidade=1,
+        kit_valor_mensal=1293.02
+    )
+    db.add(rental_item)
+    db.flush()
+
+    rendered_rental = service.render_template(db, tenant_id, str(company_id), str(t_tables_pub.id), render_req, user_id)
+    assert "Kit Teste STELSEG Vision" in rendered_rental
+    assert "1.293,02" in rendered_rental
+    print("Test 10 Passed! RentalBudgetItem Kit rendered successfully in tables.")
 
     print("\nAll Document Templates integration tests completed successfully!")
 

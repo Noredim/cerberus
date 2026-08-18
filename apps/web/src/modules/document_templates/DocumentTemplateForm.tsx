@@ -20,7 +20,12 @@ import {
     AlignCenter,
     AlignRight,
     List,
-    ListOrdered
+    ListOrdered,
+    Eye,
+    Indent,
+    Outdent,
+    AlignJustify,
+    Ruler
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, resolveHtmlMediaUrls } from '../../services/api';
@@ -97,8 +102,9 @@ const DocumentTemplateForm: React.FC = () => {
     const [versions, setVersions] = useState<DocumentVersion[]>([]);
     const [audits, setAudits] = useState<DocumentAudit[]>([]);
 
-    // Editor Mode: 'visual' or 'html'
-    const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
+    // Editor Mode: 'visual' | 'html' | 'preview'
+    const [editorMode, setEditorMode] = useState<'visual' | 'html' | 'preview'>('visual');
+    const [showMarginGuides, setShowMarginGuides] = useState(true);
     const editorRef = useRef<HTMLDivElement>(null);
     const savedRangeRef = useRef<Range | null>(null);
     const lastTextAreaPosRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
@@ -210,24 +216,122 @@ const DocumentTemplateForm: React.FC = () => {
         }
     }, []);
 
+    // Client-side PDF preview modal renderer
+    const renderPreviewHTML = React.useCallback(() => {
+        const papelTimbradoObj = letterheads.find(l => l.id === papelTimbradoId);
+        const guideClass = showMarginGuides ? 'show-margin-guides' : '';
+        const isLetterheadActive = Boolean(papelTimbradoObj);
+
+        let processedHtml = conteudoHtml;
+        const sampleSyntheticTable = `
+            <table class="tabela-itens-sintetica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+                <thead>
+                    <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                        <th style="padding: 10px 12px;">Item / Kit (Sintético)</th>
+                        <th style="padding: 10px 12px; text-align: center;">Qtd</th>
+                        <th style="padding: 10px 12px; text-align: right;">Val. Unitário</th>
+                        <th style="padding: 10px 12px; text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 10px 12px; font-weight: 500;"><strong>Kit: Kit CFTV IP 4 Câmeras</strong><br/><small style="color: #64748b;">Kit completo com NVR e câmeras IP 4K</small></td>
+                        <td style="padding: 10px 12px; text-align: center;">2</td>
+                        <td style="padding: 10px 12px; text-align: right;">R$ 2.500,00</td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 600;">R$ 5.000,00</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+                        <td colspan="3" style="padding: 10px 12px; text-align: right;">TOTAL DA PROPOSTA:</td>
+                        <td style="padding: 10px 12px; text-align: right; color: #0f172a; font-size: 13px;">R$ 5.000,00</td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+        const sampleAnalyticalTable = `
+            <table class="tabela-itens-analitica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+                <thead>
+                    <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                        <th style="padding: 10px 12px;">Código</th>
+                        <th style="padding: 10px 12px;">Descrição do Item (Analítico)</th>
+                        <th style="padding: 10px 12px; text-align: center;">Tipo</th>
+                        <th style="padding: 10px 12px; text-align: center;">Qtd</th>
+                        <th style="padding: 10px 12px; text-align: right;">Val. Unitário</th>
+                        <th style="padding: 10px 12px; text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="background-color: #f1f5f9; border-top: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
+                        <td colspan="4" style="padding: 8px 12px; font-weight: bold; color: #1e293b;">📦 KIT: Kit CFTV IP 4 Câmeras (Qtd: 2 UN)</td>
+                        <td style="padding: 8px 12px; text-align: right; font-weight: bold; color: #475569;">Subtotal:</td>
+                        <td style="padding: 8px 12px; text-align: right; font-weight: bold; color: #0f172a;">R$ 5.000,00</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 6px 12px 6px 24px; font-mono; font-size: 11px; color: #64748b;">CAM-001</td>
+                        <td style="padding: 6px 12px;">Câmera IP Dome 4K 30m IR</td>
+                        <td style="padding: 6px 12px; text-align: center;"><span style="background:#e2e8f0; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600;">Mercadoria</span></td>
+                        <td style="padding: 6px 12px; text-align: center;">8</td>
+                        <td style="padding: 6px 12px; text-align: right;">R$ 450,00</td>
+                        <td style="padding: 6px 12px; text-align: right; font-weight: 500;">R$ 3.600,00</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 6px 12px 6px 24px; font-mono; font-size: 11px; color: #64748b;">SERV-INS</td>
+                        <td style="padding: 6px 12px;">Instalação e Configuração CFTV</td>
+                        <td style="padding: 6px 12px; text-align: center;"><span style="background:#e2e8f0; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600;">Instalação</span></td>
+                        <td style="padding: 6px 12px; text-align: center;">1</td>
+                        <td style="padding: 6px 12px; text-align: right;">R$ 1.400,00</td>
+                        <td style="padding: 6px 12px; text-align: right; font-weight: 500;">R$ 1.400,00</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+
+        processedHtml = processedHtml
+            .replace(/\{\{tabela_itens_sintetica\}\}/g, sampleSyntheticTable)
+            .replace(/\{\{tabela_itens_analitica\}\}/g, sampleAnalyticalTable);
+
+        const bodyContent = `<div class="document-body-container ${guideClass} ${isLetterheadActive ? 'has-letterhead' : ''}">${processedHtml}</div>`;
+        if (!papelTimbradoObj) return bodyContent;
+        
+        const lhHtml = papelTimbradoObj.conteudo_html || '{{document_content}}';
+        const lhCss = papelTimbradoObj.conteudo_css ? `<style>${papelTimbradoObj.conteudo_css}</style>` : '';
+        
+        let merged = lhHtml;
+        if (merged.includes('{{document_content}}')) {
+            merged = merged.replace(/\{\{document_content\}\}/g, bodyContent);
+        } else if (merged.includes('{{conteudo_documento}}')) {
+            merged = merged.replace(/\{\{conteudo_documento\}\}/g, bodyContent);
+        } else if (merged.includes('{{conteudo}}')) {
+            merged = merged.replace(/\{\{conteudo\}\}/g, bodyContent);
+        } else if (merged.includes('{{content}}')) {
+            merged = merged.replace(/\{\{content\}\}/g, bodyContent);
+        } else {
+            merged = merged + bodyContent;
+        }
+
+        return lhCss + merged;
+    }, [letterheads, papelTimbradoId, conteudoHtml, showMarginGuides]);
+
     // Render preview
     const renderPreview = React.useCallback(async () => {
-        if (!selectedOppId) return;
         setRendering(true);
         try {
-            // First render local state to ensure preview has latest changes
-            const response = await api.post(`/document-templates/${id}/render`, {
-                oportunidade_id: selectedOppId
-            });
-            setRenderedHtml(response.data.html);
+            if (selectedOppId && id && !isNew) {
+                const response = await api.post(`/document-templates/${id}/render`, {
+                    oportunidade_id: selectedOppId
+                });
+                setRenderedHtml(response.data.html);
+            } else {
+                setRenderedHtml(renderPreviewHTML());
+            }
         } catch (err) {
             console.error(err);
-            const axiosError = err as { response?: { data?: { detail?: string } } };
-            alert(axiosError.response?.data?.detail || 'Erro ao processar renderização do documento.');
+            setRenderedHtml(renderPreviewHTML());
         } finally {
             setRendering(false);
         }
-    }, [id, selectedOppId]);
+    }, [id, isNew, selectedOppId, renderPreviewHTML]);
 
     useEffect(() => {
         if (isPreviewOpen) {
@@ -246,6 +350,35 @@ const DocumentTemplateForm: React.FC = () => {
         if (editorMode !== 'visual') return;
         document.execCommand(command, false, value);
         if (editorRef.current) {
+            setConteudoHtml(editorRef.current.innerHTML);
+        }
+    };
+
+    const changeFontName = (fontName: string) => {
+        if (editorMode !== 'visual' || isReadonly || !fontName) return;
+        document.execCommand('fontName', false, fontName);
+        if (editorRef.current) {
+            const fontElements = editorRef.current.querySelectorAll('font[face]');
+            fontElements.forEach((el) => {
+                const face = el.getAttribute('face');
+                if (face) {
+                    el.removeAttribute('face');
+                    (el as HTMLElement).style.fontFamily = face;
+                }
+            });
+            setConteudoHtml(editorRef.current.innerHTML);
+        }
+    };
+
+    const changeFontSize = (sizePx: string) => {
+        if (editorMode !== 'visual' || isReadonly || !sizePx) return;
+        document.execCommand('fontSize', false, '7');
+        if (editorRef.current) {
+            const fontElements = editorRef.current.querySelectorAll('font[size="7"]');
+            fontElements.forEach((el) => {
+                el.removeAttribute('size');
+                (el as HTMLElement).style.fontSize = sizePx;
+            });
             setConteudoHtml(editorRef.current.innerHTML);
         }
     };
@@ -325,16 +458,6 @@ const DocumentTemplateForm: React.FC = () => {
         }
     };
 
-    // Client-side PDF preview modal renderer
-    const renderPreviewHTML = () => {
-        const papelTimbradoObj = letterheads.find(l => l.id === papelTimbradoId);
-        if (!papelTimbradoObj) return conteudoHtml;
-        const bodyContent = `<div class="letterhead-wrapper">${conteudoHtml}</div>`;
-        if (papelTimbradoObj.conteudo_html?.includes('{{conteudo}}') || papelTimbradoObj.conteudo_html?.includes('{{content}}')) {
-            return papelTimbradoObj.conteudo_html.replace(/\{\{(conteudo|content)\}\}/g, bodyContent);
-        }
-        return papelTimbradoObj.conteudo_html + bodyContent;
-    };
 
     // Save Template (Draft or Update)
     const handleSave = async (isPublishing = false) => {
@@ -395,12 +518,15 @@ const DocumentTemplateForm: React.FC = () => {
             <head>
                 <title>${nome || 'Modelo_Documento'}</title>
                 <style>
-                    @page { size: A4; margin: 0; }
+                    @page { size: A4; margin: 3cm 2cm 2.5cm 2cm; }
                     body { margin: 0; padding: 0; font-family: sans-serif; background: #fff; }
-                    .letterhead-wrapper { padding: 20mm; display: flex; flex-direction: column; justify-content: space-between; min-height: 100vh; box-sizing: border-box; }
-                    .letterhead-wrapper > *:last-child, .footer { margin-top: auto; }
+                    .document-body-container { padding-top: 3cm !important; padding-bottom: 2.5cm !important; padding-left: 2cm !important; padding-right: 2cm !important; display: block; width: 100%; min-height: 297mm; box-sizing: border-box; }
+                    .document-body-container.has-letterhead, .letterhead-wrapper .document-body-container { padding-top: 0.2cm !important; }
+                    p { margin-top: 0; margin-bottom: 0.6em; }
+                    .footer, [class*="footer"], footer { margin-top: auto; }
                     @media print {
                         body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        @page { margin: 3cm 2cm 2.5cm 2cm; }
                     }
                 </style>
             </head>
@@ -472,6 +598,15 @@ const DocumentTemplateForm: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setIsPreviewOpen(true)}
+                        className="flex items-center gap-2 bg-bg-surface text-text-primary border border-border-subtle px-4 py-2 rounded-md font-medium hover:bg-bg-deep transition-colors min-h-[40px] cursor-pointer shadow-sm"
+                    >
+                        <Eye className="w-5 h-5 text-brand-primary" />
+                        Pré-visualizar
+                    </button>
+
                     {!isReadonly && (
                         <>
                             <button
@@ -623,6 +758,55 @@ const DocumentTemplateForm: React.FC = () => {
                         {/* Editor Header Toolbar */}
                         <div className="bg-[#f8f9fa] dark:bg-bg-deep border-b border-border-subtle px-4 py-2 flex items-center justify-between flex-wrap gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
+                                {/* Fonte (Font Family) */}
+                                <select
+                                    onChange={(e) => {
+                                        changeFontName(e.target.value);
+                                        e.target.value = '';
+                                    }}
+                                    disabled={editorMode !== 'visual' || isReadonly}
+                                    title="Tipo de Fonte"
+                                    className="h-8 bg-bg-surface dark:bg-bg-deep border border-border-subtle rounded-md px-2 text-xs font-medium text-text-primary focus:border-brand-primary outline-none cursor-pointer disabled:opacity-40"
+                                >
+                                    <option value="">Fonte</option>
+                                    <option value="Arial, sans-serif">Arial</option>
+                                    <option value="Helvetica, sans-serif">Helvetica</option>
+                                    <option value="Times New Roman, serif">Times New Roman</option>
+                                    <option value="Courier New, monospace">Courier New</option>
+                                    <option value="Georgia, serif">Georgia</option>
+                                    <option value="Verdana, sans-serif">Verdana</option>
+                                    <option value="Tahoma, sans-serif">Tahoma</option>
+                                    <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+                                </select>
+
+                                {/* Tamanho de Fonte (Font Size) */}
+                                <select
+                                    onChange={(e) => {
+                                        changeFontSize(e.target.value);
+                                        e.target.value = '';
+                                    }}
+                                    disabled={editorMode !== 'visual' || isReadonly}
+                                    title="Tamanho da Fonte"
+                                    className="h-8 bg-bg-surface dark:bg-bg-deep border border-border-subtle rounded-md px-2 text-xs font-medium text-text-primary focus:border-brand-primary outline-none cursor-pointer disabled:opacity-40"
+                                >
+                                    <option value="">Tamanho</option>
+                                    <option value="10px">10 px</option>
+                                    <option value="11px">11 px</option>
+                                    <option value="12px">12 px</option>
+                                    <option value="13px">13 px</option>
+                                    <option value="14px">14 px (Padrão)</option>
+                                    <option value="16px">16 px</option>
+                                    <option value="18px">18 px</option>
+                                    <option value="20px">20 px</option>
+                                    <option value="24px">24 px</option>
+                                    <option value="28px">28 px</option>
+                                    <option value="32px">32 px</option>
+                                    <option value="36px">36 px</option>
+                                    <option value="48px">48 px</option>
+                                </select>
+
+                                <span className="w-[1px] h-6 bg-border-subtle mx-1" />
+
                                 <button
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => execCmd('bold')}
@@ -678,6 +862,34 @@ const DocumentTemplateForm: React.FC = () => {
                                 >
                                     <AlignRight className="w-4 h-4" />
                                 </button>
+                                <button
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => execCmd('justifyFull')}
+                                    disabled={editorMode !== 'visual' || isReadonly}
+                                    title="Justificar Texto"
+                                    className="p-1.5 hover:bg-border-subtle rounded text-text-primary disabled:opacity-30 cursor-pointer"
+                                >
+                                    <AlignJustify className="w-4 h-4" />
+                                </button>
+                                <span className="w-[1px] h-6 bg-border-subtle mx-1" />
+                                <button
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => execCmd('outdent')}
+                                    disabled={editorMode !== 'visual' || isReadonly}
+                                    title="Diminuir Recuo de Parágrafo"
+                                    className="p-1.5 hover:bg-border-subtle rounded text-text-primary disabled:opacity-30 cursor-pointer"
+                                >
+                                    <Outdent className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => execCmd('indent')}
+                                    disabled={editorMode !== 'visual' || isReadonly}
+                                    title="Aumentar Recuo de Parágrafo"
+                                    className="p-1.5 hover:bg-border-subtle rounded text-text-primary disabled:opacity-30 cursor-pointer"
+                                >
+                                    <Indent className="w-4 h-4" />
+                                </button>
                                 <span className="w-[1px] h-6 bg-border-subtle mx-1" />
                                 <button
                                     onMouseDown={(e) => e.preventDefault()}
@@ -697,50 +909,86 @@ const DocumentTemplateForm: React.FC = () => {
                                 >
                                     <ListOrdered className="w-4 h-4" />
                                 </button>
+                                <span className="w-[1px] h-6 bg-border-subtle mx-1" />
+                                <button
+                                    onClick={() => setShowMarginGuides(!showMarginGuides)}
+                                    title="Alternar Marcadores Visuais de Margens (3cm Topo, 2.5cm Base)"
+                                    className={`p-1.5 rounded flex items-center gap-1 text-xs font-semibold cursor-pointer transition-colors ${showMarginGuides ? 'bg-brand-primary/15 text-brand-primary border border-brand-primary/30' : 'hover:bg-border-subtle text-text-muted'}`}
+                                >
+                                    <Ruler className="w-4 h-4" />
+                                    <span>Guias de Margem</span>
+                                </button>
                             </div>
 
-                            <button
-                                onClick={() => {
-                                    if (editorMode === 'visual') {
-                                        setEditorMode('html');
-                                    } else {
-                                        setEditorMode('visual');
-                                    }
-                                }}
-                                className="flex items-center gap-1 text-xs font-semibold px-2 py-1 bg-brand-primary/10 text-brand-primary rounded hover:bg-brand-primary/20 cursor-pointer transition-colors"
-                            >
-                                {editorMode === 'visual' ? (
-                                    <>
-                                        <Code className="w-3.5 h-3.5" /> HTML Código
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="w-3.5 h-3.5" /> Editor Visual
-                                    </>
-                                )}
-                            </button>
+                            <div className="flex items-center gap-1.5 bg-bg-deep p-1 rounded-md border border-border-subtle">
+                                <button
+                                    onClick={() => setEditorMode('visual')}
+                                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded cursor-pointer transition-colors ${editorMode === 'visual' ? 'bg-brand-primary text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                                >
+                                    <Sparkles className="w-3.5 h-3.5" /> Editor Visual
+                                </button>
+                                <button
+                                    onClick={() => setEditorMode('html')}
+                                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded cursor-pointer transition-colors ${editorMode === 'html' ? 'bg-brand-primary text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                                >
+                                    <Code className="w-3.5 h-3.5" /> HTML Código
+                                </button>
+                                <button
+                                    onClick={() => setEditorMode('preview')}
+                                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded cursor-pointer transition-colors ${editorMode === 'preview' ? 'bg-brand-primary text-white shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                                >
+                                    <Eye className="w-3.5 h-3.5" /> Pré-visualização
+                                </button>
+                            </div>
                         </div>
 
                         {/* Editor Canvas */}
                         <div className="p-4 bg-surface min-h-[500px]">
                             {editorMode === 'visual' ? (
-                                <div
-                                    ref={editorRef}
-                                    contentEditable={!isReadonly}
-                                    onKeyUp={saveSelection}
-                                    onMouseUp={saveSelection}
-                                    onFocus={saveSelection}
-                                    onInput={saveSelection}
-                                    onBlur={() => {
-                                        saveSelection();
-                                        if (editorRef.current) {
-                                            setConteudoHtml(editorRef.current.innerHTML);
-                                        }
-                                    }}
-                                    style={{ outline: 'none' }}
-                                    className="prose dark:prose-invert max-w-none min-h-[460px] text-text-primary text-sm p-2 overflow-y-auto"
-                                />
-                            ) : (
+                                <div className="space-y-2">
+                                    {showMarginGuides && (
+                                        <div className="bg-bg-deep border border-border-subtle rounded px-3 py-1.5 flex items-center justify-between text-xs text-text-muted">
+                                            <div className="flex items-center gap-2">
+                                                <Ruler className="w-3.5 h-3.5 text-brand-primary" />
+                                                <span className="font-semibold text-text-primary">Régua de Margens de Segurança:</span>
+                                            </div>
+                                            <div className="flex items-center gap-4 text-[11px] font-mono">
+                                                <span>Topo: <strong className="text-brand-primary">3,0 cm</strong></span>
+                                                <span>Base: <strong className="text-brand-primary">2,5 cm</strong></span>
+                                                <span>Laterais: <strong className="text-brand-primary">2,0 cm</strong></span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className={`relative transition-all ${showMarginGuides ? 'border-2 border-dashed border-brand-primary/40 rounded-md p-6 bg-white dark:bg-bg-deep' : ''}`}>
+                                        {showMarginGuides && (
+                                            <div className="text-[10px] uppercase tracking-wider font-bold text-brand-primary/70 mb-2 border-b border-dashed border-brand-primary/30 pb-1">
+                                                ↓ Início do Conteúdo (Margem Superior: 3,0 cm)
+                                            </div>
+                                        )}
+                                        <div
+                                            ref={editorRef}
+                                            contentEditable={!isReadonly}
+                                            onKeyUp={saveSelection}
+                                            onMouseUp={saveSelection}
+                                            onFocus={saveSelection}
+                                            onInput={saveSelection}
+                                            onBlur={() => {
+                                                saveSelection();
+                                                if (editorRef.current) {
+                                                    setConteudoHtml(editorRef.current.innerHTML);
+                                                }
+                                            }}
+                                            style={{ outline: 'none' }}
+                                            className="prose dark:prose-invert max-w-none min-h-[460px] text-text-primary text-sm p-2 overflow-y-auto"
+                                        />
+                                        {showMarginGuides && (
+                                            <div className="text-[10px] uppercase tracking-wider font-bold text-brand-primary/70 mt-2 border-t border-dashed border-brand-primary/30 pt-1 text-right">
+                                                ↑ Limite do Conteúdo (Margem Inferior: 2,5 cm)
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : editorMode === 'html' ? (
                                 <textarea
                                     id="html-textarea"
                                     value={conteudoHtml}
@@ -756,6 +1004,43 @@ const DocumentTemplateForm: React.FC = () => {
                                     disabled={isReadonly}
                                     className="w-full min-h-[460px] bg-bg-deep border border-border-subtle rounded-md p-3 text-xs font-mono text-text-primary focus:border-brand-primary outline-none transition-colors resize-y disabled:opacity-60"
                                 />
+                            ) : (
+                                <div className="bg-[#323639] p-6 rounded-md min-h-[600px] flex flex-col items-center overflow-auto shadow-inner">
+                                    <div className="w-full max-w-[210mm] mb-2 flex items-center justify-between text-xs text-gray-300 font-medium px-1">
+                                        <span>Visualização do Documento (A4)</span>
+                                        {papelTimbradoId && (
+                                            <span className="bg-white/10 px-2 py-0.5 rounded text-[11px] text-gray-200">
+                                                Papel Timbrado Aplicado
+                                            </span>
+                                        )}
+                                    </div>
+                                    <iframe
+                                        title="Live Document Preview"
+                                        srcDoc={`
+                                            <!DOCTYPE html>
+                                            <html>
+                                                <head>
+                                                                                   <style>
+                                                        @page { size: A4; margin: 3cm 2cm 2.5cm 2cm; }
+                                                        html, body { margin: 0; padding: 0; background-color: white; color: #1e293b; font-family: 'Inter', system-ui, -apple-system, sans-serif; line-height: 1.6; font-size: 13px; }
+                                                        .document-body-container { padding-top: 3cm !important; padding-bottom: 2.5cm !important; padding-left: 2cm !important; padding-right: 2cm !important; box-sizing: border-box; display: block; width: 100%; min-height: 297mm; position: relative; }
+                                                        .document-body-container.has-letterhead, .letterhead-wrapper .document-body-container { padding-top: 0.2cm !important; }
+                                                        p { margin-top: 0; margin-bottom: 0.6em; }
+                                                        h1, h2, h3, h4 { color: #0f172a; margin-top: 1.2em; margin-bottom: 0.4em; }
+                                                        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                                                        th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
+                                                        th { background-color: #f8fafc; font-weight: 600; color: #334155; }
+                                                        .show-margin-guides { outline: 1px dashed rgba(239, 68, 68, 0.4); outline-offset: -2px; }
+                                                    </style>
+                                                </head>
+                                                <body>
+                                                    ${resolveHtmlMediaUrls(renderPreviewHTML())}
+                                                </body>
+                                            </html>
+                                        `}
+                                        className="w-full max-w-[210mm] min-h-[297mm] bg-white shadow-2xl rounded-sm border border-gray-400 my-2"
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
@@ -783,11 +1068,23 @@ const DocumentTemplateForm: React.FC = () => {
                                             <span className="font-mono text-xs font-bold text-text-primary break-all">
                                                 {`{{${v.nome}}}`}
                                             </span>
-                                            {v.obrigatoria && (
-                                                <span className="text-[9px] font-bold text-brand-danger bg-brand-danger/10 px-1 py-0.5 rounded shrink-0">
-                                                    OBRIGATÓRIO
-                                                </span>
-                                            )}
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                {v.tipo === 'TABELA_HTML' && (
+                                                    <span className="text-[9px] font-bold text-brand-primary bg-brand-primary/15 px-1.5 py-0.5 rounded border border-brand-primary/30">
+                                                        TABELA DADOS
+                                                    </span>
+                                                )}
+                                                {v.tipo === 'BLOCO_HTML' && (
+                                                    <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
+                                                        BLOCO RESUMO
+                                                    </span>
+                                                )}
+                                                {v.obrigatoria && (
+                                                    <span className="text-[9px] font-bold text-brand-danger bg-brand-danger/10 px-1 py-0.5 rounded">
+                                                        OBRIGATÓRIO
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex items-center justify-between text-[11px] text-text-muted mt-1">
                                             <span>
@@ -943,11 +1240,11 @@ const DocumentTemplateForm: React.FC = () => {
                         </header>
 
                         {/* Modal content / Render Canvas */}
-                        <div className="flex-1 bg-[#eeeeee] relative p-4 flex justify-center overflow-hidden">
+                        <div className="flex-1 bg-[#323639] relative p-6 flex justify-center overflow-auto shadow-inner">
                             {rendering ? (
-                                <div className="absolute inset-0 bg-white/70 flex flex-col items-center justify-center z-10">
+                                <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-10 text-white">
                                     <Loader2 className="w-8 h-8 animate-spin text-brand-primary mb-2" />
-                                    <span className="text-sm text-text-muted font-medium">Renderizando variáveis...</span>
+                                    <span className="text-sm font-medium">Renderizando variáveis...</span>
                                 </div>
                             ) : null}
 
@@ -956,37 +1253,23 @@ const DocumentTemplateForm: React.FC = () => {
                                     ref={iframeRef}
                                     title="Render Frame"
                                     srcDoc={`
+                                        <!DOCTYPE html>
                                         <html>
                                             <head>
+                                                <meta charset="utf-8">
                                                 <style>
-                                                    html, body {
-                                                        height: 100%;
-                                                        margin: 0;
-                                                    }
-                                                    body {
-                                                        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-                                                        padding: 20mm;
-                                                        box-sizing: border-box;
-                                                        background-color: white;
-                                                        color: #333333;
-                                                        line-height: 1.6;
-                                                        font-size: 14px;
-                                                        display: flex;
-                                                        flex-direction: column;
-                                                        justify-content: space-between;
-                                                        min-height: 100vh;
-                                                    }
-                                                    .footer, [class*="footer"] {
-                                                        margin-top: auto;
-                                                    }
-                                                    h1, h2, h3, h4 { color: #111111; margin-top: 1.5em; margin-bottom: 0.5em; }
-                                                    p { margin-bottom: 1em; }
-                                                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                                                    th, td { border: 1px solid #dddddd; padding: 10px; text-align: left; }
-                                                    th { background-color: #f2f2f2; font-weight: bold; }
+                                                    @page { size: A4; margin: 3cm 2cm 2.5cm 2cm; }
+                                                    html, body { margin: 0; padding: 0; background-color: white; color: #1e293b; font-family: 'Inter', system-ui, -apple-system, sans-serif; line-height: 1.6; font-size: 13px; }
+                                                    .document-body-container { padding-top: 3cm !important; padding-bottom: 2.5cm !important; padding-left: 2cm !important; padding-right: 2cm !important; box-sizing: border-box; display: block; width: 100%; min-height: 297mm; position: relative; }
+                                                    .document-body-container.has-letterhead, .letterhead-wrapper .document-body-container { padding-top: 0.2cm !important; }
+                                                    p { margin-top: 0; margin-bottom: 0.6em; }
+                                                    h1, h2, h3, h4 { color: #0f172a; margin-top: 1.2em; margin-bottom: 0.4em; }
+                                                    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                                                    th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
+                                                    th { background-color: #f8fafc; font-weight: 600; color: #334155; }
                                                     @media print {
-                                                        body { padding: 0; background-color: white; color: black; }
-                                                        @page { margin: 20mm; }
+                                                        body { background-color: white; color: black; }
+                                                        @page { margin: 3cm 2cm 2.5cm 2cm; }
                                                     }
                                                 </style>
                                             </head>
@@ -995,11 +1278,11 @@ const DocumentTemplateForm: React.FC = () => {
                                             </body>
                                         </html>
                                     `}
-                                    className="w-full max-w-4xl h-full bg-white shadow-md border-0 rounded"
+                                    className="w-full max-w-[210mm] min-h-[297mm] bg-white shadow-2xl rounded-sm border border-gray-400 my-2"
                                 />
                             ) : (
-                                <div className="flex flex-col items-center justify-center text-text-muted">
-                                    <FileText className="w-12 h-12 mb-2 text-text-muted/40" />
+                                <div className="flex flex-col items-center justify-center text-gray-400">
+                                    <FileText className="w-12 h-12 mb-2 text-gray-500" />
                                     <span>Selecione uma proposta para gerar a visualização.</span>
                                 </div>
                             )}

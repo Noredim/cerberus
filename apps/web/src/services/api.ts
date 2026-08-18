@@ -21,11 +21,10 @@ export const resolveHtmlMediaUrls = (html?: string | null): string => {
     if (!html) return '';
     const apiBase = api.defaults.baseURL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
     const cleanBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
-    
-    if (!cleanBase) return html;
-    
-    return html.replace(/src=["'](\/uploads\/[^"']+)["']/g, (_match, p1) => {
-        return `src="${cleanBase}${p1}"`;
+    const targetBase = cleanBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+
+    return html.replace(/src=["']\/?(uploads\/[^"']+)["']/gi, (_match, p1) => {
+        return `src="${targetBase}/${p1}"`;
     });
 };
 

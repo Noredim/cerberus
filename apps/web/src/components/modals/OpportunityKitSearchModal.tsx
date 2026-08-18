@@ -39,9 +39,18 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
       });
       let kits = res.data || [];
       if (allowedTypes && allowedTypes.length > 0) {
-        kits = kits.filter((kit: any) => allowedTypes.includes(kit.tipo_contrato));
+        const allowedUpper = allowedTypes.map(t => t.toUpperCase());
+        kits = kits.filter((kit: any) => {
+          const kitType = (kit.tipo_contrato || '').toUpperCase();
+          return allowedUpper.some(allowed => 
+            kitType === allowed || 
+            kitType.includes(allowed) || 
+            allowed.includes(kitType)
+          );
+        });
       } else if (tipoContrato) {
-        kits = kits.filter((kit: any) => kit.tipo_contrato === tipoContrato);
+        const targetUpper = tipoContrato.toUpperCase();
+        kits = kits.filter((kit: any) => (kit.tipo_contrato || '').toUpperCase() === targetUpper);
       }
       setResults(kits);
     } catch (err) {

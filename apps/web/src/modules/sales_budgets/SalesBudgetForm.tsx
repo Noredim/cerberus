@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off, AlertTriangle, FileText } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
-import { api } from '../../services/api';
+import { api, resolveHtmlMediaUrls } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { AddRentalItemModal } from './AddRentalItemModal';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
@@ -723,6 +723,9 @@ export function SalesBudgetForm() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [vendedorId, setVendedorId] = useState('');
+  const [salesTeamId, setSalesTeamId] = useState('');
+  const [generatingProposal, setGeneratingProposal] = useState(false);
+  const [noDocumentRuleModalOpen, setNoDocumentRuleModalOpen] = useState(false);
 
   const canManageParticipants = useMemo(() => {
     if (!user) return false;
@@ -959,6 +962,7 @@ export function SalesBudgetForm() {
       setTitulo(d.titulo);
       setCustomerId(d.customer_id);
       setVendedorId(d.vendedor_id || '');
+      setSalesTeamId(d.sales_team_id || '');
       setObservacoes(d.observacoes || '');
       setDataOrcamento(d.data_orcamento?.slice(0, 10) || '');
       setStatus(d.status);
@@ -2880,9 +2884,138 @@ export function SalesBudgetForm() {
     }
   };
 
+  const handleGenerateCommercialProposal = async () => {
+    if (!id || !activeCompanyId) return;
+    setGeneratingProposal(true);
+    try {
+      const resolveRes = await api.get(`/companies/${activeCompanyId}/document-rules/resolve`, {
+        params: {
+          tipo_documento: 'PROPOSTA_COMERCIAL',
+          sales_team_id: salesTeamId || undefined,
+          user_id: vendedorId || user?.id
+        }
+      });
+
+      const data = resolveRes.data;
+      if (!data || !data.document_template_id || data.resolved_by === 'NONE') {
+        setNoDocumentRuleModalOpen(true);
+        return;
+      }
+
+      const renderRes = await api.post(`/document-templates/${data.document_template_id}/render`, {
+        oportunidade_id: id
+      });
+
+      const rawHtml = renderRes.data?.html;
+      if (!rawHtml) {
+        alert('Não foi possível obter o conteúdo da proposta comercial.');
+        return;
+      }
+      const renderedHtml = resolveHtmlMediaUrls(rawHtml);
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <base href="${window.location.origin}/" />
+              <title>Proposta Comercial - ${titulo || 'Oportunidade'}</title>
+              <style>
+                @media print {
+                  @page {
+                    size: A4;
+                    margin: 0;
+                  }
+                  html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: #ffffff !important;
+                  }
+                  .no-print { display: none !important; }
+                  .doc-viewport {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    display: block !important;
+                  }
+                  .a4-sheet {
+                    box-shadow: none !important;
+                    margin: 0 !important;
+                    width: 100% !important;
+                    min-height: auto !important;
+                    border: none !important;
+                    border-radius: 0 !important;
+                  }
+                }
+                body {
+                  font-family: system-ui, -apple-system, sans-serif;
+                  margin: 0;
+                  padding: 0;
+                  background: #cbd5e1;
+                  color: #0f172a;
+                }
+                .toolbar {
+                  position: fixed; top: 0; left: 0; right: 0; height: 54px;
+                  background: #0f172a; color: white; display: flex; align-items: center;
+                  justify-content: space-between; padding: 0 24px; z-index: 9999;
+                  box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: system-ui, sans-serif;
+                }
+                .toolbar span { font-weight: 600; font-size: 14px; }
+                .toolbar button {
+                  background: #4f46e5; color: white; border: none; padding: 8px 20px;
+                  border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px;
+                  transition: all 0.2s;
+                }
+                .toolbar button:hover { background: #4338ca; }
+                .doc-viewport {
+                  margin-top: 74px;
+                  margin-bottom: 40px;
+                  display: flex;
+                  justify-content: center;
+                }
+                .a4-sheet {
+                  width: 210mm;
+                  height: 297mm;
+                  min-height: 297mm;
+                  max-height: 297mm;
+                  background: #ffffff;
+                  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+                  border-radius: 4px;
+                  box-sizing: border-box;
+                  position: relative;
+                  overflow: hidden;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: space-between;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="toolbar no-print">
+                <span>Proposta Comercial (${numeroOrcamento || 'Oportunidade'}) — Modelo: ${data.template_nome || 'Padrão'}</span>
+                <button onclick="window.print()">Imprimir / Salvar PDF</button>
+              </div>
+              <div class="doc-viewport">
+                <div class="a4-sheet">
+                  ${renderedHtml}
+                </div>
+              </div>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } catch (err: any) {
+      console.error('Erro ao gerar proposta comercial:', err);
+      const msg = err.response?.data?.detail || err.message || 'Erro ao comunicar com o servidor.';
+      alert(`Falha ao gerar proposta comercial: ${msg}`);
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
+
   const handlePrintProposal = () => {
-    if (status !== 'APROVADO') return;
-    window.print();
+    handleGenerateCommercialProposal();
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
@@ -3072,6 +3205,17 @@ export function SalesBudgetForm() {
               </Button>
               {showReportsDropdown && (
                 <div className="absolute right-0 mt-1 w-56 rounded-md shadow-lg bg-bg-surface border border-border-subtle z-50 py-1">
+                  <button
+                    onClick={() => {
+                      setShowReportsDropdown(false);
+                      handleGenerateCommercialProposal();
+                    }}
+                    disabled={generatingProposal}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2 font-medium border-b border-border-subtle"
+                  >
+                    {generatingProposal ? <Loader2 className="w-4 h-4 animate-spin text-brand-primary" /> : <FileText className="w-4 h-4 text-brand-primary" />}
+                    Proposta Comercial
+                  </button>
                   <button
                     onClick={() => {
                       setShowReportsDropdown(false);
@@ -7065,6 +7209,7 @@ export function SalesBudgetForm() {
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
           title="Buscar Kit para Comodato / Locação"
+          allowedTypes={['LOCACAO', 'COMODATO', 'LOCACAO_PURA', 'INSTALACAO', 'SERVICO_INSTALACAO']}
         />
       )}
 
@@ -7076,6 +7221,7 @@ export function SalesBudgetForm() {
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
           title="Buscar Kit para Venda"
+          allowedTypes={['VENDA', 'VENDA_EQUIPAMENTOS', 'INSTALACAO', 'SERVICO_INSTALACAO']}
         />
       )}
 
@@ -7390,6 +7536,35 @@ export function SalesBudgetForm() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal aviso de falta de modelo de documento vinculado */}
+      {noDocumentRuleModalOpen && (
+        <Modal
+          isOpen={noDocumentRuleModalOpen}
+          onClose={() => setNoDocumentRuleModalOpen(false)}
+          title="Modelo de Documento Ausente"
+        >
+          <div className="p-6 space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h4 className="font-bold text-text-primary text-base">
+              Não há modelo de documento vinculado para esta equipe de venda.
+            </h4>
+            <p className="text-xs text-text-muted">
+              Acesse o cadastro da empresa na aba <strong>Documentos</strong> para vincular o modelo de Proposta Comercial a esta equipe de vendas.
+            </p>
+            <div className="pt-2 flex justify-center">
+              <Button
+                onClick={() => setNoDocumentRuleModalOpen(false)}
+                className="font-bold text-xs"
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
     </div>

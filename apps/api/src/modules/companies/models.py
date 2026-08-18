@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Numeric, Date, Boolean, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, Numeric, Date, Boolean, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from src.core.base import Base
@@ -67,6 +67,7 @@ class Company(Base):
     sales_parameters = relationship("CompanySalesParameter", back_populates="company", uselist=False, cascade="all, delete-orphan")
     commercial_policies = relationship("CommercialPolicy", back_populates="company", cascade="all, delete-orphan")
     sales_teams = relationship("SalesTeam", back_populates="company", cascade="all, delete-orphan")
+    document_rules = relationship("CompanyDocumentRule", back_populates="company", cascade="all, delete-orphan")
     city = relationship("City")
     state = relationship("State")
 
@@ -321,7 +322,33 @@ class SalesTeamPolicy(Base):
     sales_team = relationship("SalesTeam", back_populates="policies")
     policy = relationship("CommercialPolicy")
 
+
+class CompanyDocumentRule(Base):
+    """Regras de vinculação de Modelos de Documentos por Equipe de Venda na Empresa."""
+    __tablename__ = "company_document_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    tipo_documento = Column(String(50), nullable=False)  # PROPOSTA_COMERCIAL, CONTRATO_CLIENTE
+    sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_template_id = Column(UUID(as_uuid=True), ForeignKey("documento_modelo.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    company = relationship("Company", back_populates="document_rules")
+    sales_team = relationship("SalesTeam")
+    document_template = relationship("DocumentTemplate")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "tipo_documento", "sales_team_id", name="uq_company_doc_rule_team"),
+    )
+
+
 from src.modules.own_services.models import OwnService  # noqa: F401
+from src.modules.document_templates.models import DocumentTemplate  # noqa: F401
+
 
 
 

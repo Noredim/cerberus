@@ -10,6 +10,80 @@ from src.modules.document_templates.schemas import (
 from src.modules.sales_budgets.models import SalesBudget
 from src.modules.customers.models import Customer
 from src.modules.companies.models import Company
+DEFAULT_BASE_CSS = """
+@page {
+    size: A4;
+    margin: 0;
+}
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #0f172a;
+    line-height: 1.5;
+}
+.has-letterhead,
+.letterhead-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    padding: 0.8cm 1.5cm 0.8cm 1.5cm;
+    overflow: hidden;
+}
+.document-body-container {
+    box-sizing: border-box;
+    padding-top: 3.0cm;
+    padding-bottom: 2.5cm;
+    padding-left: 2.0cm;
+    padding-right: 2.0cm;
+    display: block;
+    width: 100%;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.has-letterhead .document-body,
+.letterhead-wrapper .document-body {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden;
+}
+.has-letterhead .document-body-container,
+.letterhead-wrapper .document-body-container {
+    padding-top: 0.3cm !important;
+    padding-bottom: 0.3cm !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    flex: 1 1 auto;
+}
+p {
+    margin-top: 0;
+    margin-bottom: 0.8em;
+}
+img {
+    max-width: 100%;
+    height: auto;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+.has-letterhead .footer,
+.letterhead-wrapper .footer,
+.footer, [class*="footer"], footer {
+    margin-top: auto !important;
+    flex-shrink: 0 !important;
+}
+"""
 
 
 def list_letterheads(
@@ -130,24 +204,7 @@ def preview_letterhead(data: LetterheadPreviewRequest) -> str:
     else:
         rendered = f"{html}\n{sample}"
 
-    base_css = """
-    html, body {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-    }
-    .letterhead-wrapper {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        min-height: 257mm;
-        box-sizing: border-box;
-    }
-    .footer, [class*="footer"], footer {
-        margin-top: auto;
-    }
-    """
-
+    base_css = DEFAULT_BASE_CSS
     if css and css.strip():
         rendered = f"<style>{base_css}\n{css}</style>\n<div class=\"letterhead-wrapper\">{rendered}</div>"
     else:
@@ -156,17 +213,404 @@ def preview_letterhead(data: LetterheadPreviewRequest) -> str:
     return rendered
 
 
+def format_currency(val: float) -> str:
+    val = float(val or 0.0)
+    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def build_synthetic_items_table(budget: SalesBudget) -> str:
+    """Modo Sintético: Agrupa itens por Kit de Oportunidade ou Produto avulso/Serviço.
+    Exibe 1 linha consolidada por Kit com o Nome do Kit, Quantidade, Valor Unitário e Valor Total.
+    Suporta tanto itens de Venda (budget.items) quanto Ativos de Locação/Comodato (budget.rental_items).
+    """
+    sales_items = list(budget.items or [])
+    rental_items = list(budget.rental_items or [])
+    all_items = sales_items + rental_items
+
+    if not budget or not all_items:
+        return """
+        <table class="tabela-itens-sintetica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+            <thead>
+                <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                    <th style="padding: 8px 12px;">Item / Kit (Sintético)</th>
+                    <th style="padding: 8px 12px; text-align: center;">Qtd</th>
+                    <th style="padding: 8px 12px; text-align: right;">Val. Unitário</th>
+                    <th style="padding: 8px 12px; text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="4" style="padding: 10px; text-align: center; color: #64748b;">Nenhum item cadastrado na oportunidade.</td></tr>
+            </tbody>
+        </table>
+        """
+
+    kits_map = {}
+    standalone_items = []
+
+    # 1. Process Sales items
+    for item in sales_items:
+        if item.opportunity_kit_id and item.opportunity_kit:
+            kit_id = str(item.opportunity_kit_id)
+            if kit_id not in kits_map:
+                kits_map[kit_id] = {
+                    "kit": item.opportunity_kit,
+                    "qtd": float(item.quantidade or 1),
+                    "total": 0.0,
+                    "items": []
+                }
+            kits_map[kit_id]["total"] += float(item.total_venda or 0.0)
+            kits_map[kit_id]["items"].append(item)
+        else:
+            standalone_items.append({
+                "codigo": item.product.codigo if item.product else "-",
+                "nome": item.product.nome if item.product else (item.descricao_servico or "Item Geral"),
+                "qtd": float(item.quantidade or 1),
+                "venda_unit": float(item.venda_unit or 0),
+                "total": float(item.total_venda or 0)
+            })
+
+    # 2. Process Rental items
+    for item in rental_items:
+        if item.opportunity_kit_id and item.opportunity_kit:
+            kit_id = str(item.opportunity_kit_id)
+            kit_total = float(item.kit_valor_mensal or item.valor_mensal or item.kit_investimento_total or item.custo_total_aquisicao or 0.0)
+            if kit_id not in kits_map:
+                kits_map[kit_id] = {
+                    "kit": item.opportunity_kit,
+                    "qtd": float(item.quantidade or 1),
+                    "total": 0.0,
+                    "items": []
+                }
+            kits_map[kit_id]["total"] += kit_total
+            kits_map[kit_id]["items"].append(item)
+        else:
+            qtd = float(item.quantidade or 1)
+            total = float(item.valor_mensal * qtd if item.valor_mensal else item.custo_total_aquisicao or 0.0)
+            venda_unit = total / qtd if qtd > 0 else total
+            standalone_items.append({
+                "codigo": item.product.codigo if item.product else "-",
+                "nome": item.product_nome or (item.product.nome if item.product else "Ativo de Locação"),
+                "qtd": qtd,
+                "venda_unit": venda_unit,
+                "total": total
+            })
+
+    rows_html = ""
+
+    for kit_id, data in kits_map.items():
+        kit_nome = data["kit"].nome_kit or "Kit de Oportunidade"
+        kit_desc = getattr(data["kit"], 'descricao_kit', None) or getattr(data["kit"], 'descricao', '')
+        qtd = float(data["qtd"] or 1)
+        total = data["total"]
+        unit = total / qtd if qtd > 0 else total
+
+        desc_html = f"<strong>Kit: {kit_nome}</strong>"
+        if kit_desc:
+            desc_html += f"<br/><small style='color: #64748b;'>{kit_desc}</small>"
+
+        rows_html += f"""
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 500;">{desc_html}</td>
+            <td style="padding: 10px 12px; text-align: center;">{int(qtd) if qtd.is_integer() else f"{qtd:.2f}"}</td>
+            <td style="padding: 10px 12px; text-align: right;">{format_currency(unit)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 600;">{format_currency(total)}</td>
+        </tr>
+        """
+
+    for item_data in standalone_items:
+        codigo = item_data["codigo"]
+        nome = item_data["nome"]
+        qtd = item_data["qtd"]
+        venda_unit = item_data["venda_unit"]
+        total = item_data["total"]
+
+        rows_html += f"""
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px;"><strong>[{codigo}]</strong> {nome}</td>
+            <td style="padding: 10px 12px; text-align: center;">{int(qtd) if qtd.is_integer() else f"{qtd:.2f}"}</td>
+            <td style="padding: 10px 12px; text-align: right;">{format_currency(venda_unit)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 600;">{format_currency(total)}</td>
+        </tr>
+        """
+
+    total_proposta = float(budget.valor_total or 0.0)
+    if total_proposta == 0.0:
+        total_proposta = sum(d["total"] for d in kits_map.values()) + sum(d["total"] for d in standalone_items)
+
+    return f"""
+    <table class="tabela-itens-sintetica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+        <thead>
+            <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                <th style="padding: 10px 12px;">Item / Kit (Sintético)</th>
+                <th style="padding: 10px 12px; text-align: center;">Qtd</th>
+                <th style="padding: 10px 12px; text-align: right;">Val. Unitário</th>
+                <th style="padding: 10px 12px; text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_html}
+        </tbody>
+        <tfoot>
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+                <td colspan="3" style="padding: 10px 12px; text-align: right;">TOTAL DA PROPOSTA:</td>
+                <td style="padding: 10px 12px; text-align: right; color: #0f172a; font-size: 13px;">{format_currency(total_proposta)}</td>
+            </tr>
+        </tfoot>
+    </table>
+    """
+
+
+def build_analytical_items_table(budget: SalesBudget) -> str:
+    """Modo Analítico: Abre todos os sub-itens dentro de cada Kit de Oportunidade,
+    mostrando produtos, serviços de instalação e manutenção unificados sob o Kit.
+    Suporta tanto itens de Venda (budget.items) quanto Ativos de Locação/Comodato (budget.rental_items).
+    """
+    sales_items = list(budget.items or [])
+    rental_items = list(budget.rental_items or [])
+    all_items = sales_items + rental_items
+
+    if not budget or not all_items:
+        return """
+        <table class="tabela-itens-analitica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+            <thead>
+                <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                    <th style="padding: 8px 12px;">Código</th>
+                    <th style="padding: 8px 12px;">Descrição do Item (Analítico)</th>
+                    <th style="padding: 8px 12px; text-align: center;">Tipo</th>
+                    <th style="padding: 8px 12px; text-align: center;">Qtd</th>
+                    <th style="padding: 8px 12px; text-align: right;">Val. Unitário</th>
+                    <th style="padding: 8px 12px; text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="6" style="padding: 10px; text-align: center; color: #64748b;">Nenhum item cadastrado na oportunidade.</td></tr>
+            </tbody>
+        </table>
+        """
+
+    kits_map = {}
+    standalone_items = []
+
+    # 1. Process Sales Items
+    for item in sales_items:
+        if item.opportunity_kit_id and item.opportunity_kit:
+            kit_id = str(item.opportunity_kit_id)
+            if kit_id not in kits_map:
+                kits_map[kit_id] = {
+                    "kit": item.opportunity_kit,
+                    "qtd": float(item.quantidade or 1),
+                    "total": 0.0,
+                    "items": []
+                }
+            kits_map[kit_id]["total"] += float(item.total_venda or 0.0)
+            kits_map[kit_id]["items"].append({
+                "codigo": item.product.codigo if item.product else "-",
+                "nome": item.product.nome if item.product else (item.descricao_servico or "Sub-item do Kit"),
+                "tipo_label": "Mercadoria" if item.tipo_item == "MERCADORIA" else ("Instalação" if item.tipo_item == "SERVICO_INSTALACAO" else "Manutenção"),
+                "qtd": float(item.quantidade or 1),
+                "venda_unit": float(item.venda_unit or 0),
+                "total": float(item.total_venda or 0)
+            })
+        else:
+            standalone_items.append({
+                "codigo": item.product.codigo if item.product else "-",
+                "nome": item.product.nome if item.product else (item.descricao_servico or "Item Avulso"),
+                "tipo_label": "Mercadoria" if item.tipo_item == "MERCADORIA" else ("Instalação" if item.tipo_item == "SERVICO_INSTALACAO" else "Manutenção"),
+                "qtd": float(item.quantidade or 1),
+                "venda_unit": float(item.venda_unit or 0),
+                "total": float(item.total_venda or 0)
+            })
+
+    # 2. Process Rental Items
+    for item in rental_items:
+        if item.opportunity_kit_id and item.opportunity_kit:
+            kit_id = str(item.opportunity_kit_id)
+            kit_obj = item.opportunity_kit
+            kit_total = float(item.kit_valor_mensal or item.valor_mensal or item.kit_investimento_total or item.custo_total_aquisicao or 0.0)
+            if kit_id not in kits_map:
+                kits_map[kit_id] = {
+                    "kit": kit_obj,
+                    "qtd": float(item.quantidade or 1),
+                    "total": 0.0,
+                    "items": []
+                }
+            kits_map[kit_id]["total"] += kit_total
+            
+            # Extract sub-items from kit.items if present
+            if kit_obj.items:
+                for sub in kit_obj.items:
+                    prod = sub.product
+                    svc = sub.own_service
+                    cod = prod.codigo if prod else "-"
+                    nm = prod.nome if prod else (svc.nome if svc else sub.descricao_item)
+                    tp = "Mercadoria" if sub.tipo_item == "PRODUTO" else "Serviço"
+                    q = float(sub.quantidade_no_kit or 1) * float(item.quantidade or 1)
+                    kits_map[kit_id]["items"].append({
+                        "codigo": cod,
+                        "nome": nm,
+                        "tipo_label": tp,
+                        "qtd": q,
+                        "venda_unit": 0.0,
+                        "total": 0.0
+                    })
+            else:
+                kits_map[kit_id]["items"].append({
+                    "codigo": item.product.codigo if item.product else "-",
+                    "nome": item.product_nome or "Ativo de Locação",
+                    "tipo_label": "Locação/Comodato",
+                    "qtd": float(item.quantidade or 1),
+                    "venda_unit": kit_total / float(item.quantidade or 1) if float(item.quantidade or 1) > 0 else kit_total,
+                    "total": kit_total
+                })
+        else:
+            qtd = float(item.quantidade or 1)
+            total = float(item.valor_mensal * qtd if item.valor_mensal else item.custo_total_aquisicao or 0.0)
+            venda_unit = total / qtd if qtd > 0 else total
+            standalone_items.append({
+                "codigo": item.product.codigo if item.product else "-",
+                "nome": item.product_nome or (item.product.nome if item.product else "Ativo de Locação"),
+                "tipo_label": "Locação/Comodato",
+                "qtd": qtd,
+                "venda_unit": venda_unit,
+                "total": total
+            })
+
+    rows_html = ""
+
+    for kit_id, data in kits_map.items():
+        kit_nome = data["kit"].nome_kit or "Kit de Oportunidade"
+        kit_qtd = float(data["qtd"] or 1)
+        kit_total = data["total"]
+        unidade = getattr(data["kit"], 'unidade', None) or 'UN'
+
+        rows_html += f"""
+        <tr style="background-color: #f1f5f9; border-top: 2px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
+            <td colspan="4" style="padding: 8px 12px; font-weight: bold; color: #1e293b;">
+                📦 KIT: {kit_nome} (Qtd: {int(kit_qtd) if kit_qtd.is_integer() else f"{kit_qtd:.2f}"} {unidade})
+            </td>
+            <td style="padding: 8px 12px; text-align: right; font-weight: bold; color: #475569;">Subtotal:</td>
+            <td style="padding: 8px 12px; text-align: right; font-weight: bold; color: #0f172a;">{format_currency(kit_total)}</td>
+        </tr>
+        """
+
+        for sub in data["items"]:
+            codigo = sub["codigo"]
+            nome = sub["nome"]
+            tipo_label = sub["tipo_label"]
+            tipo_badge = f'<span style="background:#e2e8f0; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600;">{tipo_label}</span>'
+            qtd = sub["qtd"]
+            venda_unit = sub["venda_unit"]
+            total = sub["total"]
+
+            unit_str = format_currency(venda_unit) if venda_unit > 0 else "-"
+            total_str = format_currency(total) if total > 0 else "-"
+
+            rows_html += f"""
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 12px 6px 24px; font-mono; font-size: 11px; color: #64748b;">{codigo}</td>
+                <td style="padding: 6px 12px;">{nome}</td>
+                <td style="padding: 6px 12px; text-align: center;">{tipo_badge}</td>
+                <td style="padding: 6px 12px; text-align: center;">{int(qtd) if qtd.is_integer() else f"{qtd:.2f}"}</td>
+                <td style="padding: 6px 12px; text-align: right;">{unit_str}</td>
+                <td style="padding: 6px 12px; text-align: right; font-weight: 500;">{total_str}</td>
+            </tr>
+            """
+
+    if standalone_items:
+        if kits_map:
+            rows_html += """
+            <tr style="background-color: #f8fafc; border-top: 2px solid #cbd5e1;">
+                <td colspan="6" style="padding: 8px 12px; font-weight: bold; color: #334155;">Itens Avulsos da Proposta</td>
+            </tr>
+            """
+        for item_data in standalone_items:
+            codigo = item_data["codigo"]
+            nome = item_data["nome"]
+            tipo_label = item_data["tipo_label"]
+            tipo_badge = f'<span style="background:#e2e8f0; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600;">{tipo_label}</span>'
+            qtd = item_data["qtd"]
+            venda_unit = item_data["venda_unit"]
+            total = item_data["total"]
+
+            rows_html += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 8px 12px; font-mono; font-size: 11px; color: #64748b;">{codigo}</td>
+                <td style="padding: 8px 12px; font-weight: 500;">{nome}</td>
+                <td style="padding: 8px 12px; text-align: center;">{tipo_badge}</td>
+                <td style="padding: 8px 12px; text-align: center;">{int(qtd) if qtd.is_integer() else f"{qtd:.2f}"}</td>
+                <td style="padding: 8px 12px; text-align: right;">{format_currency(venda_unit)}</td>
+                <td style="padding: 8px 12px; text-align: right; font-weight: 600;">{format_currency(total)}</td>
+            </tr>
+            """
+
+    total_proposta = float(budget.valor_total or 0.0)
+    if total_proposta == 0.0:
+        total_proposta = sum(d["total"] for d in kits_map.values()) + sum(d["total"] for d in standalone_items)
+
+    return f"""
+    <table class="tabela-itens-analitica" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px;">
+        <thead>
+            <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left; color: #334155;">
+                <th style="padding: 10px 12px;">Código</th>
+                <th style="padding: 10px 12px;">Descrição do Item (Analítico)</th>
+                <th style="padding: 10px 12px; text-align: center;">Tipo</th>
+                <th style="padding: 10px 12px; text-align: center;">Qtd</th>
+                <th style="padding: 10px 12px; text-align: right;">Val. Unitário</th>
+                <th style="padding: 10px 12px; text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_html}
+        </tbody>
+        <tfoot>
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+                <td colspan="5" style="padding: 10px 12px; text-align: right;">TOTAL DA PROPOSTA:</td>
+                <td style="padding: 10px 12px; text-align: right; color: #0f172a; font-size: 13px;">{format_currency(total_proposta)}</td>
+            </tr>
+        </tfoot>
+    </table>
+    """
+
+
+def build_commercial_conditions_summary(budget: SalesBudget) -> str:
+    """Gera um bloco de resumo das condições comerciais (forma de pagamento, validade, frete e observações)."""
+    forma_pag = budget.forma_pagamento.nome if budget.forma_pagamento else "A combinar"
+    vencimento = budget.data_vencimento_inicial.strftime("%d/%m/%Y") if budget.data_vencimento_inicial else "A definir"
+    obs = budget.observacoes or "Sem observações adicionais."
+
+    return f"""
+    <div class="resumo-condicoes-comerciais" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin: 15px 0; font-size: 12px;">
+        <h4 style="margin-top: 0; margin-bottom: 8px; color: #0f172a; font-size: 13px;">Condições Comerciais & Pagamento</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+            <div><strong>Forma de Pagamento:</strong> {forma_pag}</div>
+            <div><strong>Validade da Proposta:</strong> {vencimento}</div>
+        </div>
+        <div style="margin-top: 6px; color: #475569;">
+            <strong>Observações:</strong> {obs}
+        </div>
+    </div>
+    """
+
+
 VARIABLES_CATALOG = {
     "OPORTUNIDADE": [
-        {"nome": "cliente_nome", "origem": "CLIENTE", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": True},
+        {"nome": "cliente_nome", "origem": "CLIENTE", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_cnpj", "origem": "CLIENTE", "campo": "cnpj", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_cidade", "origem": "CLIENTE", "campo": "cidade", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_estado", "origem": "CLIENTE", "campo": "estado", "tipo": "TEXTO", "obrigatoria": False},
-        {"nome": "empresa_nome", "origem": "EMPRESA", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": True},
+        {"nome": "empresa_nome", "origem": "EMPRESA", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "empresa_cnpj", "origem": "EMPRESA", "campo": "cnpj", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "oportunidade_numero", "origem": "OPORTUNIDADE", "campo": "numero_orcamento", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "oportunidade_titulo", "origem": "OPORTUNIDADE", "campo": "titulo", "tipo": "TEXTO", "obrigatoria": False},
-        {"nome": "valor_proposta", "origem": "OPORTUNIDADE", "campo": "valor_total", "tipo": "NUMERO", "obrigatoria": True},
+        {"nome": "vendedor_nome", "origem": "VENDEDOR", "campo": "nome", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "forma_pagamento_nome", "origem": "FORMA_PAGAMENTO", "campo": "nome", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "valor_total_produtos", "origem": "OPORTUNIDADE", "campo": "valor_total_produtos", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_total_servicos", "origem": "OPORTUNIDADE", "campo": "valor_total_servicos", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_total_proposta", "origem": "OPORTUNIDADE", "campo": "valor_total", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_proposta", "origem": "OPORTUNIDADE", "campo": "valor_total", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "tabela_itens_sintetica", "origem": "OPORTUNIDADE", "campo": "tabela_sintetica", "tipo": "TABELA_HTML", "obrigatoria": False},
+        {"nome": "tabela_itens_analitica", "origem": "OPORTUNIDADE", "campo": "tabela_analitica", "tipo": "TABELA_HTML", "obrigatoria": False},
+        {"nome": "resumo_condicoes_comerciais", "origem": "OPORTUNIDADE", "campo": "condicoes_comerciais", "tipo": "BLOCO_HTML", "obrigatoria": False},
     ]
 }
 
@@ -201,7 +645,7 @@ def list_templates(
     if tipo:
         query = query.filter(DocumentTemplate.tipo_documento == tipo)
         
-    return query.order_by(DocumentTemplate.nome.asc()).all()
+    return query.order_by(DocumentTemplate.updated_at.desc(), DocumentTemplate.created_at.desc()).all()
 
 
 def get_template(db: Session, tenant_id: str, company_id: str, template_id: str) -> Optional[DocumentTemplate]:
@@ -444,6 +888,17 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
             cidade_nome = cust.city.nome if (cust and cust.city) else ""
             estado_sigla = (cust.state.sigla or cust.state.nome) if (cust and cust.state) else ""
 
+            produtos_sum = sum(float(item.total_venda or 0) for item in budget.items if item.tipo_item == "MERCADORIA")
+            servicos_sum = sum(float(item.total_venda or 0) for item in budget.items if item.tipo_item != "MERCADORIA")
+
+            total_formatted = format_currency(budget.valor_total)
+            produtos_formatted = format_currency(produtos_sum)
+            servicos_formatted = format_currency(servicos_sum)
+
+            tabela_sintetica_html = build_synthetic_items_table(budget)
+            tabela_analitica_html = build_analytical_items_table(budget)
+            resumo_condicoes_html = build_commercial_conditions_summary(budget)
+
             replacements = {
                 "cliente_nome": cust.nome_fantasia or cust.razao_social if cust else "",
                 "cliente_cnpj": cust.cnpj if cust else "",
@@ -453,32 +908,46 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "empresa_cnpj": budget.company.cnpj if budget.company else "",
                 "oportunidade_numero": budget.numero_orcamento or "",
                 "oportunidade_titulo": budget.titulo or "",
-                "valor_proposta": budget.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) if hasattr(budget.valor_total, 'toLocaleString') else f"R$ {float(budget.valor_total or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                "vendedor_nome": budget.vendedor.name if (budget.vendedor and hasattr(budget.vendedor, 'name')) else "",
+                "forma_pagamento_nome": budget.forma_pagamento.nome if budget.forma_pagamento else "",
+                "valor_total_produtos": produtos_formatted,
+                "valor_total_servicos": servicos_formatted,
+                "valor_total_proposta": total_formatted,
+                "valor_proposta": total_formatted,
+                "tabela_itens_sintetica": tabela_sintetica_html,
+                "tabela_itens_analitica": tabela_analitica_html,
+                "resumo_condicoes_comerciais": resumo_condicoes_html,
             }
 
-    # Perform replace for all variables
-    for var in template.variables:
-        name = var.nome
-        value = replacements.get(name, "")
-        
-        # RN006: Todo modelo vigente que for gerado deve passar pela substituição.
-        # Se for obrigatória e o valor estiver vazio, a regra diz "não deve deixar salvar sem estar preenchido".
-        # Na renderização, preencheremos ou manteremos se não houver dados.
+    # Perform replace for all variables & replacements keys
+    for name, value in replacements.items():
         html = html.replace(f"{{{{{name}}}}}", str(value))
 
+    for var in template.variables:
+        name = var.nome
+        if name not in replacements:
+            html = html.replace(f"{{{{{name}}}}}", "")
+
     # Envelopar no Papel Timbrado se estiver vinculado e ativo
+    body_content = f'<div class="document-body-container">{html}</div>'
     if template.letterhead and template.letterhead.is_active:
         lh_html = template.letterhead.conteudo_html or "{{document_content}}"
         lh_css = template.letterhead.conteudo_css or ""
         if "{{document_content}}" in lh_html:
-            html = lh_html.replace("{{document_content}}", html)
+            html = lh_html.replace("{{document_content}}", body_content)
         elif "{{conteudo_documento}}" in lh_html:
-            html = lh_html.replace("{{conteudo_documento}}", html)
+            html = lh_html.replace("{{conteudo_documento}}", body_content)
+        elif "{{conteudo}}" in lh_html:
+            html = lh_html.replace("{{conteudo}}", body_content)
+        elif "{{content}}" in lh_html:
+            html = lh_html.replace("{{content}}", body_content)
         else:
-            html = f"{lh_html}\n{html}"
+            html = f"{lh_html}\n{body_content}"
 
-        if lh_css and lh_css.strip():
-            html = f"<style>{lh_css}</style>\n{html}"
+        full_css = f"{DEFAULT_BASE_CSS}\n{lh_css}" if lh_css and lh_css.strip() else DEFAULT_BASE_CSS
+        html = f'<div class="has-letterhead">\n<style>{full_css}</style>\n{html}\n</div>'
+    else:
+        html = f"<style>{DEFAULT_BASE_CSS}</style>\n{body_content}"
 
     # Log audit
     audit = DocumentAudit(

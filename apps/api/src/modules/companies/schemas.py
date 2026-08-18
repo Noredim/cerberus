@@ -362,3 +362,22 @@ class SalesTeamOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CompanyDocumentRuleSave(BaseModel):
+    tipo_documento: str = Field(..., pattern="^(PROPOSTA_COMERCIAL|CONTRATO_CLIENTE)$")
+    sales_team_id: UUID
+    document_template_id: Optional[UUID] = None
+
+
+class CompanyDocumentRuleOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    tipo_documento: str
+    sales_team_id: UUID
+    sales_team_nome: Optional[str] = None
+    document_template_id: Optional[UUID] = None
+    document_template_nome: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+

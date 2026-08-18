@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text
-from typing import List
+from typing import List, Optional
 import uuid
 from uuid import UUID
 import json
@@ -11,8 +11,8 @@ import shutil
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
-from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa
-from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut, EligibleUserOut, SalesTeamCreateUpdate, SalesTeamOut, SalesTeamMemberOut, SalesTeamPolicyOut
+from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa, CompanyDocumentRule, SalesTeam, SalesTeamMember
+from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut, EligibleUserOut, SalesTeamCreateUpdate, SalesTeamOut, SalesTeamMemberOut, SalesTeamPolicyOut, CompanyDocumentRuleSave, CompanyDocumentRuleOut
 
 from .providers.cnpj_provider import ReceitaWsProvider
 from .services.cnpj_consultar_service import ConsultarEmpresaPorCNPJService
@@ -996,4 +996,195 @@ def delete_sales_team(
     db.delete(team)
     db.commit()
     return {"ok": True}
+
+
+# ── DOCUMENT RULES (EQUIPE DE VENDA <-> MODELO DE DOCUMENTO) ──
+
+@router.get("/{company_id}/document-rules", response_model=List[CompanyDocumentRuleOut])
+def list_company_document_rules(
+    company_id: UUID,
+    tipo_documento: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(CompanyDocumentRule).options(
+        joinedload(CompanyDocumentRule.sales_team),
+        joinedload(CompanyDocumentRule.document_template)
+    ).filter(
+        CompanyDocumentRule.company_id == company_id,
+        CompanyDocumentRule.tenant_id == current_user.tenant_id
+    )
+    if tipo_documento:
+        query = query.filter(CompanyDocumentRule.tipo_documento == tipo_documento)
+        
+    rules = query.all()
+    return [
+        CompanyDocumentRuleOut(
+            id=r.id,
+            company_id=r.company_id,
+            tipo_documento=r.tipo_documento,
+            sales_team_id=r.sales_team_id,
+            sales_team_nome=r.sales_team.nome if r.sales_team else None,
+            document_template_id=r.document_template_id,
+            document_template_nome=r.document_template.nome if r.document_template else None
+        )
+        for r in rules
+    ]
+
+
+@router.post("/{company_id}/document-rules", response_model=CompanyDocumentRuleOut)
+def save_company_document_rule(
+    company_id: UUID,
+    payload: CompanyDocumentRuleSave,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Verify sales team belongs to company & tenant
+    team = db.query(SalesTeam).filter(
+        SalesTeam.id == payload.sales_team_id,
+        SalesTeam.company_id == company_id,
+        SalesTeam.tenant_id == current_user.tenant_id
+    ).first()
+    if not team:
+        raise HTTPException(status_code=400, detail="Equipe de Venda não encontrada para esta empresa.")
+
+    # Find existing rule for (company_id, tipo_documento, sales_team_id)
+    rule = db.query(CompanyDocumentRule).filter(
+        CompanyDocumentRule.company_id == company_id,
+        CompanyDocumentRule.tipo_documento == payload.tipo_documento,
+        CompanyDocumentRule.sales_team_id == payload.sales_team_id,
+        CompanyDocumentRule.tenant_id == current_user.tenant_id
+    ).first()
+
+    if not rule:
+        rule = CompanyDocumentRule(
+            tenant_id=current_user.tenant_id,
+            company_id=company_id,
+            tipo_documento=payload.tipo_documento,
+            sales_team_id=payload.sales_team_id,
+            document_template_id=payload.document_template_id
+        )
+        db.add(rule)
+    else:
+        rule.document_template_id = payload.document_template_id
+
+    db.commit()
+    db.refresh(rule)
+
+    db_rule = db.query(CompanyDocumentRule).options(
+        joinedload(CompanyDocumentRule.sales_team),
+        joinedload(CompanyDocumentRule.document_template)
+    ).filter(CompanyDocumentRule.id == rule.id).first()
+
+    return CompanyDocumentRuleOut(
+        id=db_rule.id,
+        company_id=db_rule.company_id,
+        tipo_documento=db_rule.tipo_documento,
+        sales_team_id=db_rule.sales_team_id,
+        sales_team_nome=db_rule.sales_team.nome if db_rule.sales_team else None,
+        document_template_id=db_rule.document_template_id,
+        document_template_nome=db_rule.document_template.nome if db_rule.document_template else None
+    )
+
+
+@router.delete("/{company_id}/document-rules/{rule_id}")
+def delete_company_document_rule(
+    company_id: UUID,
+    rule_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    rule = db.query(CompanyDocumentRule).filter(
+        CompanyDocumentRule.id == rule_id,
+        CompanyDocumentRule.company_id == company_id,
+        CompanyDocumentRule.tenant_id == current_user.tenant_id
+    ).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Regra de documento não encontrada.")
+
+    db.delete(rule)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/{company_id}/document-rules/resolve")
+def resolve_document_template_for_user(
+    company_id: UUID,
+    tipo_documento: str,
+    sales_team_id: Optional[UUID] = Query(None),
+    user_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    real_team_id = sales_team_id if (sales_team_id and not hasattr(sales_team_id, "default")) else None
+    if real_team_id:
+        rule = db.query(CompanyDocumentRule).options(
+            joinedload(CompanyDocumentRule.document_template)
+        ).filter(
+            CompanyDocumentRule.company_id == company_id,
+            CompanyDocumentRule.tipo_documento == tipo_documento,
+            CompanyDocumentRule.sales_team_id == real_team_id,
+            CompanyDocumentRule.document_template_id.isnot(None)
+        ).first()
+
+        if rule and rule.document_template and rule.document_template.status != "INATIVO":
+            return {
+                "document_template_id": str(rule.document_template_id),
+                "template_nome": rule.document_template.nome,
+                "sales_team_id": str(rule.sales_team_id),
+                "resolved_by": "SALES_TEAM"
+            }
+
+    target_user_id = user_id if (user_id and not hasattr(user_id, "default")) else str(current_user.id)
+    
+    # 1. Find user's sales teams in this company
+    user_teams = db.query(SalesTeamMember).join(SalesTeam).filter(
+        SalesTeam.company_id == company_id,
+        SalesTeamMember.user_id == target_user_id
+    ).all()
+
+    team_ids = [m.sales_team_id for m in user_teams]
+    
+    if team_ids:
+        # Find document rule matching any of user's teams
+        rule = db.query(CompanyDocumentRule).options(
+            joinedload(CompanyDocumentRule.document_template)
+        ).filter(
+            CompanyDocumentRule.company_id == company_id,
+            CompanyDocumentRule.tipo_documento == tipo_documento,
+            CompanyDocumentRule.sales_team_id.in_(team_ids),
+            CompanyDocumentRule.document_template_id.isnot(None)
+        ).first()
+
+        if rule and rule.document_template and rule.document_template.status != "INATIVO":
+            return {
+                "document_template_id": str(rule.document_template_id),
+                "template_nome": rule.document_template.nome,
+                "sales_team_id": str(rule.sales_team_id),
+                "resolved_by": "SALES_TEAM"
+            }
+
+    # 2. Fallback to active template for company/tenant if no team rule found
+    from src.modules.document_templates.models import DocumentTemplate
+    fallback = db.query(DocumentTemplate).filter(
+        DocumentTemplate.company_id == company_id,
+        DocumentTemplate.tipo_documento == tipo_documento,
+        DocumentTemplate.status == "VIGENTE"
+    ).order_by(DocumentTemplate.updated_at.desc()).first()
+
+    if fallback:
+        return {
+            "document_template_id": str(fallback.id),
+            "template_nome": fallback.nome,
+            "sales_team_id": None,
+            "resolved_by": "COMPANY_FALLBACK"
+        }
+
+    return {
+        "document_template_id": None,
+        "template_nome": None,
+        "sales_team_id": None,
+        "resolved_by": "NONE"
+    }
+
 

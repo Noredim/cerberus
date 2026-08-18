@@ -49,7 +49,7 @@ const DocumentTemplateList: React.FC = () => {
     const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('ALL');
+    const [statusFilter, setStatusFilter] = useState<string>('VIGENTE');
     const [originFilter, setOriginFilter] = useState<string>('ALL');
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -116,11 +116,13 @@ const DocumentTemplateList: React.FC = () => {
         }
     };
 
-    const filteredTemplates = templates.filter(t => 
-        t.nome.toLowerCase().includes(search.toLowerCase()) ||
-        t.tipo_documento.toLowerCase().includes(search.toLowerCase()) ||
-        t.modulo_origem.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredTemplates = templates
+        .filter(t => 
+            t.nome.toLowerCase().includes(search.toLowerCase()) ||
+            t.tipo_documento.toLowerCase().includes(search.toLowerCase()) ||
+            t.modulo_origem.toLowerCase().includes(search.toLowerCase())
+        )
+        .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
 
     const getStatusBadge = (status: 'RASCUNHO' | 'VIGENTE' | 'INATIVO') => {
         switch (status) {
@@ -237,9 +239,7 @@ const DocumentTemplateList: React.FC = () => {
                             </select>
                         </div>
                     </div>
-                </div>
-
-                <div className="min-h-[200px] overflow-x-auto">
+                        <div className="min-h-[350px] pb-24 overflow-x-auto">
                     <table className="w-full text-left min-w-[800px]">
                         <thead className="bg-[#f8f9fa] dark:bg-bg-deep">
                             <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
@@ -267,119 +267,123 @@ const DocumentTemplateList: React.FC = () => {
                                             Nenhum modelo de documento encontrado.
                                         </td>
                                     </tr>
-                                ) : filteredTemplates.map((template, i) => (
-                                    <motion.tr
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        transition={{ delay: i * 0.03 }}
-                                        key={template.id}
-                                        className="group hover:bg-bg-deep transition-colors"
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-md bg-brand-primary/10 flex items-center justify-center text-brand-primary">
-                                                    <FileText className="w-4 h-4" />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold text-text-primary">{template.nome}</span>
-                                                    {template.descricao && (
-                                                        <span className="text-xs text-text-muted truncate max-w-[280px]">{template.descricao}</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-text-primary font-medium">
-                                            {template.tipo_documento}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-2 py-1 text-[10px] font-bold bg-bg-deep border border-border-subtle rounded text-text-muted uppercase tracking-tight">
-                                                {template.modulo_origem}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-text-primary font-semibold">
-                                            v{template.versao}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {getStatusBadge(template.status)}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-text-muted">
-                                            {template.updated_at ? new Date(template.updated_at).toLocaleDateString('pt-BR') : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right relative">
-                                            <button
-                                                onClick={() => setOpenDropdown(openDropdown === template.id ? null : template.id)}
-                                                className="p-2 rounded-md hover:bg-bg-deep text-text-muted hover:text-text-primary transition-all cursor-pointer"
-                                            >
-                                                <MoreVertical className="w-4 h-4" />
-                                            </button>
-
-                                            {openDropdown === template.id && (
-                                                <>
-                                                    <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                                                    <div className="absolute right-8 top-10 mt-2 w-48 bg-surface rounded-md shadow-lg z-20 border border-border-subtle overflow-hidden">
-                                                        <div className="py-1 flex flex-col">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setOpenDropdown(null);
-                                                                    navigate(`/cadastros/modelos-documentos/${template.id}`);
-                                                                }}
-                                                                className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
-                                                            >
-                                                                {template.status === 'INATIVO' ? (
-                                                                    <>
-                                                                        <Eye className="w-4 h-4" /> Visualizar Modelo
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Edit2 className="w-4 h-4" /> Editar Modelo
-                                                                    </>
-                                                                )}
-                                                            </button>
-
-                                                            {template.status === 'RASCUNHO' && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        handlePublish(template.id, template.nome);
-                                                                    }}
-                                                                    className="flex items-center gap-2 px-4 py-2 text-sm text-brand-success hover:bg-brand-success/10 transition-colors w-full text-left"
-                                                                >
-                                                                    <Check className="w-4 h-4" /> Publicar Modelo
-                                                                </button>
-                                                            )}
-
-                                                            <button
-                                                                onClick={() => {
-                                                                    setOpenDropdown(null);
-                                                                    handleDuplicate(template.id, template.nome);
-                                                                }}
-                                                                className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
-                                                            >
-                                                                <Copy className="w-4 h-4" /> Criar Nova Versão / Copiar
-                                                            </button>
-
-                                                            {template.status === 'VIGENTE' && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        handleDeactivate(template.id, template.nome);
-                                                                    }}
-                                                                    className="flex items-center gap-2 px-4 py-2 text-sm text-brand-danger hover:bg-brand-danger/10 transition-colors w-full text-left"
-                                                                >
-                                                                    <PowerOff className="w-4 h-4" /> Inativar Modelo
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                ) : filteredTemplates.map((template, i) => {
+                                    const isLastRow = i >= filteredTemplates.length - 2 && filteredTemplates.length > 2;
+                                    return (
+                                        <motion.tr
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            transition={{ delay: i * 0.03 }}
+                                            key={template.id}
+                                            className={`group hover:bg-bg-deep transition-colors ${openDropdown === template.id ? 'relative z-30' : ''}`}
+                                        >
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-md bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+                                                        <FileText className="w-4 h-4" />
                                                     </div>
-                                                </>
-                                            )}
-                                        </td>
-                                    </motion.tr>
-                                ))}
+                                                    <div className="flex flex-col">
+                                                        <span className="font-semibold text-text-primary">{template.nome}</span>
+                                                        {template.descricao && (
+                                                            <span className="text-xs text-text-muted truncate max-w-[280px]">{template.descricao}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-text-primary font-medium">
+                                                {template.tipo_documento}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="px-2 py-1 text-[10px] font-bold bg-bg-deep border border-border-subtle rounded text-text-muted uppercase tracking-tight">
+                                                    {template.modulo_origem}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-text-primary font-semibold">
+                                                v{template.versao}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {getStatusBadge(template.status)}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-text-muted">
+                                                {template.updated_at ? new Date(template.updated_at).toLocaleDateString('pt-BR') : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-right relative">
+                                                <button
+                                                    onClick={() => setOpenDropdown(openDropdown === template.id ? null : template.id)}
+                                                    className="p-2 rounded-md hover:bg-bg-deep text-text-muted hover:text-text-primary transition-all cursor-pointer"
+                                                >
+                                                    <MoreVertical className="w-4 h-4" />
+                                                </button>
+
+                                                {openDropdown === template.id && (
+                                                    <>
+                                                        <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                                                        <div className={`absolute right-6 ${isLastRow ? 'bottom-full mb-1' : 'top-10 mt-1'} w-52 bg-surface rounded-md shadow-xl z-50 border border-border-subtle overflow-hidden`}>
+                                                            <div className="py-1 flex flex-col">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setOpenDropdown(null);
+                                                                        navigate(`/cadastros/modelos-documentos/${template.id}`);
+                                                                    }}
+                                                                    className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
+                                                                >
+                                                                    {template.status === 'INATIVO' ? (
+                                                                        <>
+                                                                            <Eye className="w-4 h-4" /> Visualizar Modelo
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Edit2 className="w-4 h-4" /> Editar Modelo
+                                                                        </>
+                                                                    )}
+                                                                </button>
+
+                                                                {template.status === 'RASCUNHO' && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setOpenDropdown(null);
+                                                                            handlePublish(template.id, template.nome);
+                                                                        }}
+                                                                        className="flex items-center gap-2 px-4 py-2 text-sm text-brand-success hover:bg-brand-success/10 transition-colors w-full text-left"
+                                                                    >
+                                                                        <Check className="w-4 h-4" /> Publicar Modelo
+                                                                    </button>
+                                                                )}
+
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setOpenDropdown(null);
+                                                                        handleDuplicate(template.id, template.nome);
+                                                                    }}
+                                                                    className="flex items-center gap-2 px-4 py-2 text-sm text-text-primary hover:bg-bg-deep transition-colors w-full text-left"
+                                                                >
+                                                                    <Copy className="w-4 h-4" /> Criar Nova Versão / Copiar
+                                                                </button>
+
+                                                                {template.status === 'VIGENTE' && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setOpenDropdown(null);
+                                                                            handleDeactivate(template.id, template.nome);
+                                                                        }}
+                                                                        className="flex items-center gap-2 px-4 py-2 text-sm text-brand-danger hover:bg-brand-danger/10 transition-colors w-full text-left"
+                                                                    >
+                                                                        <PowerOff className="w-4 h-4" /> Inativar Modelo
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </td>
+                                        </motion.tr>
+                                    );
+                                })}
                             </AnimatePresence>
                         </tbody>
                     </table>
+                </div>
                 </div>
             </div>
             )}

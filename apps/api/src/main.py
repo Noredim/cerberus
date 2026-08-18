@@ -218,3 +218,6 @@ app.include_router(messaging_router)
 app.include_router(backup_router)
 app.include_router(tax_recovery_router)
 
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+

@@ -15,7 +15,8 @@ import {
     UploadCloud,
     Edit2,
     Shield,
-    Users
+    Users,
+    FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -25,6 +26,7 @@ import type { CNPJLookupResult } from './types';
 import { CnaeAutocomplete } from './components/CnaeAutocomplete';
 import { CommercialPoliciesTab } from './components/CommercialPoliciesTab';
 import { SalesTeamsTab } from './components/SalesTeamsTab';
+import { CompanyDocumentsTab } from './components/CompanyDocumentsTab';
 
 interface State {
     id: string;
@@ -122,6 +124,7 @@ const EmpresaForm: React.FC = () => {
         { id: 'sales_params', label: 'Parâmetros de Venda', icon: Hash },
         { id: 'policies', label: 'Políticas Comerciais', icon: Shield },
         { id: 'sales_teams', label: 'Equipes de Venda', icon: Users },
+        { id: 'documents', label: 'Documentos', icon: FileText },
         { id: 'qsa', label: 'Quadro de Sócios', icon: Building2 },
     ];
 
@@ -1349,6 +1352,18 @@ const EmpresaForm: React.FC = () => {
                                         className="space-y-6"
                                     >
                                         <SalesTeamsTab companyId={id!} isReadOnly={isReadOnly} />
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'documents' && (
+                                    <motion.div
+                                        key="documents"
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        className="space-y-6"
+                                    >
+                                        <CompanyDocumentsTab companyId={id!} isReadOnly={isReadOnly} />
                                     </motion.div>
                                 )}
 
