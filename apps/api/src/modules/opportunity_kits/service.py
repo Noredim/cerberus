@@ -162,11 +162,15 @@ class OpportunityKitService:
                     CommercialPolicy.ativo == True
                 ).order_by(CommercialPolicy.fator_limite.asc()).all()
                 if policies:
-                    current_factor = max(
+                    factors = [
                         Decimal(str(getattr(kit, 'fator_margem_servicos_produtos', None) or 1)),
                         Decimal(str(getattr(kit, 'fator_margem_locacao', None) or 1)),
                         Decimal(str(getattr(kit, 'fator_margem_instalacao', None) or 1))
-                    )
+                    ]
+                    for item in (getattr(kit, 'items', []) or []):
+                        if getattr(item, 'fator_margem', None) is not None:
+                            factors.append(Decimal(str(item.fator_margem)))
+                    current_factor = max(factors)
                     matched = None
                     for p in policies:
                         if current_factor >= Decimal(str(p.fator_limite)):
