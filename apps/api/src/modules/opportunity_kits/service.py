@@ -232,27 +232,60 @@ class OpportunityKitService:
         else:
             perc_comissao = Decimal(str(getattr(kit, "perc_comissao", 0) or 0)) / Decimal(100.0)
 
-        if policy:
-            tipo_com = policy.tipo_comissionamento
-            perc_dsr = policy.dsr_percentual
-            perc_fgts = policy.fgts_percentual
-            perc_inss = policy.inss_percentual
-            perc_demais = policy.demais_incidencias_percentual
-            perc_desp_op = policy.despesa_operacional_percentual
-        elif sales_budget:
-            tipo_com = sales_budget.tipo_comissionamento
-            perc_dsr = sales_budget.perc_dsr
-            perc_fgts = sales_budget.perc_fgts
-            perc_inss = sales_budget.perc_inss
-            perc_demais = sales_budget.perc_demais_incidencias
-            perc_desp_op = sales_budget.perc_despesa_operacional
+        # Resolve parameter overrides (prioritize explicit kit attributes over policy/sales_budget defaults)
+        if getattr(kit, "perc_despesa_operacional", None) is not None and Decimal(str(kit.perc_despesa_operacional or 0)) > 0:
+            perc_desp_op = Decimal(str(kit.perc_despesa_operacional))
+        elif policy and policy.despesa_operacional_percentual is not None:
+            perc_desp_op = Decimal(str(policy.despesa_operacional_percentual))
+        elif sales_budget and getattr(sales_budget, "perc_despesa_operacional", None) is not None:
+            perc_desp_op = Decimal(str(sales_budget.perc_despesa_operacional or 0))
         else:
-            tipo_com = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
-            perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
-            perc_fgts = Decimal(str(getattr(kit, "perc_fgts", 0) or 0))
-            perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
-            perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
             perc_desp_op = Decimal(str(getattr(kit, "perc_despesa_operacional", 0) or 0))
+
+        if getattr(kit, "perc_dsr", None) is not None and Decimal(str(kit.perc_dsr or 0)) > 0:
+            perc_dsr = Decimal(str(kit.perc_dsr))
+        elif policy and policy.dsr_percentual is not None:
+            perc_dsr = Decimal(str(policy.dsr_percentual))
+        elif sales_budget and getattr(sales_budget, "perc_dsr", None) is not None:
+            perc_dsr = Decimal(str(sales_budget.perc_dsr or 0))
+        else:
+            perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
+
+        if getattr(kit, "perc_fgts", None) is not None and Decimal(str(kit.perc_fgts or 0)) > 0:
+            perc_fgts = Decimal(str(kit.perc_fgts))
+        elif policy and policy.fgts_percentual is not None:
+            perc_fgts = Decimal(str(policy.fgts_percentual))
+        elif sales_budget and getattr(sales_budget, "perc_fgts", None) is not None:
+            perc_fgts = Decimal(str(sales_budget.perc_fgts or 0))
+        else:
+            perc_fgts = Decimal(str(getattr(kit, "perc_fgts", 0) or 0))
+
+        if getattr(kit, "perc_inss", None) is not None and Decimal(str(kit.perc_inss or 0)) > 0:
+            perc_inss = Decimal(str(kit.perc_inss))
+        elif policy and policy.inss_percentual is not None:
+            perc_inss = Decimal(str(policy.inss_percentual))
+        elif sales_budget and getattr(sales_budget, "perc_inss", None) is not None:
+            perc_inss = Decimal(str(sales_budget.perc_inss or 0))
+        else:
+            perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
+
+        if getattr(kit, "perc_demais_incidencias", None) is not None and Decimal(str(kit.perc_demais_incidencias or 0)) > 0:
+            perc_demais = Decimal(str(kit.perc_demais_incidencias))
+        elif policy and policy.demais_incidencias_percentual is not None:
+            perc_demais = Decimal(str(policy.demais_incidencias_percentual))
+        elif sales_budget and getattr(sales_budget, "perc_demais_incidencias", None) is not None:
+            perc_demais = Decimal(str(sales_budget.perc_demais_incidencias or 0))
+        else:
+            perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
+
+        if getattr(kit, "tipo_comissionamento", None):
+            tipo_com = kit.tipo_comissionamento
+        elif policy and policy.tipo_comissionamento:
+            tipo_com = policy.tipo_comissionamento
+        elif sales_budget and getattr(sales_budget, "tipo_comissionamento", None):
+            tipo_com = sales_budget.tipo_comissionamento
+        else:
+            tipo_com = "TRADICIONAL"
 
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
