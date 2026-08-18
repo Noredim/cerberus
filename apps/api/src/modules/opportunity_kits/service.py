@@ -157,11 +157,21 @@ class OpportunityKitService:
             from src.modules.companies.models import CommercialPolicy
             comp_id = kit.company_id or (sales_budget.company_id if sales_budget else None)
             if comp_id:
-                policy = self.db.query(CommercialPolicy).filter(
+                policies = self.db.query(CommercialPolicy).filter(
                     CommercialPolicy.company_id == comp_id,
-                    CommercialPolicy.is_default == True,
                     CommercialPolicy.ativo == True
-                ).first()
+                ).order_by(CommercialPolicy.fator_limite.asc()).all()
+                if policies:
+                    current_factor = max(
+                        Decimal(str(getattr(kit, 'fator_margem_servicos_produtos', None) or 1)),
+                        Decimal(str(getattr(kit, 'fator_margem_locacao', None) or 1)),
+                        Decimal(str(getattr(kit, 'fator_margem_instalacao', None) or 1))
+                    )
+                    matched = None
+                    for p in policies:
+                        if current_factor >= Decimal(str(p.fator_limite)):
+                            matched = p
+                    policy = matched or policies[0]
 
         # Determine if we should force 12% ICMS rate (Requirement 4)
         force_12_icms = False
@@ -201,23 +211,33 @@ class OpportunityKitService:
         perc_frete_venda = Decimal(str(kit.perc_frete_venda or 0)) / Decimal(100.0)
         perc_despesas_adm = Decimal(str(kit.perc_despesas_adm or 0)) / Decimal(100.0)
         
-        # Override with sales_budget values if present, or policy values if present, else fallback to kit values
-        if sales_budget:
-            tipo_com = sales_budget.tipo_comissionamento
-            perc_dsr = sales_budget.perc_dsr
-            perc_fgts = sales_budget.perc_fgts
-            perc_inss = sales_budget.perc_inss
-            perc_demais = sales_budget.perc_demais_incidencias
-            perc_desp_op = sales_budget.perc_despesa_operacional
-            perc_comissao = Decimal(str(sales_budget.perc_comissao_rental or 0)) / Decimal(100.0)
-        elif policy:
+        # Resolve effective commission percentage and policy parameters
+        if getattr(kit, "perc_comissao", None) is not None and Decimal(str(kit.perc_comissao or 0)) > 0:
+            perc_comissao = Decimal(str(kit.perc_comissao)) / Decimal(100.0)
+        elif policy and policy.comissao_percentual is not None:
+            perc_comissao = Decimal(str(policy.comissao_percentual)) / Decimal(100.0)
+        elif sales_budget:
+            if kit.tipo_contrato == "VENDA_EQUIPAMENTOS":
+                perc_comissao = Decimal(str(sales_budget.perc_comissao or 0)) / Decimal(100.0)
+            else:
+                perc_comissao = Decimal(str(sales_budget.perc_comissao_rental or sales_budget.perc_comissao or 0)) / Decimal(100.0)
+        else:
+            perc_comissao = Decimal(str(getattr(kit, "perc_comissao", 0) or 0)) / Decimal(100.0)
+
+        if policy:
             tipo_com = policy.tipo_comissionamento
             perc_dsr = policy.dsr_percentual
             perc_fgts = policy.fgts_percentual
             perc_inss = policy.inss_percentual
             perc_demais = policy.demais_incidencias_percentual
             perc_desp_op = policy.despesa_operacional_percentual
-            perc_comissao = Decimal(str(policy.comissao_percentual or 0)) / Decimal(100.0)
+        elif sales_budget:
+            tipo_com = sales_budget.tipo_comissionamento
+            perc_dsr = sales_budget.perc_dsr
+            perc_fgts = sales_budget.perc_fgts
+            perc_inss = sales_budget.perc_inss
+            perc_demais = sales_budget.perc_demais_incidencias
+            perc_desp_op = sales_budget.perc_despesa_operacional
         else:
             tipo_com = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
             perc_dsr = Decimal(str(getattr(kit, "perc_dsr", 0) or 0))
@@ -225,7 +245,6 @@ class OpportunityKitService:
             perc_inss = Decimal(str(getattr(kit, "perc_inss", 0) or 0))
             perc_demais = Decimal(str(getattr(kit, "perc_demais_incidencias", 0) or 0))
             perc_desp_op = Decimal(str(getattr(kit, "perc_despesa_operacional", 0) or 0))
-            perc_comissao = Decimal(str(kit.perc_comissao or 0)) / Decimal(100.0)
 
         fator_margem_inst = Decimal(getattr(kit, 'fator_margem_instalacao', 1) or 1)
         fator_margem_manut = Decimal(getattr(kit, 'fator_margem_manutencao', 1) or 1)
@@ -720,7 +739,7 @@ class OpportunityKitService:
 
             valor_base_venda = custo_aquisicao_kit * fator_margem
             
-            perc_comissao_locacao = Decimal(getattr(kit, 'perc_comissao', 0) or 0) / Decimal(100.0)
+            perc_comissao_locacao = perc_comissao
             com_destinado_loc = valor_base_venda * perc_comissao_locacao
             
             # --- START SERVICE COMMISSION CALCULATION ---

@@ -793,33 +793,26 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     setActivePolicy(applicable);
   }, [form.fator_margem_locacao, financials, userPolicies, form.tipo_contrato, form.havera_manutencao, form.qtd_meses_manutencao]);
 
-  // Effect 2: Sync commission when the active tier changes (tier ID changed).
-  // Separated from Effect 1 to avoid nested state setter anti-pattern.
+  // Effect 2: Sync commission when active policy is resolved or changes.
   useEffect(() => {
-    if (isInitialLoad.current) return;
-    if (!activePolicy) {
-      setForm(prev => ({
-        ...prev,
-        perc_comissao: 0,
-        tipo_comissionamento: 'TRADICIONAL',
-        perc_dsr: 0,
-        perc_fgts: 0,
-        perc_inss: 0,
-        perc_demais_incidencias: 0,
-        perc_despesa_operacional: 0
-      }));
-      return;
-    }
-    setForm(prev => ({
-      ...prev,
-      perc_comissao: Number(activePolicy.comissao_percentual) || 0,
-      tipo_comissionamento: activePolicy.tipo_comissionamento || 'TRADICIONAL',
-      perc_dsr: Number(activePolicy.dsr_percentual) || 0,
-      perc_fgts: Number(activePolicy.fgts_percentual) || 0,
-      perc_inss: Number(activePolicy.inss_percentual) || 0,
-      perc_demais_incidencias: Number(activePolicy.demais_incidencias_percentual) || 0,
-      perc_despesa_operacional: Number(activePolicy.despesa_operacional_percentual) || 0
-    }));
+    if (!activePolicy) return;
+    setForm(prev => {
+      // If commission is 0 or policy tier changed, sync from active commercial policy
+      if (prev.perc_comissao === 0 || prev.commercial_policy_id !== activePolicy.id || isInitialLoad.current) {
+        return {
+          ...prev,
+          commercial_policy_id: activePolicy.id,
+          perc_comissao: Number(activePolicy.comissao_percentual) || 0,
+          tipo_comissionamento: activePolicy.tipo_comissionamento || 'TRADICIONAL',
+          perc_dsr: Number(activePolicy.dsr_percentual) || 0,
+          perc_fgts: Number(activePolicy.fgts_percentual) || 0,
+          perc_inss: Number(activePolicy.inss_percentual) || 0,
+          perc_demais_incidencias: Number(activePolicy.demais_incidencias_percentual) || 0,
+          perc_despesa_operacional: Number(activePolicy.despesa_operacional_percentual) || 0
+        };
+      }
+      return prev;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePolicy?.id]); // Only fires when the TIER changes, not on every form render
 
