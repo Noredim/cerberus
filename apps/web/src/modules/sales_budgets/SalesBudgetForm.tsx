@@ -52,6 +52,7 @@ interface FormaPagamento {
   tipo_uso: 'VENDA' | 'COMPRA' | 'AMBOS';
   tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
   ativo: boolean;
+  is_default?: boolean;
   observacao?: string | null;
   parcelas: FormaPagamentoParcela[];
 }

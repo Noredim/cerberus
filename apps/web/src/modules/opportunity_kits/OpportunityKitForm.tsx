@@ -330,6 +330,7 @@ interface KitFormValues {
   custo_software_mensal_kit: number;
   custo_itens_acessorios_mensal_kit: number;
   sales_budget_id?: string;
+  sales_team_id?: string;
   sales_teams?: string[];
   items: Array<{
     tipo_item?: string;
