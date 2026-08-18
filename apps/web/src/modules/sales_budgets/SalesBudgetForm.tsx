@@ -1108,6 +1108,15 @@ export function SalesBudgetForm() {
           }
           try {
             const { data: kit } = await api.get(`/opportunity-kits/${item.opportunity_kit_id}?include_financials=true${id ? `&sales_budget_id=${id}` : ''}`);
+            if (kit.commercial_policy_id) {
+              setLoadedCommercialPolicyId(kit.commercial_policy_id);
+            }
+            if (kit.perc_comissao !== undefined && kit.perc_comissao !== null && Number(kit.perc_comissao) > 0) {
+              setPercComissao(Number(kit.perc_comissao));
+            }
+            if (kit.perc_despesa_operacional !== undefined && kit.perc_despesa_operacional !== null && Number(kit.perc_despesa_operacional) > 0) {
+              setPercDespesaOperacional(Number(kit.perc_despesa_operacional));
+            }
             const q = item.quantidade || kit.quantidade_kits || 1;
             return {
               type: 'kit',
@@ -1508,6 +1517,15 @@ export function SalesBudgetForm() {
   const handleAddKitVenda = (kit: any) => {
     if (!kit) return;
     setHasUnsavedChanges(true);
+    if (kit.commercial_policy_id) {
+      setLoadedCommercialPolicyId(kit.commercial_policy_id);
+    }
+    if (kit.perc_comissao !== undefined && kit.perc_comissao !== null && Number(kit.perc_comissao) > 0) {
+      setPercComissao(Number(kit.perc_comissao));
+    }
+    if (kit.perc_despesa_operacional !== undefined && kit.perc_despesa_operacional !== null && Number(kit.perc_despesa_operacional) > 0) {
+      setPercDespesaOperacional(Number(kit.perc_despesa_operacional));
+    }
     const q = Number(kit.quantidade_kits || 1);
     const newKit: VendaKitItem = {
       opportunity_kit_id: kit.id,

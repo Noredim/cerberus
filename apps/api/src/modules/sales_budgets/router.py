@@ -751,6 +751,7 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "sales_team_id": str(budget.sales_team_id) if budget.sales_team_id else None,
         "sales_team_nome": budget.sales_team.nome if budget.sales_team else None,
         "forma_pagamento_id": str(budget.forma_pagamento_id) if budget.forma_pagamento_id else None,
+        "commercial_policy_id": str(budget.commercial_policy_id) if budget.commercial_policy_id else None,
         "data_vencimento_inicial": budget.data_vencimento_inicial.isoformat() if budget.data_vencimento_inicial else None,
         "forma_pagamento_snapshot": budget.forma_pagamento_snapshot,
         "financial_planning": planning,
