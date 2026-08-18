@@ -187,7 +187,6 @@ interface RentalBudgetItem {
   id?: string;
   opportunity_kit_id?: string | null;
   commercial_policy_id?: string | null;
-  kit_raw?: any;
   product_id: string | null;
   product_nome?: string;
   product_codigo?: string;
