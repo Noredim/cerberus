@@ -432,17 +432,6 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     );
   }, [salesTeams, user]);
 
-  useEffect(() => {
-    if (userTeams.length > 0 && !form.sales_team_id && !form.sales_teams?.length) {
-      const defaultTeamId = userTeams[0].id;
-      setForm(prev => ({
-        ...prev,
-        sales_team_id: defaultTeamId,
-        sales_teams: [defaultTeamId]
-      }));
-    }
-  }, [userTeams, form.sales_team_id, form.sales_teams]);
-
   const isAdmin = useMemo(() => {
     return user?.roles?.includes('ADMIN') || user?.roles?.includes('ADMINISTRADOR');
   }, [user]);
@@ -518,10 +507,18 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     custo_monitoramento_unitario: 0,
     fator_monitoramento: 1.0,
     margem_minima_desejada: '',
-    sales_teams: [],
   });
 
-
+  useEffect(() => {
+    if (userTeams.length > 0 && !form.sales_team_id && !form.sales_teams?.length) {
+      const defaultTeamId = userTeams[0].id;
+      setForm(prev => ({
+        ...prev,
+        sales_team_id: defaultTeamId,
+        sales_teams: [defaultTeamId]
+      }));
+    }
+  }, [userTeams, form.sales_team_id, form.sales_teams]);
 
   useEffect(() => {
     const fetchItemDetails = async () => {
