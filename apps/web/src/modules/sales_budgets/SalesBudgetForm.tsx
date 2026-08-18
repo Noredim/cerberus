@@ -4066,9 +4066,16 @@ export function SalesBudgetForm() {
                   <h2 className="text-xl font-bold text-text-primary">Fechamento de Venda</h2>
                 </div>
                 {activePolicy && (
-                  <span className="text-[10px] font-bold text-white bg-brand-primary border border-brand-primary/20 px-2 py-1 rounded-full shadow-sm">
-                    Política Ativa: {activePolicy.nome} ({activePolicy.comissao_percentual}%)
-                  </span>
+                  <div className="inline-flex items-center gap-2.5 bg-brand-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-md shadow-brand-primary/20 border border-brand-primary/30 flex-wrap">
+                    <span className="bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[11px] font-extrabold">
+                      {activePolicy.nome_politica || activePolicy.nome || 'Política Comercial'}
+                    </span>
+                    <span>Comissão: {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%</span>
+                    <span className="opacity-60">•</span>
+                    <span>Desp. Op: {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%</span>
+                    <span className="opacity-60">•</span>
+                    <span>Fator Mín: {Number(activePolicy.fator_limite || 0).toFixed(4)}</span>
+                  </div>
                 )}
               </div>
 
