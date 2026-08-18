@@ -1392,6 +1392,12 @@ export function SalesBudgetForm() {
 
     if (match) {
       setActivePolicy(match);
+      if (match.despesa_operacional_percentual !== undefined && match.despesa_operacional_percentual !== null) {
+        setPercDespesaOperacional(Number(match.despesa_operacional_percentual));
+      }
+      if (match.comissao_percentual !== undefined && match.comissao_percentual !== null) {
+        setPercComissao(Number(match.comissao_percentual));
+      }
     }
   }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao]);
 

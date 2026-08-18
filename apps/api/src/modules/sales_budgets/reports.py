@@ -2433,19 +2433,18 @@ class OpportunitiesReportService:
                 act_comm = float(opportunity.perc_comissao or 0)
                 act_desp = float(opportunity.perc_despesa_operacional or 0)
                 
-                # Check items/kits if opportunity fields are 0
-                if act_comm == 0 and act_desp == 0:
-                    from src.modules.opportunity_kits.models import OpportunityKit
-                    for item in list(opportunity.items) + list(opportunity.rental_items):
-                        kit = getattr(item, 'opportunity_kit', None)
-                        kit_id = getattr(item, 'opportunity_kit_id', None)
-                        if not kit and kit_id:
-                            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
-                        if kit:
-                            if getattr(kit, 'perc_comissao', None) is not None and float(kit.perc_comissao) > 0:
-                                act_comm = float(kit.perc_comissao)
-                            if getattr(kit, 'perc_despesa_operacional', None) is not None and float(kit.perc_despesa_operacional) > 0:
-                                act_desp = float(kit.perc_despesa_operacional)
+                # Check items/kits - kit values ALWAYS take priority over opportunity defaults
+                for item in list(opportunity.items) + list(opportunity.rental_items):
+                    kit = getattr(item, 'opportunity_kit', None)
+                    kit_id = getattr(item, 'opportunity_kit_id', None)
+                    if not kit and kit_id:
+                        kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+                    if kit:
+                        if getattr(kit, 'perc_comissao', None) is not None and float(kit.perc_comissao) > 0:
+                            act_comm = float(kit.perc_comissao)
+                        if getattr(kit, 'perc_despesa_operacional', None) is not None and float(kit.perc_despesa_operacional) > 0:
+                            act_desp = float(kit.perc_despesa_operacional)
+                        break
 
                 # 1. Exact match by commission and operational expense
                 exact_p = next(
