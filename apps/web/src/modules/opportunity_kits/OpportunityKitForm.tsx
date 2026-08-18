@@ -708,7 +708,12 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         // The admin endpoint /{id}/commercial-policies returns ALL tiers and
         // was causing minAllowed to be the company-wide minimum (e.g. 1.0)
         // instead of what the user's role actually permits (e.g. 1.71).
-        const res = await api.get(`/companies/commercial-policies/me`);
+        const targetTeamId = opportunitySalesTeamId || form.sales_team_id || (form.sales_teams && form.sales_teams[0]);
+        const url = targetTeamId 
+          ? `/companies/commercial-policies/me?sales_team_id=${targetTeamId}`
+          : `/companies/commercial-policies/me`;
+
+        const res = await api.get(url);
         const policies = (res.data || []).filter((p: any) => p.ativo);
         const sorted = [...policies].sort((a: any, b: any) => Number(a.fator_limite) - Number(b.fator_limite));
         setUserPolicies(sorted);
@@ -750,6 +755,9 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
             return { ...prev, ...updates };
           });
+        } else {
+          setUserPolicies([]);
+          setActivePolicy(null);
         }
       } catch (err) {
         console.error('Failed to load company policies', err);
@@ -759,7 +767,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     };
 
     loadPolicies();
-  }, [kitId, form.tipo_contrato, activeCompanyId]);
+  }, [kitId, form.tipo_contrato, activeCompanyId, opportunitySalesTeamId, form.sales_team_id]);
 
 
   // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ

@@ -888,8 +888,12 @@ export function SalesBudgetForm() {
         icms_externo: pick('icms_externo'),
       });
 
-      // Fetch Commercial Policies
-      api.get(`/companies/commercial-policies/me`).then(res => {
+      // Fetch Commercial Policies scoped to salesTeamId if selected
+      const policiesUrl = salesTeamId
+        ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}`
+        : `/companies/commercial-policies/me`;
+
+      api.get(policiesUrl).then(res => {
         const policies = res.data || [];
         setUserPolicies(policies);
         if (policies.length > 0) {
@@ -914,12 +918,16 @@ export function SalesBudgetForm() {
           const currentMkp = markupPadrao;
           const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
             .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
-          if (applicable) setActivePolicy(applicable);
-
+          
           const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
+          setActivePolicy(applicable || defaultPolicy);
+
           if (!isEditing) {
             setPercDespesaOperacional(Number(applicable?.despesa_operacional_percentual ?? defaultPolicy?.despesa_operacional_percentual ?? 0));
           }
+        } else {
+          setUserPolicies([]);
+          setActivePolicy(null);
         }
       }).catch(err => console.error('Failed to load policies', err));
 
@@ -954,6 +962,37 @@ export function SalesBudgetForm() {
       }
     }).catch(err => console.error('Failed to fetch company details:', err));
   }, [activeCompanyId, isEditing]);
+
+  // Re-fetch commercial policies whenever salesTeamId changes
+  useEffect(() => {
+    if (!activeCompanyId) return;
+    const policiesUrl = salesTeamId
+      ? `/companies/commercial-policies/me?sales_team_id=${salesTeamId}`
+      : `/companies/commercial-policies/me`;
+
+    api.get(policiesUrl).then(res => {
+      const policies = res.data || [];
+      setUserPolicies(policies);
+      if (policies.length > 0) {
+        const minVal = Math.min(...policies.map((p: any) => Number(p.fator_limite)));
+        setMinFatorAllowed(minVal);
+
+        const currentMkp = markupPadrao;
+        const applicable = policies.filter((p: any) => Number(p.fator_limite) <= currentMkp)
+          .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+        
+        const defaultPolicy = policies.find((p: any) => p.is_default) || policies[0];
+        setActivePolicy(applicable || defaultPolicy);
+
+        if (!isEditing) {
+          setPercDespesaOperacional(Number(applicable?.despesa_operacional_percentual ?? defaultPolicy?.despesa_operacional_percentual ?? 0));
+        }
+      } else {
+        setUserPolicies([]);
+        setActivePolicy(null);
+      }
+    }).catch(err => console.error('Failed to load policies for sales team', err));
+  }, [salesTeamId, activeCompanyId]);
 
 
   useEffect(() => {

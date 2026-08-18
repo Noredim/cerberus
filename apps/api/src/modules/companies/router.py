@@ -268,20 +268,32 @@ async def upload_company_logo(
 
 @router.get("/commercial-policies/me", response_model=List[CommercialPolicyOut])
 def get_my_commercial_policies(
+    sales_team_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     active_company_id: str = Depends(get_active_company)
 ):
     """
     Returns commercial policies applicable to the current user's role
-    in the active company. Used by OpportunityKitForm to enforce
-    margin factor limits scoped to the logged-in user.
+    in the active company. Used by OpportunityKitForm and SalesBudgetForm
+    to enforce margin factor limits scoped to the logged-in user and sales team.
     """
-    from .models import CommercialPolicy, CommercialPolicyRole
+    from .models import CommercialPolicy, CommercialPolicyRole, SalesTeamPolicy
     from src.modules.professionals.models import Professional
 
     if not active_company_id:
         return []
+
+    # If sales_team_id is provided, filter policies strictly to those linked to the sales team
+    team_policy_ids = None
+    if sales_team_id:
+        team_policy_rows = db.query(SalesTeamPolicy.commercial_policy_id).filter(
+            SalesTeamPolicy.sales_team_id == sales_team_id
+        ).all()
+        team_policy_ids = [r[0] for r in team_policy_rows]
+        if not team_policy_ids:
+            # Sales team has no linked policies -> return empty list
+            return []
 
     # Find the user's professional record to get their role
     professional = db.query(Professional).filter(
@@ -295,17 +307,19 @@ def get_my_commercial_policies(
     if not professional or not professional.role_id:
         # No role assigned — return all active policies for the company
         # so the UI can still display them (read-only info)
-        policies = db.query(CommercialPolicy).options(
+        query = db.query(CommercialPolicy).options(
             joinedload(CommercialPolicy.roles),
             selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
         ).filter(
             CommercialPolicy.company_id == active_company_id,
             CommercialPolicy.ativo == True
-        ).all()
-        return policies
+        )
+        if team_policy_ids is not None:
+            query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
+        return query.all()
 
     # Filter policies linked to the user's role
-    policies = db.query(CommercialPolicy).join(
+    query = db.query(CommercialPolicy).join(
         CommercialPolicyRole
     ).options(
         joinedload(CommercialPolicy.roles),
@@ -314,8 +328,10 @@ def get_my_commercial_policies(
         CommercialPolicy.company_id == active_company_id,
         CommercialPolicy.ativo == True,
         CommercialPolicyRole.role_id == professional.role_id
-    ).all()
-    return policies
+    )
+    if team_policy_ids is not None:
+        query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
+    return query.all()
 
 @router.get("/{company_id}", response_model=CompanyOut)
 def get_company(
@@ -510,20 +526,28 @@ def upsert_sales_parameters(
 @router.get("/{id}/commercial-policies", response_model=List[CommercialPolicyOut])
 def get_commercial_policies(
     id: UUID,
+    sales_team_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     from sqlalchemy.orm import selectinload
-    from .models import CommercialPolicy, CommercialPolicyServiceCommission
+    from .models import CommercialPolicy, CommercialPolicyServiceCommission, SalesTeamPolicy
     from .schemas import CommercialPolicyOut
     
-    policies = db.query(CommercialPolicy).options(
+    query = db.query(CommercialPolicy).options(
         joinedload(CommercialPolicy.roles),
         selectinload(CommercialPolicy.service_commissions).joinedload(CommercialPolicyServiceCommission.own_service)
     ).filter(
         CommercialPolicy.company_id == id
-    ).all()
-    return policies
+    )
+
+    if sales_team_id:
+        team_policy_ids = [r[0] for r in db.query(SalesTeamPolicy.commercial_policy_id).filter(SalesTeamPolicy.sales_team_id == sales_team_id).all()]
+        if not team_policy_ids:
+            return []
+        query = query.filter(CommercialPolicy.id.in_(team_policy_ids))
+
+    return query.all()
 
 @router.post("/{id}/commercial-policies", response_model=CommercialPolicyOut)
 def create_commercial_policy(
