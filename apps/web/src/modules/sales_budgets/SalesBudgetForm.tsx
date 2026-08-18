@@ -118,6 +118,8 @@ const Decimal4Input = ({ value, onChange, disabled, placeholder = "0.0000", clas
 interface SalesBudgetItem {
   id?: string;
   opportunity_kit_id?: string | null;
+  commercial_policy_id?: string | null;
+  kit_raw?: any;
   product_id: string | null;
   product_nome: string;
   product_codigo: string;
@@ -184,6 +186,8 @@ interface VendaKitItem {
 interface RentalBudgetItem {
   id?: string;
   opportunity_kit_id?: string | null;
+  commercial_policy_id?: string | null;
+  kit_raw?: any;
   product_id: string | null;
   product_nome?: string;
   product_codigo?: string;
@@ -1367,10 +1371,10 @@ export function SalesBudgetForm() {
     let match = null;
 
     // 0. Check if any kit item in items or rentalItems has an explicit commercial policy ID or policy data
-    const kitWithPolicy = items.find(i => i.opportunity_kit_id && (i.kit_raw?.commercial_policy_id || (i as any).commercial_policy_id)) ||
-                          rentalItems.find(ri => ri.opportunity_kit_id && (ri.kit_raw?.commercial_policy_id || (ri as any).commercial_policy_id));
+    const allItems: any[] = [...items, ...rentalItems];
+    const kitWithPolicy = allItems.find(i => i.opportunity_kit_id && (i.kit_raw?.commercial_policy_id || i.commercial_policy_id));
 
-    const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || (kitWithPolicy as any).commercial_policy_id) : null;
+    const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || kitWithPolicy.commercial_policy_id) : null;
 
     // 1. Explicit Commercial Policy ID (from kit or budget)
     const effectivePolicyId = kitPolicyId || loadedCommercialPolicyId;
