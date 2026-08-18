@@ -2392,6 +2392,18 @@ class OpportunitiesReportService:
         }
 
         policy_obj = opportunity.commercial_policy
+        
+        # If not explicit on opportunity, check items / kits
+        if not policy_obj:
+            for item in list(opportunity.items) + list(opportunity.rental_items):
+                kit = getattr(item, 'opportunity_kit', None)
+                if kit and kit.commercial_policy_id:
+                    from src.modules.companies.models import CommercialPolicy
+                    policy_obj = db.query(CommercialPolicy).filter(CommercialPolicy.id == kit.commercial_policy_id).first()
+                    if policy_obj:
+                        break
+
+        # If still not set, resolve dynamically by matching against company/sales team policies
         if not policy_obj and opportunity.company_id:
             from src.modules.companies.models import CommercialPolicy, SalesTeamPolicy
             query = db.query(CommercialPolicy).filter(
@@ -2408,17 +2420,37 @@ class OpportunitiesReportService:
             
             policies = query.all()
             if policies:
-                current_mkp = float(opportunity.markup_padrao or 1.0)
-                applicable = sorted(
-                    [p for p in policies if float(p.fator_limite) <= current_mkp + 0.0001],
-                    key=lambda p: float(p.fator_limite),
-                    reverse=True
+                # Determine actual commission & operational expense applied in the opportunity / kits
+                act_comm = float(opportunity.perc_comissao or 0)
+                act_desp = float(opportunity.perc_despesa_operacional or 0)
+                
+                # Check items/kits if opportunity fields are 0
+                if act_comm == 0 and act_desp == 0:
+                    for item in list(opportunity.items) + list(opportunity.rental_items):
+                        kit = getattr(item, 'opportunity_kit', None)
+                        if kit:
+                            if getattr(kit, 'perc_comissao', None) is not None:
+                                act_comm = float(kit.perc_comissao)
+                            if getattr(kit, 'perc_despesa_operacional', None) is not None:
+                                act_desp = float(kit.perc_despesa_operacional)
+
+                # 1. Exact match by commission and operational expense
+                exact_p = next(
+                    (p for p in policies if abs(float(p.comissao_percentual or 0) - act_comm) < 0.001 and abs(float(p.despesa_operacional_percentual or 0) - act_desp) < 0.001),
+                    None
                 )
-                if applicable:
-                    policy_obj = applicable[0]
+                if exact_p:
+                    policy_obj = exact_p
                 else:
-                    default_p = next((p for p in policies if p.is_default), None)
-                    policy_obj = default_p or policies[0]
+                    # 2. Match by effective sale markup factor (venda_consolidada / total_custo_aquisicao)
+                    effective_factor = (venda_consolidada / total_custo_aquisicao) if total_custo_aquisicao > 0 else float(opportunity.markup_padrao or 1.0)
+                    applicable = sorted(
+                        [p for p in policies if float(p.fator_limite) <= effective_factor + 0.0001],
+                        key=lambda p: float(p.fator_limite),
+                        reverse=True
+                    )
+                    if applicable:
+                        policy_obj = applicable[0]
 
         if policy_obj:
             policy_info = {
