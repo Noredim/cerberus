@@ -25,6 +25,7 @@ const FormasPagamentoForm: React.FC = () => {
         tipo_uso: 'VENDA',
         tipo_distribuicao: 'PERCENTUAL',
         ativo: true,
+        is_default: false,
         observacao: '',
         parcelas: [
             { sequencia: 1, descricao: 'Parcela 1', intervalo_dias: 0, percentual: 100, valor_fixo: null }
@@ -176,6 +177,7 @@ const FormasPagamentoForm: React.FC = () => {
                 tipo_uso: formData.tipo_uso,
                 tipo_distribuicao: formData.tipo_distribuicao,
                 ativo: formData.ativo,
+                is_default: formData.is_default || false,
                 observacao: formData.observacao || null,
                 parcelas: parcelas.map(p => ({
                     sequencia: p.sequencia,
@@ -303,17 +305,33 @@ const FormasPagamentoForm: React.FC = () => {
                                     />
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        id="ativo"
-                                        checked={formData.ativo}
-                                        onChange={e => handleHeaderChange('ativo', e.target.checked)}
-                                        className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
-                                    />
-                                    <label htmlFor="ativo" className="text-sm font-semibold text-text-primary cursor-pointer">
-                                        Forma de Pagamento Ativa
-                                    </label>
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 md:col-span-2 pt-2">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ativo"
+                                            checked={formData.ativo}
+                                            onChange={e => handleHeaderChange('ativo', e.target.checked)}
+                                            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                                        />
+                                        <label htmlFor="ativo" className="text-sm font-semibold text-text-primary cursor-pointer">
+                                            Forma de Pagamento Ativa
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="is_default"
+                                            checked={formData.is_default || false}
+                                            onChange={e => handleHeaderChange('is_default', e.target.checked)}
+                                            className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 cursor-pointer"
+                                        />
+                                        <label htmlFor="is_default" className="text-sm font-semibold text-text-primary cursor-pointer flex items-center gap-1.5">
+                                            <span>Forma de Pagamento Padrão para Oportunidades</span>
+                                            <span className="text-xs text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">(Sugerida no cabeçalho)</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </section>

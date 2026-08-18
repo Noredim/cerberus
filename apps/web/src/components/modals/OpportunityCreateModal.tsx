@@ -30,6 +30,8 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
   const { user, activeCompanyId, userCompanies } = useAuth();
   const currentCompanyId = activeCompanyId || localStorage.getItem('company_id') || userCompanies[0]?.company_id;
 
+  const [defaultFormaPagamentoId, setDefaultFormaPagamentoId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -43,17 +45,25 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
       setVendedorId('');
       setSalesTeamId('');
       setUsarProdutosGerais(false);
+      setDefaultFormaPagamentoId(null);
     }
     setError('');
 
     const loadModalData = async () => {
       setLoadingTeams(true);
       try {
-        const [custRes, profRes, teamsRes] = await Promise.all([
+        const [custRes, profRes, teamsRes, fpRes] = await Promise.all([
           api.get('/cadastro/clientes', { params: { limit: 500 } }),
           api.get('/professionals', { params: { limit: 500 } }),
-          currentCompanyId ? api.get(`/companies/${currentCompanyId}/sales-teams`) : Promise.resolve({ data: [] })
+          currentCompanyId ? api.get(`/companies/${currentCompanyId}/sales-teams`) : Promise.resolve({ data: [] }),
+          api.get('/cadastro/formas-pagamento')
         ]);
+
+        const fps = Array.isArray(fpRes.data) ? fpRes.data : [];
+        const defaultFp = fps.find((fp: any) => fp.ativo && fp.is_default && (fp.tipo_uso === 'VENDA' || fp.tipo_uso === 'AMBOS'));
+        if (defaultFp) {
+          setDefaultFormaPagamentoId(defaultFp.id);
+        }
 
         const custItems = Array.isArray(custRes.data) ? custRes.data : custRes.data.items || [];
         setCustomers(custItems);
@@ -166,6 +176,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
             customer_id: customerId,
             vendedor_id: vendedorId,
             sales_team_id: salesTeamId || null,
+            forma_pagamento_id: defaultFormaPagamentoId || null,
             responsavel_ids: user?.id ? [user.id] : [],
             data_orcamento: new Date().toISOString().slice(0, 10),
             status: 'EM_LANCAMENTO',

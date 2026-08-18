@@ -47,6 +47,7 @@ class FormaPagamentoBase(BaseModel):
     tipo_uso: TipoUsoEnum
     tipo_distribuicao: TipoDistribuicaoEnum
     ativo: bool = True
+    is_default: bool = False
     observacao: Optional[str] = None
 
 class FormaPagamentoCreate(FormaPagamentoBase):

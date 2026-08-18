@@ -29,6 +29,7 @@ export interface FormaPagamento {
     tipo_uso: 'COMPRA' | 'VENDA' | 'AMBOS';
     tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
     ativo: boolean;
+    is_default?: boolean;
     observacao?: string | null;
     updated_at: string;
     parcelas: FormaPagamentoParcela[];
@@ -151,7 +152,14 @@ const FormasPagamentoList: React.FC = () => {
                                                     <CreditCard className="w-4 h-4" />
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-text-primary">{forma.descricao}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold text-text-primary">{forma.descricao}</span>
+                                                        {forma.is_default && (
+                                                            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded uppercase tracking-wider">
+                                                                Padrão
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {forma.observacao && (
                                                         <span className="text-xs text-text-muted truncate max-w-[250px]">{forma.observacao}</span>
                                                     )}

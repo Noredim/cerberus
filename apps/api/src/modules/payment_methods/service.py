@@ -21,13 +21,25 @@ class PaymentMethodsService:
         return db.query(FormaPagamento).filter(FormaPagamento.id == forma_id, FormaPagamento.tenant_id == tenant_id).first()
 
     @staticmethod
+    def _clear_other_defaults(db: Session, tenant_id: str, current_id: Optional[uuid.UUID] = None):
+        query = db.query(FormaPagamento).filter(FormaPagamento.tenant_id == tenant_id, FormaPagamento.is_default == True)
+        if current_id:
+            query = query.filter(FormaPagamento.id != current_id)
+        for fp in query.all():
+            fp.is_default = False
+
+    @staticmethod
     def create_forma(db: Session, tenant_id: str, data: FormaPagamentoCreate) -> FormaPagamento:
+        if data.is_default:
+            PaymentMethodsService._clear_other_defaults(db, tenant_id)
+
         db_forma = FormaPagamento(
             tenant_id=tenant_id,
             descricao=data.descricao,
             tipo_uso=data.tipo_uso.value,
             tipo_distribuicao=data.tipo_distribuicao.value,
             ativo=data.ativo,
+            is_default=data.is_default,
             observacao=data.observacao
         )
         db.add(db_forma)
@@ -62,10 +74,14 @@ class PaymentMethodsService:
             # If description or active state is changing it might be ok, but changing installments is blocked
             raise ValueError("Esta forma de pagamento já possui movimentações vinculadas e não pode ser alterada. Inative-a e crie uma nova.")
 
+        if data.is_default:
+            PaymentMethodsService._clear_other_defaults(db, tenant_id, forma_id)
+
         db_forma.descricao = data.descricao
         db_forma.tipo_uso = data.tipo_uso.value
         db_forma.tipo_distribuicao = data.tipo_distribuicao.value
         db_forma.ativo = data.ativo
+        db_forma.is_default = data.is_default
         db_forma.observacao = data.observacao
 
         # Remove old installments

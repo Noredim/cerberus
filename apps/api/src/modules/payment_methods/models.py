@@ -15,6 +15,7 @@ class FormaPagamento(Base):
     tipo_uso = Column(String(20), nullable=False)  # 'COMPRA', 'VENDA', 'AMBOS'
     tipo_distribuicao = Column(String(20), nullable=False)  # 'PERCENTUAL', 'RATEIO_IGUAL', 'VALOR_FIXO'
     ativo = Column(Boolean, nullable=False, default=True)
+    is_default = Column(Boolean, nullable=False, default=False)
     observacao = Column(Text, nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=func.now())

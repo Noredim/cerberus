@@ -692,7 +692,7 @@ export function SalesBudgetForm() {
   const [percComissaoDiretoria, setPercComissaoDiretoria] = useState(0);
   const [percDespesaOperacional, setPercDespesaOperacional] = useState(0);
   const [isComparativoExpanded, setIsComparativoExpanded] = useState(false);
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [rentalItems, setRentalItems] = useState<RentalBudgetItem[]>([]);
   const [showAddRentalItemModal, setShowAddRentalItemModal] = useState(false);
   const [showKitSearchModal, setShowKitSearchModal] = useState(false);
@@ -783,8 +783,16 @@ export function SalesBudgetForm() {
         setUsers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.items || []);
 
         const activeFps = fpRes.data || [];
-        setSalesFormasPagamento(activeFps.filter((fp: any) => fp.ativo && (fp.tipo_uso === 'VENDA' || fp.tipo_uso === 'AMBOS')));
+        const salesFps = activeFps.filter((fp: any) => fp.ativo && (fp.tipo_uso === 'VENDA' || fp.tipo_uso === 'AMBOS'));
+        setSalesFormasPagamento(salesFps);
         setPurchaseFormasPagamento(activeFps.filter((fp: any) => fp.ativo && (fp.tipo_uso === 'COMPRA' || fp.tipo_uso === 'AMBOS')));
+
+        if (!id) {
+          const defaultFp = salesFps.find((fp: any) => fp.is_default);
+          if (defaultFp) {
+            setFormaPagamentoId(prev => prev || defaultFp.id);
+          }
+        }
       } catch (err) {
         console.error(err);
       }
@@ -3412,7 +3420,23 @@ export function SalesBudgetForm() {
                   className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60" />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-text-muted mb-1">Forma de Pagamento</label>
+                <select
+                  value={formaPagamentoId}
+                  onChange={e => { setFormaPagamentoId(e.target.value); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60 font-medium"
+                >
+                  <option value="">Sem forma de pagamento selecionada</option>
+                  {salesFormasPagamento.map(fp => (
+                    <option key={fp.id} value={fp.id}>
+                      {fp.descricao} {fp.is_default ? '(Padrão)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
                 <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
@@ -5459,9 +5483,9 @@ export function SalesBudgetForm() {
                   onChange={e => { setFormaPagamentoId(e.target.value); setHasUnsavedChanges(true); }}
                   disabled={isReadonly}
                 >
-                  <option value="">Selecione...</option>
+                  <option value="">Sem forma de pagamento selecionada</option>
                   {salesFormasPagamento.map((fp) => (
-                    <option key={fp.id} value={fp.id}>{fp.descricao}</option>
+                    <option key={fp.id} value={fp.id}>{fp.descricao} {fp.is_default ? '(Padrão)' : ''}</option>
                   ))}
                 </select>
               </div>
