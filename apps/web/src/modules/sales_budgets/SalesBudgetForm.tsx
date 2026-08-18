@@ -1385,11 +1385,21 @@ export function SalesBudgetForm() {
       match = userPolicies.find((p: any) => p.id === effectivePolicyId);
     }
 
-    // Compute current effective markup factor of the sale
+    // Compute current effective markup factor of the sale directly from items and kits
+    let totalVendaCalc = 0;
+    let totalCustoCalc = 0;
+    items.forEach((i: any) => {
+      totalVendaCalc += Number(i.total_venda || (i.venda_unit * i.quantidade) || 0);
+      totalCustoCalc += Number((i.custo_unit_base || 0) * (i.quantidade || 1));
+    });
+    vendaKits.forEach((vk: any) => {
+      totalVendaCalc += Number(vk.faturamento_total || vk.data?.faturamento_total || 0);
+      totalCustoCalc += Number(vk.custo_aquisicao_equip_unit || vk.data?.custo_aquisicao_equip_unit || 0) * Number(vk.quantidade || vk.data?.quantidade || 1);
+    });
+
     let currentMkp = Number(markupPadrao || 1.0);
-    const custoAqTotal = (totals?.custoAquisicaoLimpo || 0) + (totals?.freteCompra || 0);
-    if (custoAqTotal > 0 && (totals?.totalVenda || 0) > 0) {
-      currentMkp = totals.totalVenda / custoAqTotal;
+    if (totalCustoCalc > 0 && totalVendaCalc > 0) {
+      currentMkp = totalVendaCalc / totalCustoCalc;
     }
     if (kitWithPolicy) {
       const kFator = Number(kitWithPolicy.fator_margem_locacao || kitWithPolicy.fator_margem_servicos_produtos || kitWithPolicy.fator_margem || 0);
@@ -1431,7 +1441,7 @@ export function SalesBudgetForm() {
         setPercComissao(Number(match.comissao_percentual));
       }
     }
-  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, vendaKits, rentalItems, totals?.totalVenda, totals?.custoAquisicaoLimpo, totals?.freteCompra]);
+  }, [userPolicies, loadedCommercialPolicyId, percComissao, percDespesaOperacional, markupPadrao, items, vendaKits, rentalItems]);
 
 
 
