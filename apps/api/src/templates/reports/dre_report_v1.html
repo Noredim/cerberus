@@ -436,10 +436,9 @@
             </tr>
             {% endif %}
             {% set comissao_total_val = (saidas.despesas_venda.comissao.valor or 0) + (saidas.despesas_venda.comissao_dsr.valor or 0) + (saidas.despesas_venda.comissao_fgts.valor or 0) + (saidas.despesas_venda.comissao_inss.valor or 0) + (saidas.despesas_venda.comissao_demais.valor or 0) %}
-            {% set comissao_total_pct = (comissao_total_val / entradas.total_entradas * 100) if entradas.total_entradas > 0 else 0 %}
             <tr class="row-item" style="font-weight: bold;">
                 <td class="row-item-detail">(-) Comissão</td>
-                <td class="text-right">{{ format_percent(comissao_total_pct) }}%</td>
+                <td class="text-right">{{ format_percent_ratio(comissao_total_val, entradas.total_entradas) }}%</td>
                 <td class="text-right">R$ {{ format_currency(comissao_total_val) }}</td>
             </tr>
             <tr class="row-item">
