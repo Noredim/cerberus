@@ -408,7 +408,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     correctedValue: number;
     policyName: string;
   } | null>(null);
-
+  const [opportunitySalesTeamId, setOpportunitySalesTeamId] = useState<string | null>(null);
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
 
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
@@ -431,6 +431,17 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       team.members?.some((m: any) => m.user_id === user.id)
     );
   }, [salesTeams, user]);
+
+  useEffect(() => {
+    if (userTeams.length > 0 && !form.sales_team_id && !form.sales_teams?.length) {
+      const defaultTeamId = userTeams[0].id;
+      setForm(prev => ({
+        ...prev,
+        sales_team_id: defaultTeamId,
+        sales_teams: [defaultTeamId]
+      }));
+    }
+  }, [userTeams, form.sales_team_id, form.sales_teams]);
 
   const isAdmin = useMemo(() => {
     return user?.roles?.includes('ADMIN') || user?.roles?.includes('ADMINISTRADOR');
