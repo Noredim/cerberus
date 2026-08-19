@@ -163,6 +163,7 @@ class OpportunityKitCreate(OpportunityKitBase):
 
 
 class OpportunityKitUpdate(BaseModel):
+    commercial_policy_id: Optional[UUID] = None
     items: Optional[List[OpportunityKitItemCreate]] = None
     costs: Optional[List[OpportunityKitCostCreate]] = None
     monthly_costs: Optional[List[OpportunityKitMonthlyCostCreate]] = None

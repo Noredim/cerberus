@@ -1379,12 +1379,6 @@ export function SalesBudgetForm() {
 
     const kitPolicyId = kitWithPolicy ? (kitWithPolicy.kit_raw?.commercial_policy_id || kitWithPolicy.commercial_policy_id || kitWithPolicy.summary?.commercial_policy_id) : null;
 
-    // 1. Explicit Commercial Policy ID (from kit or budget)
-    const effectivePolicyId = kitPolicyId || loadedCommercialPolicyId;
-    if (effectivePolicyId) {
-      match = userPolicies.find((p: any) => p.id === effectivePolicyId);
-    }
-
     // Compute current effective markup factor of the sale directly from items and kits
     let totalVendaCalc = 0;
     let totalCustoCalc = 0;
@@ -1401,14 +1395,21 @@ export function SalesBudgetForm() {
     if (totalCustoCalc > 0 && totalVendaCalc > 0) {
       currentMkp = totalVendaCalc / totalCustoCalc;
     }
-    if (kitWithPolicy) {
-      const kFator = Number(kitWithPolicy.fator_margem_locacao || kitWithPolicy.fator_margem_servicos_produtos || kitWithPolicy.fator_margem || 0);
+
+    const anyKit = allItems.find(i => i.opportunity_kit_id || i.data?.opportunity_kit_id);
+    if (anyKit) {
+      const kFator = Number(anyKit.fator_margem_locacao || anyKit.fator_margem_servicos_produtos || anyKit.fator_margem || anyKit.kit_raw?.fator_margem_servicos_produtos || anyKit.kit_raw?.fator_margem_locacao || 0);
       if (kFator > 0) currentMkp = kFator;
     }
 
-    // 2. Check if kit has specific commission / despesa_operacional
-    if (!match && kitWithPolicy) {
-      const kitRaw = kitWithPolicy.kit_raw || kitWithPolicy;
+    // 1. Explicit Commercial Policy ID from kit
+    if (kitPolicyId) {
+      match = userPolicies.find((p: any) => p.id === kitPolicyId);
+    }
+
+    // 2. Check if any kit has specific commission / despesa_operacional / markup factor
+    if (!match && anyKit) {
+      const kitRaw = anyKit.kit_raw || anyKit;
       const kComm = Number(kitRaw.perc_comissao ?? kitRaw.summary?.perc_comissao ?? 0);
       const kDesp = Number(kitRaw.perc_despesa_operacional ?? kitRaw.summary?.perc_despesa_operacional ?? 0);
       if (kComm > 0 || kDesp > 0) {
@@ -1416,13 +1417,18 @@ export function SalesBudgetForm() {
           Math.abs(Number(p.comissao_percentual || 0) - kComm) < 0.001 &&
           Math.abs(Number(p.despesa_operacional_percentual || 0) - kDesp) < 0.001
         );
-        if (candidate && Number(candidate.fator_limite) <= currentMkp + 0.0001) {
+        if (candidate) {
           match = candidate;
         }
       }
     }
 
-    // 3. Fallback: match by effective markup factor (highest policy with fator_limite <= currentMkp)
+    // 3. Explicit Commercial Policy ID from budget (if no kit policy matched)
+    if (!match && loadedCommercialPolicyId) {
+      match = userPolicies.find((p: any) => p.id === loadedCommercialPolicyId);
+    }
+
+    // 4. Fallback: match by effective markup factor (highest policy with fator_limite <= currentMkp)
     if (!match) {
       const applicable = userPolicies
         .filter((p: any) => Number(p.fator_limite) <= currentMkp + 0.0001)
@@ -4217,15 +4223,22 @@ export function SalesBudgetForm() {
                   <h2 className="text-xl font-bold text-text-primary">Fechamento de Venda</h2>
                 </div>
                 {activePolicy && (
-                  <div className="inline-flex items-center gap-2.5 bg-brand-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-md shadow-brand-primary/20 border border-brand-primary/30 flex-wrap">
-                    <span className="bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[11px] font-extrabold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
                       {activePolicy.nome_politica || activePolicy.nome || 'Política Comercial'}
                     </span>
-                    <span>Comissão: {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%</span>
-                    <span className="opacity-60">•</span>
-                    <span>Desp. Op: {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%</span>
-                    <span className="opacity-60">•</span>
-                    <span>Fator Mín: {Number(activePolicy.fator_limite || 0).toFixed(4)}</span>
+                    <div className="inline-flex items-center gap-1.5 bg-bg-subtle border border-border-subtle px-2.5 py-1 rounded-lg text-xs font-semibold">
+                      <span className="text-text-muted font-medium">Comissão:</span>
+                      <span className="font-extrabold text-brand-primary tabular-nums">{Number(activePolicy.comissao_percentual || 0).toFixed(2)}%</span>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 bg-bg-subtle border border-border-subtle px-2.5 py-1 rounded-lg text-xs font-semibold">
+                      <span className="text-text-muted font-medium">Desp. Op:</span>
+                      <span className="font-extrabold text-text-primary tabular-nums">{Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%</span>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 bg-bg-subtle border border-border-subtle px-2.5 py-1 rounded-lg text-xs font-semibold">
+                      <span className="text-text-muted font-medium">Fator Mín:</span>
+                      <span className="font-extrabold text-text-primary tabular-nums">{Number(activePolicy.fator_limite || 0).toFixed(4)}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -7436,6 +7449,15 @@ export function SalesBudgetForm() {
                 onSuccess={(savedKit) => {
                   setEditingKit(null);
                   if (savedKit) {
+                    if (savedKit.commercial_policy_id) {
+                      setLoadedCommercialPolicyId(savedKit.commercial_policy_id);
+                    }
+                    if (savedKit.perc_despesa_operacional !== undefined && savedKit.perc_despesa_operacional !== null) {
+                      setPercDespesaOperacional(Number(savedKit.perc_despesa_operacional));
+                    }
+                    if (savedKit.perc_comissao !== undefined && savedKit.perc_comissao !== null) {
+                      setPercComissao(Number(savedKit.perc_comissao));
+                    }
                     if (editingKit.tab === 'locacao') {
                       // Update Rental Items
                       setRentalItems(prev => prev.map((item, i) => {

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2, Users } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2, Users, ShieldCheck } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -1563,27 +1563,49 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   </div>
 
                   {/* Collapsible Rules (Política Comercial) */}
-                  <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
+                  <div className="mb-4 border border-border-subtle rounded-xl overflow-hidden bg-bg-surface shadow-xs">
                     <button 
                       type="button"
                       onClick={() => setIsPolicyExpanded(!isPolicyExpanded)}
-                      className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3.5 py-2.5 bg-bg-subtle text-xs font-bold text-text-secondary border-b border-border-subtle cursor-pointer hover:bg-bg-deep/50 transition-colors"
+                      className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-bg-subtle text-xs font-bold text-text-secondary cursor-pointer hover:bg-bg-deep/50 transition-colors"
                     >
-                      <span className="text-xs font-extrabold uppercase tracking-widest text-text-primary">Regras de Negócio</span>
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ShieldCheck className="w-4 h-4 text-brand-primary shrink-0" />
+                        <span className="text-xs font-extrabold uppercase tracking-widest text-text-primary whitespace-nowrap">Regras de Negócio</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
                         {activePolicy && (
-                          <div className="inline-flex items-center gap-2.5 bg-brand-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-md shadow-brand-primary/20">
-                            <span className="bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[11px] font-extrabold">{activePolicy.nome_politica}</span>
-                            <span>Comissão: {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%</span>
-                            <span className="opacity-60">•</span>
-                            <span>Desp. Op: {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%</span>
-                            <span className="opacity-60">•</span>
-                            <span>Fator Mín: {Number(activePolicy.fator_limite || 0).toFixed(4)}</span>
-                          </div>
+                          <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider truncate max-w-[120px]">
+                            {activePolicy.nome_politica}
+                          </span>
                         )}
-                        {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
+                        {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted shrink-0" /> : <ChevronDown className="w-4 h-4 text-text-muted shrink-0" />}
                       </div>
                     </button>
+
+                    {/* Metrics 3-Col Bar (Always visible when activePolicy exists) */}
+                    {activePolicy && (
+                      <div className="grid grid-cols-3 gap-1.5 p-2 bg-bg-subtle/40 border-t border-border-subtle/60">
+                        <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                          <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Comissão</span>
+                          <span className="text-xs font-extrabold text-brand-primary tabular-nums">
+                            {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                          <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Desp. Op.</span>
+                          <span className="text-xs font-extrabold text-text-primary tabular-nums">
+                            {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                          <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Fator Mín.</span>
+                          <span className="text-xs font-extrabold text-text-primary tabular-nums">
+                            {Number(activePolicy.fator_limite || 0).toFixed(4)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {isPolicyExpanded && (
                       <div className="p-3 bg-bg-surface">
@@ -2097,27 +2119,49 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 </div>
 
                 {/* Collapsible Rules (Política Comercial) */}
-                <div className="mb-4 border border-border-subtle rounded-lg overflow-hidden">
+                <div className="mb-4 border border-border-subtle rounded-xl overflow-hidden bg-bg-surface shadow-xs">
                   <button 
                     type="button"
                     onClick={() => setIsPolicyExpanded(!isPolicyExpanded)}
-                    className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3.5 py-2.5 bg-bg-subtle text-xs font-bold text-text-secondary border-b border-border-subtle cursor-pointer hover:bg-bg-deep/50 transition-colors"
+                    className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 bg-bg-subtle text-xs font-bold text-text-secondary cursor-pointer hover:bg-bg-deep/50 transition-colors"
                   >
-                    <span className="text-xs font-extrabold uppercase tracking-widest text-text-primary">Regras de Negócio</span>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ShieldCheck className="w-4 h-4 text-brand-primary shrink-0" />
+                      <span className="text-xs font-extrabold uppercase tracking-widest text-text-primary whitespace-nowrap">Regras de Negócio</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
                       {activePolicy && (
-                        <div className="inline-flex items-center gap-2.5 bg-brand-primary text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-md shadow-brand-primary/20">
-                          <span className="bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[11px] font-extrabold">{activePolicy.nome_politica}</span>
-                          <span>Comissão: {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%</span>
-                          <span className="opacity-60">•</span>
-                          <span>Desp. Op: {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%</span>
-                          <span className="opacity-60">•</span>
-                          <span>Fator Mín: {Number(activePolicy.fator_limite || 0).toFixed(4)}</span>
-                        </div>
+                        <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider truncate max-w-[120px]">
+                          {activePolicy.nome_politica}
+                        </span>
                       )}
-                      {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
+                      {isPolicyExpanded ? <ChevronUp className="w-4 h-4 text-text-muted shrink-0" /> : <ChevronDown className="w-4 h-4 text-text-muted shrink-0" />}
                     </div>
                   </button>
+
+                  {/* Metrics 3-Col Bar (Always visible when activePolicy exists) */}
+                  {activePolicy && (
+                    <div className="grid grid-cols-3 gap-1.5 p-2 bg-bg-subtle/40 border-t border-border-subtle/60">
+                      <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                        <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Comissão</span>
+                        <span className="text-xs font-extrabold text-brand-primary tabular-nums">
+                          {Number(activePolicy.comissao_percentual || 0).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                        <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Desp. Op.</span>
+                        <span className="text-xs font-extrabold text-text-primary tabular-nums">
+                          {Number(activePolicy.despesa_operacional_percentual || 0).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="bg-bg-surface border border-border-subtle/80 rounded-lg p-2 text-center shadow-2xs">
+                        <span className="block text-[9px] font-bold text-text-muted uppercase tracking-wider truncate">Fator Mín.</span>
+                        <span className="text-xs font-extrabold text-text-primary tabular-nums">
+                          {Number(activePolicy.fator_limite || 0).toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {isPolicyExpanded && (
                     <div className="p-3 bg-bg-surface">
