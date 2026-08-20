@@ -13,7 +13,9 @@ import {
     Calendar,
     Percent,
     UploadCloud,
-    Search
+    Search,
+    ListPlus,
+    CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -36,6 +38,8 @@ const TaxBenefitForm: React.FC = () => {
     });
     const [ncmInputValue, setNcmInputValue] = useState('');
     const [ncmLocalFilter, setNcmLocalFilter] = useState('');
+    const [isManualBatchModalOpen, setIsManualBatchModalOpen] = useState(false);
+    const [manualBatchText, setManualBatchText] = useState('');
     const [formData, setFormData] = useState<Partial<TaxBenefit>>({
         nome: '',
         descricao: '',
@@ -131,6 +135,50 @@ const TaxBenefitForm: React.FC = () => {
                 updateRegraField('condicoes.ncm_incluir', [...current, masked]);
             }
         }
+    };
+
+    const parseNcmsFromRawText = (text: string): string[] => {
+        if (!text) return [];
+        const parts = text.split(/[\r\n,;\s\t]+/);
+        const parsedNcms: string[] = [];
+
+        for (const part of parts) {
+            const clean = part.replace(/\D/g, '');
+            if (clean.length === 8) {
+                const masked = `${clean.slice(0, 4)}.${clean.slice(4, 6)}.${clean.slice(6, 8)}`;
+                if (!parsedNcms.includes(masked)) {
+                    parsedNcms.push(masked);
+                }
+            }
+        }
+        return parsedNcms;
+    };
+
+    const handleMultipleNcmsAdd = (text: string): number => {
+        const newNcms = parseNcmsFromRawText(text);
+        if (newNcms.length === 0) {
+            alert('Nenhum NCM válido de 8 dígitos foi localizado no texto fornecido.');
+            return 0;
+        }
+
+        const current = formData.regra_json?.condicoes?.ncm_incluir || [];
+        const currentSet = new Set(current);
+        let addedCount = 0;
+
+        newNcms.forEach((masked) => {
+            if (!currentSet.has(masked)) {
+                currentSet.add(masked);
+                addedCount++;
+            }
+        });
+
+        if (addedCount > 0) {
+            updateRegraField('condicoes.ncm_incluir', Array.from(currentSet));
+            alert(`${addedCount} novo(s) NCM(s) adicionado(s) com sucesso.`);
+        } else {
+            alert('Todos os NCMs fornecidos já estão presentes na lista.');
+        }
+        return addedCount;
     };
 
     const handleNcmInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -598,7 +646,18 @@ const TaxBenefitForm: React.FC = () => {
                                                         <p className="text-[10px] text-text-muted">Consulte na base global ou filtre os já adicionados.</p>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <label className="flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 transition-colors px-3 py-1.5 rounded-md cursor-pointer border border-brand-primary/20 shadow-sm">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setManualBatchText('');
+                                                                setIsManualBatchModalOpen(true);
+                                                            }}
+                                                            className="flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 transition-colors px-3 py-1.5 rounded-md cursor-pointer border border-brand-primary/20 shadow-sm"
+                                                        >
+                                                            <ListPlus className="w-3.5 h-3.5" />
+                                                            Inserir Vários (Manual)
+                                                        </button>
+                                                        <label className="flex items-center gap-1.5 text-xs font-bold text-text-muted bg-bg-deep hover:bg-bg-deep/80 transition-colors px-3 py-1.5 rounded-md cursor-pointer border border-border-subtle shadow-sm">
                                                             <UploadCloud className="w-3.5 h-3.5" />
                                                             Importar CSV
                                                             <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
@@ -611,11 +670,21 @@ const TaxBenefitForm: React.FC = () => {
                                                         <div className={`absolute inset-0 bg-brand-primary/5 rounded-md transition-opacity opacity-0 group-focus-within:opacity-100 -m-1 pointer-events-none`} />
                                                         <input
                                                             type="text"
-                                                            placeholder="Consultar ou Filtrar NCM..."
+                                                            placeholder="Consultar ou Filtrar NCM (cole um ou vários códigos)..."
                                                             value={ncmInputValue}
                                                             onChange={(e) => {
                                                                 handleNcmInputChange(e);
                                                                 setNcmLocalFilter(e.target.value);
+                                                            }}
+                                                            onPaste={(e) => {
+                                                                const pastedText = e.clipboardData.getData('text');
+                                                                const parsed = parseNcmsFromRawText(pastedText);
+                                                                if (parsed.length > 1) {
+                                                                    e.preventDefault();
+                                                                    handleMultipleNcmsAdd(pastedText);
+                                                                    setNcmInputValue('');
+                                                                    setNcmLocalFilter('');
+                                                                }
                                                             }}
                                                             onKeyDown={(e) => {
                                                                 if (e.key === 'Enter') {
@@ -790,8 +859,127 @@ const TaxBenefitForm: React.FC = () => {
                         </p>
                     </div>
                 </div>
-            </motion.div >
-        </div >
+            </motion.div>
+
+            {/* Modal de Inclusão Manual em Lote de NCMs */}
+            <AnimatePresence>
+                {isManualBatchModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+                            onClick={() => setIsManualBatchModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-2xl bg-surface border border-border-subtle rounded-xl shadow-2xl overflow-hidden glass-morphism z-[101]"
+                        >
+                            <div className="bg-bg-deep/80 px-6 py-4 border-b border-border-subtle flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <ListPlus className="w-5 h-5 text-brand-primary" />
+                                    <h3 className="font-bold text-text-primary text-base">Inclusão Manual em Lote de NCMs</h3>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsManualBatchModalOpen(false)}
+                                    className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-bg-deep transition-colors cursor-pointer"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-4">
+                                <p className="text-xs text-text-muted leading-relaxed">
+                                    Cole ou digite a lista de NCMs abaixo. Você pode separar os códigos por quebra de linha, vírgula, ponto e vírgula ou espaço. Formatos aceitos: <code className="bg-bg-deep px-1.5 py-0.5 rounded text-brand-primary font-mono text-[11px]">8471.30.12</code> ou <code className="bg-bg-deep px-1.5 py-0.5 rounded text-brand-primary font-mono text-[11px]">84713012</code>.
+                                </p>
+
+                                <textarea
+                                    value={manualBatchText}
+                                    onChange={(e) => setManualBatchText(e.target.value)}
+                                    placeholder="Exemplo:&#10;8471.30.12&#10;8471.30.19, 8504.40.10&#10;8517.62.55; 8528.52.00"
+                                    rows={8}
+                                    className="w-full bg-bg-deep border border-border-subtle rounded-lg p-4 font-mono text-xs text-text-primary outline-none focus:border-brand-primary transition-colors resize-y leading-relaxed"
+                                />
+
+                                {/* Preview Badge */}
+                                {(() => {
+                                    const parsed = parseNcmsFromRawText(manualBatchText);
+                                    const current = formData.regra_json?.condicoes?.ncm_incluir || [];
+                                    const currentSet = new Set(current);
+                                    const newNcms = parsed.filter(n => !currentSet.has(n));
+                                    const alreadyAddedNcms = parsed.filter(n => currentSet.has(n));
+
+                                    return (
+                                        <div className="space-y-3 pt-2">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="font-bold text-text-primary flex items-center gap-1.5">
+                                                    <CheckCircle2 className="w-4 h-4 text-brand-success" />
+                                                    {parsed.length} NCM(s) válidos detectados
+                                                </span>
+                                                {parsed.length > 0 && (
+                                                    <span className="text-[11px] text-text-muted">
+                                                        ({newNcms.length} novos | {alreadyAddedNcms.length} já cadastrados)
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {parsed.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto custom-scrollbar bg-bg-deep/50 p-3 rounded-lg border border-border-subtle">
+                                                    {parsed.slice(0, 20).map((tag) => {
+                                                        const isDuplicate = currentSet.has(tag);
+                                                        return (
+                                                            <span
+                                                                key={tag}
+                                                                className={`px-2 py-1 rounded text-[10px] font-mono font-bold border ${isDuplicate ? 'bg-bg-deep text-text-muted border-border-subtle line-through opacity-70' : 'bg-brand-primary/10 text-brand-primary border-brand-primary/20'}`}
+                                                            >
+                                                                {tag}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                    {parsed.length > 20 && (
+                                                        <span className="px-2 py-1 bg-bg-deep text-text-muted rounded text-[10px] font-bold border border-border-subtle">
+                                                            + {parsed.length - 20} adicionais
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            <div className="bg-bg-deep/80 px-6 py-4 border-t border-border-subtle flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsManualBatchModalOpen(false)}
+                                    className="px-4 py-2 text-xs font-bold text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={parseNcmsFromRawText(manualBatchText).length === 0}
+                                    onClick={() => {
+                                        const added = handleMultipleNcmsAdd(manualBatchText);
+                                        if (added > 0) {
+                                            setIsManualBatchModalOpen(false);
+                                            setManualBatchText('');
+                                        }
+                                    }}
+                                    className="bg-brand-primary text-white px-5 py-2 rounded-md text-xs font-bold hover:bg-brand-primary/90 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                                >
+                                    Adicionar NCMs
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 };
 
