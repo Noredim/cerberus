@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
