@@ -1328,10 +1328,17 @@ class OpportunityKitService:
             "cost_summaries": cost_summaries
         }
 
-    def list_kits(self, tenant_id: str, company_id: str, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None, current_user: Optional[any] = None):
+    def list_kits(self, tenant_id: str, company_id: Any, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None, current_user: Optional[any] = None):
         from sqlalchemy.orm import joinedload
         from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
+        from uuid import UUID
         
+        if isinstance(company_id, str):
+            try:
+                company_id = UUID(company_id)
+            except ValueError:
+                pass
+                
         query = self.db.query(OpportunityKit).options(
             joinedload(OpportunityKit.sales_teams).joinedload(OpportunityKitSalesTeam.sales_team)
         ).filter(
