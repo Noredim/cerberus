@@ -2611,7 +2611,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Nome do Kit</label>
                 <Input
-                  value={form.nome_kit}
+                  value={form.nome_kit || ''}
                   onChange={(e) => handleInputChange('nome_kit', e.target.value)}
                   placeholder="Ex: Kit CFTV Enterprise 36x"
                   className="w-full text-lg font-medium"
@@ -2620,7 +2620,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Descrição (Opcional)</label>
                 <textarea
-                  value={form.descricao_kit}
+                  value={form.descricao_kit || ''}
                   onChange={(e) => handleInputChange('descricao_kit', e.target.value)}
                   className="w-full rounded-lg border border-border-strong bg-bg-surface px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/50 min-h-[100px]"
                 />
@@ -2643,7 +2643,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     {(isAdmin || userTeams.length >= 1) && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {(isAdmin ? salesTeams : userTeams).map((team) => {
-                          const isChecked = form.sales_teams?.includes(team.id);
+                          const isChecked = Boolean(form.sales_teams?.includes(team.id));
                           return (
                             <label
                               key={team.id}
@@ -2962,7 +2962,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <input
                     type="checkbox"
                     id="chk-instalacao"
-                    checked={form.instalacao_inclusa}
+                    checked={Boolean(form.instalacao_inclusa)}
                     onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
                     className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                   />
@@ -2971,7 +2971,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                 {form.instalacao_inclusa && (
                   <div className="pl-8 pt-4 border-t border-border-subtle/50">
                     <label className="block text-sm font-medium mb-1">% de Instalação</label>
-                    <Input type="number" step="0.01" value={form.percentual_instalacao} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
+                    <Input type="number" step="0.01" value={form.percentual_instalacao ?? ''} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
                     <p className="text-[10px] text-text-muted mt-1">Calculado sobre o custo de aquisição final do kit.</p>
                   </div>
                 )}
@@ -2984,7 +2984,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <input
                         type="checkbox"
                         id="chk-havera-manutencao"
-                        checked={form.havera_manutencao}
+                        checked={Boolean(form.havera_manutencao)}
                         onChange={(e) => handleInputChange('havera_manutencao', e.target.checked)}
                         className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                       />
@@ -2993,7 +2993,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                     {form.havera_manutencao && (
                       <div className="pl-8 pt-4 border-t border-border-subtle/50">
                         <label className="block text-sm font-medium mb-1">Qtd. Meses de Manutenção</label>
-                        <Input type="number" step="1" maxLength={3} value={form.qtd_meses_manutencao} onChange={(e) => handleInputChange('qtd_meses_manutencao', e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full" placeholder="Ex: 12" />
+                        <Input type="number" step="1" maxLength={3} value={form.qtd_meses_manutencao ?? ''} onChange={(e) => handleInputChange('qtd_meses_manutencao', e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full" placeholder="Ex: 12" />
                       </div>
                     )}
                   </>
@@ -3003,7 +3003,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <input
                         type="checkbox"
                         id="chk-manutencao"
-                        checked={form.manutencao_inclusa}
+                        checked={Boolean(form.manutencao_inclusa)}
                         onChange={(e) => handleInputChange('manutencao_inclusa', e.target.checked)}
                         className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                       />
@@ -3032,7 +3032,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <input
                     type="checkbox"
                     id="chk-faturamento-separado"
-                    checked={form.faturamento_servico_separado}
+                    checked={Boolean(form.faturamento_servico_separado)}
                     onChange={(e) => handleInputChange('faturamento_servico_separado', e.target.checked)}
                     className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                   />
@@ -3049,7 +3049,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                   <Input
                     type="number"
                     step="0.01"
-                    value={(form as any)[f]}
+                    value={(form as any)[f] ?? 0}
                     onChange={(e) => handleInputChange(f as keyof KitFormValues, parseFloat(e.target.value) || 0)}
                     readOnly={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}
                     disabled={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}

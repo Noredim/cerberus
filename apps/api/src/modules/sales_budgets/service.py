@@ -737,7 +737,10 @@ def check_user_has_budget_access(db: Session, user_id: str, tenant_id: str, budg
         return True
     
     # 2. Check if user is the assigned vendedor
-    if budget.vendedor_id and str(budget.vendedor_id) == str(user_id):
+    from src.modules.professionals.models import Professional
+    prof_ids = [str(p[0]) for p in db.query(Professional.id).filter(Professional.user_id == user_id).all()]
+    user_and_prof_ids = [str(user_id)] + prof_ids
+    if budget.vendedor_id and str(budget.vendedor_id) in user_and_prof_ids:
         return True
 
     # 3. Check if user is in responsaveis
@@ -1735,11 +1738,14 @@ def list_budgets(
         query = query.filter(SalesBudget.company_id == company_id)
         
     if user_id:
-        is_approver, _ = check_is_approver(db, user_id, tenant_id, company_id)
-        if not is_approver:
+        is_admin_or_mgr = check_is_manager_or_admin(db, user_id, tenant_id, company_id)
+        if not is_admin_or_mgr:
+            from src.modules.professionals.models import Professional
+            prof_ids = [str(p[0]) for p in db.query(Professional.id).filter(Professional.user_id == user_id).all()]
+            user_and_prof_ids = [user_id] + prof_ids
             query = query.filter(
                 or_(
-                    SalesBudget.vendedor_id == user_id,
+                    SalesBudget.vendedor_id.in_(user_and_prof_ids),
                     SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == user_id)
                 )
             )
@@ -1748,7 +1754,11 @@ def list_budgets(
         query = query.filter(SalesBudget.status == status)
         
     if vendedor_id:
-        query = query.filter(SalesBudget.vendedor_id == vendedor_id)
+        from src.modules.professionals.models import Professional
+        v_prof_ids = [str(p[0]) for p in db.query(Professional.id).filter(Professional.user_id == vendedor_id).all()]
+        v_user_ids = [str(p[0]) for p in db.query(Professional.user_id).filter(Professional.id == vendedor_id).all()]
+        v_all_ids = [vendedor_id] + v_prof_ids + v_user_ids
+        query = query.filter(SalesBudget.vendedor_id.in_(v_all_ids))
         
     if responsavel_id:
         query = query.filter(SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == responsavel_id))
@@ -2039,6 +2049,35 @@ def check_is_approver(db: Session, user_id: str, tenant_id: str, company_id: Any
             return True, role_name_upper
 
     return False, "VENDEDOR"
+
+
+def check_is_manager_or_admin(db: Session, user_id: str, tenant_id: str, company_id: Any) -> bool:
+    from src.modules.users.models import UserRole, UserRoleEnum
+    from src.modules.professionals.models import Professional
+
+    if isinstance(company_id, str):
+        try:
+            company_id = UUID(company_id)
+        except ValueError:
+            pass
+
+    user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
+    for ur in user_roles:
+        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA):
+            return True
+
+    professional = db.query(Professional).filter(
+        Professional.user_id == user_id,
+        Professional.company_id == company_id,
+        Professional.tenant_id == tenant_id
+    ).first()
+    
+    if professional and professional.role:
+        role_name_upper = professional.role.name.upper()
+        if role_name_upper in ("GERENTE", "DIRETOR"):
+            return True
+
+    return False
 
 
 def get_user_role_name(db: Session, user_id: str, tenant_id: str, company_id: Any) -> str:

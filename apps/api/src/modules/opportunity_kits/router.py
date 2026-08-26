@@ -134,30 +134,10 @@ def delete_kit(
     if not active_company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id obrigatório")
     service = OpportunityKitService(db)
-    kit = service.get_kit(str(kit_id), current_user.tenant_id, active_company_id)
-    if not kit:
-        raise HTTPException(status_code=404, detail="Kit não encontrado")
-    
-    licitacao_id = kit.licitacao_id
-    nome_kit = kit.nome_kit
-    
-    db.delete(kit)
-    db.commit()
-    
-    if licitacao_id:
-        try:
-            from src.modules.licitacoes.service import LicitacaoService
-            LicitacaoService.register_history(
-                db, 
-                licitacao_id, 
-                current_user.tenant_id, 
-                current_user.id, 
-                f"{current_user.name} excluiu o kit {nome_kit}."
-            )
-            db.commit()
-            LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
-        except Exception:
-            pass
-            
+    try:
+        service.delete_kit(str(kit_id), current_user.tenant_id, active_company_id, current_user=current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return None
+
 

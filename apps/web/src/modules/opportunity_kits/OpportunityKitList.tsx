@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package } from 'lucide-react';
+import { Plus, Package, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import Modal from '../../components/modals/Modal';
 
 interface KitSummary {
   valor_mensal_kit: number;
@@ -32,6 +33,11 @@ export const OpportunityKitList = () => {
   const [kits, setKits] = useState<Kit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Deletion modal state
+  const [kitToDelete, setKitToDelete] = useState<Kit | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   useEffect(() => {
     if (activeCompanyId) fetchKits();
   }, [activeCompanyId]);
@@ -44,6 +50,34 @@ export const OpportunityKitList = () => {
       console.error('Error fetching kits:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleOpenDeleteModal = (kit: Kit) => {
+    setKitToDelete(kit);
+    setDeleteError(null);
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (isDeleting) return;
+    setKitToDelete(null);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!kitToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/opportunity-kits/${kitToDelete.id}`);
+      setKits(prev => prev.filter(k => k.id !== kitToDelete.id));
+      setKitToDelete(null);
+    } catch (error: any) {
+      console.error('Error deleting kit:', error);
+      const detailMessage = error.response?.data?.detail || 'Ocorreu um erro ao tentar excluir o kit.';
+      setDeleteError(detailMessage);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -92,14 +126,12 @@ export const OpportunityKitList = () => {
                   <th className="px-6 py-4 text-right">Lucro Mensal</th>
                   <th className="px-6 py-4 text-right">Margem</th>
                   <th className="px-6 py-4 text-right">ROI</th>
-                  <th className="px-6 py-4">Ações</th>
+                  <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {kits.map((kit) => {
                   const isRental = RENTAL_TYPES.includes(kit.tipo_contrato);
-                  // Grid shows valor_mensal_antes_impostos (the billing value = Locação + Manutenção)
-                  // NOT valor_mensal_kit (which is the tax-grossed-up internal value)
                   const valorMensal = kit.summary?.valor_mensal_antes_impostos ?? kit.summary?.valor_mensal_kit ?? 0;
                   const lucro = kit.summary?.lucro_mensal_kit ?? 0;
                   const margem = kit.summary?.margem_kit ?? 0;
@@ -111,12 +143,10 @@ export const OpportunityKitList = () => {
                       <td className="px-6 py-4 text-text-secondary">{kit.tipo_contrato}</td>
                       <td className="px-6 py-4 text-center text-text-secondary">{kit.quantidade_kits}</td>
 
-                      {/* Valor Mensal: billing value (pre-tax, as shown in the form HUD) */}
                       <td className="px-6 py-4 text-right tabular-nums text-text-primary font-medium">
                         {fmtC(valorMensal)}
                       </td>
 
-                      {/* Lucro Mensal: hidden (—) for LOCACAO/COMODATO */}
                       <td className="px-6 py-4 text-right tabular-nums font-medium">
                         {isRental ? (
                           <span className="text-text-muted">—</span>
@@ -125,7 +155,6 @@ export const OpportunityKitList = () => {
                         )}
                       </td>
 
-                      {/* Margem: hidden (—) for LOCACAO/COMODATO */}
                       <td className="px-6 py-4 text-right tabular-nums font-medium">
                         {isRental ? (
                           <span className="text-text-muted">—</span>
@@ -134,7 +163,6 @@ export const OpportunityKitList = () => {
                         )}
                       </td>
 
-                      {/* ROI: shown only for LOCACAO/COMODATO */}
                       <td className="px-6 py-4 text-right tabular-nums">
                         {isRental && roi > 0 ? (
                           <span className="inline-flex items-center gap-1 text-cyan-600 font-bold">
@@ -146,10 +174,21 @@ export const OpportunityKitList = () => {
                         )}
                       </td>
 
-                      <td className="px-6 py-4 font-medium">
-                        <Button variant="ghost" size="sm" onClick={() => navigate(`/cadastros/kits/${kit.id}`)}>
-                          Editar
-                        </Button>
+                      <td className="px-6 py-4 text-right font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/cadastros/kits/${kit.id}`)}>
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenDeleteModal(kit)}
+                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-500/10"
+                            title="Excluir Kit"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -159,6 +198,48 @@ export const OpportunityKitList = () => {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal for Deletion */}
+      <Modal
+        isOpen={kitToDelete !== null}
+        onClose={handleCloseDeleteModal}
+        title="Confirmar Exclusão de Kit"
+        description="Esta ação removerá o kit do cadastro de oportunidades."
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {deleteError ? (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-start gap-3 text-rose-600 dark:text-rose-400 text-sm">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold block mb-1">Não foi possível excluir o kit:</span>
+                <p>{deleteError}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-text-primary text-sm">
+              Tem certeza que deseja excluir o kit <strong className="font-bold text-text-primary">{kitToDelete?.nome_kit}</strong>? Esta ação não poderá ser desfeita.
+            </p>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-subtle">
+            <Button variant="outline" onClick={handleCloseDeleteModal} disabled={isDeleting}>
+              {deleteError ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {!deleteError && (
+              <Button
+                variant="primary"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500"
+              >
+                {isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
+

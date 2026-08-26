@@ -1343,13 +1343,17 @@ class OpportunityKitService:
 
         if current_user:
             from src.modules.users.models import UserRoleEnum
-            from src.modules.companies.models import SalesTeamMember
+            from src.modules.companies.models import SalesTeamMember, SalesTeam
             from sqlalchemy import exists, and_
             
-            is_admin = any(r.role == UserRoleEnum.ADMIN for r in current_user.roles)
+            is_admin = any(r.role == UserRoleEnum.ADMIN for r in getattr(current_user, "roles", []))
             if not is_admin:
-                user_team_ids = [r[0] for r in self.db.query(SalesTeamMember.sales_team_id).filter(
-                    SalesTeamMember.user_id == current_user.id
+                user_team_ids = [r[0] for r in self.db.query(SalesTeamMember.sales_team_id).join(
+                    SalesTeam, SalesTeam.id == SalesTeamMember.sales_team_id
+                ).filter(
+                    SalesTeamMember.user_id == current_user.id,
+                    SalesTeam.company_id == company_id,
+                    SalesTeam.ativo == True
                 ).all()]
                 
                 public_cond = ~exists().where(OpportunityKitSalesTeam.opportunity_kit_id == OpportunityKit.id)
@@ -1783,7 +1787,7 @@ class OpportunityKitService:
     def recalculate_kit_preview(self, tenant_id: str, company_id: str, data: OpportunityKitCreate) -> dict:
         """Endpoint used to preview financials without saving to DB"""
         # Create a mock objects
-        kit = OpportunityKit(**data.model_dump(exclude={"items", "costs", "monthly_costs"}))
+        kit = OpportunityKit(**data.model_dump(exclude={"items", "costs", "monthly_costs", "sales_teams"}))
         setattr(kit, "company_id", UUID(company_id) if company_id else None)  # type: ignore[arg-type]
         kit.items = [OpportunityKitItem(**item_data.model_dump()) for item_data in data.items]
         kit.costs = [OpportunityKitCost(**cost_data.model_dump()) for cost_data in data.costs]
@@ -1797,3 +1801,49 @@ class OpportunityKitService:
             if Decimal(str(kit.margem_minima_desejada)) > current_margin:
                 raise ValueError("A margem mínima desejada não pode ser maior que a margem atual do Kit.")
         return fin
+
+    def delete_kit(self, kit_id: str, tenant_id: str, company_id: str, current_user: Optional[any] = None) -> None:
+        kit = self.get_kit(kit_id, tenant_id, company_id)
+        if not kit:
+            raise ValueError("Kit não encontrado.")
+            
+        if kit.sales_budget_id is not None or kit.sales_proposal_id is not None:
+            raise ValueError("Este kit não pode ser excluído pois está vinculado a uma oportunidade ou proposta de venda.")
+            
+        from src.modules.sales_budgets.models import SalesBudgetItem, RentalBudgetItem
+        item_usage = self.db.query(SalesBudgetItem).filter(SalesBudgetItem.opportunity_kit_id == kit.id).first()
+        if item_usage:
+            raise ValueError("Este kit não pode ser excluído pois já foi utilizado em oportunidades de venda.")
+            
+        rental_usage = self.db.query(RentalBudgetItem).filter(RentalBudgetItem.opportunity_kit_id == kit.id).first()
+        if rental_usage:
+            raise ValueError("Este kit não pode ser excluído pois já foi utilizado em oportunidades de venda.")
+            
+        from src.modules.sales_proposals.models import SalesProposalKit
+        proposal_usage = self.db.query(SalesProposalKit).filter(SalesProposalKit.opportunity_kit_id == kit.id).first()
+        if proposal_usage:
+            raise ValueError("Este kit não pode ser excluído pois já foi utilizado em propostas comerciais.")
+            
+        licitacao_id = kit.licitacao_id
+        nome_kit = kit.nome_kit
+        
+        self.db.delete(kit)
+        self.db.commit()
+        
+        if licitacao_id:
+            try:
+                from src.modules.licitacoes.service import LicitacaoService
+                user_name = current_user.name if current_user and hasattr(current_user, 'name') else "Usuário"
+                user_id = current_user.id if current_user and hasattr(current_user, 'id') else None
+                LicitacaoService.register_history(
+                    self.db, 
+                    licitacao_id, 
+                    tenant_id, 
+                    user_id, 
+                    f"{user_name} excluiu o kit {nome_kit}."
+                )
+                self.db.commit()
+                LicitacaoService.invalidate_licitacao_totals(self.db, licitacao_id)
+            except Exception:
+                pass
+
