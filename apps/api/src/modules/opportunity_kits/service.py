@@ -1640,10 +1640,183 @@ class OpportunityKitService:
         kit.item_summaries = fin["item_summaries"]
         return kit
 
-    def update_kit(self, kit_id: str, tenant_id: str, data: OpportunityKitUpdate, company_id: Optional[str] = None, current_user: Optional[any] = None) -> OpportunityKit:
+    def clone_kit(
+        self, 
+        source_kit_id: str, 
+        tenant_id: str, 
+        company_id: str, 
+        sales_budget_id: Optional[str] = None, 
+        sales_proposal_id: Optional[str] = None,
+        licitacao_id: Optional[str] = None,
+        licitacao_item_id: Optional[str] = None,
+        new_name: Optional[str] = None
+    ) -> OpportunityKit:
+        """Creates a deep copy of an OpportunityKit and its child entities (items, costs, monthly_costs, sales_teams)
+        bound to a specific sales_budget_id, sales_proposal_id, or licitacao_id.
+        """
+        source_kit = self.get_kit(source_kit_id, tenant_id, company_id)
+        if not source_kit:
+            raise ValueError("Kit de origem não encontrado.")
+
+        import uuid
+        from src.modules.opportunity_kits.models import (
+            OpportunityKit, OpportunityKitItem, OpportunityKitCost,
+            OpportunityKitMonthlyCost, OpportunityKitSalesTeam
+        )
+
+        new_kit = OpportunityKit(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            company_id=source_kit.company_id,
+            sales_budget_id=UUID(str(sales_budget_id)) if sales_budget_id else None,
+            sales_proposal_id=UUID(str(sales_proposal_id)) if sales_proposal_id else None,
+            licitacao_id=UUID(str(licitacao_id)) if licitacao_id else None,
+            licitacao_item_id=UUID(str(licitacao_item_id)) if licitacao_item_id else None,
+            commercial_policy_id=source_kit.commercial_policy_id,
+            comissionamento_detalhado=source_kit.comissionamento_detalhado,
+            nome_kit=new_name or source_kit.nome_kit,
+            descricao_kit=source_kit.descricao_kit,
+            quantidade_kits=source_kit.quantidade_kits,
+            tipo_contrato=source_kit.tipo_contrato,
+            considerar_st_ou_difal=source_kit.considerar_st_ou_difal,
+            forma_execucao=source_kit.forma_execucao,
+            prazo_contrato_meses=source_kit.prazo_contrato_meses,
+            prazo_instalacao_meses=source_kit.prazo_instalacao_meses,
+            fator_margem_locacao=source_kit.fator_margem_locacao,
+            taxa_juros_mensal=source_kit.taxa_juros_mensal,
+            taxa_manutencao_anual=source_kit.taxa_manutencao_anual,
+            instalacao_inclusa=source_kit.instalacao_inclusa,
+            percentual_instalacao=source_kit.percentual_instalacao,
+            manutencao_inclusa=source_kit.manutencao_inclusa,
+            fator_manutencao=source_kit.fator_manutencao,
+            fator_margem_instalacao=source_kit.fator_margem_instalacao,
+            fator_margem_manutencao=source_kit.fator_margem_manutencao,
+            fator_margem_servicos_produtos=source_kit.fator_margem_servicos_produtos,
+            havera_manutencao=source_kit.havera_manutencao,
+            qtd_meses_manutencao=source_kit.qtd_meses_manutencao,
+            faturamento_servico_separado=source_kit.faturamento_servico_separado,
+            custo_monitoramento_unitario=source_kit.custo_monitoramento_unitario,
+            fator_monitoramento=source_kit.fator_monitoramento,
+            aliq_pis=source_kit.aliq_pis,
+            aliq_cofins=source_kit.aliq_cofins,
+            aliq_csll=source_kit.aliq_csll,
+            aliq_irpj=source_kit.aliq_irpj,
+            aliq_iss=source_kit.aliq_iss,
+            aliq_icms=source_kit.aliq_icms,
+            perc_frete_venda=source_kit.perc_frete_venda,
+            perc_despesas_adm=source_kit.perc_despesas_adm,
+            perc_comissao=source_kit.perc_comissao,
+            tipo_comissionamento=source_kit.tipo_comissionamento,
+            perc_dsr=source_kit.perc_dsr,
+            perc_fgts=source_kit.perc_fgts,
+            perc_inss=source_kit.perc_inss,
+            perc_demais_incidencias=source_kit.perc_demais_incidencias,
+            perc_despesa_operacional=source_kit.perc_despesa_operacional,
+            custo_manut_mensal_kit=source_kit.custo_manut_mensal_kit,
+            custo_suporte_mensal_kit=source_kit.custo_suporte_mensal_kit,
+            custo_seguro_mensal_kit=source_kit.custo_seguro_mensal_kit,
+            custo_logistica_mensal_kit=source_kit.custo_logistica_mensal_kit,
+            custo_software_mensal_kit=source_kit.custo_software_mensal_kit,
+            custo_itens_acessorios_mensal_kit=source_kit.custo_itens_acessorios_mensal_kit,
+            margem_minima_desejada=source_kit.margem_minima_desejada,
+            fator_minimo_calculado=source_kit.fator_minimo_calculado,
+            valor_venda_minimo=source_kit.valor_venda_minimo,
+            lucro_minimo=source_kit.lucro_minimo,
+            margem_minima_resultante=source_kit.margem_minima_resultante,
+            custo_total=source_kit.custo_total,
+            venda_total=source_kit.venda_total,
+            lucro_estimado=source_kit.lucro_estimado,
+            margem_geral=source_kit.margem_geral,
+            custo_unitario=source_kit.custo_unitario,
+            venda_unitario=source_kit.venda_unitario,
+        )
+        self.db.add(new_kit)
+
+        # Clone items
+        for item in source_kit.items:
+            self.db.add(OpportunityKitItem(
+                kit_id=new_kit.id,
+                tipo_item=item.tipo_item,
+                product_id=item.product_id,
+                own_service_id=item.own_service_id,
+                descricao_item=item.descricao_item,
+                quantidade_no_kit=item.quantidade_no_kit
+            ))
+
+        # Clone costs (block 6)
+        for cost in source_kit.costs:
+            self.db.add(OpportunityKitCost(
+                kit_id=new_kit.id,
+                tipo_item=cost.tipo_item,
+                forma_execucao=cost.forma_execucao,
+                own_service_id=cost.own_service_id,
+                product_id=cost.product_id,
+                tipo_custo=cost.tipo_custo,
+                quantidade=cost.quantidade,
+                valor_unitario=cost.valor_unitario
+            ))
+
+        # Clone monthly costs (block 7)
+        for mcost in getattr(source_kit, "monthly_costs", []):
+            self.db.add(OpportunityKitMonthlyCost(
+                kit_id=new_kit.id,
+                servico=mcost.servico,
+                tipo_custo=mcost.tipo_custo,
+                quantidade=mcost.quantidade,
+                valor_unitario=mcost.valor_unitario
+            ))
+
+        # Clone sales teams
+        for link in source_kit.sales_teams:
+            self.db.add(OpportunityKitSalesTeam(
+                opportunity_kit_id=new_kit.id,
+                sales_team_id=link.sales_team_id
+            ))
+
+        self.db.flush()
+        self.db.commit()
+        self.db.refresh(new_kit)
+
+        fin = self.calculate_financials(new_kit, tenant_id)
+        new_kit.summary = fin["summary"]
+        new_kit.item_summaries = fin["item_summaries"]
+        return new_kit
+
+    def update_kit(
+        self, 
+        kit_id: str, 
+        tenant_id: str, 
+        data: OpportunityKitUpdate, 
+        company_id: Optional[str] = None, 
+        current_user: Optional[any] = None,
+        sales_budget_id: Optional[str] = None,
+        sales_proposal_id: Optional[str] = None
+    ) -> OpportunityKit:
         kit = self.get_kit(kit_id, tenant_id, company_id)
         if not kit:
             return None
+            
+        # Check if updating a global catalog kit from an opportunity context
+        is_global = (kit.sales_budget_id is None and kit.sales_proposal_id is None and kit.licitacao_id is None)
+        if is_global and (sales_proposal_id or sales_budget_id):
+            cloned = self.clone_kit(
+                source_kit_id=str(kit.id),
+                tenant_id=tenant_id,
+                company_id=company_id or str(kit.company_id),
+                sales_proposal_id=sales_proposal_id,
+                sales_budget_id=sales_budget_id
+            )
+            if sales_proposal_id:
+                from src.modules.sales_proposals.models import SalesProposalKit
+                from uuid import UUID
+                prop_kit = self.db.query(SalesProposalKit).filter_by(
+                    proposal_id=UUID(sales_proposal_id),
+                    opportunity_kit_id=kit.id
+                ).first()
+                if prop_kit:
+                    prop_kit.opportunity_kit_id = cloned.id
+                    self.db.flush()
+            kit = cloned
             
         update_data = data.model_dump(exclude_unset=True)
         

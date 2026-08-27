@@ -658,10 +658,24 @@ def _process_sale_items(db, budget, data_items, tenant_id, company_uf, customer_
 
         calc = calculate_item(item_data, defaults, product, has_st, is_same_cnpj=is_same_cnpj)
 
+        kit_id = getattr(item_data, "opportunity_kit_id", None)
+        if kit_id:
+            from src.modules.opportunity_kits.models import OpportunityKit
+            kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
+            if kit and not kit.sales_budget_id and not kit.sales_proposal_id and not kit.licitacao_id:
+                from src.modules.opportunity_kits.service import OpportunityKitService
+                cloned_kit = OpportunityKitService(db).clone_kit(
+                    source_kit_id=str(kit.id),
+                    tenant_id=budget.tenant_id,
+                    company_id=str(budget.company_id),
+                    sales_budget_id=str(budget.id)
+                )
+                kit_id = cloned_kit.id
+
         db_item = SalesBudgetItem(
             budget_id=budget.id,
             product_id=item_data.product_id,
-            opportunity_kit_id=getattr(item_data, "opportunity_kit_id", None),
+            opportunity_kit_id=kit_id,
             tipo_item=item_data.tipo_item,
             descricao_servico=item_data.descricao_servico,
             usa_parametros_padrao=item_data.usa_parametros_padrao,
@@ -679,6 +693,17 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
         if kit_id:
             kit = db.query(OpportunityKit).filter(OpportunityKit.id == kit_id).first()
             if kit:
+                if not kit.sales_budget_id and not kit.sales_proposal_id and not kit.licitacao_id:
+                    from src.modules.opportunity_kits.service import OpportunityKitService
+                    cloned_kit = OpportunityKitService(db).clone_kit(
+                        source_kit_id=str(kit.id),
+                        tenant_id=budget.tenant_id,
+                        company_id=str(budget.company_id),
+                        sales_budget_id=str(budget.id)
+                    )
+                    kit = cloned_kit
+                    kit_id = cloned_kit.id
+
                 local_defaults["tipo_comissionamento"] = getattr(kit, "tipo_comissionamento", "TRADICIONAL")
                 local_defaults["perc_dsr"] = getattr(kit, "perc_dsr", Decimal("0.0"))
                 local_defaults["perc_fgts"] = getattr(kit, "perc_fgts", Decimal("0.0"))
@@ -690,7 +715,7 @@ def _process_rental_items(db, budget, data_items, rental_defaults):
         db_item = RentalBudgetItem(
             budget_id=budget.id,
             product_id=item_data.product_id,
-            opportunity_kit_id=getattr(item_data, "opportunity_kit_id", None),
+            opportunity_kit_id=kit_id,
             custo_op_mensal_kit=getattr(item_data, "custo_op_mensal_kit", None),
             is_kit_instalacao=getattr(item_data, "is_kit_instalacao", False),
             tipo_contrato_kit=getattr(item_data, "tipo_contrato_kit", None),

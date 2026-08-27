@@ -141,34 +141,47 @@ class SalesProposalService:
         existing_kit = db.query(SalesProposalKit).filter_by(proposal_id=proposal_id, opportunity_kit_id=kit_id).first()
         if existing_kit:
             raise HTTPException(status_code=400, detail="Este kit já foi adicionado a esta proposta.")
+
+        # Always clone global kit (or kit belonging to another proposal/budget) to create a private instance
+        from src.modules.opportunity_kits.service import OpportunityKitService
+        opportunity_kit_service = OpportunityKitService(db)
+        
+        if not kit.sales_proposal_id or kit.sales_proposal_id != proposal_id:
+            cloned_kit = opportunity_kit_service.clone_kit(
+                source_kit_id=str(kit.id),
+                tenant_id=tenant_id,
+                company_id=str(company_id),
+                sales_proposal_id=str(proposal_id)
+            )
+            target_kit = cloned_kit
+            target_kit_id = cloned_kit.id
+        else:
+            target_kit = kit
+            target_kit_id = kit.id
             
         # check if it's the first kit to populate factors if they are currently null/zero
         is_first_kit = db.query(SalesProposalKit).filter_by(proposal_id=proposal_id).count() == 0
         
         if is_first_kit:
             if proposal.fator_margem_produtos is None or proposal.fator_margem_produtos == 0:
-                proposal.fator_margem_produtos = kit.fator_margem_locacao
+                proposal.fator_margem_produtos = target_kit.fator_margem_locacao
             if proposal.fator_margem_servicos is None or proposal.fator_margem_servicos == 0:
-                proposal.fator_margem_servicos = kit.fator_margem_servicos_produtos
+                proposal.fator_margem_servicos = target_kit.fator_margem_servicos_produtos
             if proposal.fator_margem_instalacao is None or proposal.fator_margem_instalacao == 0:
-                proposal.fator_margem_instalacao = kit.fator_margem_instalacao
+                proposal.fator_margem_instalacao = target_kit.fator_margem_instalacao
             if proposal.fator_margem_manutencao is None or proposal.fator_margem_manutencao == 0:
-                proposal.fator_margem_manutencao = kit.fator_margem_manutencao
+                proposal.fator_margem_manutencao = target_kit.fator_margem_manutencao
             if proposal.frete_venda is None or proposal.frete_venda == 0:
-                proposal.frete_venda = kit.perc_frete_venda
+                proposal.frete_venda = target_kit.perc_frete_venda
             if proposal.despesas_adm is None or proposal.despesas_adm == 0:
-                proposal.despesas_adm = kit.perc_despesas_adm
+                proposal.despesas_adm = target_kit.perc_despesas_adm
             if proposal.comissao is None or proposal.comissao == 0:
-                proposal.comissao = kit.perc_comissao
+                proposal.comissao = target_kit.perc_comissao
 
-        prop_kit = SalesProposalKit(proposal_id=proposal_id, opportunity_kit_id=kit_id)
+        prop_kit = SalesProposalKit(proposal_id=proposal_id, opportunity_kit_id=target_kit_id)
         db.add(prop_kit)
-        
-        # Link the kit exclusively to this proposal if not already linked to an opportunity
-        if not kit.sales_budget_id and not kit.sales_proposal_id:
-            kit.sales_proposal_id = proposal_id
 
-        self._log_action(db, proposal.id, user_id, "ADICAO_KIT", f"Kit {kit.nome_kit} adicionado.")
+        self._log_action(db, proposal.id, user_id, "ADICAO_KIT", f"Kit {target_kit.nome_kit} adicionado.")
         db.commit()
         db.refresh(prop_kit)
         return prop_kit
@@ -182,6 +195,8 @@ class SalesProposalService:
         kit = prop_kit.opportunity_kit
         kit_name = kit.nome_kit if kit else ""
         db.delete(prop_kit)
+        if kit and kit.sales_proposal_id == proposal_id:
+            db.delete(kit)
         self._log_action(db, proposal.id, user_id, "REMOCAO_KIT", f"Kit {kit_name} removido.")
         db.commit()
         return True
