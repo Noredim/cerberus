@@ -338,6 +338,7 @@ class NFeXmlParser:
             qCom = to_dec(get_child_text(prod_node, "qCom"))
             vUnCom = to_dec(get_child_text(prod_node, "vUnCom"))
             vProd_item = to_dec(get_child_text(prod_node, "vProd"))
+            vFrete_item = to_dec(get_child_text(prod_node, "vFrete"))
 
             # Impostos do item
             imposto_node = find_node_by_local_name(det, "imposto")
@@ -481,6 +482,7 @@ class NFeXmlParser:
                 "qCom": qCom,
                 "vUnCom": vUnCom,
                 "vProd": vProd_item,
+                "vFrete": vFrete_item,
                 "tributos": tributos_item
             })
 
@@ -516,6 +518,51 @@ class NFeXmlParser:
                     "tPag": tPag,
                     "vPag": vPag
                 })
+
+        # Transporte (transp)
+        transp_data = None
+        transp_node = find_node_by_local_name(inf_nfe_node, "transp")
+        if transp_node is not None:
+            mod_frete = get_child_text(transp_node, "modFrete")
+            mod_frete_map = {
+                "0": "0 - CIF (Remetente)",
+                "1": "1 - FOB (Destinatário)",
+                "2": "2 - Terceiros",
+                "3": "3 - Próprio Remetente",
+                "4": "4 - Próprio Destinatário",
+                "9": "9 - Sem Frete"
+            }
+            mod_frete_desc = mod_frete_map.get(str(mod_frete).strip() if mod_frete is not None else "", mod_frete or "Não informado")
+
+            transporta_node = find_node_by_local_name(transp_node, "transporta")
+            transporta_data = None
+            if transporta_node is not None:
+                transporta_data = {
+                    "cnpj_cpf": get_child_text(transporta_node, "CNPJ") or get_child_text(transporta_node, "CPF"),
+                    "xNome": get_child_text(transporta_node, "xNome"),
+                    "IE": get_child_text(transporta_node, "IE"),
+                    "xEnder": get_child_text(transporta_node, "xEnder"),
+                    "xMun": get_child_text(transporta_node, "xMun"),
+                    "UF": get_child_text(transporta_node, "UF")
+                }
+
+            vol_node = find_node_by_local_name(transp_node, "vol")
+            vol_data = None
+            if vol_node is not None:
+                vol_data = {
+                    "qVol": get_child_text(vol_node, "qVol"),
+                    "esp": get_child_text(vol_node, "esp"),
+                    "nVol": get_child_text(vol_node, "nVol"),
+                    "pesoL": get_child_text(vol_node, "pesoL"),
+                    "pesoB": get_child_text(vol_node, "pesoB")
+                }
+
+            transp_data = {
+                "modFrete": mod_frete,
+                "modFreteDesc": mod_frete_desc,
+                "transporta": transporta_data,
+                "vol": vol_data
+            }
 
         return {
             "document_type": "NFE",
@@ -557,5 +604,6 @@ class NFeXmlParser:
             "items": items,
             "installments": installments,
             "payments": payments,
+            "transp": transp_data,
             "xml_raw": xml_content
         }

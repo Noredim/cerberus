@@ -11,7 +11,9 @@ import {
     ChevronDown,
     ChevronUp,
     AlertCircle,
-    RefreshCw
+    RefreshCw,
+    Truck,
+    Info
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../../services/api';
@@ -81,7 +83,21 @@ interface NfeAnalysis {
         recipient_cnpj: string | null;
         recipient_name: string | null;
         vProd: number | null;
+        vFrete: number | null;
         vNF: number | null;
+        transp?: {
+            modFrete?: string;
+            modFreteDesc?: string;
+            transporta?: {
+                cnpj_cpf?: string;
+                xNome?: string;
+                IE?: string;
+                xEnder?: string;
+                xMun?: string;
+                UF?: string;
+            };
+            vol?: any;
+        } | null;
         cStat: string | null;
         xMotivo: string | null;
         nProt: string | null;
@@ -571,11 +587,65 @@ const NfeAnalysisDetail: React.FC = () => {
             </div>
 
             {/* Totals Cards Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="bg-surface rounded-lg p-4 border border-border-subtle shadow-sm">
                     <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider block">Produtos</span>
                     <span className="text-lg font-bold text-text-primary block mt-0.5">{formatCurrency(doc.vProd)}</span>
                 </div>
+
+                {/* FRETE Card with Carrier Tooltip */}
+                <div className="bg-surface rounded-lg p-4 border border-border-subtle shadow-sm relative group">
+                    <div className="flex items-center justify-between">
+                        <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider block">Frete</span>
+                        {doc.transp?.transporta && (
+                            <Info className="w-3.5 h-3.5 text-brand-primary cursor-pointer hover:opacity-80 transition-opacity" />
+                        )}
+                    </div>
+                    <span className="text-lg font-bold text-text-primary block mt-0.5">{formatCurrency(doc.vFrete)}</span>
+
+                    {/* Carrier Tooltip */}
+                    {doc.transp?.transporta && (
+                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-30 w-72 p-3 bg-slate-900 text-white rounded-lg shadow-xl border border-slate-700 text-xs animate-in fade-in duration-150">
+                            <div className="font-bold text-amber-400 border-b border-slate-700 pb-1 mb-2 flex items-center gap-1.5">
+                                <Truck className="w-3.5 h-3.5 text-amber-400" /> Dados do Fornecedor de Frete
+                            </div>
+                            <div className="space-y-1 text-[11px]">
+                                <div>
+                                    <span className="text-slate-400">Transportadora: </span>
+                                    <strong className="text-white">{doc.transp.transporta.xNome || 'Não informada'}</strong>
+                                </div>
+                                {doc.transp.transporta.cnpj_cpf && (
+                                    <div>
+                                        <span className="text-slate-400">CNPJ/CPF: </span>
+                                        <span className="font-mono text-slate-200">{doc.transp.transporta.cnpj_cpf}</span>
+                                    </div>
+                                )}
+                                {doc.transp.transporta.IE && (
+                                    <div>
+                                        <span className="text-slate-400">IE: </span>
+                                        <span className="font-mono text-slate-200">{doc.transp.transporta.IE}</span>
+                                    </div>
+                                )}
+                                {(doc.transp.transporta.xEnder || doc.transp.transporta.xMun) && (
+                                    <div>
+                                        <span className="text-slate-400">Endereço: </span>
+                                        <span className="text-slate-200">
+                                            {doc.transp.transporta.xEnder ? `${doc.transp.transporta.xEnder}, ` : ''}
+                                            {doc.transp.transporta.xMun || ''}
+                                            {doc.transp.transporta.UF ? `/${doc.transp.transporta.UF}` : ''}
+                                        </span>
+                                    </div>
+                                )}
+                                {doc.transp.modFreteDesc && (
+                                    <div className="pt-1 border-t border-slate-800 text-[10px] text-slate-400">
+                                        Modalidade: <strong className="text-amber-300">{doc.transp.modFreteDesc}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <div className="bg-surface rounded-lg p-4 border border-border-subtle shadow-sm">
                     <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider block">ICMS</span>
                     <span className="text-lg font-bold text-brand-primary block mt-0.5">{formatCurrency(taxSums.icmsSum)}</span>
@@ -588,9 +658,9 @@ const NfeAnalysisDetail: React.FC = () => {
                     <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider block">IBS / CBS</span>
                     <span className="text-lg font-bold text-brand-primary block mt-0.5">{formatCurrency(taxSums.ibsSum + taxSums.cbsSum)}</span>
                 </div>
-                <div className="bg-surface rounded-lg p-4 border border-border-subtle shadow-sm col-span-2">
+                <div className="bg-surface rounded-lg p-4 border border-border-subtle shadow-sm">
                     <span className="text-text-muted text-[10px] font-bold uppercase tracking-wider block">Valor Total da Nota</span>
-                    <span className="text-2xl font-bold text-brand-primary block mt-0.5">{formatCurrency(doc.vNF)}</span>
+                    <span className="text-xl font-bold text-brand-primary block mt-0.5">{formatCurrency(doc.vNF)}</span>
                 </div>
             </div>
 
@@ -943,7 +1013,11 @@ const NfeAnalysisDetail: React.FC = () => {
                                 const ipiTotal = parseFloat(item.tributos?.IPI?.IPITrib?.vIPI || item.tributos?.IPI?.vIPI || 0);
                                 const ipiUnit = qty > 0 ? ipiTotal / qty : 0;
                                 
-                                const freteTotal = 0;
+                                let freteTotal = parseFloat((item as any).vFrete || 0);
+                                if (freteTotal === 0 && doc.vFrete && doc.vProd && doc.vProd > 0) {
+                                    const itemTotalProd = parseFloat(item.vProd as any) || (qty * unitValue);
+                                    freteTotal = doc.vFrete * (itemTotalProd / doc.vProd);
+                                }
                                 const freteUnit = qty > 0 ? freteTotal / qty : 0;
 
                                 // Fetch MVA and BIT flags from caching state
@@ -1002,7 +1076,7 @@ const NfeAnalysisDetail: React.FC = () => {
                                     };
                                 } else {
                                     // ICMS ST logic (REVENDA)
-                                    const baseComMVA = (unitValue + ipiUnit) * (1 + mvaPercent / 100);
+                                    const baseComMVA = (unitValue + ipiUnit + freteUnit) * (1 + mvaPercent / 100);
                                     const CRED = icmsEntradaEffective / 100;
                                     let calcIcmsStFinal = 0;
                                     
@@ -1235,9 +1309,9 @@ const NfeAnalysisDetail: React.FC = () => {
                                                                                                     return (
                                                                                                         <>
                                                                                                             <div>
-                                                                                                                1. Base com MVA:<br/>
+                                                                                                                1. Base com MVA (Produto + IPI + Frete):<br/>
                                                                                                                 <span className="font-mono bg-bg-deep px-1 py-0.5 rounded text-text-primary">
-                                                                                                                    ({unitValue.toFixed(2)} + {ipiUnit.toFixed(2)}) * (1 + {fd.mvaPercent}%) = {fd.baseComMVA.toFixed(2)}
+                                                                                                                    ({unitValue.toFixed(2)} + {ipiUnit.toFixed(2)} + {freteUnit.toFixed(2)}) * (1 + {fd.mvaPercent}%) = {fd.baseComMVA.toFixed(2)}
                                                                                                                 </span>
                                                                                                             </div>
                                                                                                             <div>
@@ -1264,9 +1338,9 @@ const NfeAnalysisDetail: React.FC = () => {
                                                                                                     return (
                                                                                                         <>
                                                                                                             <div>
-                                                                                                                1. Base com MVA:<br/>
+                                                                                                                1. Base com MVA (Produto + IPI + Frete):<br/>
                                                                                                                 <span className="font-mono bg-bg-deep px-1 py-0.5 rounded text-text-primary">
-                                                                                                                    ({unitValue.toFixed(2)} + {ipiUnit.toFixed(2)}) * (1 + {fd.mvaPercent}%) = {fd.baseComMVA.toFixed(2)}
+                                                                                                                    ({unitValue.toFixed(2)} + {ipiUnit.toFixed(2)} + {freteUnit.toFixed(2)}) * (1 + {fd.mvaPercent}%) = {fd.baseComMVA.toFixed(2)}
                                                                                                                 </span>
                                                                                                             </div>
                                                                                                             <div>

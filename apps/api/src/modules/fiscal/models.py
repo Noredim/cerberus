@@ -1,11 +1,13 @@
 import uuid
 from typing import Optional
-from sqlalchemy import Column, String, Numeric, Boolean, Text, DateTime, ForeignKey, Integer, Date, UniqueConstraint
+from sqlalchemy import Column, String, Numeric, Boolean, Text, DateTime, ForeignKey, Integer, Date, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 from src.modules.users.models import User
+
+JSONType = JSON().with_variant(JSONB, "postgresql")
 
 class NcmRule(Base):
     __tablename__ = "ncm_rules"
@@ -97,6 +99,7 @@ class FiscalDocument(Base):
     dhRecbto = Column(DateTime(timezone=True), nullable=True)
     xml_version = Column(String(10), nullable=True)
     xml_raw = Column(Text, nullable=True)
+    transp_data = Column(JSONType, nullable=True)
 
     # Status e Origem de Importação (NF-e Resumida por Evento)
     status_importacao = Column(String(30), default="COMPLETA", index=True)  # COMPLETA, RESUMIDA_EVENTO, PENDENTE_COMPLEMENTACAO
@@ -118,6 +121,19 @@ class FiscalDocument(Base):
     histories = relationship("FiscalNfeHistory", back_populates="fiscal_document", cascade="all, delete-orphan")
     events = relationship("FiscalDocumentEvent", back_populates="fiscal_document", cascade="all, delete-orphan")
     usuario_classificacao = relationship("User", foreign_keys=[usuario_classificacao_id])
+
+    @property
+    def transp(self):
+        if self.transp_data:
+            return self.transp_data
+        if self.xml_raw:
+            try:
+                from src.modules.fiscal.parser import NFeXmlParser
+                parsed = NFeXmlParser.parse_xml(self.xml_raw)
+                return parsed.get("transp")
+            except Exception:
+                return None
+        return None
 
 
 class FiscalDocumentEvent(Base):
@@ -171,9 +187,10 @@ class FiscalDocumentItem(Base):
     qCom = Column(Numeric(19, 6), nullable=True)
     vUnCom = Column(Numeric(19, 6), nullable=True)
     vProd = Column(Numeric(19, 4), nullable=True)
+    vFrete = Column(Numeric(19, 4), default=0)
     
-    # Store all taxes structure as JSONB
-    tributos = Column(JSONB, nullable=True)
+    # Store all taxes structure as JSON
+    tributos = Column(JSONType, nullable=True)
 
     # Relationships
     fiscal_document = relationship("FiscalDocument", back_populates="items")

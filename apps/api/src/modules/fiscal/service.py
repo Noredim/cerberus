@@ -747,6 +747,7 @@ class NfeAnalysisService:
                     dhRecbto=parsed.get("dhRecbto"),
                     xml_version=parsed.get("xml_version"),
                     xml_raw=xml_content,
+                    transp_data=parsed.get("transp"),
                 )
                 db.add(doc)
                 db.flush()
@@ -764,6 +765,7 @@ class NfeAnalysisService:
                         qCom=item_data["qCom"],
                         vUnCom=item_data["vUnCom"],
                         vProd=item_data["vProd"],
+                        vFrete=item_data.get("vFrete", Decimal(0)),
                         tributos=item_data["tributos"],
                     )
                     db.add(item_obj)
@@ -1372,6 +1374,7 @@ class NfeAnalysisService:
             dhRecbto=parsed.get("dhRecbto"),
             xml_version=parsed.get("xml_version"),
             xml_raw=xml_content,
+            transp_data=parsed.get("transp"),
         )
         db.add(doc)
         db.flush()
@@ -1388,6 +1391,7 @@ class NfeAnalysisService:
                 qCom=item_data["qCom"],
                 vUnCom=item_data["vUnCom"],
                 vProd=item_data["vProd"],
+                vFrete=item_data.get("vFrete", Decimal(0)),
                 tributos=item_data["tributos"],
             )
             db.add(item_obj)

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from uuid import UUID
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 class FiscalDocumentPaymentOut(BaseModel):
     id: UUID
@@ -34,6 +34,7 @@ class FiscalDocumentItemOut(BaseModel):
     qCom: Optional[float] = None
     vUnCom: Optional[float] = None
     vProd: Optional[float] = None
+    vFrete: Optional[float] = None
     tributos: Optional[Any] = None
 
     class Config:
@@ -116,6 +117,8 @@ class FiscalDocumentOut(BaseModel):
     criada_por_evento: Optional[bool] = False
     ano_mes_emissao: Optional[str] = None
     codigo_uf: Optional[str] = None
+    transp_data: Optional[Dict[str, Any]] = None
+    transp: Optional[Dict[str, Any]] = None
 
     items: List[FiscalDocumentItemOut] = []
     installments: List[FiscalDocumentInstallmentOut] = []

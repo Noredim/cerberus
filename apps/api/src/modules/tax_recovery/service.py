@@ -465,7 +465,11 @@ class TaxRecoveryService:
 
             vProd_val = Decimal(str(item.vProd or 0))
             vIPI_val = Decimal(str(tributos.get("IPI", {}).get("vIPI") or 0))
-            base_calculo = vProd_val + vIPI_val
+            item_frete = Decimal(str(getattr(item, "vFrete", None) or 0))
+            if item_frete == 0 and fiscal_doc.vFrete:
+                item_frete = Decimal(str(fiscal_doc.vFrete)) / max(len(fiscal_doc.items or [1]), 1)
+
+            base_calculo = vProd_val + vIPI_val + item_frete
 
             base_st = base_calculo * (Decimal("1") + mva)
             icms_proprio_deduzido = vProd_val * cred
@@ -475,7 +479,8 @@ class TaxRecoveryService:
             st_calculated = max(Decimal("0"), icms_st_protegido * (Decimal("1") - DESCONTO_CREDITO_OUTORGADO))
 
             steps.append(
-                f"Recálculo ST Revenda (Engine Cerberus): Base ST R$ {base_st:.2f} (MVA {mva*100:.2f}%). "
+                f"Recálculo ST Revenda (Engine Cerberus): Base Produto + IPI + Frete R$ {base_calculo:.2f} "
+                f"(Prod: {vProd_val:.2f}, IPI: {vIPI_val:.2f}, Frete: {item_frete:.2f}). Base ST R$ {base_st:.2f} (MVA {mva*100:.2f}%). "
                 f"ST Bruto ({ALIQ_INTERNA_DESTINO*100:.0f}% - Créd Efetivo {cred*100:.0f}%): R$ {icms_st_bruto:.2f}. "
                 f"Crédito Outorgado ({DESCONTO_CREDITO_OUTORGADO*100:.0f}%): ST Final R$ {st_calculated:.2f}"
             )
@@ -523,7 +528,9 @@ class TaxRecoveryService:
 
                 vProd_val = Decimal(str(item.vProd or 0))
                 vIPI_val = Decimal(str(tributos.get("IPI", {}).get("vIPI") or 0))
-                vFrete_val = Decimal(str(fiscal_doc.vFrete or 0)) / max(len(fiscal_doc.items or [1]), 1)
+                vFrete_val = Decimal(str(getattr(item, "vFrete", None) or 0))
+                if vFrete_val == 0 and fiscal_doc.vFrete:
+                    vFrete_val = Decimal(str(fiscal_doc.vFrete)) / max(len(fiscal_doc.items or [1]), 1)
 
                 base_com_ipi_e_frete = vProd_val + vIPI_val + vFrete_val
                 c_icms_origem = base_com_ipi_e_frete * aliq_origem
