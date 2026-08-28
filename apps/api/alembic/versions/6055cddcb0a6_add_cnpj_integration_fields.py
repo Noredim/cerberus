@@ -51,6 +51,68 @@ def upgrade() -> None:
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS cnae_catalog (
+            cnae_codigo VARCHAR(20) PRIMARY KEY,
+            descricao VARCHAR NOT NULL,
+            versao VARCHAR(50) DEFAULT '2.0',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS company_cnaes (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+            cnae_codigo VARCHAR(20) NOT NULL,
+            tipo VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS company_tax_profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+            vigencia_inicio DATE NOT NULL,
+            vigencia_fim DATE,
+            regime_tributario VARCHAR(50) NOT NULL,
+            contribuinte_icms BOOLEAN DEFAULT FALSE,
+            contribuinte_iss BOOLEAN DEFAULT TRUE,
+            inscricao_estadual VARCHAR(50),
+            inscricao_municipal VARCHAR(50),
+            regime_iss VARCHAR(50) DEFAULT 'FIXO',
+            regime_icms VARCHAR(50) DEFAULT 'NAO_APLICA',
+            perfil_tarifario_st BOOLEAN DEFAULT TRUE,
+            observacoes VARCHAR,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS tax_benefits (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            nome VARCHAR(255) NOT NULL,
+            descricao VARCHAR,
+            esfera VARCHAR(50) NOT NULL,
+            tributo_alvo VARCHAR(50) NOT NULL,
+            tipo_beneficio VARCHAR(100) NOT NULL,
+            regra_json JSONB NOT NULL,
+            requer_habilitacao BOOLEAN DEFAULT FALSE,
+            documento_base VARCHAR(255),
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS company_benefits (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+            benefit_id UUID NOT NULL REFERENCES tax_benefits(id) ON DELETE CASCADE,
+            vigencia_inicio DATE NOT NULL,
+            vigencia_fim DATE,
+            prioridade INTEGER DEFAULT 100,
+            status VARCHAR(50) DEFAULT 'ATIVO',
+            observacao VARCHAR,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
     """))
 
     op.create_table('cnpj_query_cache',
@@ -96,10 +158,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.alter_column('cnae_catalog', 'descricao',
-               existing_type=sa.TEXT(),
-               type_=sa.String(),
-               existing_nullable=False)
+    conn.execute(sa.text("ALTER TABLE cnae_catalog ALTER COLUMN descricao TYPE VARCHAR;"))
 
     conn.execute(sa.text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS cnpj_consultado_em TIMESTAMP WITH TIME ZONE;"))
     conn.execute(sa.text("ALTER TABLE companies ADD COLUMN IF NOT EXISTS cnpj_consulta_origem VARCHAR(50);"))
