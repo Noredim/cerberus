@@ -80,13 +80,12 @@ services:
       - TZ=America/Manaus
 
   web:
-    build: ./apps/web
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
     container_name: cerberus_web
     ports:
-      - "5173:5173"
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
+      - "5173:80"
     networks:
       - cerberus_network
     environment:
