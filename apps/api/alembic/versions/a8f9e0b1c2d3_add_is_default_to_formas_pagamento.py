@@ -17,7 +17,8 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('formas_pagamento', sa.Column('is_default', sa.Boolean(), nullable=False, server_default=sa.text('false')))
+    conn = op.get_bind()
+    conn.execute(sa.text("ALTER TABLE formas_pagamento ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;"))
 
 
 def downgrade():

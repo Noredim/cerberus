@@ -19,17 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add columns to email_configs
-    op.add_column('email_configs', sa.Column('imap_host', sa.String(length=255), nullable=True))
-    op.add_column('email_configs', sa.Column('imap_port', sa.Integer(), nullable=True, server_default='993'))
-    op.add_column('email_configs', sa.Column('imap_user', sa.String(length=255), nullable=True))
-    op.add_column('email_configs', sa.Column('imap_password_encrypted', sa.String(length=512), nullable=True))
-    op.add_column('email_configs', sa.Column('imap_use_ssl', sa.Boolean(), nullable=True, server_default='true'))
-    op.add_column('email_configs', sa.Column('imap_use_tls', sa.Boolean(), nullable=True, server_default='false'))
+    conn = op.get_bind()
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_host VARCHAR(255);"))
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_port INTEGER DEFAULT 993;"))
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_user VARCHAR(255);"))
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_password_encrypted VARCHAR(512);"))
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_use_ssl BOOLEAN DEFAULT TRUE;"))
+    conn.execute(sa.text("ALTER TABLE email_configs ADD COLUMN IF NOT EXISTS imap_use_tls BOOLEAN DEFAULT FALSE;"))
 
 
 def downgrade() -> None:
-    # Remove columns from email_configs
     op.drop_column('email_configs', 'imap_use_tls')
     op.drop_column('email_configs', 'imap_use_ssl')
     op.drop_column('email_configs', 'imap_password_encrypted')
