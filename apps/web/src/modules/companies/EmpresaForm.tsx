@@ -21,7 +21,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useCompanies } from './hooks/useCompanies';
-import { api } from '../../services/api';
+import { api, resolveMediaUrl } from '../../services/api';
 import type { CNPJLookupResult } from './types';
 import { CnaeAutocomplete } from './components/CnaeAutocomplete';
 import { CommercialPoliciesTab } from './components/CommercialPoliciesTab';
@@ -640,7 +640,7 @@ const EmpresaForm: React.FC = () => {
                                         <div className="flex border border-border-subtle rounded-lg p-4 bg-bg-deep items-center gap-6">
                                             <div className="w-24 h-24 rounded-full bg-surface border border-border-subtle flex items-center justify-center overflow-hidden shadow-sm shrink-0">
                                                 {formData.logo_url ? (
-                                                    <img src={`http://localhost:8000${formData.logo_url}`} alt="Logo" className="w-full h-full object-contain" />
+                                                    <img src={resolveMediaUrl(formData.logo_url)} alt="Logo" className="w-full h-full object-contain" />
                                                 ) : (
                                                     <Building2 className="w-8 h-8 text-text-muted opacity-50" />
                                                 )}

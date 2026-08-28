@@ -10,6 +10,9 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: true,
+    hmr: {
+      clientPort: 443,
+    },
     proxy: {
       '/uploads': {
         target: 'http://localhost:8000',

@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+import { api } from '../../services/api';
+
 interface SyncJob {
     id: string;
     started_at: string;
@@ -28,9 +30,8 @@ const SyncJobsList: React.FC = () => {
 
     const fetchJobs = async () => {
         try {
-            const response = await fetch('http://localhost:8000/catalog/integrations/ibge/sync-jobs');
-            const data = await response.json();
-            setJobs(data);
+            const response = await api.get('/catalog/integrations/ibge/sync-jobs');
+            setJobs(response.data);
         } catch (error) {
             console.error('Error fetching jobs:', error);
         } finally {

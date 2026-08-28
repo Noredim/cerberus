@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+);
+
 export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '/api'),
+    baseURL: import.meta.env.VITE_API_URL || (isLocalhost && import.meta.env.DEV ? 'http://localhost:8000' : '/api'),
     headers: {
         'Content-Type': 'application/json',
     },
@@ -12,14 +17,14 @@ export const resolveMediaUrl = (url?: string | null): string => {
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
         return url;
     }
-    const apiBase = api.defaults.baseURL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+    const apiBase = api.defaults.baseURL || (isLocalhost && import.meta.env.DEV ? 'http://localhost:8000' : '');
     const cleanBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
     return `${cleanBase}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export const resolveHtmlMediaUrls = (html?: string | null): string => {
     if (!html) return '';
-    const apiBase = api.defaults.baseURL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+    const apiBase = api.defaults.baseURL || (isLocalhost && import.meta.env.DEV ? 'http://localhost:8000' : '');
     const cleanBase = apiBase.replace(/\/api\/?$/, '').replace(/\/$/, '');
     const targetBase = cleanBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
 
