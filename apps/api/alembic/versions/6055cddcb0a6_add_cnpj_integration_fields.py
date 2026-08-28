@@ -77,7 +77,6 @@ def upgrade() -> None:
             inscricao_municipal VARCHAR(50),
             regime_iss VARCHAR(50) DEFAULT 'FIXO',
             regime_icms VARCHAR(50) DEFAULT 'NAO_APLICA',
-            perfil_tarifario_st BOOLEAN DEFAULT TRUE,
             observacoes VARCHAR,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
