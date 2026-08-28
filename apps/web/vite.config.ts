@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    allowedHosts: true,
     proxy: {
       '/uploads': {
         target: 'http://localhost:8000',
