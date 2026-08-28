@@ -1343,7 +1343,10 @@ class OpportunityKitService:
             joinedload(OpportunityKit.sales_teams).joinedload(OpportunityKitSalesTeam.sales_team)
         ).filter(
             OpportunityKit.tenant_id == tenant_id,
-            OpportunityKit.company_id == company_id
+            OpportunityKit.company_id == company_id,
+            OpportunityKit.sales_budget_id == None,
+            OpportunityKit.sales_proposal_id == None,
+            OpportunityKit.licitacao_id == None
         )
         if tipo_contrato:
             query = query.filter(OpportunityKit.tipo_contrato == tipo_contrato)
@@ -1375,29 +1378,7 @@ class OpportunityKitService:
                 else:
                     visibility_cond = public_cond
                 
-                if sales_budget_id:
-                    query = query.filter(
-                        (OpportunityKit.sales_budget_id == sales_budget_id) |
-                        ((OpportunityKit.sales_budget_id == None) & visibility_cond)
-                    )
-                else:
-                    query = query.filter(
-                        (OpportunityKit.sales_budget_id == None) & visibility_cond
-                    )
-            else:
-                if sales_budget_id:
-                    query = query.filter(
-                        (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
-                    )
-                else:
-                    query = query.filter(OpportunityKit.sales_budget_id == None)
-        else:
-            if sales_budget_id:
-                query = query.filter(
-                    (OpportunityKit.sales_budget_id == None) | (OpportunityKit.sales_budget_id == sales_budget_id)
-                )
-            else:
-                query = query.filter(OpportunityKit.sales_budget_id == None)
+                query = query.filter(visibility_cond)
             
         kits = query.all()
         
