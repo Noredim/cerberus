@@ -154,6 +154,8 @@ class OpportunityKitBase(BaseModel):
 
     commercial_policy_id: Optional[UUID] = None
     comissionamento_detalhado: Optional[Any] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 class OpportunityKitCreate(OpportunityKitBase):
     items: List[OpportunityKitItemCreate] = []

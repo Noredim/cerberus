@@ -86,6 +86,8 @@ services:
     container_name: cerberus_web
     ports:
       - "5173:80"
+    depends_on:
+      - api
     networks:
       - cerberus_network
     environment:

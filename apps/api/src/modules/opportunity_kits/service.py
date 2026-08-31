@@ -1380,7 +1380,7 @@ class OpportunityKitService:
                 
                 query = query.filter(visibility_cond)
             
-        kits = query.all()
+        kits = query.order_by(OpportunityKit.updated_at.desc(), OpportunityKit.created_at.desc()).all()
         
         # Compute dynamic financials
         for kit in kits:

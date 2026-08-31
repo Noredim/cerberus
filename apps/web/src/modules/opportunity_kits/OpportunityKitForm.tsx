@@ -703,7 +703,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           fator_margem_locacao: pick('mkp_padrao') || 1,
           fator_margem_manutencao: pick('mkp_padrao') || 1,
           perc_despesas_adm: pick('despesa_administrativa'),
-          ...(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? {
+          ...(['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato) ? {
             fator_margem_servicos_produtos: pick('mkp_padrao') || 1,
             fator_margem_instalacao: pick('mkp_padrao') || 1,
           } : {}),
@@ -747,7 +747,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           setForm(prev => {
             const updates: any = {};
 
-            if (shouldOverwriteTaxes && defaultPolicy && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
+            if (shouldOverwriteTaxes && defaultPolicy && ['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato)) {
               const defaultFator = Number(defaultPolicy.fator_limite);
               updates.fator_margem_locacao = defaultFator;
               updates.fator_margem_instalacao = defaultFator;
@@ -1801,7 +1801,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                       <span className="block text-[9px] text-text-primary font-bold uppercase tracking-wider mb-1 relative z-10">Faturamento Total</span>
                       <div className="text-lg font-black text-brand-primary tracking-tight relative z-10">{fmtC(faturamentoTotal)}</div>
                       <div className="text-[9px] font-medium text-text-muted mt-1 relative z-10 flex flex-col">
-                        <span>Venda {form.havera_manutencao && `+ Manut. (${qtdMeses || '—'}m)`}</span>
+                        <span>Venda {form.havera_manutencao ? `+ Manut. (${qtdMeses || '—'}m)` : ''}</span>
                       </div>
                     </div>
                   </div>
@@ -2268,8 +2268,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
                           {fmtC(totalComissaoDespOp)}
                         </div>
                         <div className="text-[9px] text-brand-primary/80 mt-1.5 font-medium leading-tight">
-                          Comissão: {Number(form.perc_comissao || 0).toFixed(2)}%
-                          {form.tipo_contrato === 'COMODATO' && ` | Desp. Op: ${Number(form.perc_despesa_operacional || 0).toFixed(2)}%`}
+                          <span>Comissão: {Number(form.perc_comissao || 0).toFixed(2)}%</span>
+                          {form.tipo_contrato === 'COMODATO' && <span>{` | Desp. Op: ${Number(form.perc_despesa_operacional || 0).toFixed(2)}%`}</span>}
                         </div>
                       </div>
                     </Tooltip>
