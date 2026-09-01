@@ -73,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             label: 'Comercial',
             path: '/comercial',
             subItems: [
+                { label: 'Leads', path: '/comercial/leads' },
                 { label: 'Clientes', path: '/cadastros/clientes' },
                 { label: 'Fornecedores', path: '/cadastros/fornecedores' },
                 { label: 'Kits (oportunidades)', path: '/cadastros/kits' },
@@ -122,6 +123,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                             ...item,
                             subItems: item.subItems?.filter(sub => 
                                 [
+                                    'Leads',
                                     'Clientes', 
                                     'Fornecedores', 
                                     'Kits (oportunidades)', 

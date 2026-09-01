@@ -41,6 +41,8 @@ from src.modules.licitacoes.router import router as licitacoes_router
 from src.modules.messaging.router import router as messaging_router
 from src.modules.backup.router import router as backup_router
 from src.modules.tax_recovery.router import router as tax_recovery_router
+from src.modules.leads.router import router as leads_router
+from src.modules.integrations.google.router import router as google_integrations_router
 from src.modules.backup.scheduler import start_backup_scheduler, stop_backup_scheduler
 
 from contextlib import asynccontextmanager
@@ -217,6 +219,8 @@ app.include_router(licitacoes_router)
 app.include_router(messaging_router)
 app.include_router(backup_router)
 app.include_router(tax_recovery_router)
+app.include_router(leads_router)
+app.include_router(google_integrations_router)
 
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

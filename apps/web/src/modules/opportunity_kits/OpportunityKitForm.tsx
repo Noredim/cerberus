@@ -374,12 +374,29 @@ export interface OpportunityKitFormProps {
   isModal?: boolean;
   onClose?: () => void;
   initialSalesBudgetId?: string | null;
+  initialSalesTeamId?: string | null;
+  initialPrazoContrato?: number;
+  initialPrazoInstalacao?: number;
+  initialTaxaJuros?: number;
+  initialTaxaManutencao?: number;
   initialTipoContrato?: string;
   onSuccess?: (savedKit?: any) => void;
   modalEditKitId?: string | null;
 }
 
-export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudgetId, initialTipoContrato = 'LOCACAO', onSuccess, modalEditKitId }: OpportunityKitFormProps = {}) => {
+export const OpportunityKitForm = ({
+  isModal = false,
+  onClose,
+  initialSalesBudgetId,
+  initialSalesTeamId,
+  initialPrazoContrato,
+  initialPrazoInstalacao,
+  initialTaxaJuros,
+  initialTaxaManutencao,
+  initialTipoContrato = 'LOCACAO',
+  onSuccess,
+  modalEditKitId
+}: OpportunityKitFormProps = {}) => {
   const { kitId: routeKitId } = useParams();
   const kitId = isModal ? modalEditKitId : routeKitId;
   const { activeCompanyId } = useAuth();
@@ -409,8 +426,19 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     correctedValue: number;
     policyName: string;
   } | null>(null);
-  const [opportunitySalesTeamId, setOpportunitySalesTeamId] = useState<string | null>(null);
+  const [opportunitySalesTeamId, setOpportunitySalesTeamId] = useState<string | null>(initialSalesTeamId || null);
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
+
+  useEffect(() => {
+    if (initialSalesTeamId) {
+      setOpportunitySalesTeamId(initialSalesTeamId);
+      setForm(prev => ({
+        ...prev,
+        sales_team_id: initialSalesTeamId,
+        sales_teams: [initialSalesTeamId]
+      }));
+    }
+  }, [initialSalesTeamId]);
 
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
   const { user } = useAuth();
@@ -512,14 +540,14 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
 
   useEffect(() => {
     if (userTeams.length > 0 && !form.sales_team_id && !form.sales_teams?.length) {
-      const defaultTeamId = userTeams[0].id;
+      const defaultTeamId = initialSalesTeamId || opportunitySalesTeamId || userTeams[0].id;
       setForm(prev => ({
         ...prev,
         sales_team_id: defaultTeamId,
         sales_teams: [defaultTeamId]
       }));
     }
-  }, [userTeams, form.sales_team_id, form.sales_teams]);
+  }, [userTeams, form.sales_team_id, form.sales_teams, initialSalesTeamId, opportunitySalesTeamId]);
 
   useEffect(() => {
     const fetchItemDetails = async () => {
@@ -644,6 +672,24 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
       data.considerar_st_ou_difal = data.considerar_st_ou_difal || 'DIFAL';
       data.forma_execucao = data.forma_execucao || 'H. NORMAL';
 
+      if (initialSalesTeamId || opportunitySalesTeamId) {
+        const effTeamId = initialSalesTeamId || opportunitySalesTeamId;
+        data.sales_team_id = effTeamId;
+        data.sales_teams = [effTeamId];
+      }
+      if (initialPrazoContrato && (sourceBudgetId || initialSalesBudgetId)) {
+        data.prazo_contrato_meses = initialPrazoContrato;
+      }
+      if (initialPrazoInstalacao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+        data.prazo_instalacao_meses = initialPrazoInstalacao;
+      }
+      if (initialTaxaJuros !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+        data.taxa_juros_mensal = initialTaxaJuros;
+      }
+      if (initialTaxaManutencao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+        data.taxa_manutencao_anual = initialTaxaManutencao;
+      }
+
       setForm(data);
       isInitialLoad.current = false;
       // Ensure we record the loaded contract type so it doesn't trigger the change detection later
@@ -730,7 +776,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
         // The admin endpoint /{id}/commercial-policies returns ALL tiers and
         // was causing minAllowed to be the company-wide minimum (e.g. 1.0)
         // instead of what the user's role actually permits (e.g. 1.71).
-        const targetTeamId = opportunitySalesTeamId || form.sales_team_id || (form.sales_teams && form.sales_teams[0]);
+        const targetTeamId = initialSalesTeamId || opportunitySalesTeamId || form.sales_team_id || (form.sales_teams && form.sales_teams[0]);
         const url = targetTeamId 
           ? `/companies/commercial-policies/me?sales_team_id=${targetTeamId}`
           : `/companies/commercial-policies/me`;
@@ -747,14 +793,26 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           setForm(prev => {
             const updates: any = {};
 
-            if (shouldOverwriteTaxes && defaultPolicy && ['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato)) {
-              const defaultFator = Number(defaultPolicy.fator_limite);
-              updates.fator_margem_locacao = defaultFator;
-              updates.fator_margem_instalacao = defaultFator;
-              updates.fator_margem_manutencao = defaultFator;
-              updates.fator_margem_servicos_produtos = defaultFator;
-              updates.taxa_manutencao_anual = defaultPolicy.manutencao_ano_percentual ?? 0;
-              updates.perc_comissao = defaultPolicy.comissao_percentual ?? 0;
+            const currentPolicyBelongsToTeam = prev.commercial_policy_id && sorted.some((p: any) => p.id === prev.commercial_policy_id);
+            const policyToApply = currentPolicyBelongsToTeam 
+              ? sorted.find((p: any) => p.id === prev.commercial_policy_id)
+              : defaultPolicy;
+
+            if (policyToApply && (!currentPolicyBelongsToTeam || shouldOverwriteTaxes)) {
+              updates.commercial_policy_id = policyToApply.id;
+              updates.perc_comissao = Number(policyToApply.comissao_percentual ?? 0);
+              updates.perc_despesa_operacional = Number(policyToApply.despesa_operacional_percentual ?? 0);
+              updates.tipo_comissionamento = policyToApply.tipo_comissionamento || 'TRADICIONAL';
+              updates.perc_dsr = Number(policyToApply.dsr_percentual ?? 0);
+              updates.perc_fgts = Number(policyToApply.fgts_percentual ?? 0);
+              updates.perc_inss = Number(policyToApply.inss_percentual ?? 0);
+              updates.perc_demais_incidencias = Number(policyToApply.demais_incidencias_percentual ?? 0);
+              updates.taxa_manutencao_anual = Number(policyToApply.manutencao_ano_percentual ?? prev.taxa_manutencao_anual);
+              updates.fator_margem_locacao = Number(policyToApply.fator_limite ?? minAllowed);
+              updates.fator_margem_instalacao = Number(policyToApply.fator_limite ?? minAllowed);
+              updates.fator_margem_manutencao = Number(policyToApply.fator_limite ?? minAllowed);
+              updates.fator_margem_servicos_produtos = Number(policyToApply.fator_limite ?? minAllowed);
+              updates.fator_monitoramento = Number(policyToApply.fator_limite ?? minAllowed);
             } else {
               if (Number(prev.fator_margem_locacao) < minAllowed) updates.fator_margem_locacao = minAllowed;
               if (Number(prev.fator_margem_instalacao) < minAllowed) updates.fator_margem_instalacao = minAllowed;
@@ -766,11 +824,11 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
             const currentFator = Number(updates.fator_margem_locacao ?? prev.fator_margem_locacao);
             const applicable = sorted
               .filter((p: any) => Number(p.fator_limite) <= currentFator + 0.00001)
-              .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0];
+              .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0] || defaultPolicy;
 
             if (applicable) {
               setTimeout(() => setActivePolicy(applicable), 0);
-              if (!shouldOverwriteTaxes && updates.perc_comissao === undefined) {
+              if (!shouldOverwriteTaxes && updates.perc_comissao === undefined && prev.perc_comissao === 0) {
                 updates.perc_comissao = applicable.comissao_percentual;
               }
             }
@@ -789,7 +847,7 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
     };
 
     loadPolicies();
-  }, [kitId, form.tipo_contrato, activeCompanyId, opportunitySalesTeamId, form.sales_team_id]);
+  }, [kitId, form.tipo_contrato, activeCompanyId, opportunitySalesTeamId, form.sales_team_id, initialSalesTeamId]);
 
 
   // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
@@ -839,7 +897,8 @@ export const OpportunityKitForm = ({ isModal = false, onClose, initialSalesBudge
           perc_fgts: Number(activePolicy.fgts_percentual) || 0,
           perc_inss: Number(activePolicy.inss_percentual) || 0,
           perc_demais_incidencias: Number(activePolicy.demais_incidencias_percentual) || 0,
-          perc_despesa_operacional: Number(activePolicy.despesa_operacional_percentual) || 0
+          perc_despesa_operacional: Number(activePolicy.despesa_operacional_percentual) || 0,
+          taxa_manutencao_anual: Number(activePolicy.manutencao_ano_percentual) ?? prev.taxa_manutencao_anual
         };
       }
       return prev;

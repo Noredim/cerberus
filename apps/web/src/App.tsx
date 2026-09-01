@@ -55,6 +55,9 @@ import { NfeMonthlyTrackerList } from './modules/fiscal/acompanhamento-nfe/NfeMo
 import { NfeMonthlyDetailView } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyDetailView';
 import { TaxRecoveryList } from './modules/fiscal/recuperacao-impostos/TaxRecoveryList';
 import { TaxRecoveryDetail } from './modules/fiscal/recuperacao-impostos/TaxRecoveryDetail';
+import { LeadList } from './modules/leads/LeadList';
+import { LeadDetail } from './modules/leads/LeadDetail';
+import { GoogleCallback } from './modules/integrations/GoogleCallback';
 
 
 import { Loader2, ServerOff } from 'lucide-react';
@@ -110,6 +113,7 @@ const ProtectedRoute = () => {
           '/cadastros/kits',       // Kits (oportunidades)
           '/orcamentos-compras',   // Orçamento de compra
           '/orcamentos-vendas',    // Oportunidades
+          '/comercial/leads',      // Leads
           '/comercial/comparativos',// Comparativos de soluções
           '/comercial/licitacoes', // Licitações
           '/settings',             // Configurações
@@ -279,6 +283,13 @@ function App() {
             {/* Comercial: Licitações */}
             <Route path="/comercial/licitacoes" element={<LicitacaoList />} />
             <Route path="/comercial/licitacoes/:id" element={<LicitacaoForm />} />
+
+            {/* Comercial: Leads */}
+            <Route path="/comercial/leads" element={<LeadList />} />
+            <Route path="/comercial/leads/:id" element={<LeadDetail />} />
+
+            {/* Integrações: Google Calendar Callback */}
+            <Route path="/integrations/google/callback" element={<GoogleCallback />} />
 
 
             {/* Relatórios */}

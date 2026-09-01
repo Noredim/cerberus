@@ -32,6 +32,9 @@ services:
       - ALLOWED_ORIGINS=https://cerberus.warslab.com.br
       - JWT_SECRET=e2c8ef16a06b9bb429d475a841f6c8b3782ba2bcf799adc7106927e69ce234cd
       - TZ=America/Manaus
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://cerberus.warslab.com.br/integrations/google/callback}
     volumes:
       - /opt/cerberus/data/uploads:/app/uploads
     depends_on:

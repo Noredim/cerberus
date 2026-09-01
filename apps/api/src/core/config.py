@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     EMAIL_ENCRYPTION_KEY: str = ""
 
+    # Google OAuth 2.0 / Calendar Settings
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:5173/integrations/google/callback"
+
     def __init__(self, **values):
         super().__init__(**values)
         
