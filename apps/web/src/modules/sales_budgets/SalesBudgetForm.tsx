@@ -3085,26 +3085,32 @@ export function SalesBudgetForm() {
                 @media print {
                   @page {
                     size: A4;
-                    margin: 0;
+                    margin: 15mm 15mm 15mm 15mm;
                   }
                   html, body {
                     margin: 0 !important;
                     padding: 0 !important;
                     background: #ffffff !important;
                   }
-                  .no-print { display: none !important; }
+                  .no-print, .toolbar {
+                    display: none !important;
+                  }
                   .doc-viewport {
                     margin: 0 !important;
                     padding: 0 !important;
                     display: block !important;
+                    background: transparent !important;
                   }
                   .a4-sheet {
                     box-shadow: none !important;
                     margin: 0 !important;
                     width: 100% !important;
+                    max-width: 100% !important;
                     min-height: auto !important;
                     border: none !important;
                     border-radius: 0 !important;
+                    padding: 0 !important;
+                    background: #ffffff !important;
                   }
                 }
                 body {
@@ -3129,24 +3135,22 @@ export function SalesBudgetForm() {
                 .toolbar button:hover { background: #4338ca; }
                 .doc-viewport {
                   margin-top: 74px;
-                  margin-bottom: 40px;
+                  margin-bottom: 50px;
                   display: flex;
                   justify-content: center;
+                  padding: 0 20px;
                 }
                 .a4-sheet {
                   width: 210mm;
-                  height: 297mm;
                   min-height: 297mm;
-                  max-height: 297mm;
+                  height: auto;
                   background: #ffffff;
-                  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+                  box-shadow: 0 10px 30px -5px rgba(0,0,0,0.2);
                   border-radius: 4px;
                   box-sizing: border-box;
                   position: relative;
-                  overflow: hidden;
-                  display: flex;
-                  flex-direction: column;
-                  justify-content: space-between;
+                  display: block;
+                  padding: 20mm 15mm;
                 }
               </style>
             </head>
@@ -3337,19 +3341,15 @@ export function SalesBudgetForm() {
           )}
 
           {isEditing && (
-            <Tooltip content={(status !== 'APROVADO' && status !== 'GANHO' && status !== 'PERDIDO') ? "A proposta só pode ser emitida após aprovação gerencial." : ""}>
-              <div>
-                <Button
-                  onClick={handlePrintProposal}
-                  disabled={status !== 'APROVADO' && status !== 'GANHO' && status !== 'PERDIDO'}
-                  variant="outline"
-                  className="flex items-center gap-1.5"
-                >
-                  <Printer className="w-4 h-4" />
-                  Emitir Proposta
-                </Button>
-              </div>
-            </Tooltip>
+            <Button
+              onClick={handlePrintProposal}
+              disabled={generatingProposal}
+              variant="outline"
+              className="flex items-center gap-1.5"
+            >
+              {generatingProposal ? <Loader2 className="w-4 h-4 animate-spin text-brand-primary" /> : <Printer className="w-4 h-4" />}
+              Emitir Proposta
+            </Button>
           )}
 
           {isEditing && (
@@ -3674,13 +3674,14 @@ export function SalesBudgetForm() {
           const venda_custo_total = venda_fat - totals.lucro;
           const comissaoBruta = totals.comissao + totals.comissao_dsr + totals.comissao_fgts + totals.comissao_inss + totals.comissao_demais;
 
-          // Single Source of Truth indicators from dreData for Venda tab
-          const realVendaFat = dreData?.entradas?.total_entradas ?? venda_fat;
-          const realVendaCustoTotal = dreData?.saidas?.total_saidas ?? venda_custo_total;
+          // Venda indicators
+          const realVendaFat = venda_fat;
+          const realVendaCustoTotal = venda_custo_total;
           const realVendaRecLiq = Math.max(0, realVendaFat - realVendaCustoTotal);
           const realVendaComissaoDiretoria = Math.max(0, realVendaRecLiq * (percComissaoDiretoria / 100));
           const realVendaSaldo = realVendaRecLiq - realVendaComissaoDiretoria;
           const realVendaMargem = realVendaFat > 0 ? (realVendaSaldo / realVendaFat) * 100 : 0;
+          const custoAquisicaoCompleto = (totals.base_fornecedor + totals.total_impostos_compra + totals.total_frete_compra) || totals.custo;
 
           return (
             <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mb-6 mt-4">
@@ -3736,8 +3737,8 @@ export function SalesBudgetForm() {
                   <Tooltip content={
                     <div className="w-64 space-y-2 text-gray-200">
                       <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Faturamento</div>
-                      <div className="flex justify-between text-sm"><span>Venda de Mercadoria:</span> <span className="font-medium text-white">{fmt(dreData ? dreData.entradas.total_produtos : totals.fat_mercadoria)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Instalação / Serviços:</span> <span className="font-medium text-white">{fmt(dreData ? dreData.entradas.total_servicos : totals.fat_instalacao)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Venda de Mercadoria:</span> <span className="font-medium text-white">{fmt(totals.fat_mercadoria)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Instalação / Serviços:</span> <span className="font-medium text-white">{fmt(totals.fat_instalacao)}</span></div>
                       <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 text-white"><span>Faturamento Total:</span> <span>{fmt(realVendaFat)}</span></div>
                     </div>
                   }>
@@ -3750,12 +3751,12 @@ export function SalesBudgetForm() {
                   <Tooltip content={
                     <div className="w-72 space-y-2 text-gray-200">
                       <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Custos</div>
-                      <div className="flex justify-between text-sm"><span>Fornecedores Líquidos:</span> <span className="font-medium text-white">{fmt(dreData ? dreData.saidas.fornecedores.reduce((acc: number, f: any) => acc + (f.valor || 0), 0) : totals.base_fornecedor)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Impostos de Compra:</span> <span className="font-medium text-white">{fmt(dreData ? (dreData.saidas.impostos_compra.ipi.valor + dreData.saidas.impostos_compra.icms_st.valor + dreData.saidas.impostos_compra.difal.valor) : totals.total_impostos_compra)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Impostos de Venda:</span> <span className="font-medium text-white">{fmt(dreData ? Object.values(dreData.saidas.impostos_venda || {}).reduce((acc: number, item: any) => acc + (item?.valor || 0), 0) : totals.total_impostos_venda)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Despesas de Venda:</span> <span className="font-medium text-white">{fmt(dreData ? ((dreData.saidas.despesas_venda.comissao?.valor || 0) + (dreData.saidas.despesas_venda.despesa_operacional?.valor || 0) + (dreData.saidas.despesas_venda.comissao_dsr?.valor || 0) + (dreData.saidas.despesas_venda.comissao_fgts?.valor || 0) + (dreData.saidas.despesas_venda.comissao_inss?.valor || 0) + (dreData.saidas.despesas_venda.comissao_demais?.valor || 0)) : (comissaoBruta + (totals.desp_operacional || 0)))}</span></div>
-                      <div className="flex justify-between text-sm"><span>Despesas Administrativas:</span> <span className="font-medium text-white">{fmt(dreData ? dreData.saidas.despesas_venda.despesas_administrativas.valor : totals.despAdm)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Frete / Logística:</span> <span className="font-medium text-white">{fmt(dreData ? dreData.saidas.despesas_venda.frete.valor : totals.frete)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Fornecedores Líquidos:</span> <span className="font-medium text-white">{fmt(totals.base_fornecedor)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Impostos de Compra:</span> <span className="font-medium text-white">{fmt(totals.total_impostos_compra)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Impostos de Venda:</span> <span className="font-medium text-white">{fmt(totals.total_impostos_venda)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Despesas de Venda:</span> <span className="font-medium text-white">{fmt(comissaoBruta + (totals.desp_operacional || 0))}</span></div>
+                      <div className="flex justify-between text-sm"><span>Despesas Administrativas:</span> <span className="font-medium text-white">{fmt(totals.despAdm)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Frete / Logística:</span> <span className="font-medium text-white">{fmt(totals.frete)}</span></div>
                       <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 text-white"><span>Custo Total:</span> <span>{fmt(realVendaCustoTotal)}</span></div>
                     </div>
                   }>
@@ -3825,72 +3826,72 @@ export function SalesBudgetForm() {
                 <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Custo Aquisição</span>
-                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(dreData ? dreData.saidas.fornecedores.reduce((acc: number, f: any) => acc + (f.valor || 0), 0) : totals.custo)}</p>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(custoAquisicaoCompleto)}</p>
                     <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-3 w-56">
                       <div className="font-semibold text-amber-300 mb-2">Composição do Custo</div>
                       <div className="space-y-1">
-                        <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(dreData ? dreData.saidas.fornecedores.reduce((acc: number, f: any) => acc + (f.valor || 0), 0) : totals.base_fornecedor)}</span></div>
+                        <div className="flex justify-between"><span>Fornecedor (Base):</span><span>{fmt(totals.base_fornecedor)}</span></div>
                         {totals.total_ipi > 0 && <div className="flex justify-between"><span>IPI:</span><span className="text-amber-300">+ {fmt(totals.total_ipi)}</span></div>}
                         {totals.total_frete_compra > 0 && <div className="flex justify-between"><span>Frete CIF:</span><span className="text-amber-300">+ {fmt(totals.total_frete_compra)}</span></div>}
                         {totals.total_icms_st > 0 && <div className="flex justify-between"><span>ICMS-ST:</span><span className="text-amber-300">+ {fmt(totals.total_icms_st)}</span></div>}
                         {totals.total_difal > 0 && <div className="flex justify-between"><span>DIFAL:</span><span className="text-amber-300">+ {fmt(totals.total_difal)}</span></div>}
-                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(dreData ? dreData.saidas.fornecedores.reduce((acc: number, f: any) => acc + (f.valor || 0), 0) : totals.custo)}</span></div>
+                        <div className="border-t border-white/20 pt-1 mt-1 flex justify-between font-bold"><span>Total:</span><span>{fmt(custoAquisicaoCompleto)}</span></div>
                       </div>
                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
                     </div>
                   </div>
                   <div className="bg-bg-deep rounded-lg p-3 relative group cursor-help">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted cursor-help">Impostos</span>
-                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(dreData ? ((dreData.saidas.impostos_compra.ipi.valor + dreData.saidas.impostos_compra.icms_st.valor + dreData.saidas.impostos_compra.difal.valor) + (dreData.saidas.impostos_venda ? Object.values(dreData.saidas.impostos_venda).reduce((acc: number, item: any) => acc + (item?.valor || 0), 0) : 0)) : totals.impostos)}</p>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.total_impostos_venda)}</p>
                     <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1e293b] text-white text-xs rounded-lg shadow-xl p-4 w-64">
                       <div className="font-bold text-sky-300 mb-2 border-b border-white/10 pb-1">Detalhamento dos Impostos</div>
                       
                       <div className="font-semibold text-amber-300 text-[11px] mb-1">Compra:</div>
                       <div className="pl-2 space-y-1 mb-2">
-                        <div className="flex justify-between text-gray-300"><span>IPI:</span><span>{fmt(dreData ? dreData.saidas.impostos_compra.ipi.valor : totals.total_ipi)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>ICMS-ST:</span><span>{fmt(dreData ? dreData.saidas.impostos_compra.icms_st.valor : totals.total_icms_st)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>DIFAL:</span><span>{fmt(dreData ? dreData.saidas.impostos_compra.difal.valor : totals.total_difal)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>IPI:</span><span>{fmt(totals.total_ipi)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ICMS-ST:</span><span>{fmt(totals.total_icms_st)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>DIFAL:</span><span>{fmt(totals.total_difal)}</span></div>
                         {totals.total_credito_icms > 0 && (
                           <div className="flex justify-between text-brand-success"><span>Créd. ICMS (Compra):</span><span>-{fmt(totals.total_credito_icms)}</span></div>
                         )}
                         <div className="flex justify-between font-semibold text-white border-t border-white/5 pt-0.5">
                           <span>Subtotal Compra:</span>
-                          <span>{fmt(dreData ? (dreData.saidas.impostos_compra.ipi.valor + dreData.saidas.impostos_compra.icms_st.valor + dreData.saidas.impostos_compra.difal.valor) : Math.max(0, totals.total_ipi + totals.total_icms_st + totals.total_difal - totals.total_credito_icms))}</span>
+                          <span>{fmt(totals.total_impostos_compra)}</span>
                         </div>
                       </div>
 
                       <div className="font-semibold text-teal-300 text-[11px] mb-1">Venda:</div>
                       <div className="pl-2 space-y-1 mb-2">
-                        <div className="flex justify-between text-gray-300"><span>PIS:</span><span>{fmt(dreData?.saidas?.impostos_venda?.pis?.valor ?? totals.total_pis)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>COFINS:</span><span>{fmt(dreData?.saidas?.impostos_venda?.cofins?.valor ?? totals.total_cofins)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>CSLL:</span><span>{fmt(dreData?.saidas?.impostos_venda?.csll?.valor ?? totals.total_csll)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>IRPJ:</span><span>{fmt(dreData?.saidas?.impostos_venda?.irpj?.valor ?? totals.total_irpj)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>ICMS:</span><span>{fmt(dreData?.saidas?.impostos_venda?.icms?.valor ?? totals.total_icms)}</span></div>
-                        <div className="flex justify-between text-gray-300"><span>ISS:</span><span>{fmt(dreData?.saidas?.impostos_venda?.iss?.valor ?? totals.total_iss)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>PIS:</span><span>{fmt(totals.total_pis)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>COFINS:</span><span>{fmt(totals.total_cofins)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>CSLL:</span><span>{fmt(totals.total_csll)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>IRPJ:</span><span>{fmt(totals.total_irpj)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ICMS:</span><span>{fmt(totals.total_icms)}</span></div>
+                        <div className="flex justify-between text-gray-300"><span>ISS:</span><span>{fmt(totals.total_iss)}</span></div>
                         <div className="flex justify-between font-semibold text-white border-t border-white/5 pt-0.5">
                           <span>Subtotal Venda:</span>
-                          <span>{fmt(dreData ? Object.values(dreData.saidas.impostos_venda || {}).reduce((acc: number, item: any) => acc + (item?.valor || 0), 0) : totals.total_impostos_venda)}</span>
+                          <span>{fmt(totals.total_impostos_venda)}</span>
                         </div>
                       </div>
 
                       <div className="border-t border-white/20 pt-1.5 mt-2 flex justify-between font-bold text-white text-sm">
-                        <span>Total Consolidado:</span>
-                        <span>{fmt(dreData ? ((dreData.saidas.impostos_compra.ipi.valor + dreData.saidas.impostos_compra.icms_st.valor + dreData.saidas.impostos_compra.difal.valor) + Object.values(dreData.saidas.impostos_venda || {}).reduce((acc: number, item: any) => acc + (item?.valor || 0), 0)) : totals.impostos)}</span>
+                        <span>Total Venda:</span>
+                        <span>{fmt(totals.total_impostos_venda)}</span>
                       </div>
                       <div className="absolute top-full left-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1e293b]" />
                     </div>
                   </div>
                   <div className="bg-bg-deep rounded-lg p-3">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider">Frete Venda</span>
-                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(dreData ? dreData.saidas.despesas_venda.frete.valor : totals.frete)}</p>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.frete)}</p>
                   </div>
                   <div className="bg-bg-deep rounded-lg p-3">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider">Desp. Adm.</span>
-                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(dreData ? dreData.saidas.despesas_venda.despesas_administrativas.valor : totals.despAdm)}</p>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.despAdm)}</p>
                   </div>
                   <div className="bg-bg-deep rounded-lg p-3">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider">Desp. Operacional</span>
-                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(dreData ? dreData.saidas.despesas_venda.despesa_operacional.valor : totals.desp_operacional)}</p>
+                    <p className="text-sm font-bold text-text-primary mt-1">{fmt(totals.desp_operacional)}</p>
                   </div>
                   {/* Comissão Padrão */}
                   <div className="bg-bg-deep rounded-lg p-3 cursor-help">
@@ -3963,31 +3964,29 @@ export function SalesBudgetForm() {
                         )}
                         {totals.despAdm > 0 && (
                           <div className="flex justify-between text-gray-400">
-                            <span>(-) Desp. Adm.:</span>
+                            <span>(-) Despesa Adm.:</span>
                             <span>-{fmt(totals.despAdm)}</span>
-                          </div>
-                        )}
-                        {comissaoBruta > 0 && (
-                          <div className="flex justify-between text-gray-400">
-                            <span>(-) Comissão Bruta:</span>
-                            <span>-{fmt(comissaoBruta)}</span>
                           </div>
                         )}
                         {totals.desp_operacional > 0 && (
                           <div className="flex justify-between text-gray-400">
-                            <span>(-) Desp. Operacional:</span>
+                            <span>(-) Despesa Operacional:</span>
                             <span>-{fmt(totals.desp_operacional)}</span>
                           </div>
                         )}
-                        <div className="border-t border-white/20 pt-1.5 mt-2 flex justify-between font-bold text-emerald-400 text-xs">
-                          <span>Total (Lucro Padrão):</span>
+                        <div className="flex justify-between text-gray-400">
+                          <span>(-) Comissão:</span>
+                          <span>-{fmt(comissaoBruta)}</span>
+                        </div>
+                        <div className="border-t border-white/20 pt-1.5 mt-1 flex justify-between font-bold text-emerald-400 text-xs">
+                          <span>(=) Lucro Padrão:</span>
                           <span>{fmt(totals.lucro)}</span>
                         </div>
                       </div>
                     }>
                       <div className="w-full h-full flex flex-col justify-center">
                         <span className="text-[10px] text-text-muted uppercase tracking-wider border-b border-dashed border-text-muted w-fit">Lucro Padrão</span>
-                        <p className={`text-sm font-bold mt-1 ${totals.margem >= 15 ? 'text-emerald-600' : totals.margem >= 5 ? 'text-amber-600' : 'text-rose-600'}`}>{fmt(totals.lucro)}</p>
+                        <p className="text-sm font-bold text-brand-success mt-1">{fmt(totals.lucro)}</p>
                       </div>
                     </Tooltip>
                   </div>

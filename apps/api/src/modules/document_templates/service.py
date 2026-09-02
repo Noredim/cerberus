@@ -1,5 +1,5 @@
 import re
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from uuid import UUID
 from typing import List, Optional, Tuple
 from src.modules.document_templates.models import DocumentTemplate, DocumentVersion, DocumentVariable, DocumentAudit, Letterhead
@@ -9,64 +9,108 @@ from src.modules.document_templates.schemas import (
 )
 from src.modules.sales_budgets.models import SalesBudget
 from src.modules.customers.models import Customer
-from src.modules.companies.models import Company
+from src.modules.companies.models import Company, SalesTeam, SalesTeamMember
+from src.modules.users.models import User
 DEFAULT_BASE_CSS = """
 @page {
     size: A4;
-    margin: 0;
+    margin: 10mm 15mm 10mm 15mm;
 }
 html, body {
     margin: 0;
     padding: 0;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
     color: #0f172a;
     line-height: 1.5;
 }
 .has-letterhead,
 .letterhead-wrapper {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 297mm;
-    min-height: 297mm;
-    max-height: 297mm;
-    box-sizing: border-box;
-    position: relative;
+    display: block;
     width: 100%;
-    padding: 0.8cm 1.5cm 0.8cm 1.5cm;
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+.letterhead-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin: 0;
+    padding: 0;
+    border: none !important;
+}
+.letterhead-print-table > thead {
+    display: table-header-group;
+}
+.letterhead-print-table > tfoot {
+    display: table-footer-group;
+}
+.letterhead-print-table > tbody > tr > td {
+    padding: 0;
+    border: none !important;
+    vertical-align: top;
+}
+.letterhead-header-cell,
+.letterhead-footer-cell {
+    padding: 0;
+    border: none !important;
+}
+.letterhead-body-cell {
+    padding-top: 10px;
+    padding-bottom: 15px;
+}
+.stelseg-document-header,
+.document-header,
+.header {
+    width: 100%;
+    margin: 0 0 15px 0;
+    padding: 0 0 8px 0;
+    border-bottom: 2px solid #0284c7;
+    text-align: left;
+}
+.stelseg-header-logo,
+.header-logo {
+    display: block;
+    width: auto;
+    max-width: 280px;
+    max-height: 55px;
+    margin: 0;
+    padding: 0;
+}
+.stelseg-document-footer,
+.document-footer,
+.footer {
+    width: 100%;
+    margin: 0;
+    padding: 6px 0 0 0;
+    border-top: 1px solid #94a3b8;
+    color: #334155;
+    font-size: 9px;
+    line-height: 1.4;
+    text-align: left;
+}
+.stelseg-footer-company,
+.footer-company {
+    margin: 0;
+    padding: 0;
+    color: #1e3a5f;
+    font-weight: 700;
 }
 .document-body-container {
     box-sizing: border-box;
-    padding-top: 3.0cm;
-    padding-bottom: 2.5cm;
-    padding-left: 2.0cm;
-    padding-right: 2.0cm;
     display: block;
     width: 100%;
     word-wrap: break-word;
     overflow-wrap: break-word;
 }
-.has-letterhead .document-body,
-.letterhead-wrapper .document-body {
-    flex: 1 1 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: hidden;
-}
-.has-letterhead .document-body-container,
-.letterhead-wrapper .document-body-container {
-    padding-top: 0.3cm !important;
-    padding-bottom: 0.3cm !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    flex: 1 1 auto;
+.document-body,
+.stelseg-document-content {
+    width: 100%;
+    display: block;
 }
 p {
     margin-top: 0;
-    margin-bottom: 0.8em;
+    margin-bottom: 0.5em;
 }
 img {
     max-width: 100%;
@@ -75,13 +119,7 @@ img {
 table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 1em;
-}
-.has-letterhead .footer,
-.letterhead-wrapper .footer,
-.footer, [class*="footer"], footer {
-    margin-top: auto !important;
-    flex-shrink: 0 !important;
+    margin-bottom: 0.5em;
 }
 """
 
@@ -442,7 +480,8 @@ def build_analytical_items_table(budget: SalesBudget) -> str:
                     prod = sub.product
                     svc = sub.own_service
                     cod = prod.codigo if prod else "-"
-                    nm = prod.nome if prod else (svc.nome if svc else sub.descricao_item)
+                    svc_nome = getattr(svc, "nome_servico", None) or getattr(svc, "nome", None) or sub.descricao_item
+                    nm = prod.nome if prod else svc_nome
                     tp = "Mercadoria" if sub.tipo_item == "PRODUTO" else "Serviço"
                     q = float(sub.quantidade_no_kit or 1) * float(item.quantidade or 1)
                     kits_map[kit_id]["items"].append({
@@ -574,7 +613,7 @@ def build_analytical_items_table(budget: SalesBudget) -> str:
 
 def build_commercial_conditions_summary(budget: SalesBudget) -> str:
     """Gera um bloco de resumo das condições comerciais (forma de pagamento, validade, frete e observações)."""
-    forma_pag = budget.forma_pagamento.nome if budget.forma_pagamento else "A combinar"
+    forma_pag = getattr(budget.forma_pagamento, 'descricao', getattr(budget.forma_pagamento, 'nome', 'A combinar')) if budget.forma_pagamento else "A combinar"
     vencimento = budget.data_vencimento_inicial.strftime("%d/%m/%Y") if budget.data_vencimento_inicial else "A definir"
     obs = budget.observacoes or "Sem observações adicionais."
 
@@ -592,20 +631,618 @@ def build_commercial_conditions_summary(budget: SalesBudget) -> str:
     """
 
 
+def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
+    """Gera todas as seções conceituais da Proposta Comercial da Oportunidade:
+    1. Venda de Produtos (Kits de Venda com PRD, Nome, Qtd, Unitário, Total + Subtotal do Kit + Total Geral)
+    2. Instalação (Kits de Instalação com Kit, Qtd, Unitário, Total + Total Geral)
+    3. Comodato / Locação (Kits com Mensalidade, Qtd de Meses, Lista de Produtos sem preços individuais + Total Mensal)
+    4. Resumo Geral da Proposta (Venda R$, Instalação R$, Mensalidade R$/mês)
+    5. Assinaturas (Vendedor e Cliente)
+    
+    Retorna um dicionário contendo o HTML consolidado e as seções individuais.
+    """
+    from src.modules.opportunity_kits.models import OpportunityKit
+    from src.modules.opportunity_kits.service import OpportunityKitService
+
+    kit_service = OpportunityKitService(db)
+    kits = db.query(OpportunityKit).filter_by(sales_budget_id=budget.id).all() if budget else []
+
+    # 1. Agrupar por modalidade de contrato
+    venda_kits = [k for k in kits if k.tipo_contrato == "VENDA_EQUIPAMENTOS"]
+    instalacao_kits = [k for k in kits if k.tipo_contrato == "INSTALACAO"]
+    locacao_kits = [k for k in kits if k.tipo_contrato in ("COMODATO", "LOCACAO")]
+
+    # Verificar itens avulsos de venda (sem kit vinculado)
+    standalone_venda_items = [item for item in (budget.items or []) if not item.opportunity_kit_id]
+
+    has_venda = bool(venda_kits or standalone_venda_items)
+    has_instalacao = bool(instalacao_kits)
+    has_locacao = bool(locacao_kits)
+
+    # ── SEÇÃO 1: VENDA DE PRODUTOS ──
+    venda_html = ""
+    total_venda_geral = 0.0
+
+    if has_venda:
+        venda_tables = ""
+        
+        # Kits de Venda
+        for k in venda_kits:
+            try:
+                fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                s = fin.get("summary", {})
+                item_summaries = fin.get("item_summaries", [])
+            except Exception:
+                fin, s, item_summaries = {}, {}, []
+
+            b_item = next((it for it in (budget.items or []) if str(it.opportunity_kit_id) == str(k.id)), None)
+            qtd_kit = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
+            
+            tot_kit = float(b_item.total_venda if b_item and b_item.total_venda is not None else (s.get("venda_equipamentos_total") or 0.0))
+            if tot_kit == 0.0 and getattr(k, 'venda_total', None):
+                tot_kit = float(k.venda_total) * qtd_kit
+            
+            total_venda_geral += tot_kit
+
+            # Map item_summaries by product_id / item id
+            summary_by_prod = {}
+            for summ in item_summaries:
+                if summ.get("id"):
+                    summary_by_prod[str(summ["id"])] = summ
+                if summ.get("product_id"):
+                    summary_by_prod[str(summ["product_id"])] = summ
+
+            rows_items = ""
+            for it in k.items:
+                prod = it.product
+                cod = prod.codigo if prod else "-"
+                nm = prod.nome if prod else (it.descricao_item or "Produto")
+                
+                summ = summary_by_prod.get(str(it.id)) or (summary_by_prod.get(str(it.product_id)) if it.product_id else None)
+                if summ:
+                    qtd_item = float(summ.get("quantidade_no_kit", it.quantidade_no_kit or 1.0)) * qtd_kit
+                    unit_venda = float(summ.get("venda_unitario_item", 0.0))
+                    tot_venda = float(summ.get("venda_total_item", unit_venda * qtd_item))
+                else:
+                    qtd_item = float(it.quantidade_no_kit or 1.0) * qtd_kit
+                    unit_venda = 0.0
+                    tot_venda = 0.0
+
+                rows_items += f"""
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 7px 10px; font-family: monospace; font-size: 11px; font-weight: 600; color: #475569;">{cod}</td>
+                    <td style="padding: 7px 10px; color: #1e293b;">{nm}</td>
+                    <td style="padding: 7px 10px; text-align: center; color: #334155;">{int(qtd_item) if qtd_item.is_integer() else f'{qtd_item:.2f}'}</td>
+                    <td style="padding: 7px 10px; text-align: right; color: #334155;">{format_currency(unit_venda)}</td>
+                    <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(tot_venda)}</td>
+                </tr>
+                """
+
+            venda_tables += f"""
+            <div class="proposal-kit-block" style="margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📦 KIT: {k.nome_kit}</span>
+                    <span style="font-size: 11px; opacity: 0.85;">Qtd: {int(qtd_kit) if qtd_kit.is_integer() else f'{qtd_kit:.2f}'}</span>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                            <th style="padding: 6px 10px; width: 14%;">PRD</th>
+                            <th style="padding: 6px 10px;">Nome do Produto</th>
+                            <th style="padding: 6px 10px; text-align: center; width: 10%;">Qtd</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 18%;">Valor Unitário</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 18%;">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_items}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700;">
+                            <td colspan="4" style="padding: 6px 10px; text-align: right; color: #334155; font-size: 11px;">TOTAL DO KIT:</td>
+                            <td style="padding: 6px 10px; text-align: right; color: #0f172a; font-size: 11.5px;">{format_currency(tot_kit)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            """
+
+        # Itens Avulsos de Venda
+        if standalone_venda_items:
+            tot_avulso = 0.0
+            rows_avulso = ""
+            for it in standalone_venda_items:
+                cod = it.product.codigo if it.product else "-"
+                nm = it.product.nome if it.product else (it.descricao_servico or "Item Avulso")
+                qtd = float(it.quantidade or 1)
+                unit_venda = float(it.venda_unit or 0)
+                tot = float(it.total_venda or (unit_venda * qtd))
+                tot_avulso += tot
+
+                rows_avulso += f"""
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 6px 10px; font-family: monospace; font-size: 11px; font-weight: 600; color: #475569;">{cod}</td>
+                    <td style="padding: 6px 10px; color: #1e293b;">{nm}</td>
+                    <td style="padding: 6px 10px; text-align: center; color: #334155;">{int(qtd) if qtd.is_integer() else f'{qtd:.2f}'}</td>
+                    <td style="padding: 6px 10px; text-align: right; color: #334155;">{format_currency(unit_venda)}</td>
+                    <td style="padding: 6px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(tot)}</td>
+                </tr>
+                """
+            total_venda_geral += tot_avulso
+
+            venda_tables += f"""
+            <div class="proposal-kit-block" style="margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                <div style="background-color: #334155; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700;">
+                    Itens Avulsos da Proposta
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                            <th style="padding: 6px 10px; width: 14%;">PRD</th>
+                            <th style="padding: 6px 10px;">Nome do Produto</th>
+                            <th style="padding: 6px 10px; text-align: center; width: 10%;">Qtd</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 18%;">Valor Unitário</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 18%;">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_avulso}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700;">
+                            <td colspan="4" style="padding: 6px 10px; text-align: right; color: #334155; font-size: 11px;">TOTAL ITENS AVULSOS:</td>
+                            <td style="padding: 6px 10px; text-align: right; color: #0f172a; font-size: 11.5px;">{format_currency(tot_avulso)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            """
+
+        venda_html = f"""
+        <div class="section-venda-produtos" style="margin-bottom: 14px;">
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 3px; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">1. Venda de Produtos</h3>
+            </div>
+            {venda_tables}
+            <div style="text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; padding: 6px 10px; background-color: #e2e8f0; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 4px;">
+                TOTAL DE VENDA DE PRODUTOS: {format_currency(total_venda_geral)}
+            </div>
+        </div>
+        """
+
+    # ── SEÇÃO 2: INSTALAÇÃO ──
+    instalacao_html = ""
+    total_instalacao_geral = 0.0
+
+    if has_instalacao:
+        rows_inst = ""
+        for k in instalacao_kits:
+            try:
+                fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                s = fin.get("summary", {})
+            except Exception:
+                fin, s = {}, {}
+
+            b_item = next((it for it in (budget.items or []) if str(it.opportunity_kit_id) == str(k.id)), None)
+            qtd_inst = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
+            unit_inst = float(b_item.venda_unit if b_item and b_item.venda_unit is not None else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0))
+            if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
+                unit_inst = float(k.venda_unitario)
+            
+            tot_inst = float(b_item.total_venda if b_item and b_item.total_venda is not None else (unit_inst * qtd_inst))
+            total_instalacao_geral += tot_inst
+
+            rows_inst += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 7px 10px; font-weight: 600; color: #1e293b;">{k.nome_kit}</td>
+                <td style="padding: 7px 10px; text-align: center; color: #334155;">{int(qtd_inst) if qtd_inst.is_integer() else f'{qtd_inst:.2f}'}</td>
+                <td style="padding: 7px 10px; text-align: right; color: #334155;">{format_currency(unit_inst)}</td>
+                <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(tot_inst)}</td>
+            </tr>
+            """
+
+        instalacao_html = f"""
+        <div class="section-instalacao" style="margin-bottom: 14px;">
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 3px; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">2. Instalação</h3>
+            </div>
+            <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 4px; page-break-inside: avoid; break-inside: avoid;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                            <th style="padding: 6px 10px;">Kit</th>
+                            <th style="padding: 6px 10px; text-align: center; width: 14%;">Quantidade</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 22%;">Valor Unitário</th>
+                            <th style="padding: 6px 10px; text-align: right; width: 22%;">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_inst}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700;">
+                            <td colspan="3" style="padding: 6px 10px; text-align: right; color: #334155;">TOTAL DE INSTALAÇÃO:</td>
+                            <td style="padding: 6px 10px; text-align: right; color: #0f172a; font-size: 11.5px;">{format_currency(total_instalacao_geral)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        """
+
+    # ── SEÇÃO 3: COMODATO / LOCAÇÃO ──
+    locacao_html = ""
+    total_locacao_mensal = 0.0
+
+    if has_locacao:
+        locacao_blocks = ""
+        for k in locacao_kits:
+            try:
+                fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                s = fin.get("summary", {})
+            except Exception:
+                fin, s = {}, {}
+
+            rental_item = next((rit for rit in (budget.rental_items or []) if str(rit.opportunity_kit_id) == str(k.id)), None)
+            qtd_kit = float(rental_item.quantidade if rental_item and rental_item.quantidade is not None else (k.quantidade_kits or 1))
+            
+            mensal_unit = float(rental_item.kit_valor_mensal or rental_item.valor_mensal if rental_item and (rental_item.kit_valor_mensal or rental_item.valor_mensal) is not None else (s.get("valor_mensal_antes_impostos") or s.get("valor_mensal_kit") or 0.0))
+            if mensal_unit == 0.0 and getattr(k, 'custo_total', None):
+                mensal_unit = float(k.custo_total)
+
+            mensal_tot = mensal_unit * qtd_kit
+            total_locacao_mensal += mensal_tot
+            meses_contrato = k.prazo_contrato_meses or budget.prazo_contrato_meses or 36
+
+            rows_items = ""
+            # 1. Itens do Bloco 4 (Produtos e Serviços vinculados ao kit)
+            for it in (k.items or []):
+                prod = it.product
+                cod = prod.codigo if prod else "SERV"
+                nm = prod.nome if prod else (getattr(it.own_service, 'nome_servico', None) or it.descricao_item or "Item do Kit")
+                q = float(it.quantidade_no_kit or 1) * qtd_kit
+
+                rows_items += f"""
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 6px 10px; font-family: monospace; font-size: 11px; font-weight: 600; color: #475569;">{cod}</td>
+                    <td style="padding: 6px 10px; color: #1e293b;">{nm}</td>
+                    <td style="padding: 6px 10px; text-align: center; color: #334155;">{int(q) if q.is_integer() else f'{q:.2f}'}</td>
+                </tr>
+                """
+
+            # 2. Custos Operacionais Mensais do Bloco 6 (Serviços e custos operacionais mensais do kit)
+            for c in (k.costs or []):
+                if c.tipo_custo != "INSTALACAO":
+                    prod = c.product
+                    cod = prod.codigo if prod else "SERV"
+                    nm = prod.nome if prod else (getattr(c.own_service, 'nome_servico', None) or c.descricao_item or "Serviço Operacional")
+                    q = float(c.quantidade or 1) * qtd_kit
+
+                    rows_items += f"""
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 6px 10px; font-family: monospace; font-size: 11px; font-weight: 600; color: #475569;">{cod}</td>
+                        <td style="padding: 6px 10px; color: #1e293b;">{nm}</td>
+                        <td style="padding: 6px 10px; text-align: center; color: #334155;">{int(q) if q.is_integer() else f'{q:.2f}'}</td>
+                    </tr>
+                    """
+
+            if hasattr(k, 'monthly_costs') and k.monthly_costs:
+                for mc in k.monthly_costs:
+                    cod = "SERV"
+                    nm = mc.servico or "Custo Mensal"
+                    q = float(mc.quantidade or 1) * qtd_kit
+
+                    rows_items += f"""
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 6px 10px; font-family: monospace; font-size: 11px; font-weight: 600; color: #475569;">{cod}</td>
+                        <td style="padding: 6px 10px; color: #1e293b;">{nm}</td>
+                        <td style="padding: 6px 10px; text-align: center; color: #334155;">{int(q) if q.is_integer() else f'{q:.2f}'}</td>
+                    </tr>
+                    """
+
+            locacao_blocks += f"""
+            <div class="proposal-kit-block" style="margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📦 KIT: {k.nome_kit}</span>
+                    <span style="font-size: 11px; opacity: 0.9;">Qtd: {int(qtd_kit) if qtd_kit.is_integer() else f'{qtd_kit:.2f}'}</span>
+                </div>
+                <div style="background-color: #f8fafc; border-bottom: 1px solid #cbd5e1; padding: 6px 12px; display: flex; justify-content: space-between; font-size: 11.5px; color: #334155;">
+                    <div><strong>Mensalidade:</strong> <span style="color: #0f172a; font-weight: 700;">{format_currency(mensal_tot)}/mês</span></div>
+                    <div><strong>Quantidade de Meses:</strong> <span style="color: #0f172a; font-weight: 700;">{meses_contrato} meses</span></div>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                            <th style="padding: 5px 10px; width: 18%;">PRD</th>
+                            <th style="padding: 5px 10px;">Nome do Produto / Serviço</th>
+                            <th style="padding: 5px 10px; text-align: center; width: 14%;">Quantidade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_items}
+                    </tbody>
+                </table>
+            </div>
+            """
+
+        locacao_html = f"""
+        <div class="section-comodato-locacao" style="margin-bottom: 14px;">
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 3px; margin-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">3. Comodato / Locação</h3>
+            </div>
+            {locacao_blocks}
+            <div style="text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; padding: 6px 10px; background-color: #e2e8f0; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 4px;">
+                TOTAL MENSAL COMODATO / LOCAÇÃO: {format_currency(total_locacao_mensal)}/mês
+            </div>
+        </div>
+        """
+
+    # ── DADOS DE CLIENTE, VENDEDOR E ASSINATURAS ──
+    vendedor_str = budget.vendedor.name if (budget.vendedor and hasattr(budget.vendedor, 'name')) else ""
+    if not vendedor_str and budget.responsaveis:
+        vendedor_str = budget.responsaveis[0].user.name if budget.responsaveis[0].user else ""
+    if not vendedor_str:
+        vendedor_str = "Consultor Comercial"
+
+    cliente_str = budget.customer.razao_social if budget.customer else (budget.customer.nome_fantasia if budget.customer else "Cliente")
+
+    assinaturas_html = f"""
+    <div class="proposal-signatures-block" style="margin-top: 24px; padding-top: 10px; page-break-inside: avoid; break-inside: avoid;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center;">
+            <div>
+                <div style="border-top: 1.5px solid #0f172a; margin-bottom: 6px; width: 85%; margin-left: auto; margin-right: auto;"></div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #0f172a;">{vendedor_str}</div>
+                <div style="font-size: 10.5px; color: #64748b;">Consultor Comercial / Vendedor</div>
+            </div>
+            <div>
+                <div style="border-top: 1.5px solid #0f172a; margin-bottom: 6px; width: 85%; margin-left: auto; margin-right: auto;"></div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #0f172a;">{cliente_str}</div>
+                <div style="font-size: 10.5px; color: #64748b;">Cliente / De Acordo</div>
+            </div>
+        </div>
+    </div>
+    """
+
+    # ── CABEÇALHO PADRONIZADO DA PROPOSTA ──
+    cust = budget.customer
+    cidade_nome = cust.city.nome if (cust and cust.city) else ""
+    estado_sigla = (cust.state.sigla or cust.state.nome) if (cust and cust.state) else ""
+    cidade_uf_str = f"{cidade_nome} / {estado_sigla}" if (cidade_nome and estado_sigla) else (cidade_nome or estado_sigla)
+
+    data_emissao_str = budget.data_orcamento.strftime("%d/%m/%Y") if budget.data_orcamento else datetime.now().strftime("%d/%m/%Y")
+    data_validade_str = budget.data_vencimento_inicial.strftime("%d/%m/%Y") if budget.data_vencimento_inicial else "15 dias"
+
+    forma_pag_str = ""
+    if budget.forma_pagamento and budget.forma_pagamento.descricao:
+        forma_pag_str = budget.forma_pagamento.descricao
+    elif budget.forma_pagamento_snapshot and isinstance(budget.forma_pagamento_snapshot, dict):
+        forma_pag_str = budget.forma_pagamento_snapshot.get("descricao", "")
+    if not forma_pag_str:
+        forma_pag_str = "A Combinar / Padrão"
+
+    header_html = f"""
+    <div class="proposal-header-block" style="border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">PROPOSTA COMERCIAL</h2>
+                <div style="font-size: 12.5px; font-weight: 700; color: #475569; margin-top: 2px;">Oportunidade nº {budget.numero_orcamento or ''}</div>
+            </div>
+            <div style="text-align: right; font-size: 11px; color: #64748b; line-height: 1.4;">
+                <div><strong>Data:</strong> {data_emissao_str}</div>
+                <div><strong>Validade:</strong> {data_validade_str}</div>
+            </div>
+        </div>
+        <div style="margin-top: 10px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 11px; line-height: 1.5;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+                <div><strong>Cliente:</strong> {cliente_str}</div>
+                <div><strong>CNPJ:</strong> {cust.cnpj if cust else ''}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 2px;">
+                <div><strong>Cidade/UF:</strong> {cidade_uf_str}</div>
+                <div><strong>Consultor / Vendedor:</strong> {vendedor_str}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 2px; border-top: 1px dashed #cbd5e1; padding-top: 3px;">
+                <div><strong>Forma de Pagamento:</strong> {forma_pag_str}</div>
+                <div><strong>Validade da Proposta:</strong> {data_validade_str}</div>
+            </div>
+        </div>
+    </div>
+    """
+
+    # ── RESUMO GERAL DA PROPOSTA / DEMONSTRATIVO DE VALORES ──
+    total_unico = total_venda_geral + total_instalacao_geral
+    has_unico = bool(has_venda or has_instalacao)
+    prazo_contrato = budget.prazo_contrato_meses or 36
+    if locacao_kits and locacao_kits[0].prazo_contrato_meses:
+        prazo_contrato = locacao_kits[0].prazo_contrato_meses
+    total_contrato_locacao = total_locacao_mensal * prazo_contrato
+
+    tabelas_demonstrativo = ""
+
+    # 1. Tabela Demonstrativo de Valores Únicos (Venda + Instalação)
+    if has_unico:
+        rows_unico = ""
+        if has_venda:
+            rows_unico += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 7px 10px; color: #1e293b;">Venda de Equipamentos / Produtos</td>
+                <td style="padding: 7px 10px; text-align: center; color: #475569;">Pagamento Único</td>
+                <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(total_venda_geral)}</td>
+            </tr>
+            """
+        if has_instalacao:
+            rows_unico += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 7px 10px; color: #1e293b;">Serviços de Instalação e Configuração</td>
+                <td style="padding: 7px 10px; text-align: center; color: #475569;">Pagamento Único</td>
+                <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(total_instalacao_geral)}</td>
+            </tr>
+            """
+
+        parcelas_info = ""
+        if budget.forma_pagamento and budget.forma_pagamento.parcelas:
+            qtd_p = len(budget.forma_pagamento.parcelas)
+            if qtd_p > 1:
+                val_p = total_unico / qtd_p
+                parcelas_info = f"<div style='font-size: 11px; color: #475569;'><strong>Condição:</strong> {qtd_p}x de {format_currency(val_p)} ({forma_pag_str})</div>"
+
+        tabelas_demonstrativo += f"""
+        <div style="margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+            <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                Demonstrativo de Valores — Pagamento Único (Venda / Instalação)
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                <thead>
+                    <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                        <th style="padding: 5px 10px;">Descrição</th>
+                        <th style="padding: 5px 10px; text-align: center; width: 22%;">Modalidade</th>
+                        <th style="padding: 5px 10px; text-align: right; width: 24%;">Valor Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_unico}
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700;">
+                        <td colspan="2" style="padding: 6px 10px; text-align: right; color: #334155;">TOTAL DE INVESTIMENTO (VALOR ÚNICO):</td>
+                        <td style="padding: 6px 10px; text-align: right; color: #0f172a; font-size: 12px;">{format_currency(total_unico)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            {f"<div style='padding: 5px 10px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0;'>{parcelas_info}</div>" if parcelas_info else ""}
+        </div>
+        """
+
+    # 2. Tabela Demonstrativo de Valores Recorrentes (Comodato / Locação)
+    if has_locacao:
+        tabelas_demonstrativo += f"""
+        <div style="margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+            <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                Demonstrativo de Valores — Comodato / Locação (Mensal Recorrente)
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+                <thead>
+                    <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
+                        <th style="padding: 5px 10px;">Descrição</th>
+                        <th style="padding: 5px 10px; text-align: center; width: 22%;">Quantidade de Meses</th>
+                        <th style="padding: 5px 10px; text-align: right; width: 24%;">Valor Mensal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 6px 10px; color: #1e293b;">Serviços e Equipamentos em Comodato / Locação</td>
+                        <td style="padding: 6px 10px; text-align: center; font-weight: 600; color: #0f172a;">{prazo_contrato} meses</td>
+                        <td style="padding: 6px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(total_locacao_mensal)}/mês</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700;">
+                        <td colspan="2" style="padding: 6px 10px; text-align: right; color: #334155;">TOTAL MENSAL RECORRENTE:</td>
+                        <td style="padding: 6px 10px; text-align: right; color: #0f172a; font-size: 12px;">{format_currency(total_locacao_mensal)}/mês</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div style="padding: 5px 10px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 11px; color: #475569;">
+                <strong>Período Contratual:</strong> {prazo_contrato} meses
+            </div>
+        </div>
+        """
+
+    resumo_html = f"""
+    <div class="proposal-summary-block" style="margin-top: 14px; margin-bottom: 14px;">
+        <div style="border-bottom: 2px solid #0f172a; padding-bottom: 3px; margin-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">Resumo Geral da Proposta</h3>
+        </div>
+        {tabelas_demonstrativo}
+    </div>
+    """
+
+    # ── SEÇÃO DE OBSERVAÇÕES ──
+    obs_custom = budget.observacoes.strip() if (budget.observacoes and budget.observacoes.strip()) else ""
+
+    observacoes_html = f"""
+    <div class="proposal-observations-block" style="margin-top: 14px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+        <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+            Observações
+        </div>
+        <div style="padding: 10px 12px; background-color: #f8fafc; font-size: 11px; color: #334155; line-height: 1.5;">
+            <div style="margin-bottom: 6px;">
+                <strong>1.</strong> Toda a venda de material e comodato de equipamentos será feito o faturamento pelo CNPJ: <strong>00.950.381/0001-00 Stelmat Teleinformática LTDA</strong>.
+            </div>
+            <div>
+                <strong>2.</strong> Todo o serviço de monitoramento e serviços táticos serão faturados pelo CNPJ: <strong>43.294.119/0001-27 | Stelseg Tecnologia em Monitoramento e Segurança Eletrônica LTDA</strong>.
+            </div>
+            {f'<div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1; color: #475569;"><strong>3. Informações Complementares:</strong> {obs_custom}</div>' if obs_custom else ''}
+        </div>
+    </div>
+    """
+
+    # ── CONSOLIDADO COMPLETO DA PROPOSTA ──
+    consolidated_body = ""
+    if not (has_venda or has_instalacao or has_locacao):
+        consolidated_body = f"""
+        {header_html}
+        <div style="padding: 24px; text-align: center; color: #64748b; font-size: 13px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px;">
+            Nenhum item comercial cadastrado nesta oportunidade.
+        </div>
+        """
+    else:
+        consolidated_body = f"""
+        {header_html}
+        {venda_html}
+        {instalacao_html}
+        {locacao_html}
+        {resumo_html}
+        {observacoes_html}
+        {assinaturas_html}
+        """
+
+    return {
+        "header_html": header_html,
+        "venda_html": venda_html,
+        "instalacao_html": instalacao_html,
+        "locacao_html": locacao_html,
+        "resumo_html": resumo_html,
+        "observacoes_html": observacoes_html,
+        "assinaturas_html": assinaturas_html,
+        "proposta_completa_html": consolidated_body,
+        "total_venda": total_venda_geral,
+        "total_instalacao": total_instalacao_geral,
+        "total_locacao_mensal": total_locacao_mensal,
+        "has_venda": has_venda,
+        "has_instalacao": has_instalacao,
+        "has_locacao": has_locacao,
+    }
+
+
 VARIABLES_CATALOG = {
     "OPORTUNIDADE": [
+        {"nome": "proposta_comercial", "origem": "OPORTUNIDADE", "campo": "proposta_completa", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "proposta_comercial_completa", "origem": "OPORTUNIDADE", "campo": "proposta_completa", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "secao_venda_produtos", "origem": "OPORTUNIDADE", "campo": "secao_venda", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "secao_instalacao", "origem": "OPORTUNIDADE", "campo": "secao_instalacao", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "secao_comodato_locacao", "origem": "OPORTUNIDADE", "campo": "secao_locacao", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "resumo_proposta", "origem": "OPORTUNIDADE", "campo": "resumo_proposta", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "observacoes_proposta", "origem": "OPORTUNIDADE", "campo": "observacoes_proposta", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "bloco_assinaturas", "origem": "OPORTUNIDADE", "campo": "bloco_assinaturas", "tipo": "BLOCO_HTML", "obrigatoria": False},
         {"nome": "cliente_nome", "origem": "CLIENTE", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_cnpj", "origem": "CLIENTE", "campo": "cnpj", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_cidade", "origem": "CLIENTE", "campo": "cidade", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "cliente_estado", "origem": "CLIENTE", "campo": "estado", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "cliente_cidade_uf", "origem": "CLIENTE", "campo": "cidade_uf", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "empresa_nome", "origem": "EMPRESA", "campo": "razao_social", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "empresa_cnpj", "origem": "EMPRESA", "campo": "cnpj", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "oportunidade_numero", "origem": "OPORTUNIDADE", "campo": "numero_orcamento", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "oportunidade_titulo", "origem": "OPORTUNIDADE", "campo": "titulo", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "vendedor_nome", "origem": "VENDEDOR", "campo": "nome", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "data_emissao", "origem": "OPORTUNIDADE", "campo": "data_orcamento", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "data_validade", "origem": "OPORTUNIDADE", "campo": "data_vencimento_inicial", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "forma_pagamento_nome", "origem": "FORMA_PAGAMENTO", "campo": "nome", "tipo": "TEXTO", "obrigatoria": False},
         {"nome": "valor_total_produtos", "origem": "OPORTUNIDADE", "campo": "valor_total_produtos", "tipo": "MOEDA", "obrigatoria": False},
         {"nome": "valor_total_servicos", "origem": "OPORTUNIDADE", "campo": "valor_total_servicos", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_total_venda", "origem": "OPORTUNIDADE", "campo": "total_venda", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_total_instalacao", "origem": "OPORTUNIDADE", "campo": "total_instalacao", "tipo": "MOEDA", "obrigatoria": False},
+        {"nome": "valor_mensal_locacao", "origem": "OPORTUNIDADE", "campo": "total_locacao_mensal", "tipo": "MOEDA", "obrigatoria": False},
         {"nome": "valor_total_proposta", "origem": "OPORTUNIDADE", "campo": "valor_total", "tipo": "MOEDA", "obrigatoria": False},
         {"nome": "valor_proposta", "origem": "OPORTUNIDADE", "campo": "valor_total", "tipo": "MOEDA", "obrigatoria": False},
         {"nome": "tabela_itens_sintetica", "origem": "OPORTUNIDADE", "campo": "tabela_sintetica", "tipo": "TABELA_HTML", "obrigatoria": False},
@@ -887,6 +1524,7 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
             cust = budget.customer
             cidade_nome = cust.city.nome if (cust and cust.city) else ""
             estado_sigla = (cust.state.sigla or cust.state.nome) if (cust and cust.state) else ""
+            cidade_uf_str = f"{cidade_nome} / {estado_sigla}" if (cidade_nome and estado_sigla) else (cidade_nome or estado_sigla)
 
             produtos_sum = sum(float(item.total_venda or 0) for item in budget.items if item.tipo_item == "MERCADORIA")
             servicos_sum = sum(float(item.total_venda or 0) for item in budget.items if item.tipo_item != "MERCADORIA")
@@ -895,21 +1533,51 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
             produtos_formatted = format_currency(produtos_sum)
             servicos_formatted = format_currency(servicos_sum)
 
+            # Build full structured proposal sections
+            prop_data = build_commercial_proposal_full(budget, db)
+
             tabela_sintetica_html = build_synthetic_items_table(budget)
             tabela_analitica_html = build_analytical_items_table(budget)
             resumo_condicoes_html = build_commercial_conditions_summary(budget)
 
+            data_emissao_str = budget.data_orcamento.strftime("%d/%m/%Y") if budget.data_orcamento else datetime.now().strftime("%d/%m/%Y")
+            data_validade_str = budget.data_vencimento_inicial.strftime("%d/%m/%Y") if budget.data_vencimento_inicial else "15 dias"
+
+            vendedor_str = budget.vendedor.name if (budget.vendedor and hasattr(budget.vendedor, 'name')) else ""
+            if not vendedor_str and budget.responsaveis:
+                vendedor_str = budget.responsaveis[0].user.name if budget.responsaveis[0].user else ""
+
+            emitter_user = db.query(User).filter(User.id == user_id).first()
+            emitter_user_name = emitter_user.name if emitter_user else "Usuário Cerberus"
+
             replacements = {
+                "proposta_comercial": prop_data["proposta_completa_html"],
+                "proposta_comercial_completa": prop_data["proposta_completa_html"],
+                "secao_venda_produtos": prop_data["venda_html"],
+                "secao_instalacao": prop_data["instalacao_html"],
+                "secao_comodato_locacao": prop_data["locacao_html"],
+                "resumo_proposta": prop_data["resumo_html"],
+                "observacoes_proposta": prop_data["observacoes_html"],
+                "bloco_assinaturas": prop_data["assinaturas_html"],
+                "valor_total_venda": format_currency(prop_data["total_venda"]),
+                "valor_total_instalacao": format_currency(prop_data["total_instalacao"]),
+                "valor_mensal_locacao": format_currency(prop_data["total_locacao_mensal"]),
+                "data_emissao": data_emissao_str,
+                "data_validade": data_validade_str,
                 "cliente_nome": cust.nome_fantasia or cust.razao_social if cust else "",
                 "cliente_cnpj": cust.cnpj if cust else "",
                 "cliente_cidade": cidade_nome,
                 "cliente_estado": estado_sigla,
+                "cliente_cidade_uf": cidade_uf_str,
                 "empresa_nome": budget.company.razao_social if budget.company else "",
                 "empresa_cnpj": budget.company.cnpj if budget.company else "",
                 "oportunidade_numero": budget.numero_orcamento or "",
                 "oportunidade_titulo": budget.titulo or "",
-                "vendedor_nome": budget.vendedor.name if (budget.vendedor and hasattr(budget.vendedor, 'name')) else "",
-                "forma_pagamento_nome": budget.forma_pagamento.nome if budget.forma_pagamento else "",
+                "vendedor_nome": vendedor_str,
+                "usuario_emissor": emitter_user_name,
+                "usuario_nome": emitter_user_name,
+                "impresso_por": f"Impresso por cerberus.warslab.com.br | Usuário: {emitter_user_name}",
+                "forma_pagamento_nome": getattr(budget.forma_pagamento, 'descricao', getattr(budget.forma_pagamento, 'nome', '')) if budget.forma_pagamento else "",
                 "valor_total_produtos": produtos_formatted,
                 "valor_total_servicos": servicos_formatted,
                 "valor_total_proposta": total_formatted,
@@ -918,6 +1586,11 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "tabela_itens_analitica": tabela_analitica_html,
                 "resumo_condicoes_comerciais": resumo_condicoes_html,
             }
+
+            # Se for uma PROPOSTA_COMERCIAL e o template estiver vazio, usa a proposta completa
+            if template.tipo_documento == "PROPOSTA_COMERCIAL":
+                if not html or html.strip() in ("", "<p></p>"):
+                    html = prop_data["proposta_completa_html"]
 
     # Perform replace for all variables & replacements keys
     for name, value in replacements.items():
@@ -928,19 +1601,42 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
         if name not in replacements:
             html = html.replace(f"{{{{{name}}}}}", "")
 
-    # Envelopar no Papel Timbrado se estiver vinculado e ativo
+    # Determina o papel timbrado aplicável:
+    # 1. Se for OPORTUNIDADE, prioriza o papel timbrado da equipe de venda selecionada
+    # 2. Se a equipe de venda não tiver papel timbrado (None), imprime sem cabeçalho e rodapé
+    active_letterhead = None
+    if template.modulo_origem == "OPORTUNIDADE" and budget:
+        target_team = None
+        if getattr(budget, "sales_team_id", None):
+            target_team = db.query(SalesTeam).options(joinedload(SalesTeam.papel_timbrado)).filter(SalesTeam.id == budget.sales_team_id).first()
+        elif getattr(budget, "vendedor_id", None):
+            member = db.query(SalesTeamMember).filter(SalesTeamMember.user_id == str(budget.vendedor_id)).first()
+            if member:
+                target_team = db.query(SalesTeam).options(joinedload(SalesTeam.papel_timbrado)).filter(SalesTeam.id == member.sales_team_id).first()
+
+        if target_team:
+            if target_team.papel_timbrado and target_team.papel_timbrado.is_active:
+                active_letterhead = target_team.papel_timbrado
+            else:
+                active_letterhead = None  # Equipe sem papel timbrado -> imprime sem cabeçalhos e rodapé
+        else:
+            active_letterhead = template.letterhead if (template.letterhead and template.letterhead.is_active) else None
+    else:
+        active_letterhead = template.letterhead if (template.letterhead and template.letterhead.is_active) else None
+
+    # Envelopar no Papel Timbrado se estiver ativo
     body_content = f'<div class="document-body-container">{html}</div>'
-    if template.letterhead and template.letterhead.is_active:
-        lh_html = template.letterhead.conteudo_html or "{{document_content}}"
-        lh_css = template.letterhead.conteudo_css or ""
-        if "{{document_content}}" in lh_html:
-            html = lh_html.replace("{{document_content}}", body_content)
-        elif "{{conteudo_documento}}" in lh_html:
-            html = lh_html.replace("{{conteudo_documento}}", body_content)
-        elif "{{conteudo}}" in lh_html:
-            html = lh_html.replace("{{conteudo}}", body_content)
-        elif "{{content}}" in lh_html:
-            html = lh_html.replace("{{content}}", body_content)
+    if active_letterhead:
+        lh_html = active_letterhead.conteudo_html or "{{document_content}}"
+        # Substitui variáveis no próprio papel timbrado (ex: usuario_emissor, impresso_por)
+        for name, value in replacements.items():
+            lh_html = lh_html.replace(f"{{{{{name}}}}}", str(value))
+
+        lh_css = active_letterhead.conteudo_css or ""
+        # Substituição robusta de qualquer formato de placeholder de conteúdo no papel timbrado
+        placeholder_pattern = r'(\{\{|\{|\[|&#123;&#123;|&lcub;&lcub;)\s*(document_content|conteudo_documento|conteudo|content)\s*(\}\}|\}|\]|&#125;&#125;|&rcub;&rcub;)'
+        if re.search(placeholder_pattern, lh_html, flags=re.IGNORECASE):
+            html = re.sub(placeholder_pattern, lambda m: body_content, lh_html, flags=re.IGNORECASE)
         else:
             html = f"{lh_html}\n{body_content}"
 

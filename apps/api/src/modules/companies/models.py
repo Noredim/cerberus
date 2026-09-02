@@ -291,11 +291,13 @@ class SalesTeam(Base):
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     nome = Column(String(100), nullable=False)
+    papel_timbrado_id = Column(UUID(as_uuid=True), ForeignKey("papel_timbrado.id", ondelete="SET NULL"), nullable=True, index=True)
     ativo = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     company = relationship("Company", back_populates="sales_teams")
+    papel_timbrado = relationship("Letterhead")
     members = relationship("SalesTeamMember", back_populates="sales_team", cascade="all, delete-orphan")
     policies = relationship("SalesTeamPolicy", back_populates="sales_team", cascade="all, delete-orphan")
 

@@ -346,6 +346,7 @@ class SalesTeamPolicyOut(BaseModel):
 
 class SalesTeamCreateUpdate(BaseModel):
     nome: str = Field(..., min_length=2, max_length=100)
+    papel_timbrado_id: Optional[UUID] = None
     ativo: bool = True
     members: List[SalesTeamMemberCreate] = []
     policies: List[SalesTeamPolicyCreate] = []
@@ -355,6 +356,8 @@ class SalesTeamOut(BaseModel):
     id: UUID
     company_id: UUID
     nome: str
+    papel_timbrado_id: Optional[UUID] = None
+    nome_papel_timbrado: Optional[str] = None
     ativo: bool
     members: List[SalesTeamMemberOut] = []
     policies: List[SalesTeamPolicyOut] = []

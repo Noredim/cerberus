@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck, FileText } from 'lucide-react';
 import { api } from '../../../services/api';
 
 interface EligibleUser {
@@ -13,6 +13,13 @@ interface CommercialPolicy {
     id: string;
     nome_politica: string;
     ativo: boolean;
+}
+
+interface Letterhead {
+    id: string;
+    nome: string;
+    is_active: boolean;
+    is_default?: boolean;
 }
 
 interface TeamMember {
@@ -32,6 +39,8 @@ interface TeamPolicy {
 interface SalesTeam {
     id?: string;
     nome: string;
+    papel_timbrado_id?: string | null;
+    nome_papel_timbrado?: string | null;
     ativo: boolean;
     members: TeamMember[];
     policies: TeamPolicy[];
@@ -46,6 +55,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
     const [teams, setTeams] = useState<SalesTeam[]>([]);
     const [eligibleUsers, setEligibleUsers] = useState<EligibleUser[]>([]);
     const [activePolicies, setActivePolicies] = useState<CommercialPolicy[]>([]);
+    const [letterheads, setLetterheads] = useState<Letterhead[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -62,15 +72,17 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
         setLoading(true);
         setError('');
         try {
-            const [usersRes, teamsRes, policiesRes] = await Promise.all([
+            const [usersRes, teamsRes, policiesRes, letterheadsRes] = await Promise.all([
                 api.get(`/companies/${companyId}/eligible-users`),
                 api.get(`/companies/${companyId}/sales-teams`),
-                api.get(`/companies/${companyId}/commercial-policies`)
+                api.get(`/companies/${companyId}/commercial-policies`),
+                api.get('/document-templates/letterheads', { params: { company_id: companyId, is_active: true } })
             ]);
             setEligibleUsers(usersRes.data);
             setTeams(teamsRes.data);
             // Only associate active policies
             setActivePolicies(policiesRes.data.filter((p: any) => p.ativo));
+            setLetterheads(letterheadsRes.data.filter((l: any) => l.is_active));
         } catch (err: any) {
             console.error('Error loading sales teams data', err);
             setError('Erro ao carregar equipes de venda.');
@@ -82,6 +94,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
     const handleStartCreate = () => {
         setEditingTeam({
             nome: '',
+            papel_timbrado_id: null,
             ativo: true,
             members: [],
             policies: []
@@ -91,6 +104,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
     const handleStartEdit = (team: SalesTeam) => {
         setEditingTeam({
             ...team,
+            papel_timbrado_id: team.papel_timbrado_id || null,
             members: [...team.members],
             policies: [...team.policies]
         });
@@ -121,6 +135,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
 
         const payload = {
             nome: editingTeam.nome,
+            papel_timbrado_id: editingTeam.papel_timbrado_id || null,
             ativo: editingTeam.ativo,
             members: editingTeam.members.map(m => ({
                 user_id: m.user_id,
@@ -263,6 +278,18 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                             </div>
 
                                             <div className="space-y-1.5 pt-2">
+                                                <p className="text-xs font-bold uppercase text-text-muted tracking-wider">Papel Timbrado</p>
+                                                <div className="flex items-center gap-1.5 text-xs">
+                                                    <FileText className="w-3.5 h-3.5 text-brand-primary shrink-0" />
+                                                    {t.nome_papel_timbrado ? (
+                                                        <span className="font-semibold text-text-primary">{t.nome_papel_timbrado}</span>
+                                                    ) : (
+                                                        <span className="text-text-muted italic">Nenhum (impressão sem cabeçalho/rodapé)</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5 pt-2">
                                                 <p className="text-xs font-bold uppercase text-text-muted tracking-wider">Políticas Comerciais</p>
                                                 <div className="flex flex-wrap gap-1">
                                                     {t.policies.length === 0 ? (
@@ -310,7 +337,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                             <h3 className="text-lg font-bold text-text-primary">
                                 {editingTeam.id ? `Editar Equipe: ${editingTeam.nome}` : 'Nova Equipe de Venda'}
                             </h3>
-                            <p className="text-sm text-text-muted">Configure o nome, membros e políticas comerciais da equipe.</p>
+                            <p className="text-sm text-text-muted">Configure o nome, membros, papel timbrado e políticas comerciais da equipe.</p>
                         </div>
                         <span className="flex items-center gap-2">
                             <label className="text-sm font-medium text-text-primary">Ativa</label>
@@ -325,16 +352,38 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                     </div>
 
                     <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-semibold text-text-primary mb-1">Nome da Equipe</label>
-                            <input
-                                type="text"
-                                value={editingTeam.nome}
-                                disabled={isReadOnly}
-                                onChange={(e) => setEditingTeam({ ...editingTeam, nome: e.target.value })}
-                                className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all"
-                                placeholder="Ex: Time Comercial Sul"
-                            />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-1">Nome da Equipe</label>
+                                <input
+                                    type="text"
+                                    value={editingTeam.nome}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setEditingTeam({ ...editingTeam, nome: e.target.value })}
+                                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all"
+                                    placeholder="Ex: Time Comercial Sul"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-1 flex items-center justify-between">
+                                    <span>Papel Timbrado das Propostas</span>
+                                    <span className="text-xs font-normal text-text-muted">Cabeçalho e Rodapé</span>
+                                </label>
+                                <select
+                                    value={editingTeam.papel_timbrado_id || ''}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setEditingTeam({ ...editingTeam, papel_timbrado_id: e.target.value || null })}
+                                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all"
+                                >
+                                    <option value="">Nenhum (Imprimir sem cabeçalho e rodapé)</option>
+                                    {letterheads.map((lh) => (
+                                        <option key={lh.id} value={lh.id}>
+                                            {lh.nome} {lh.is_default ? '(Padrão)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">

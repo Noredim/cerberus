@@ -262,6 +262,24 @@ except Exception as e:
     print(f"Test failed with error: {e}")
     raise e
 finally:
-    # Always rollback transaction to prevent database pollution
-    db.rollback()
-    db.close()
+    # Cleanup test templates to avoid polluting company's real templates
+    try:
+        test_tmpl_ids = [t1.id, template.id, clone.id, t_tables.id]
+        db.query(DocumentAudit).filter(DocumentAudit.modelo_id.in_(test_tmpl_ids)).delete(synchronize_session=False)
+        db.query(DocumentVariable).filter(DocumentVariable.modelo_id.in_(test_tmpl_ids)).delete(synchronize_session=False)
+        db.query(DocumentVersion).filter(DocumentVersion.modelo_id.in_(test_tmpl_ids)).delete(synchronize_session=False)
+        db.query(DocumentTemplate).filter(DocumentTemplate.id.in_(test_tmpl_ids)).delete(synchronize_session=False)
+        
+        # Restore real vigent template
+        real_tmpl = db.query(DocumentTemplate).filter(
+            DocumentTemplate.tipo_documento == "PROPOSTA_COMERCIAL",
+            DocumentTemplate.nome == "Proposta Comercial Stelseg V1"
+        ).first()
+        if real_tmpl:
+            real_tmpl.status = "VIGENTE"
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+

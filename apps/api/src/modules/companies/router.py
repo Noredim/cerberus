@@ -738,6 +738,7 @@ def list_sales_teams(
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
 
     teams = db.query(SalesTeam).options(
+        joinedload(SalesTeam.papel_timbrado),
         joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
         joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
     ).filter(
@@ -769,6 +770,8 @@ def list_sales_teams(
             id=t.id,
             company_id=t.company_id,
             nome=t.nome,
+            papel_timbrado_id=t.papel_timbrado_id,
+            nome_papel_timbrado=t.papel_timbrado.nome if t.papel_timbrado else None,
             ativo=t.ativo,
             members=members_out,
             policies=policies_out
@@ -786,6 +789,7 @@ def create_sales_team(
 ):
     from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy, CommercialPolicy
     from src.modules.users.models import UserCompany, User
+    from src.modules.document_templates.models import Letterhead
 
     # 1. Verify company belongs to current user's tenant
     company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
@@ -828,17 +832,28 @@ def create_sales_team(
                     detail=f"A política comercial '{valid_policies[pid].nome_politica}' está inativa e não pode ser vinculada."
                 )
 
-    # 4. Create SalesTeam
+    # 4. Validate letterhead if provided
+    if payload.papel_timbrado_id:
+        lh = db.query(Letterhead).filter(
+            Letterhead.id == payload.papel_timbrado_id,
+            Letterhead.company_id == company_id,
+            Letterhead.tenant_id == current_user.tenant_id
+        ).first()
+        if not lh:
+            raise HTTPException(status_code=400, detail="Papel timbrado selecionado não encontrado para esta empresa.")
+
+    # 5. Create SalesTeam
     team = SalesTeam(
         tenant_id=current_user.tenant_id,
         company_id=company_id,
         nome=payload.nome,
+        papel_timbrado_id=payload.papel_timbrado_id,
         ativo=payload.ativo
     )
     db.add(team)
     db.flush() # Populate team.id
 
-    # 5. Create members
+    # 6. Create members
     for m in payload.members:
         member = SalesTeamMember(
             sales_team_id=team.id,
@@ -847,7 +862,7 @@ def create_sales_team(
         )
         db.add(member)
 
-    # 6. Create policies linkage
+    # 7. Create policies linkage
     for p in payload.policies:
         policy_link = SalesTeamPolicy(
             sales_team_id=team.id,
@@ -860,6 +875,7 @@ def create_sales_team(
 
     # Re-fetch with relationships populated
     db_team = db.query(SalesTeam).options(
+        joinedload(SalesTeam.papel_timbrado),
         joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
         joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
     ).filter(SalesTeam.id == team.id).first()
@@ -888,6 +904,8 @@ def create_sales_team(
         id=db_team.id,
         company_id=db_team.company_id,
         nome=db_team.nome,
+        papel_timbrado_id=db_team.papel_timbrado_id,
+        nome_papel_timbrado=db_team.papel_timbrado.nome if db_team.papel_timbrado else None,
         ativo=db_team.ativo,
         members=members_out,
         policies=policies_out
@@ -903,6 +921,7 @@ def update_sales_team(
 ):
     from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy, CommercialPolicy
     from src.modules.users.models import UserCompany, User
+    from src.modules.document_templates.models import Letterhead
 
     # 1. Fetch Sales Team and ensure it belongs to current tenant
     team = db.query(SalesTeam).filter(
@@ -950,11 +969,22 @@ def update_sales_team(
                     detail=f"A política comercial '{valid_policies[pid].nome_politica}' está inativa e não pode ser vinculada."
                 )
 
-    # 4. Update core attributes
+    # 4. Validate letterhead if provided
+    if payload.papel_timbrado_id:
+        lh = db.query(Letterhead).filter(
+            Letterhead.id == payload.papel_timbrado_id,
+            Letterhead.company_id == company_id,
+            Letterhead.tenant_id == current_user.tenant_id
+        ).first()
+        if not lh:
+            raise HTTPException(status_code=400, detail="Papel timbrado selecionado não encontrado para esta empresa.")
+
+    # 5. Update core attributes
     team.nome = payload.nome
+    team.papel_timbrado_id = payload.papel_timbrado_id
     team.ativo = payload.ativo
 
-    # 5. Update members
+    # 6. Update members
     db.query(SalesTeamMember).filter(SalesTeamMember.sales_team_id == team_id).delete()
     for m in payload.members:
         member = SalesTeamMember(
@@ -964,7 +994,7 @@ def update_sales_team(
         )
         db.add(member)
 
-    # 6. Update policies
+    # 7. Update policies
     db.query(SalesTeamPolicy).filter(SalesTeamPolicy.sales_team_id == team_id).delete()
     for p in payload.policies:
         policy_link = SalesTeamPolicy(
@@ -978,6 +1008,7 @@ def update_sales_team(
 
     # Re-fetch with relationships populated
     db_team = db.query(SalesTeam).options(
+        joinedload(SalesTeam.papel_timbrado),
         joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
         joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
     ).filter(SalesTeam.id == team.id).first()
@@ -1006,6 +1037,8 @@ def update_sales_team(
         id=db_team.id,
         company_id=db_team.company_id,
         nome=db_team.nome,
+        papel_timbrado_id=db_team.papel_timbrado_id,
+        nome_papel_timbrado=db_team.papel_timbrado.nome if db_team.papel_timbrado else None,
         ativo=db_team.ativo,
         members=members_out,
         policies=policies_out
