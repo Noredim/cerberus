@@ -97,7 +97,7 @@ const DocumentTemplateForm: React.FC = () => {
     const [descricao, setDescricao] = useState('');
     const [status, setStatus] = useState<'RASCUNHO' | 'VIGENTE' | 'INATIVO'>('RASCUNHO');
     const [versao, setVersao] = useState(1);
-    const [conteudoHtml, setConteudoHtml] = useState('<p>Digite seu documento aqui...</p>');
+    const [conteudoHtml, setConteudoHtml] = useState('{{proposta_comercial}}');
     
     const [versions, setVersions] = useState<DocumentVersion[]>([]);
     const [audits, setAudits] = useState<DocumentAudit[]>([]);

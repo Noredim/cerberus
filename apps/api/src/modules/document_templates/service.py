@@ -1587,10 +1587,13 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "resumo_condicoes_comerciais": resumo_condicoes_html,
             }
 
-            # Se for uma PROPOSTA_COMERCIAL e o template estiver vazio, usa a proposta completa
+            # Se for uma PROPOSTA_COMERCIAL e o template estiver vazio, com texto padrão ou sem seções de itens:
             if template.tipo_documento == "PROPOSTA_COMERCIAL":
-                if not html or html.strip() in ("", "<p></p>"):
+                clean_text = re.sub(r'<[^>]*>', '', html or "").strip()
+                if not html or html.strip() in ("", "<p></p>", "<p><br></p>", "<p>&nbsp;</p>") or clean_text in ("", "Digite seu documento aqui...", "Digite seu texto aqui..."):
                     html = prop_data["proposta_completa_html"]
+                elif "{{proposta_comercial}}" not in html and "{{proposta_comercial_completa}}" not in html and "{{secao_venda_produtos}}" not in html and "{{tabela_itens_sintetica}}" not in html and "{{tabela_itens_analitica}}" not in html:
+                    html = f"{html}\n{prop_data['proposta_completa_html']}"
 
     # Perform replace for all variables & replacements keys
     for name, value in replacements.items():
