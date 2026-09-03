@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from uuid import UUID
 from typing import List, Optional, Tuple
@@ -1106,10 +1107,10 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
             taxa_juros = Decimal(str(fp_snap.get("taxa_juros_mensal") or 0))
             forma_nome = fp_snap.get("descricao") or forma_pag_str
 
-        if rules and total_unico > Decimal('0'):
+        if rules and Decimal(str(total_unico)) > Decimal('0'):
             from src.modules.payment_methods.service import PaymentMethodsService
             calc = PaymentMethodsService.calculate_installments_schedule(
-                valor_total=total_unico,
+                valor_total=Decimal(str(total_unico)),
                 parcelas_rules=rules,
                 tipo_distribuicao=tipo_dist,
                 taxa_juros_mensal=taxa_juros
