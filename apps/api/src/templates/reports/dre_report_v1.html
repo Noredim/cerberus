@@ -127,6 +127,13 @@
                 <td class="text-right">R$ {{ format_currency(entradas.total_servicos) }}</td>
             </tr>
             {% endif %}
+            {% if entradas.juros_parcelamento and entradas.juros_parcelamento > 0 %}
+            <tr class="row-item">
+                <td class="row-item-detail">(+) Juros de Parcelamento (Receita Financeira)</td>
+                <td class="text-right">{{ format_percent_ratio(entradas.juros_parcelamento, entradas.total_entradas) }}%</td>
+                <td class="text-right">R$ {{ format_currency(entradas.juros_parcelamento) }}</td>
+            </tr>
+            {% endif %}
             <tr class="row-item">
                 <td class="row-item-detail">(+) Restituição ICMS ST (Interestadual)</td>
                 <td class="text-right">{{ format_percent_ratio(entradas.restituicao_icms_st, entradas.total_entradas) }}%</td>

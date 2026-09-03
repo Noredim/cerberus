@@ -2178,6 +2178,56 @@ export function SalesBudgetForm() {
     return { ...t, margem: t.venda > 0 ? (t.lucro / t.venda * 100) : 0 };
   }, [items, vendaKits, isInterstate]);
 
+  // Juros de parcelamento da Forma de Pagamento na Venda
+  const paymentInterestVenda = useMemo(() => {
+    const selectedFp = salesFormasPagamento.find(fp => fp.id === formaPagamentoId);
+    const fpTaxaJuros = Number(selectedFp?.taxa_juros_mensal) || 0;
+    const fpParcelas = selectedFp?.parcelas || [];
+    const fpNumParcelas = fpParcelas.length;
+    const baseVenda = totals.venda || 0;
+
+    let jurosVenda = 0;
+    let totalVendaComJuros = baseVenda;
+    let pmtVenda = 0;
+
+    if (fpTaxaJuros > 0 && fpNumParcelas > 0 && baseVenda > 0) {
+      const i = fpTaxaJuros / 100;
+      const weights = fpParcelas.map((p: any) => {
+        if (selectedFp?.tipo_distribuicao === 'PERCENTUAL') {
+          return (Number(p.percentual) || 0) / 100;
+        } else if (selectedFp?.tipo_distribuicao === 'RATEIO_IGUAL') {
+          return 1 / fpNumParcelas;
+        } else {
+          const totalFixo = fpParcelas.reduce((acc: number, it: any) => acc + (Number(it.valor_fixo) || 0), 0);
+          return totalFixo > 0 ? (Number(p.valor_fixo) || 0) / totalFixo : 1 / fpNumParcelas;
+        }
+      });
+
+      const sumDiscounted = fpParcelas.reduce((acc: number, p: any, idx: number) => {
+        const d = Number(p.intervalo_dias) || 0;
+        const factor = Math.pow(1 + i, d / 30);
+        return acc + (weights[idx] / factor);
+      }, 0);
+
+      if (sumDiscounted > 0) {
+        pmtVenda = (baseVenda * weights[0]) / sumDiscounted;
+        const totalComJuros = baseVenda / sumDiscounted;
+        jurosVenda = Math.max(0, totalComJuros - baseVenda);
+        totalVendaComJuros = baseVenda + jurosVenda;
+      }
+    }
+
+    return {
+      selectedFp,
+      fpTaxaJuros,
+      fpParcelas,
+      fpNumParcelas,
+      jurosVenda,
+      totalVendaComJuros,
+      pmtVenda
+    };
+  }, [salesFormasPagamento, formaPagamentoId, totals.venda]);
+
   // Rental totals
   const rentalTotals = useMemo(() => {
     const t = {
@@ -3685,8 +3735,9 @@ export function SalesBudgetForm() {
       {activeTab === 'venda' && (<>
         {/* Consolidação Diretoria — right after header */}
         {isApprover && (items.length > 0 || vendaKits.length > 0) && (() => {
-          const venda_fat = totals.venda;
-          const venda_custo_total = venda_fat - totals.lucro;
+          const jurosVenda = paymentInterestVenda.jurosVenda;
+          const venda_fat = totals.venda + jurosVenda;
+          const venda_custo_total = totals.venda - totals.lucro;
           const comissaoBruta = totals.comissao + totals.comissao_dsr + totals.comissao_fgts + totals.comissao_inss + totals.comissao_demais;
 
           // Venda indicators
@@ -3750,10 +3801,16 @@ export function SalesBudgetForm() {
 
                 <div className="lg:col-span-8 flex flex-wrap gap-6 items-end lg:justify-end">
                   <Tooltip content={
-                    <div className="w-64 space-y-2 text-gray-200">
+                    <div className="w-72 space-y-2 text-gray-200">
                       <div className="font-bold text-white border-b border-gray-600 pb-1">Detalhamento Faturamento</div>
                       <div className="flex justify-between text-sm"><span>Venda de Mercadoria:</span> <span className="font-medium text-white">{fmt(totals.fat_mercadoria)}</span></div>
                       <div className="flex justify-between text-sm"><span>Instalação / Serviços:</span> <span className="font-medium text-white">{fmt(totals.fat_instalacao)}</span></div>
+                      {jurosVenda > 0 && (
+                        <div className="flex justify-between text-sm text-indigo-300">
+                          <span>Juros de Parcelamento:</span>
+                          <span className="font-medium text-indigo-200">+{fmt(jurosVenda)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm font-bold border-t border-gray-600 pt-1 text-white"><span>Faturamento Total:</span> <span>{fmt(realVendaFat)}</span></div>
                     </div>
                   }>
@@ -3957,7 +4014,7 @@ export function SalesBudgetForm() {
                         <div className="font-bold text-white border-b border-gray-600 pb-1 mb-2 font-sans text-xs">Cálculo do Lucro Padrão</div>
                         <div className="flex justify-between text-gray-300">
                           <span>(+) Faturamento:</span>
-                          <span className="font-semibold text-teal-300">{fmt(totals.venda)}</span>
+                          <span className="font-semibold text-teal-300">{fmt(realVendaFat)}</span>
                         </div>
                         <div className="flex justify-between text-gray-400">
                           <span>(-) Valor de Aquisição:</span>
@@ -4241,41 +4298,7 @@ export function SalesBudgetForm() {
           const margemManutencao = t.totalManutencao > 0 ? (t.lucroManutencao / t.totalManutencao) * 100 : 0;
 
           // Juros da Forma de Pagamento (Receita Financeira na Venda)
-          const selectedFp = salesFormasPagamento.find(fp => fp.id === formaPagamentoId);
-          const fpTaxaJuros = Number(selectedFp?.taxa_juros_mensal) || 0;
-          const fpParcelas = selectedFp?.parcelas || [];
-          const fpNumParcelas = fpParcelas.length;
-
-          let jurosVenda = 0;
-          let totalVendaComJuros = t.totalVenda;
-          let pmtVenda = 0;
-
-          if (fpTaxaJuros > 0 && fpNumParcelas > 0 && t.totalVenda > 0) {
-            const i = fpTaxaJuros / 100;
-            const weights = fpParcelas.map((p: any) => {
-              if (selectedFp?.tipo_distribuicao === 'PERCENTUAL') {
-                return (Number(p.percentual) || 0) / 100;
-              } else if (selectedFp?.tipo_distribuicao === 'RATEIO_IGUAL') {
-                return 1 / fpNumParcelas;
-              } else {
-                const totalFixo = fpParcelas.reduce((acc: number, it: any) => acc + (Number(it.valor_fixo) || 0), 0);
-                return totalFixo > 0 ? (Number(p.valor_fixo) || 0) / totalFixo : 1 / fpNumParcelas;
-              }
-            });
-
-            const sumDiscounted = fpParcelas.reduce((acc: number, p: any, idx: number) => {
-              const d = Number(p.intervalo_dias) || 0;
-              const factor = Math.pow(1 + i, d / 30);
-              return acc + (weights[idx] / factor);
-            }, 0);
-
-            if (sumDiscounted > 0) {
-              pmtVenda = (t.totalVenda * weights[0]) / sumDiscounted;
-              const totalComJuros = t.totalVenda / sumDiscounted;
-              jurosVenda = Math.max(0, totalComJuros - t.totalVenda);
-              totalVendaComJuros = t.totalVenda + jurosVenda;
-            }
-          }
+          const { selectedFp, fpTaxaJuros, fpNumParcelas, jurosVenda, totalVendaComJuros, pmtVenda } = paymentInterestVenda;
 
           return (
             <div className="mb-6 bg-surface border border-border-subtle rounded-xl p-6 shadow-sm overflow-hidden">
@@ -6692,6 +6715,22 @@ export function SalesBudgetForm() {
                       <td className="py-2.5 px-4 text-right text-text-muted font-mono">-</td>
                       <td className="py-2.5 px-4 text-right text-text-primary font-mono">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.total_servicos)}</td>
                     </tr>
+                    {dreData.entradas.juros_parcelamento > 0 && (
+                      <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors bg-indigo-500/5">
+                        <td className="py-2.5 px-6 flex items-center gap-2 font-medium text-indigo-700 dark:text-indigo-400">
+                          <span className="text-xs text-indigo-600 font-bold">(+)</span>
+                          Juros de Parcelamento (Receita Financeira)
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-text-muted font-mono">
+                          {dreData.entradas.total_entradas > 0
+                            ? ((dreData.entradas.juros_parcelamento / dreData.entradas.total_entradas) * 100).toFixed(2) + '%'
+                            : '-'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-indigo-700 dark:text-indigo-400 font-mono font-semibold">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(dreData.entradas.juros_parcelamento)}
+                        </td>
+                      </tr>
+                    )}
                     {dreData.entradas.restituicao_icms_st > 0 && (
                       <tr className="text-text-primary hover:bg-bg-deep/5 transition-colors bg-emerald-500/5">
                         <td className="py-2.5 px-6 flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400">

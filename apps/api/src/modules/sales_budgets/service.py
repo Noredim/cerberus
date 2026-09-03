@@ -3290,7 +3290,54 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
         # Zero out the entries field since it has been neted against sales taxes
         restituicao_icms_st = Decimal("0.0")
         
-    total_entradas = total_produtos + total_servicos + restituicao_icms_st
+    # Juros de Parcelamento (Receita Financeira da Forma de Pagamento)
+    juros_parcelamento = Decimal("0.0")
+    fp = getattr(opportunity, 'forma_pagamento', None)
+    if not fp and opportunity.forma_pagamento_id:
+        from src.modules.payment_methods.models import FormaPagamento
+        fp = db.query(FormaPagamento).filter(FormaPagamento.id == opportunity.forma_pagamento_id).first()
+
+    fp_snap = getattr(opportunity, 'forma_pagamento_snapshot', None)
+    rules = []
+    tipo_dist = "RATEIO_IGUAL"
+    taxa_juros = Decimal("0.0")
+
+    if fp and fp.parcelas:
+        sorted_parcs = sorted(fp.parcelas, key=lambda x: x.sequencia or 1)
+        rules = [
+            {
+                "sequencia": p.sequencia,
+                "descricao": p.descricao,
+                "intervalo_dias": p.intervalo_dias,
+                "percentual": float(p.percentual) if p.percentual is not None else None,
+                "valor_fixo": float(p.valor_fixo) if p.valor_fixo is not None else None
+            }
+            for p in sorted_parcs
+        ]
+        tipo_dist = fp.tipo_distribuicao
+        taxa_juros = Decimal(str(fp.taxa_juros_mensal or 0))
+    elif fp_snap and fp_snap.get("parcelas"):
+        rules = fp_snap.get("parcelas") or []
+        tipo_dist = fp_snap.get("tipo_distribuicao") or "RATEIO_IGUAL"
+        taxa_juros = Decimal(str(fp_snap.get("taxa_juros_mensal") or 0))
+
+    if venda_oportunidade_total_venda > Decimal("0.0"):
+        base_venda_juros = venda_oportunidade_total_venda
+    elif is_rental_opp:
+        base_venda_juros = total_servicos
+    else:
+        base_venda_juros = total_produtos + total_servicos
+    if rules and taxa_juros > Decimal("0.0") and base_venda_juros > Decimal("0.0"):
+        from src.modules.payment_methods.service import PaymentMethodsService
+        calc = PaymentMethodsService.calculate_installments_schedule(
+            valor_total=base_venda_juros,
+            parcelas_rules=rules,
+            tipo_distribuicao=tipo_dist,
+            taxa_juros_mensal=taxa_juros
+        )
+        juros_parcelamento = Decimal(str(calc.get("total_juros", 0.0) or 0.0))
+
+    total_entradas = total_produtos + total_servicos + restituicao_icms_st + juros_parcelamento
     
     ipi_compra_pct = (purchase_ipi / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
     st_compra_pct = (purchase_st / custo_base_produtos * 100) if custo_base_produtos > 0 else Decimal("0.0")
@@ -3465,6 +3512,7 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
             "total_produtos": float(round(total_produtos, 2)),
             "total_servicos": float(round(total_servicos, 2)),
             "restituicao_icms_st": float(round(restituicao_icms_st, 2)),
+            "juros_parcelamento": float(round(juros_parcelamento, 2)),
             "total_entradas": float(round(total_entradas, 2))
         },
         "resultado": {

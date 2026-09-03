@@ -288,8 +288,8 @@ class PaymentMethodsService:
             for idx in range(num_parcelas):
                 installments_values[idx] = pmt_val
 
-        total_geral = sum(installments_values)
-        total_juros = total_geral - valor_total_dec
+        total_juros = max(Decimal('0'), (total_com_juros - valor_total_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        total_geral = valor_total_dec + total_juros
         total_entrada = sum(installments_values[idx] for idx, p in enumerate(parcelas_rules) if int(p.get("intervalo_dias") or 0) == 0)
         total_financiado = sum(installments_values[idx] for idx, p in enumerate(parcelas_rules) if int(p.get("intervalo_dias") or 0) > 0)
         pmt = installments_values[0] if installments_values else Decimal('0')

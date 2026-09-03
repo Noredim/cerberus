@@ -395,6 +395,8 @@ class OpportunitiesReportService:
             add_row("1. RECEITA OPERACIONAL BRUTA (ENTRADAS)", 100.0, dre_data["entradas"]["total_entradas"], is_bold=True, bg_color='#f1f5f9')
             add_row("(+) Venda de Equipamentos", (float(dre_data["entradas"]["total_produtos"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["total_produtos"], is_indent=True)
             add_row("(+) Faturamento de Serviços", (float(dre_data["entradas"]["total_servicos"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["total_servicos"], is_indent=True)
+            if dre_data["entradas"].get("juros_parcelamento", 0) > 0:
+                add_row("(+) Juros de Parcelamento", (float(dre_data["entradas"]["juros_parcelamento"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["juros_parcelamento"], is_indent=True)
             if dre_data["entradas"]["restituicao_icms_st"] > 0:
                 add_row("(+) Restituição ICMS ST", (float(dre_data["entradas"]["restituicao_icms_st"]) / float(dre_data["entradas"]["total_entradas"]) * 100) if dre_data["entradas"]["total_entradas"] > 0 else 0, dre_data["entradas"]["restituicao_icms_st"], is_indent=True)
                 
