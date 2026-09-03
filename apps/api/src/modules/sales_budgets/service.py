@@ -270,14 +270,13 @@ def calculate_rental_item(item_data: RentalBudgetItemCreate, rental_defaults: di
             p_imp = _d(rental_defaults.get("perc_pis_rental", 0)) + _d(rental_defaults.get("perc_cofins_rental", 0)) + _d(rental_defaults.get("perc_csll_rental", 0)) + _d(rental_defaults.get("perc_irpj_rental", 0))
             if is_comodato: p_imp += _d(rental_defaults.get("perc_iss_rental", 0))
 
-        if is_instalacao:
-            valor_mensal_unit = valor_base_final_unit
-            impostos_unit = _round(valor_mensal_unit * (p_imp / Decimal("100")))
+        if getattr(item_data, "kit_valor_mensal", None) is not None:
+            valor_mensal_unit = _d(item_data.kit_valor_mensal)
         else:
-            impostos_unit = _round(valor_base_final_unit * (p_imp / Decimal("100")))
-            valor_mensal_unit = valor_base_final_unit + impostos_unit
-            
-        rec_liq_unit = valor_mensal_unit - impostos_unit
+            valor_mensal_unit = valor_base_final_unit
+
+        impostos_unit = _round(valor_mensal_unit * (p_imp / Decimal("100"))) if getattr(item_data, "kit_valor_impostos", None) is None else _d(item_data.kit_valor_impostos)
+        rec_liq_unit = valor_mensal_unit - impostos_unit if getattr(item_data, "kit_receita_liquida", None) is None else _d(item_data.kit_receita_liquida)
         depreciacao_unit = _round(custo_aquisicao_unit / prazo) if (not is_instalacao and prazo > 0) else Decimal("0")
         custo_total_mensal_unit = depreciacao_unit + custo_manut_mensal_unit
 
@@ -1154,6 +1153,9 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     # Update header + sale defaults
     budget.customer_id = data.customer_id
     budget.commercial_policy_id = data.commercial_policy_id
+    budget.sales_team_id = data.sales_team_id
+    budget.vendedor_id = data.vendedor_id
+    budget.usar_produtos_gerais = getattr(data, 'usar_produtos_gerais', False)
     budget.titulo = data.titulo
     budget.observacoes = data.observacoes
     budget.data_orcamento = data.data_orcamento

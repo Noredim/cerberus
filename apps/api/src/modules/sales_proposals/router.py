@@ -19,8 +19,7 @@ from src.modules.sales_proposals.service import sales_proposal_service
 
 router = APIRouter(
     prefix="/sales-proposals", 
-    tags=["Sales Proposals"],
-    dependencies=[Depends(check_not_engenharia_preco)]
+    tags=["Sales Proposals"]
 )
 
 @router.get("", response_model=List[SalesProposalResponse])

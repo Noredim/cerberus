@@ -1080,11 +1080,61 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
             """
 
         parcelas_info = ""
-        if budget.forma_pagamento and budget.forma_pagamento.parcelas:
-            qtd_p = len(budget.forma_pagamento.parcelas)
-            if qtd_p > 1:
-                val_p = total_unico / qtd_p
-                parcelas_info = f"<div style='font-size: 11px; color: #475569;'><strong>Condição:</strong> {qtd_p}x de {format_currency(val_p)} ({forma_pag_str})</div>"
+        fp = budget.forma_pagamento
+        fp_snap = budget.forma_pagamento_snapshot
+        
+        rules = []
+        tipo_dist = "RATEIO_IGUAL"
+        taxa_juros = Decimal('0')
+        forma_nome = forma_pag_str
+
+        if fp and fp.parcelas:
+            rules = [
+                {
+                    "intervalo_dias": p.intervalo_dias,
+                    "percentual": float(p.percentual) if p.percentual is not None else None,
+                    "valor_fixo": float(p.valor_fixo) if p.valor_fixo is not None else None
+                }
+                for p in fp.parcelas
+            ]
+            tipo_dist = fp.tipo_distribuicao
+            taxa_juros = Decimal(str(fp.taxa_juros_mensal or 0))
+            forma_nome = fp.descricao
+        elif fp_snap and fp_snap.get("parcelas"):
+            rules = fp_snap.get("parcelas") or []
+            tipo_dist = fp_snap.get("tipo_distribuicao") or "RATEIO_IGUAL"
+            taxa_juros = Decimal(str(fp_snap.get("taxa_juros_mensal") or 0))
+            forma_nome = fp_snap.get("descricao") or forma_pag_str
+
+        if rules and total_unico > Decimal('0'):
+            from src.modules.payment_methods.service import PaymentMethodsService
+            calc = PaymentMethodsService.calculate_installments_schedule(
+                valor_total=total_unico,
+                parcelas_rules=rules,
+                tipo_distribuicao=tipo_dist,
+                taxa_juros_mensal=taxa_juros
+            )
+            qtd_p = len(rules)
+            pmt = calc["pmt"]
+            total_geral = calc["total_geral"]
+            total_juros = calc["total_juros"]
+
+            if total_juros > Decimal('0'):
+                parcelas_info = (
+                    f"<div style='font-size: 11px; color: #334155; line-height: 1.5;'>"
+                    f"<strong>Condição de Pagamento:</strong> {forma_nome}<br />"
+                    f"<span style='font-size: 12px; font-weight: 700; color: #0f172a;'>{qtd_p}x de {format_currency(pmt)}</span> "
+                    f"<span style='color: #475569;'>(Total a Prazo: <strong>{format_currency(total_geral)}</strong> | Acréscimo de Juros: <strong>+{format_currency(total_juros)}</strong>)</span>"
+                    f"</div>"
+                )
+            elif qtd_p > 1:
+                parcelas_info = (
+                    f"<div style='font-size: 11px; color: #334155;'>"
+                    f"<strong>Condição de Pagamento:</strong> {qtd_p}x de {format_currency(pmt)} ({forma_nome})"
+                    f"</div>"
+                )
+            else:
+                parcelas_info = f"<div style='font-size: 11px; color: #334155;'><strong>Condição de Pagamento:</strong> {forma_nome}</div>"
 
         tabelas_demonstrativo += f"""
         <div style="margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">

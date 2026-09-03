@@ -375,6 +375,7 @@ export interface OpportunityKitFormProps {
   onClose?: () => void;
   initialSalesBudgetId?: string | null;
   initialSalesTeamId?: string | null;
+  initialSalesTeamNome?: string | null;
   initialPrazoContrato?: number;
   initialPrazoInstalacao?: number;
   initialTaxaJuros?: number;
@@ -389,6 +390,7 @@ export const OpportunityKitForm = ({
   onClose,
   initialSalesBudgetId,
   initialSalesTeamId,
+  initialSalesTeamNome,
   initialPrazoContrato,
   initialPrazoInstalacao,
   initialTaxaJuros,
@@ -427,6 +429,7 @@ export const OpportunityKitForm = ({
     policyName: string;
   } | null>(null);
   const [opportunitySalesTeamId, setOpportunitySalesTeamId] = useState<string | null>(initialSalesTeamId || null);
+  const [opportunitySalesTeamNome, setOpportunitySalesTeamNome] = useState<string | null>(initialSalesTeamNome || null);
   const [licitacaoItemDetails, setLicitacaoItemDetails] = useState<any>(null);
 
   useEffect(() => {
@@ -439,6 +442,12 @@ export const OpportunityKitForm = ({
       }));
     }
   }, [initialSalesTeamId]);
+
+  useEffect(() => {
+    if (initialSalesTeamNome) {
+      setOpportunitySalesTeamNome(initialSalesTeamNome);
+    }
+  }, [initialSalesTeamNome]);
 
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
   const { user } = useAuth();
@@ -493,14 +502,14 @@ export const OpportunityKitForm = ({
     quantidade_kits: 1,
     tipo_contrato: initialTipoContrato,
     considerar_st_ou_difal: 'DIFAL',
-    prazo_contrato_meses: 36,
-    prazo_instalacao_meses: 0,
+    prazo_contrato_meses: initialPrazoContrato ?? 36,
+    prazo_instalacao_meses: initialPrazoInstalacao ?? 0,
     fator_margem_locacao: 1.0,
     fator_margem_instalacao: 1.0,
     fator_margem_manutencao: 1.0,
     fator_margem_servicos_produtos: 1.0,
-    taxa_juros_mensal: 0,
-    taxa_manutencao_anual: 0,
+    taxa_juros_mensal: initialTaxaJuros ?? 0,
+    taxa_manutencao_anual: initialTaxaManutencao ?? 0,
     instalacao_inclusa: false,
     percentual_instalacao: '',
     havera_manutencao: false,
@@ -569,15 +578,13 @@ export const OpportunityKitForm = ({
     fetchItemDetails();
   }, [form.licitacao_id, form.licitacao_item_id]);
 
-  const [opportunitySalesTeamNome, setOpportunitySalesTeamNome] = useState<string | null>(null);
-
   const budgetIdToQuery = sourceBudgetId || form.sales_budget_id;
   useEffect(() => {
     if (budgetIdToQuery) {
       api.get(`/sales-budgets/${budgetIdToQuery}`).then(res => {
         if (res.data) {
           setOpportunityCustomerName(res.data.customer_nome || 'Cliente');
-          if (res.data.sales_team_id) {
+          if (!initialSalesTeamId && res.data.sales_team_id) {
             setOpportunitySalesTeamId(res.data.sales_team_id);
             setForm(prev => ({
               ...prev,
@@ -585,7 +592,7 @@ export const OpportunityKitForm = ({
               sales_teams: [res.data.sales_team_id]
             }));
           }
-          if (res.data.sales_team_nome) {
+          if (!initialSalesTeamNome && res.data.sales_team_nome) {
             setOpportunitySalesTeamNome(res.data.sales_team_nome);
           }
           const companyState = res.data.company_state_sigla;
@@ -596,7 +603,17 @@ export const OpportunityKitForm = ({
         }
       }).catch(err => console.error("Error loading budget customer", err));
     }
-  }, [budgetIdToQuery]);
+  }, [budgetIdToQuery, initialSalesTeamId, initialSalesTeamNome]);
+
+  const displayedSalesTeamNome = useMemo(() => {
+    if (initialSalesTeamNome) return initialSalesTeamNome;
+    const effId = initialSalesTeamId || opportunitySalesTeamId || form.sales_team_id;
+    if (effId && salesTeams.length > 0) {
+      const found = salesTeams.find((t: any) => t.id === effId);
+      if (found?.nome) return found.nome;
+    }
+    return opportunitySalesTeamNome;
+  }, [initialSalesTeamNome, initialSalesTeamId, opportunitySalesTeamId, form.sales_team_id, salesTeams, opportunitySalesTeamNome]);
 
   useEffect(() => {
     if (isInterstate && form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
@@ -677,16 +694,16 @@ export const OpportunityKitForm = ({
         data.sales_team_id = effTeamId;
         data.sales_teams = [effTeamId];
       }
-      if (initialPrazoContrato && (sourceBudgetId || initialSalesBudgetId)) {
+      if ((data.prazo_contrato_meses === undefined || data.prazo_contrato_meses === null) && initialPrazoContrato && (sourceBudgetId || initialSalesBudgetId)) {
         data.prazo_contrato_meses = initialPrazoContrato;
       }
-      if (initialPrazoInstalacao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+      if ((data.prazo_instalacao_meses === undefined || data.prazo_instalacao_meses === null) && initialPrazoInstalacao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
         data.prazo_instalacao_meses = initialPrazoInstalacao;
       }
-      if (initialTaxaJuros !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+      if ((data.taxa_juros_mensal === undefined || data.taxa_juros_mensal === null) && initialTaxaJuros !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
         data.taxa_juros_mensal = initialTaxaJuros;
       }
-      if (initialTaxaManutencao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
+      if ((data.taxa_manutencao_anual === undefined || data.taxa_manutencao_anual === null) && initialTaxaManutencao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
         data.taxa_manutencao_anual = initialTaxaManutencao;
       }
 
@@ -1355,10 +1372,10 @@ export const OpportunityKitForm = ({
                     Cliente: <strong className="text-text-secondary">{opportunityCustomerName}</strong>
                   </span>
                 )}
-                {opportunitySalesTeamNome && (
+                {displayedSalesTeamNome && (
                   <span className="text-xs text-text-muted flex items-center gap-1 font-medium mt-0.5">
                     <Users className="w-3.5 h-3.5 text-brand-primary" />
-                    Equipe de Venda: <strong className="text-primary-700 bg-primary-50 border border-primary-200 px-2 py-0.5 rounded font-semibold">{opportunitySalesTeamNome}</strong>
+                    Equipe de Venda: <strong className="text-primary-700 bg-primary-50 border border-primary-200 px-2 py-0.5 rounded font-semibold">{displayedSalesTeamNome}</strong>
                   </span>
                 )}
               </div>

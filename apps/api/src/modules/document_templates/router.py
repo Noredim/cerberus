@@ -16,8 +16,7 @@ from src.modules.document_templates.schemas import (
 
 router = APIRouter(
     prefix="/document-templates", 
-    tags=["Document Templates"],
-    dependencies=[Depends(check_not_engenharia_preco)]
+    tags=["Document Templates"]
 )
 
 

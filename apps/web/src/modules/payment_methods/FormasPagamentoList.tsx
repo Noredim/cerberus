@@ -28,6 +28,7 @@ export interface FormaPagamento {
     descricao: string;
     tipo_uso: 'COMPRA' | 'VENDA' | 'AMBOS';
     tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
+    taxa_juros_mensal?: number;
     ativo: boolean;
     is_default?: boolean;
     observacao?: string | null;
@@ -172,9 +173,16 @@ const FormasPagamentoList: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="px-2 py-1 text-[10px] font-bold bg-bg-deep border border-border-subtle rounded text-text-muted uppercase tracking-tight">
-                                                {forma.tipo_distribuicao.replace('_', ' ')}
-                                            </span>
+                                            <div className="flex flex-col gap-1 items-start">
+                                                <span className="px-2 py-1 text-[10px] font-bold bg-bg-deep border border-border-subtle rounded text-text-muted uppercase tracking-tight">
+                                                    {forma.tipo_distribuicao.replace('_', ' ')}
+                                                </span>
+                                                {forma.taxa_juros_mensal && forma.taxa_juros_mensal > 0 ? (
+                                                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded">
+                                                        {forma.taxa_juros_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 6 })}% a.m. (Price)
+                                                    </span>
+                                                ) : null}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-text-primary">
                                             {forma.parcelas?.length || 0}

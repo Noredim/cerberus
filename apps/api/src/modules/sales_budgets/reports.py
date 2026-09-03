@@ -2508,16 +2508,29 @@ class OpportunitiesReportService:
             from src.modules.payment_methods.models import FormaPagamento
             fp = db.query(FormaPagamento).filter(FormaPagamento.id == opportunity.forma_pagamento_id).first()
             if fp and fp.parcelas:
-                venda_total_val = float(venda_consolidada)
+                from src.modules.payment_methods.service import PaymentMethodsService
                 num_parcelas = len(fp.parcelas)
                 sorted_parcs = sorted(fp.parcelas, key=lambda x: x.sequencia or 1)
+                rules = [
+                    {
+                        "sequencia": p.sequencia,
+                        "descricao": p.descricao,
+                        "intervalo_dias": p.intervalo_dias,
+                        "percentual": float(p.percentual) if p.percentual is not None else None,
+                        "valor_fixo": float(p.valor_fixo) if p.valor_fixo is not None else None
+                    }
+                    for p in sorted_parcs
+                ]
+                calc = PaymentMethodsService.calculate_installments_schedule(
+                    valor_total=Decimal(str(venda_consolidada or 0)),
+                    parcelas_rules=rules,
+                    tipo_distribuicao=fp.tipo_distribuicao,
+                    taxa_juros_mensal=Decimal(str(fp.taxa_juros_mensal or 0))
+                )
+                inst_values = calc.get("installments_values", [])
+
                 for p_idx, parc in enumerate(sorted_parcs, 1):
-                    if parc.percentual and float(parc.percentual) > 0:
-                        vlr = venda_total_val * (float(parc.percentual) / 100.0)
-                    elif parc.valor_fixo and float(parc.valor_fixo) > 0:
-                        vlr = float(parc.valor_fixo)
-                    else:
-                        vlr = venda_total_val / num_parcelas if num_parcelas > 0 else 0.0
+                    vlr = float(inst_values[p_idx - 1]) if p_idx - 1 < len(inst_values) else 0.0
                     
                     data_prev = "-"
                     d_base = opportunity.data_vencimento_inicial or opportunity.data_orcamento

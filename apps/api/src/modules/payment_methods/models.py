@@ -14,6 +14,7 @@ class FormaPagamento(Base):
     descricao = Column(String(100), nullable=False)
     tipo_uso = Column(String(20), nullable=False)  # 'COMPRA', 'VENDA', 'AMBOS'
     tipo_distribuicao = Column(String(20), nullable=False)  # 'PERCENTUAL', 'RATEIO_IGUAL', 'VALOR_FIXO'
+    taxa_juros_mensal = Column(Numeric(10, 6), nullable=False, default=0.000000)
     ativo = Column(Boolean, nullable=False, default=True)
     is_default = Column(Boolean, nullable=False, default=False)
     observacao = Column(Text, nullable=True)

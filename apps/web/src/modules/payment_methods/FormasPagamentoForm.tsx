@@ -24,6 +24,7 @@ const FormasPagamentoForm: React.FC = () => {
         descricao: '',
         tipo_uso: 'VENDA',
         tipo_distribuicao: 'PERCENTUAL',
+        taxa_juros_mensal: 0,
         ativo: true,
         is_default: false,
         observacao: '',
@@ -48,6 +49,7 @@ const FormasPagamentoForm: React.FC = () => {
                 }));
                 setFormData({
                     ...data,
+                    taxa_juros_mensal: data.taxa_juros_mensal !== undefined && data.taxa_juros_mensal !== null ? parseFloat(data.taxa_juros_mensal) : 0,
                     parcelas: parcelasParsed
                 });
             } catch (err) {
@@ -143,6 +145,55 @@ const FormasPagamentoForm: React.FC = () => {
     const sumPercent = (formData.parcelas || []).reduce((acc, p) => acc + (p.percentual || 0), 0);
     const nullFixedCount = (formData.parcelas || []).filter(p => p.valor_fixo === null).length;
 
+    // Price simulation for demonstrative card
+    const taxaJuros = formData.taxa_juros_mensal || 0;
+    const parcelas = formData.parcelas || [];
+    const numParcelas = parcelas.length;
+    const baseSimulation = 10000;
+
+    let pmtSim = 0;
+    let totalGeralSim = baseSimulation;
+    let totalJurosSim = 0;
+    let installmentsSim: number[] = [];
+
+    if (numParcelas > 0) {
+        if (taxaJuros > 0) {
+            const i = taxaJuros / 100;
+            let sumDiscountedWeights = 0;
+            const weights = parcelas.map(p => {
+                if (formData.tipo_distribuicao === 'PERCENTUAL') {
+                    return (p.percentual || 0) / 100;
+                } else if (formData.tipo_distribuicao === 'RATEIO_IGUAL') {
+                    return 1 / numParcelas;
+                } else {
+                    const totalFixo = parcelas.reduce((acc, it) => acc + (it.valor_fixo || 0), 0);
+                    return totalFixo > 0 ? (p.valor_fixo || 0) / totalFixo : 1 / numParcelas;
+                }
+            });
+
+            parcelas.forEach((p, idx) => {
+                const dias = p.intervalo_dias || 0;
+                const df = dias === 0 ? 1 : Math.pow(1 + i, -(dias / 30));
+                sumDiscountedWeights += weights[idx] * df;
+            });
+
+            const totalComJuros = sumDiscountedWeights > 0 ? baseSimulation / sumDiscountedWeights : baseSimulation;
+            installmentsSim = weights.map(w => Math.round(totalComJuros * w * 100) / 100);
+            if (formData.tipo_distribuicao === 'RATEIO_IGUAL') {
+                const equalVal = installmentsSim[0];
+                installmentsSim = installmentsSim.map(() => equalVal);
+            }
+            totalGeralSim = Math.round(installmentsSim.reduce((acc, v) => acc + v, 0) * 100) / 100;
+            totalJurosSim = Math.round((totalGeralSim - baseSimulation) * 100) / 100;
+            pmtSim = installmentsSim[0] || 0;
+        } else {
+            installmentsSim = parcelas.map(() => Math.round((baseSimulation / numParcelas) * 100) / 100);
+            pmtSim = installmentsSim[0] || 0;
+            totalGeralSim = baseSimulation;
+            totalJurosSim = 0;
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -176,6 +227,7 @@ const FormasPagamentoForm: React.FC = () => {
                 descricao: formData.descricao,
                 tipo_uso: formData.tipo_uso,
                 tipo_distribuicao: formData.tipo_distribuicao,
+                taxa_juros_mensal: formData.taxa_juros_mensal ? Number(formData.taxa_juros_mensal) : 0,
                 ativo: formData.ativo,
                 is_default: formData.is_default || false,
                 observacao: formData.observacao || null,
@@ -292,6 +344,32 @@ const FormasPagamentoForm: React.FC = () => {
                                         <option value="RATEIO_IGUAL">Rateio Igualitário</option>
                                         <option value="VALOR_FIXO">Valores Fixos / Saldo Restante</option>
                                     </select>
+                                </div>
+
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
+                                        <span>Taxa de juros mensal (%)</span>
+                                        <span className="text-[10px] text-text-muted font-normal lowercase">sistema price / tabela bcb</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="0.000001"
+                                            min="0"
+                                            max="100"
+                                            value={formData.taxa_juros_mensal !== undefined ? formData.taxa_juros_mensal : 0}
+                                            onChange={e => {
+                                                const val = parseFloat(e.target.value);
+                                                handleHeaderChange('taxa_juros_mensal', isNaN(val) ? 0 : val);
+                                            }}
+                                            placeholder="0.000000"
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 pr-16 pl-4 outline-none focus:border-brand-primary transition-colors text-sm font-semibold text-text-primary"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted">% a.m.</span>
+                                    </div>
+                                    <p className="text-[11px] text-text-muted">
+                                        Juros compostos ao mês, calculados pelo sistema Price. Informe 0 para parcelamento sem juros.
+                                    </p>
                                 </div>
 
                                 <div className="space-y-1.5 md:col-span-2">
@@ -516,6 +594,83 @@ const FormasPagamentoForm: React.FC = () => {
                                         <span>Nenhuma parcela configurada como "Saldo". A soma dos valores fixos deve ser idêntica ao valor da oportunidade/compra.</span>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {taxaJuros > 0 && numParcelas > 0 && (
+                            <div className="space-y-3 pt-3 border-t border-border-subtle">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-brand-primary uppercase tracking-wider">
+                                        Simulação Price (Ex: R$ 10.000)
+                                    </span>
+                                    <span className="text-[11px] font-bold bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded">
+                                        {taxaJuros.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 6 })}% a.m.
+                                    </span>
+                                </div>
+
+                                <div className="space-y-1.5 bg-bg-deep p-3 rounded-lg border border-border-subtle text-xs">
+                                    <div className="flex justify-between text-text-muted">
+                                        <span>Valor à vista:</span>
+                                        <span className="font-semibold text-text-primary">
+                                            {baseSimulation.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-text-muted">
+                                        <span>Taxa de juros:</span>
+                                        <span className="font-semibold text-text-primary">{taxaJuros}% ao mês</span>
+                                    </div>
+                                    <div className="flex justify-between text-text-muted">
+                                        <span>Quantidade:</span>
+                                        <span className="font-semibold text-text-primary">{numParcelas} parcelas</span>
+                                    </div>
+                                    <div className="flex justify-between text-text-muted border-t border-border-subtle pt-1.5">
+                                        <span>Valor de cada parcela:</span>
+                                        <span className="font-bold text-brand-primary text-sm">
+                                            {pmtSim.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                                        <span>Acréscimo total (Juros):</span>
+                                        <span>+ {totalJurosSim.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                    </div>
+                                    <div className="flex justify-between text-text-primary font-bold border-t border-border-subtle pt-1.5">
+                                        <span>Total das parcelas:</span>
+                                        <span>{totalGeralSim.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                                    </div>
+                                </div>
+
+                                {/* Cronograma detalhado */}
+                                <div className="space-y-1">
+                                    <span className="text-[11px] font-bold text-text-muted uppercase">Cronograma Simulado:</span>
+                                    <div className="border border-border-subtle rounded-md overflow-hidden text-[11px]">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-bg-deep border-b border-border-subtle text-text-muted font-semibold">
+                                                <tr>
+                                                    <th className="py-1 px-2">Parcela</th>
+                                                    <th className="py-1 px-2">Momento</th>
+                                                    <th className="py-1 px-2 text-right">Valor</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border-subtle">
+                                                {parcelas.map((p, idx) => (
+                                                    <tr key={idx} className="hover:bg-bg-deep/50">
+                                                        <td className="py-1 px-2 font-medium">{idx + 1}ª parcela</td>
+                                                        <td className="py-1 px-2 text-text-muted">
+                                                            {(p.intervalo_dias || 0) === 0 ? 'No ato' : `${p.intervalo_dias} dias`}
+                                                        </td>
+                                                        <td className="py-1 px-2 text-right font-semibold text-text-primary">
+                                                            {(installmentsSim[idx] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <p className="text-[10px] text-text-muted italic">
+                                    Metodologia de financiamento com prestações fixas e desconto a valor presente.
+                                </p>
                             </div>
                         )}
                     </div>

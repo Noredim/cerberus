@@ -51,6 +51,7 @@ interface FormaPagamento {
   descricao: string;
   tipo_uso: 'VENDA' | 'COMPRA' | 'AMBOS';
   tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
+  taxa_juros_mensal?: number;
   ativo: boolean;
   is_default?: boolean;
   observacao?: string | null;
@@ -2433,12 +2434,18 @@ export function SalesBudgetForm() {
       let salesInstallments: InstSimulada[] = [];
       const selectedFp = salesFormasPagamento.find(fp => fp.id === formaPagamentoId);
 
-      if (selectedFp && dataVencimentoInicial && totals.venda > 0) {
+      const upfrontInstalacaoKits = rentalItems
+        .filter(ri => ri.tipo_contrato_kit === 'INSTALACAO' || ri.is_kit_instalacao)
+        .reduce((sum, ri) => sum + ((ri.kit_valor_mensal || 0) * (ri.quantidade || 1)), 0);
+      const totalPagamentoUnico = (totals.venda || 0) + upfrontInstalacaoKits;
+
+      if (selectedFp && dataVencimentoInicial && totalPagamentoUnico > 0) {
         try {
           const response = await api.post('/cadastro/formas-pagamento/simular', {
-            valor_total: totals.venda,
+            valor_total: totalPagamentoUnico,
             data_inicial: dataVencimentoInicial,
             tipo_distribuicao: selectedFp.tipo_distribuicao,
+            taxa_juros_mensal: selectedFp.taxa_juros_mensal || 0,
             parcelas: selectedFp.parcelas.map((p: FormaPagamentoParcela) => ({
               sequencia: p.sequencia,
               descricao: p.descricao,
@@ -2460,9 +2467,13 @@ export function SalesBudgetForm() {
         }
       }
 
-      // Option C: recurring monthly lease schedules
+      // Option C: recurring monthly lease schedules (excluding upfront sale and upfront installation)
       const leases: InstSimulada[] = [];
-      const validRentals = rentalItems.filter(ri => ri.tipo_contrato_kit !== 'VENDA_EQUIPAMENTOS');
+      const validRentals = rentalItems.filter(ri => 
+        ri.tipo_contrato_kit !== 'VENDA_EQUIPAMENTOS' && 
+        ri.tipo_contrato_kit !== 'INSTALACAO' && 
+        !ri.is_kit_instalacao
+      );
       validRentals.forEach(ri => {
         const prazo = ri.prazo_contrato || 0;
         const valorMensal = (ri.valor_mensal || 0) * (ri.quantidade || 1);
@@ -3480,14 +3491,18 @@ export function SalesBudgetForm() {
                   <span className="text-text-muted">Versão:</span>
                   <span className="font-mono font-bold text-brand-primary">{versao}</span>
                 </div>
-                {valorTotal > 0 && (
-                  <div className="flex items-center gap-1.5 bg-bg-deep border border-border-subtle rounded-lg px-2.5 py-1 text-xs">
-                    <span className="text-text-muted">Valor Total:</span>
-                    <span className="font-bold text-text-primary">
-                      {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                )}
+                {(() => {
+                  const currentTotalOpportunity = (totals.venda || 0) + (rentalTotals.faturamentoTotal || 0);
+                  const displayedTotal = currentTotalOpportunity > 0 ? currentTotalOpportunity : valorTotal;
+                  return displayedTotal > 0 ? (
+                    <div className="flex items-center gap-1.5 bg-bg-deep border border-border-subtle rounded-lg px-2.5 py-1 text-xs">
+                      <span className="text-text-muted">Valor Total:</span>
+                      <span className="font-bold text-text-primary">
+                        {displayedTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               {/* Timeline steps */}
@@ -4225,6 +4240,43 @@ export function SalesBudgetForm() {
 
           const margemManutencao = t.totalManutencao > 0 ? (t.lucroManutencao / t.totalManutencao) * 100 : 0;
 
+          // Juros da Forma de Pagamento (Receita Financeira na Venda)
+          const selectedFp = salesFormasPagamento.find(fp => fp.id === formaPagamentoId);
+          const fpTaxaJuros = Number(selectedFp?.taxa_juros_mensal) || 0;
+          const fpParcelas = selectedFp?.parcelas || [];
+          const fpNumParcelas = fpParcelas.length;
+
+          let jurosVenda = 0;
+          let totalVendaComJuros = t.totalVenda;
+          let pmtVenda = 0;
+
+          if (fpTaxaJuros > 0 && fpNumParcelas > 0 && t.totalVenda > 0) {
+            const i = fpTaxaJuros / 100;
+            const weights = fpParcelas.map((p: any) => {
+              if (selectedFp?.tipo_distribuicao === 'PERCENTUAL') {
+                return (Number(p.percentual) || 0) / 100;
+              } else if (selectedFp?.tipo_distribuicao === 'RATEIO_IGUAL') {
+                return 1 / fpNumParcelas;
+              } else {
+                const totalFixo = fpParcelas.reduce((acc: number, it: any) => acc + (Number(it.valor_fixo) || 0), 0);
+                return totalFixo > 0 ? (Number(p.valor_fixo) || 0) / totalFixo : 1 / fpNumParcelas;
+              }
+            });
+
+            const sumDiscounted = fpParcelas.reduce((acc: number, p: any, idx: number) => {
+              const d = Number(p.intervalo_dias) || 0;
+              const factor = Math.pow(1 + i, d / 30);
+              return acc + (weights[idx] / factor);
+            }, 0);
+
+            if (sumDiscounted > 0) {
+              pmtVenda = (t.totalVenda * weights[0]) / sumDiscounted;
+              const totalComJuros = t.totalVenda / sumDiscounted;
+              jurosVenda = Math.max(0, totalComJuros - t.totalVenda);
+              totalVendaComJuros = t.totalVenda + jurosVenda;
+            }
+          }
+
           return (
             <div className="mb-6 bg-surface border border-border-subtle rounded-xl p-6 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between gap-2 mb-4 pb-4 border-b border-border-subtle/50">
@@ -4296,7 +4348,7 @@ export function SalesBudgetForm() {
                 {/* 2. Total de Venda */}
                 <div className="bg-surface border border-border-subtle rounded-xl p-5 shadow-sm flex flex-col justify-between">
                   <div>
-                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Venda</div>
+                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Total de Venda (À Vista)</div>
                     <div className="text-2xl font-black text-brand-primary mb-4">{fmt(t.totalVenda)}</div>
 
                     <div className="space-y-1.5 mb-2 text-[10px] xl:text-[11px] text-text-muted">
@@ -4318,10 +4370,66 @@ export function SalesBudgetForm() {
                           </div>
                         </>
                       )}
+                      {fpTaxaJuros > 0 && (
+                        <div className="flex justify-between items-center border-t border-indigo-200/50 dark:border-indigo-800/50 pt-1.5 mt-1.5 text-indigo-600 dark:text-indigo-400 font-semibold">
+                          <span>Total a Prazo (+ Juros)</span>
+                          <span>{fmt(totalVendaComJuros)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-text-muted mt-auto pt-3 border-t border-border-subtle uppercase">
                     <span>Faturamento Equip/Serv</span>
+                  </div>
+                </div>
+
+                {/* 3. Indicador de Juros da Forma de Pagamento (Receita Financeira) */}
+                <div className={`border rounded-xl p-5 shadow-sm flex flex-col justify-between relative overflow-hidden transition-all ${fpTaxaJuros > 0 ? 'bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800' : 'bg-surface border-border-subtle'}`}>
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <div className={`text-[11px] font-bold uppercase tracking-wider ${fpTaxaJuros > 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-text-muted'}`}>
+                        Juros Forma Pagamento
+                      </div>
+                      {fpTaxaJuros > 0 ? (
+                        <span className="px-2 py-0.5 text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-700">
+                          {fpTaxaJuros.toFixed(2)}% a.m.
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-bg-deep text-text-muted rounded">
+                          0% a.m.
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-2xl font-black mb-3 ${fpTaxaJuros > 0 ? 'text-indigo-600 dark:text-indigo-300' : 'text-text-muted'}`}>
+                      {fpTaxaJuros > 0 ? `+ ${fmt(jurosVenda)}` : 'R$ 0,00'}
+                    </div>
+
+                    <div className="space-y-1 text-[10px] xl:text-[11px] text-text-muted">
+                      <div className="flex justify-between items-center">
+                        <span>Base de Cálculo</span>
+                        <span className="font-semibold text-text-primary">{fmt(t.totalVenda)}</span>
+                      </div>
+                      {fpTaxaJuros > 0 ? (
+                        <>
+                          <div className="flex justify-between items-center text-indigo-600 dark:text-indigo-300 font-semibold">
+                            <span>Parcelas Fixas</span>
+                            <span>{fpNumParcelas}x de {fmt(pmtVenda)}</span>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-indigo-200/50 dark:border-indigo-800/50 pt-1 mt-1 font-bold text-indigo-700 dark:text-indigo-200">
+                            <span>Total a Prazo</span>
+                            <span>{fmt(totalVendaComJuros)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[10px] text-text-muted/80 italic pt-1">
+                          Condição sem incidência de juros
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`text-[10px] mt-auto pt-3 border-t uppercase tracking-wide flex justify-between items-center ${fpTaxaJuros > 0 ? 'border-indigo-200/60 dark:border-indigo-800/60 text-indigo-600/80 dark:text-indigo-400' : 'border-border-subtle text-text-muted'}`}>
+                    <span>{fpTaxaJuros > 0 ? 'Receita Financeira' : 'Sem Juros'}</span>
+                    <span className="truncate max-w-[130px] font-medium" title={selectedFp?.descricao || ''}>{selectedFp?.descricao || 'À Vista'}</span>
                   </div>
                 </div>
 
@@ -6360,6 +6468,12 @@ export function SalesBudgetForm() {
                 isModal={true}
                 onClose={() => setShowCreateKitModal(false)}
                 initialSalesBudgetId={id}
+                initialSalesTeamId={salesTeamId}
+                initialSalesTeamNome={salesTeams.find(t => t.id === salesTeamId)?.nome}
+                initialPrazoContrato={+prazoContratoMeses}
+                initialPrazoInstalacao={+prazoInstalacaoMeses}
+                initialTaxaJuros={+taxaJurosMensal}
+                initialTaxaManutencao={+taxaManutencaoAnual}
                 initialTipoContrato={novoKitTipoContrato}
                 onSuccess={(savedKit) => {
                   setShowCreateKitModal(false);
@@ -7471,6 +7585,7 @@ export function SalesBudgetForm() {
                 onClose={() => setEditingKit(null)}
                 initialSalesBudgetId={id}
                 initialSalesTeamId={salesTeamId}
+                initialSalesTeamNome={salesTeams.find(t => t.id === salesTeamId)?.nome}
                 initialPrazoContrato={+prazoContratoMeses}
                 initialPrazoInstalacao={+prazoInstalacaoMeses}
                 initialTaxaJuros={+taxaJurosMensal}

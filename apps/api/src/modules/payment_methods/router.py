@@ -21,6 +21,7 @@ class SimulationInput(BaseModel):
     valor_total: Decimal = Field(..., ge=0)
     data_inicial: date
     tipo_distribuicao: TipoDistribuicaoEnum
+    taxa_juros_mensal: Optional[Decimal] = Field(default=Decimal('0.000000'), ge=0, le=100)
     parcelas: List[dict]  # list of dict containing: sequencia, descricao, intervalo_dias, percentual, valor_fixo
 
 def check_admin_or_finance(user: User):
@@ -117,7 +118,8 @@ def simular_parcelas(
             data_inicial=data.data_inicial,
             tipo_distribuicao=data.tipo_distribuicao.value,
             parcelas_rules=data.parcelas,
-            tipo_movimento='RECEBIMENTO'
+            tipo_movimento='RECEBIMENTO',
+            taxa_juros_mensal=data.taxa_juros_mensal or Decimal('0')
         )
         
         # Format output

@@ -303,7 +303,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
                 className="sr-only"
               />
               <Users className="w-4 h-4 shrink-0" />
-              <span>Fila Automática (Round Robin)</span>
+              <span>Fila Automática</span>
             </label>
 
             <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
@@ -353,7 +353,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
               >
                 <option value="">Selecione um vendedor da equipe...</option>
                 {teamMembers.map((m: any) => (
-                  <option key={m.user_id} value={m.user_id}>{m.user?.name || m.user_id}</option>
+                  <option key={m.user_id} value={m.user_id}>{m.user_name || m.user?.name || m.user_email || m.user_id}</option>
                 ))}
               </select>
             </div>

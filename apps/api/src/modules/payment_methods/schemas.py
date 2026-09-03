@@ -46,6 +46,7 @@ class FormaPagamentoBase(BaseModel):
     descricao: str = Field(..., min_length=1)
     tipo_uso: TipoUsoEnum
     tipo_distribuicao: TipoDistribuicaoEnum
+    taxa_juros_mensal: Decimal = Field(default=Decimal('0.000000'), ge=0, le=100, max_digits=10, decimal_places=6)
     ativo: bool = True
     is_default: bool = False
     observacao: Optional[str] = None

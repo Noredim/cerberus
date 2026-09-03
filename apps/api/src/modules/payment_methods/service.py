@@ -1,8 +1,8 @@
 import uuid
 import calendar
 from datetime import datetime, date, timedelta
-from decimal import Decimal
-from typing import List, Optional, Tuple, Dict
+from decimal import Decimal, ROUND_HALF_UP
+from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -38,6 +38,7 @@ class PaymentMethodsService:
             descricao=data.descricao,
             tipo_uso=data.tipo_uso.value,
             tipo_distribuicao=data.tipo_distribuicao.value,
+            taxa_juros_mensal=data.taxa_juros_mensal,
             ativo=data.ativo,
             is_default=data.is_default,
             observacao=data.observacao
@@ -80,6 +81,7 @@ class PaymentMethodsService:
         db_forma.descricao = data.descricao
         db_forma.tipo_uso = data.tipo_uso.value
         db_forma.tipo_distribuicao = data.tipo_distribuicao.value
+        db_forma.taxa_juros_mensal = data.taxa_juros_mensal
         db_forma.ativo = data.ativo
         db_forma.is_default = data.is_default
         db_forma.observacao = data.observacao
@@ -135,6 +137,175 @@ class PaymentMethodsService:
         return date(year, month, day)
 
     @staticmethod
+    def calculate_installments_schedule(
+        valor_total: Decimal,
+        parcelas_rules: List[dict],
+        tipo_distribuicao: str,
+        taxa_juros_mensal: Decimal = Decimal('0')
+    ) -> Dict[str, Any]:
+        """
+        Calcula os valores exatos de cada parcela.
+        Se taxa_juros_mensal > 0:
+          - Parcelas com intervalo_dias == 0 são consideradas Entrada (não incidem juros).
+          - O valor financiado PV = valor_total - valor_entrada.
+          - n = quantidade de parcelas financiadas (intervalo_dias > 0).
+          - Para i = taxa_juros_mensal / 100:
+              PMT = (PV * i) / (1 - (1 + i)^(-n))
+            arredondado com ROUND_HALF_UP para 2 casas decimais.
+          - Cada parcela financiada recebe exatamente o valor PMT fixo.
+          - Total com juros = valor_entrada + (n * PMT)
+          - Total de juros = (n * PMT) - PV
+        Se taxa_juros_mensal == 0:
+          - Mantém o rateio padrão existente (PERCENTUAL, RATEIO_IGUAL, VALOR_FIXO).
+        """
+        if valor_total <= 0 or not parcelas_rules:
+            return {
+                "installments_values": [Decimal('0')] * len(parcelas_rules),
+                "total_entrada": Decimal('0'),
+                "valor_financiado": Decimal('0'),
+                "taxa_juros_mensal": Decimal(str(taxa_juros_mensal or 0)),
+                "pmt": Decimal('0'),
+                "total_financiado": Decimal('0'),
+                "total_juros": Decimal('0'),
+                "total_geral": Decimal('0')
+            }
+
+        num_parcelas = len(parcelas_rules)
+        valor_total_dec = Decimal(str(valor_total))
+        taxa_juros_dec = Decimal(str(taxa_juros_mensal or 0))
+
+        # Identifica índices de entrada (intervalo_dias == 0) e parcelas financiadas (intervalo_dias > 0)
+        entrada_indices = []
+        financiada_indices = []
+        for idx, p in enumerate(parcelas_rules):
+            intervalo = int(p.get("intervalo_dias") or 0)
+            if intervalo == 0:
+                entrada_indices.append(idx)
+            else:
+                financiada_indices.append(idx)
+
+        installments_values = [Decimal('0')] * num_parcelas
+
+        # CASO 1: SEM JUROS (taxa_juros_dec <= 0)
+        if taxa_juros_dec <= Decimal('0'):
+            if tipo_distribuicao == TipoDistribuicaoEnum.PERCENTUAL.value:
+                for idx, p in enumerate(parcelas_rules):
+                    pct = Decimal(str(p.get("percentual") or 0))
+                    val = (valor_total_dec * (pct / Decimal('100'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    installments_values[idx] = val
+            elif tipo_distribuicao == TipoDistribuicaoEnum.RATEIO_IGUAL.value:
+                for idx in range(num_parcelas):
+                    val = (valor_total_dec / Decimal(str(num_parcelas))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    installments_values[idx] = val
+            elif tipo_distribuicao == TipoDistribuicaoEnum.VALOR_FIXO.value:
+                saldo_idx = -1
+                for idx, p in enumerate(parcelas_rules):
+                    v_fixo = p.get("valor_fixo")
+                    if v_fixo is not None:
+                        val = Decimal(str(v_fixo)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                        installments_values[idx] = val
+                    else:
+                        saldo_idx = idx
+
+                if saldo_idx != -1:
+                    sum_others = sum(installments_values[i] for i in range(num_parcelas) if i != saldo_idx)
+                    installments_values[saldo_idx] = max(Decimal('0'), valor_total_dec - sum_others)
+                else:
+                    total_sum = sum(installments_values)
+                    if total_sum != valor_total_dec:
+                        raise ValueError(f"A soma das parcelas ({total_sum}) deve ser igual ao valor total ({valor_total_dec})")
+
+            # Ajuste de centavos de arredondamento na última parcela para PERCENTUAL e RATEIO_IGUAL
+            if tipo_distribuicao in [TipoDistribuicaoEnum.PERCENTUAL.value, TipoDistribuicaoEnum.RATEIO_IGUAL.value]:
+                total_calculated = sum(installments_values)
+                diff = valor_total_dec - total_calculated
+                if diff != Decimal('0'):
+                    installments_values[-1] += diff
+
+            total_entrada = sum(installments_values[i] for i in entrada_indices)
+            total_financiado = sum(installments_values[i] for i in financiada_indices)
+
+            return {
+                "installments_values": installments_values,
+                "total_entrada": total_entrada,
+                "valor_financiado": total_financiado,
+                "taxa_juros_mensal": Decimal('0'),
+                "pmt": installments_values[financiada_indices[0]] if financiada_indices else Decimal('0'),
+                "total_financiado": total_financiado,
+                "total_juros": Decimal('0'),
+                "total_geral": valor_total_dec
+            }
+
+        # CASO 2: COM JUROS (taxa_juros_dec > 0) — Metodologia de Prestações Fixas / Desconto a Valor Presente
+        i = taxa_juros_dec / Decimal('100')
+
+        # 1. Determina os pesos w_k de cada parcela
+        weights: List[Decimal] = []
+        if tipo_distribuicao == TipoDistribuicaoEnum.PERCENTUAL.value:
+            for p in parcelas_rules:
+                pct = Decimal(str(p.get("percentual") or 0))
+                weights.append(pct / Decimal('100'))
+        elif tipo_distribuicao == TipoDistribuicaoEnum.RATEIO_IGUAL.value:
+            w_equal = Decimal('1') / Decimal(str(num_parcelas))
+            weights = [w_equal] * num_parcelas
+        else:  # VALOR_FIXO
+            total_fixo = sum(Decimal(str(p.get("valor_fixo") or 0)) for p in parcelas_rules)
+            if total_fixo > Decimal('0'):
+                weights = [Decimal(str(p.get("valor_fixo") or 0)) / total_fixo for p in parcelas_rules]
+            else:
+                w_equal = Decimal('1') / Decimal(str(num_parcelas))
+                weights = [w_equal] * num_parcelas
+
+        # 2. Calcula a soma dos fatores de desconto: sum( w_k / (1 + i)^(dias_k / 30) )
+        sum_discounted_weights = Decimal('0')
+        for idx, p in enumerate(parcelas_rules):
+            dias = int(p.get("intervalo_dias") or 0)
+            if dias == 0:
+                df = Decimal('1')
+            elif dias % 30 == 0:
+                meses = dias // 30
+                df = (Decimal('1') + i) ** (-meses)
+            else:
+                meses_float = dias / 30.0
+                df = Decimal(str((1.0 + float(i)) ** (-meses_float)))
+            
+            sum_discounted_weights += weights[idx] * df
+
+        # 3. Total com Juros = PV / sum_discounted_weights
+        if sum_discounted_weights > Decimal('0'):
+            total_com_juros = valor_total_dec / sum_discounted_weights
+        else:
+            total_com_juros = valor_total_dec
+
+        # 4. Valor nominal de cada parcela = round(total_com_juros * weight, 2)
+        for idx in range(num_parcelas):
+            p_val = (total_com_juros * weights[idx]).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            installments_values[idx] = p_val
+
+        # Para RATEIO_IGUAL, garantir que todas as parcelas tenham exatamente o mesmo valor nominal (PMT fixo)
+        if tipo_distribuicao == TipoDistribuicaoEnum.RATEIO_IGUAL.value:
+            pmt_val = installments_values[0]
+            for idx in range(num_parcelas):
+                installments_values[idx] = pmt_val
+
+        total_geral = sum(installments_values)
+        total_juros = total_geral - valor_total_dec
+        total_entrada = sum(installments_values[idx] for idx, p in enumerate(parcelas_rules) if int(p.get("intervalo_dias") or 0) == 0)
+        total_financiado = sum(installments_values[idx] for idx, p in enumerate(parcelas_rules) if int(p.get("intervalo_dias") or 0) > 0)
+        pmt = installments_values[0] if installments_values else Decimal('0')
+
+        return {
+            "installments_values": installments_values,
+            "total_entrada": total_entrada,
+            "valor_financiado": total_financiado,
+            "taxa_juros_mensal": taxa_juros_dec,
+            "pmt": pmt,
+            "total_financiado": total_financiado,
+            "total_juros": total_juros,
+            "total_geral": total_geral
+        }
+
+    @staticmethod
     def generate_planning_from_rules(
         db: Session,
         tenant_id: str,
@@ -145,59 +316,22 @@ class PaymentMethodsService:
         data_inicial: date,
         tipo_distribuicao: str,
         parcelas_rules: List[dict],
-        tipo_movimento: str
+        tipo_movimento: str,
+        taxa_juros_mensal: Decimal = Decimal('0')
     ) -> List[PlanejamentoFinanceiro]:
-        if valor_total <= 0:
+        if valor_total <= 0 or not parcelas_rules:
             return []
 
-        num_parcelas = len(parcelas_rules)
-        if num_parcelas == 0:
-            return []
+        calc_result = PaymentMethodsService.calculate_installments_schedule(
+            valor_total=valor_total,
+            parcelas_rules=parcelas_rules,
+            tipo_distribuicao=tipo_distribuicao,
+            taxa_juros_mensal=taxa_juros_mensal
+        )
 
-        # Convert values to Decimal
-        valor_total_dec = Decimal(str(valor_total))
-        installments_values = []
+        installments_values = calc_result["installments_values"]
 
-        # 1. Compute values for each installment
-        if tipo_distribuicao == TipoDistribuicaoEnum.PERCENTUAL.value:
-            for p in parcelas_rules:
-                pct = Decimal(str(p.get("percentual") or 0))
-                val = round(valor_total_dec * (pct / Decimal('100')), 2)
-                installments_values.append(val)
-        elif tipo_distribuicao == TipoDistribuicaoEnum.RATEIO_IGUAL.value:
-            for p in parcelas_rules:
-                val = round(valor_total_dec / Decimal(str(num_parcelas)), 2)
-                installments_values.append(val)
-        elif tipo_distribuicao == TipoDistribuicaoEnum.VALOR_FIXO.value:
-            for p in parcelas_rules:
-                v_fixo = p.get("valor_fixo")
-                val = round(Decimal(str(v_fixo)), 2) if v_fixo is not None else Decimal('0')
-                installments_values.append(val)
-
-            # Determine dynamic "Saldo" installment if any
-            saldo_idx = -1
-            for idx, p in enumerate(parcelas_rules):
-                if p.get("valor_fixo") is None:
-                    saldo_idx = idx
-                    break
-
-            if saldo_idx != -1:
-                sum_others = sum(installments_values[i] for i in range(num_parcelas) if i != saldo_idx)
-                installments_values[saldo_idx] = max(Decimal('0'), valor_total_dec - sum_others)
-            else:
-                # If all filled, enforce sum equals total
-                total_sum = sum(installments_values)
-                if total_sum != valor_total_dec:
-                    raise ValueError(f"A soma das parcelas ({total_sum}) deve ser igual ao valor total ({valor_total_dec})")
-
-        # 2. Adjust rounding difference for PERCENTUAL and RATEIO_IGUAL (rest goes to last installment)
-        if tipo_distribuicao in [TipoDistribuicaoEnum.PERCENTUAL.value, TipoDistribuicaoEnum.RATEIO_IGUAL.value]:
-            total_calculated = sum(installments_values)
-            diff = valor_total_dec - total_calculated
-            if diff != 0:
-                installments_values[-1] += diff
-
-        # 3. Create PlanejamentoFinanceiro rows
+        # Create PlanejamentoFinanceiro rows
         results = []
         for idx, p in enumerate(parcelas_rules):
             intervalo = int(p.get("intervalo_dias") or 0)
@@ -235,26 +369,29 @@ class PaymentMethodsService:
         if isinstance(data_inicial, datetime):
             data_inicial = data_inicial.date()
 
-        # 2. Calculate Sales budget totals
-        # Sale portion = items + rental_items of type VENDA_EQUIPAMENTOS
+        # 2. Calculate Sales & Upfront Installation budget totals (Pagamento Único)
         total_venda_items = sum(Decimal(str(i.total_venda or 0)) for i in budget.items)
         total_venda_kits = sum(Decimal(str(ri.kit_valor_mensal or 0)) * Decimal(str(ri.quantidade or 1)) for ri in budget.rental_items if getattr(ri, "tipo_contrato_kit", None) == 'VENDA_EQUIPAMENTOS')
-        valor_venda = total_venda_items + total_venda_kits
+        total_instalacao_kits = sum(Decimal(str(ri.kit_valor_mensal or 0)) * Decimal(str(ri.quantidade or 1)) for ri in budget.rental_items if getattr(ri, "tipo_contrato_kit", None) == 'INSTALACAO' or getattr(ri, "is_kit_instalacao", False))
+        valor_pagamento_unico = total_venda_items + total_venda_kits + total_instalacao_kits
 
-        # 3. Generate planning for Sales portion
-        if valor_venda > 0:
+        # 3. Generate planning for Sales & Installation portion
+        if valor_pagamento_unico > 0:
             # Read rules from snapshot if present, otherwise from database
             parcelas_rules = []
             tipo_distribuicao = None
+            taxa_juros_mensal = Decimal('0')
             
             if budget.forma_pagamento_snapshot:
                 snap = budget.forma_pagamento_snapshot
                 tipo_distribuicao = snap.get("tipo_distribuicao")
                 parcelas_rules = snap.get("parcelas") or []
+                taxa_juros_mensal = Decimal(str(snap.get("taxa_juros_mensal") or 0))
             else:
                 forma = db.query(FormaPagamento).filter(FormaPagamento.id == budget.forma_pagamento_id).first()
                 if forma:
                     tipo_distribuicao = forma.tipo_distribuicao
+                    taxa_juros_mensal = Decimal(str(forma.taxa_juros_mensal or 0))
                     parcelas_rules = [
                         {
                             "sequencia": p.sequencia,
@@ -270,6 +407,7 @@ class PaymentMethodsService:
                         "id": str(forma.id),
                         "descricao": forma.descricao,
                         "tipo_distribuicao": forma.tipo_distribuicao,
+                        "taxa_juros_mensal": float(taxa_juros_mensal),
                         "parcelas": parcelas_rules
                     }
                     db.add(budget)
@@ -281,15 +419,20 @@ class PaymentMethodsService:
                     company_id=budget.company_id,
                     origem_tipo='SALES_BUDGET',
                     origem_id=budget.id,
-                    valor_total=valor_venda,
+                    valor_total=valor_pagamento_unico,
                     data_inicial=data_inicial,
                     tipo_distribuicao=tipo_distribuicao,
                     parcelas_rules=parcelas_rules,
-                    tipo_movimento=TipoMovimentoEnum.RECEBIMENTO.value
+                    tipo_movimento=TipoMovimentoEnum.RECEBIMENTO.value,
+                    taxa_juros_mensal=taxa_juros_mensal
                 )
 
-        # 4. Option C: Generate recurring monthly planning for Leases/Rentals
-        valid_rentals = [ri for ri in budget.rental_items if getattr(ri, "tipo_contrato_kit", None) != 'VENDA_EQUIPAMENTOS']
+        # 4. Option C: Generate recurring monthly planning for Leases/Rentals (Strictly preserved, without interest)
+        valid_rentals = [
+            ri for ri in budget.rental_items 
+            if getattr(ri, "tipo_contrato_kit", None) not in ('VENDA_EQUIPAMENTOS', 'INSTALACAO') 
+            and not getattr(ri, "is_kit_instalacao", False)
+        ]
         for ri in valid_rentals:
             prazo = int(ri.prazo_contrato or 0)
             valor_mensal = Decimal(str(ri.valor_mensal or 0)) * Decimal(str(ri.quantidade or 1))
@@ -333,15 +476,18 @@ class PaymentMethodsService:
         if valor_total > 0:
             parcelas_rules = []
             tipo_distribuicao = None
+            taxa_juros_mensal = Decimal('0')
             
             if budget.forma_pagamento_snapshot:
                 snap = budget.forma_pagamento_snapshot
                 tipo_distribuicao = snap.get("tipo_distribuicao")
                 parcelas_rules = snap.get("parcelas") or []
+                taxa_juros_mensal = Decimal(str(snap.get("taxa_juros_mensal") or 0))
             else:
                 forma = db.query(FormaPagamento).filter(FormaPagamento.id == budget.forma_pagamento_id).first()
                 if forma:
                     tipo_distribuicao = forma.tipo_distribuicao
+                    taxa_juros_mensal = Decimal(str(forma.taxa_juros_mensal or 0))
                     parcelas_rules = [
                         {
                             "sequencia": p.sequencia,
@@ -357,6 +503,7 @@ class PaymentMethodsService:
                         "id": str(forma.id),
                         "descricao": forma.descricao,
                         "tipo_distribuicao": forma.tipo_distribuicao,
+                        "taxa_juros_mensal": float(taxa_juros_mensal),
                         "parcelas": parcelas_rules
                     }
                     db.add(budget)
@@ -372,5 +519,6 @@ class PaymentMethodsService:
                     data_inicial=data_inicial,
                     tipo_distribuicao=tipo_distribuicao,
                     parcelas_rules=parcelas_rules,
-                    tipo_movimento=TipoMovimentoEnum.PAGAMENTO.value
+                    tipo_movimento=TipoMovimentoEnum.PAGAMENTO.value,
+                    taxa_juros_mensal=taxa_juros_mensal
                 )
