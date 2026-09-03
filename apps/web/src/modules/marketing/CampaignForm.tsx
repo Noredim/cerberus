@@ -605,10 +605,15 @@ export const CampaignForm: React.FC = () => {
 
             {/* Imagem do Banner / Destaque */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 flex items-center gap-1.5">
-                <Image className="w-3.5 h-3.5 text-brand-primary" />
-                Imagem do Banner / Produto
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                  <Image className="w-3.5 h-3.5 text-brand-primary" />
+                  Imagem do Banner / Produto
+                </label>
+                <span className="text-[10px] font-semibold text-text-muted bg-bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                  Sugerido: 1200 × 800 px
+                </span>
+              </div>
               <div className="flex gap-2 items-center">
                 <input
                   type="text"
@@ -628,14 +633,22 @@ export const CampaignForm: React.FC = () => {
                   />
                 </label>
               </div>
+              <p className="text-[11px] text-text-muted mt-1.5 leading-relaxed">
+                Tamanho recomendado: <strong>1200 × 800 px</strong> (proporção 4:3 ou 16:9). Formatos: JPG, PNG ou WebP (máx. 5MB).
+              </p>
             </div>
 
             {/* Imagem de Fundo (Hero Background) */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 flex items-center gap-1.5">
-                <Image className="w-3.5 h-3.5 text-brand-primary" />
-                Imagem de Fundo (Hero Background)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                  <Image className="w-3.5 h-3.5 text-brand-primary" />
+                  Imagem de Fundo (Hero Background)
+                </label>
+                <span className="text-[10px] font-semibold text-text-muted bg-bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                  Sugerido: 1920 × 1080 px
+                </span>
+              </div>
               <div className="flex gap-2 items-center">
                 <input
                   type="text"
@@ -655,6 +668,9 @@ export const CampaignForm: React.FC = () => {
                   />
                 </label>
               </div>
+              <p className="text-[11px] text-text-muted mt-1.5 leading-relaxed">
+                Tamanho recomendado: <strong>1920 × 1080 px</strong> (Full HD widescreen 16:9). Formatos: JPG ou WebP (máx. 5MB).
+              </p>
             </div>
 
             {/* Cores da Marca */}
