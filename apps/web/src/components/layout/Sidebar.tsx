@@ -11,7 +11,8 @@ import {
     ChevronRight,
     FileText,
     Briefcase,
-    ShieldCheck
+    ShieldCheck,
+    Megaphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -82,6 +83,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 { label: 'Propostas de Venda', path: '/comercial/propostas' },
                 { label: 'Licitações', path: '/comercial/licitacoes' },
                 { label: 'Comparativos de soluções', path: '/comercial/comparativos' },
+                { label: 'Marketing / LPs', path: '/marketing' },
+            ]
+        },
+        {
+            icon: Megaphone,
+            label: 'Marketing',
+            path: '/marketing',
+            subItems: [
+                { label: 'Campanhas & LPs', path: '/marketing' },
+                { label: 'Nova Campanha', path: '/marketing/campanhas/nova' },
             ]
         },
         {

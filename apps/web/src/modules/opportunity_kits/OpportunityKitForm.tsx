@@ -508,7 +508,7 @@ export const OpportunityKitForm = ({
     fator_margem_instalacao: 1.0,
     fator_margem_manutencao: 1.0,
     fator_margem_servicos_produtos: 1.0,
-    taxa_juros_mensal: initialTaxaJuros ?? 0,
+    taxa_juros_mensal: initialTaxaJuros ?? (['LOCACAO', 'COMODATO'].includes(initialTipoContrato) ? 3 : 0),
     taxa_manutencao_anual: initialTaxaManutencao ?? 0,
     instalacao_inclusa: false,
     percentual_instalacao: '',
@@ -717,119 +717,111 @@ export const OpportunityKitForm = ({
     }
   };
 
+  // ── Unified Company Parameters & Commercial Policies Loading ──
   useEffect(() => {
     if (!activeCompanyId) return;
 
-    // Map tipo_contrato → per-type parameter suffix in company sales parameters
     const modalSuffix: Record<string, string> = {
       LOCACAO: 'locacao',
       COMODATO: 'comodato',
       VENDA_EQUIPAMENTOS: 'venda',
-      INSTALACAO: 'venda', // Apenas instalação usa bloco Venda
+      INSTALACAO: 'venda',
     };
     const suffix = modalSuffix[form.tipo_contrato] || 'locacao';
 
     // Detect whether the user changed the type (vs. initial mount)
-    // Only detect changes if the kit is FULLY LOADED. 
-    // This prevents the 'initial default LOCACAO -> actual DB values (e.g. COMODATO)' change from overwriting factors.
     const tipoChanged = isKitLoaded && prevTipoContratoRef.current !== form.tipo_contrato;
     prevTipoContratoRef.current = form.tipo_contrato;
 
     // For existing kits on initial load, don't overwrite already-saved taxes.
-    // But DO overwrite when the user explicitly switches tipo_contrato.
+    // But DO overwrite when the user explicitly switches tipo_contrato or for a new kit.
     const shouldOverwriteTaxes = (!kitId && isKitLoaded) || tipoChanged;
 
-    if (!shouldOverwriteTaxes) return; // Guard: only prefill for new kits or on tipo_contrato change
-
-    api.get(`/companies/${activeCompanyId}/sales-parameters`).then(res => {
-      const p = res.data;
-      if (!p) return;
-
-      // Prefer per-type field; fall back to the generic field if the per-type is 0/null
-      const pick = (base: string) =>
-        Number(p[`${base}_${suffix}`] ?? p[base] ?? 0);
-
-      setForm(prev => ({
-        ...prev,
-        ...(shouldOverwriteTaxes ? {
-          aliq_pis: pick('pis'),
-          aliq_cofins: pick('cofins'),
-          aliq_csll: pick('csll'),
-          aliq_irpj: pick('irpj'),
-          aliq_iss: pick('iss'),
-          aliq_icms: pick('icms_interno'),
-        } : {}),
-        // MKP: apply per-type defaults for ALL contract types on tipo_contrato change
-        // pick('mkp_padrao') resolves to: p['mkp_padrao_locacao'] for LOCACAO,
-        //   p['mkp_padrao_comodato'] for COMODATO, p['mkp_padrao_venda'] for VENDA, etc.
-        ...(shouldOverwriteTaxes ? {
-          fator_margem_locacao: pick('mkp_padrao') || 1,
-          fator_margem_manutencao: pick('mkp_padrao') || 1,
-          perc_despesas_adm: pick('despesa_administrativa'),
-          ...(['VENDA_EQUIPAMENTOS', 'INSTALACAO'].includes(form.tipo_contrato) ? {
-            fator_margem_servicos_produtos: pick('mkp_padrao') || 1,
-            fator_margem_instalacao: pick('mkp_padrao') || 1,
-          } : {}),
-        } : {}),
-      }));
-    }).catch(err => console.error('Failed to load sales parameters', err));
-  }, [kitId, form.tipo_contrato, activeCompanyId, isKitLoaded]);
-
-  // ÔöÇÔöÇ Policy loading — ALWAYS runs, independent of shouldOverwriteTaxes guard ÔöÇÔöÇ
-  // BUG FIX: previously this lived inside the prefill effect above. The
-  // `if (!shouldOverwriteTaxes) return` guard was killing the whole effect for
-  // existing kits, so setPoliciesLoaded(true) was never called and the
-  // "Carregando políticas..." spinner looped forever.
-  useEffect(() => {
-    if (!activeCompanyId) return;
-
-    const shouldOverwriteTaxes = !kitId && isKitLoaded;
-
-    const loadPolicies = async () => {
+    const loadPoliciesAndParams = async () => {
       setPoliciesLoaded(false);
       try {
-        // Use the user-scoped endpoint so limits reflect the logged-in user's
-        // role (cargo), not every tier configured for the company.
-        // The admin endpoint /{id}/commercial-policies returns ALL tiers and
-        // was causing minAllowed to be the company-wide minimum (e.g. 1.0)
-        // instead of what the user's role actually permits (e.g. 1.71).
         const targetTeamId = initialSalesTeamId || opportunitySalesTeamId || form.sales_team_id || (form.sales_teams && form.sales_teams[0]);
-        const url = targetTeamId 
+        const policyUrl = targetTeamId 
           ? `/companies/commercial-policies/me?sales_team_id=${targetTeamId}`
           : `/companies/commercial-policies/me`;
 
-        const res = await api.get(url);
-        const policies = (res.data || []).filter((p: any) => p.ativo);
+        const [policiesRes, paramsRes] = await Promise.all([
+          api.get(policyUrl).catch(err => {
+            console.error('Failed to load commercial policies', err);
+            return { data: [] };
+          }),
+          api.get(`/companies/${activeCompanyId}/sales-parameters`).catch(err => {
+            console.error('Failed to load sales parameters', err);
+            return { data: null };
+          }),
+        ]);
+
+        const policies = (policiesRes.data || []).filter((p: any) => p.ativo);
         const sorted = [...policies].sort((a: any, b: any) => Number(a.fator_limite) - Number(b.fator_limite));
         setUserPolicies(sorted);
 
+        const p = paramsRes.data;
+        const pick = (base: string) => Number(p?.[`${base}_${suffix}`] ?? p?.[base] ?? 0);
+
         if (sorted.length > 0) {
           const minAllowed = Number(sorted[0].fator_limite);
-          const defaultPolicy: any = sorted.find((p: any) => p.is_default) ?? sorted[0];
+          const defaultPolicy: any = sorted.find((pol: any) => pol.is_default) ?? sorted[0];
+
+          // MKP Padrão cadastrado na empresa (por modalidade ou geral)
+          const mkpPadrao = pick('mkp_padrao');
+          const effectiveDefaultFactor = mkpPadrao > 0 ? Math.max(mkpPadrao, minAllowed) : (Number(defaultPolicy?.fator_limite ?? minAllowed) || 1.0);
 
           setForm(prev => {
             const updates: any = {};
 
-            const currentPolicyBelongsToTeam = prev.commercial_policy_id && sorted.some((p: any) => p.id === prev.commercial_policy_id);
+            const currentPolicyBelongsToTeam = prev.commercial_policy_id && sorted.some((pol: any) => pol.id === prev.commercial_policy_id);
             const policyToApply = currentPolicyBelongsToTeam 
-              ? sorted.find((p: any) => p.id === prev.commercial_policy_id)
+              ? sorted.find((pol: any) => pol.id === prev.commercial_policy_id)
               : defaultPolicy;
 
-            if (policyToApply && (!currentPolicyBelongsToTeam || shouldOverwriteTaxes)) {
-              updates.commercial_policy_id = policyToApply.id;
-              updates.perc_comissao = Number(policyToApply.comissao_percentual ?? 0);
-              updates.perc_despesa_operacional = Number(policyToApply.despesa_operacional_percentual ?? 0);
-              updates.tipo_comissionamento = policyToApply.tipo_comissionamento || 'TRADICIONAL';
-              updates.perc_dsr = Number(policyToApply.dsr_percentual ?? 0);
-              updates.perc_fgts = Number(policyToApply.fgts_percentual ?? 0);
-              updates.perc_inss = Number(policyToApply.inss_percentual ?? 0);
-              updates.perc_demais_incidencias = Number(policyToApply.demais_incidencias_percentual ?? 0);
-              updates.taxa_manutencao_anual = Number(policyToApply.manutencao_ano_percentual ?? prev.taxa_manutencao_anual);
-              updates.fator_margem_locacao = Number(policyToApply.fator_limite ?? minAllowed);
-              updates.fator_margem_instalacao = Number(policyToApply.fator_limite ?? minAllowed);
-              updates.fator_margem_manutencao = Number(policyToApply.fator_limite ?? minAllowed);
-              updates.fator_margem_servicos_produtos = Number(policyToApply.fator_limite ?? minAllowed);
-              updates.fator_monitoramento = Number(policyToApply.fator_limite ?? minAllowed);
+            if (shouldOverwriteTaxes) {
+              if (policyToApply) {
+                updates.commercial_policy_id = policyToApply.id;
+                updates.perc_comissao = Number(policyToApply.comissao_percentual ?? 0);
+                updates.perc_despesa_operacional = Number(policyToApply.despesa_operacional_percentual ?? 0);
+                updates.tipo_comissionamento = policyToApply.tipo_comissionamento || 'TRADICIONAL';
+                updates.perc_dsr = Number(policyToApply.dsr_percentual ?? 0);
+                updates.perc_fgts = Number(policyToApply.fgts_percentual ?? 0);
+                updates.perc_inss = Number(policyToApply.inss_percentual ?? 0);
+                updates.perc_demais_incidencias = Number(policyToApply.demais_incidencias_percentual ?? 0);
+                updates.taxa_manutencao_anual = Number(policyToApply.manutencao_ano_percentual ?? prev.taxa_manutencao_anual);
+              }
+
+              if (p) {
+                updates.aliq_pis = pick('pis');
+                updates.aliq_cofins = pick('cofins');
+                updates.aliq_csll = pick('csll');
+                updates.aliq_irpj = pick('irpj');
+                updates.aliq_iss = pick('iss');
+                updates.aliq_icms = pick('icms_interno');
+                updates.perc_despesas_adm = pick('despesa_administrativa');
+              }
+
+              // Fatores de margem seguindo o MKP PADRÃO cadastrado na empresa
+              updates.fator_margem_locacao = effectiveDefaultFactor;
+              updates.fator_margem_servicos_produtos = effectiveDefaultFactor;
+              updates.fator_margem_instalacao = effectiveDefaultFactor;
+              updates.fator_margem_manutencao = effectiveDefaultFactor;
+              updates.fator_manutencao = effectiveDefaultFactor;
+
+              // Taxa juros padrão de 3% a.m para Locação e Comodato
+              if (['LOCACAO', 'COMODATO'].includes(form.tipo_contrato)) {
+                if (prev.taxa_juros_mensal === undefined || prev.taxa_juros_mensal === null || prev.taxa_juros_mensal === 0) {
+                  updates.taxa_juros_mensal = 3;
+                }
+              }
+
+              // Manutenção inclusa padrão de 30% a.a
+              if (prev.manutencao_inclusa) {
+                if (!prev.taxa_manutencao_anual || prev.taxa_manutencao_anual === 0) {
+                  updates.taxa_manutencao_anual = 30;
+                }
+              }
             } else {
               if (Number(prev.fator_margem_locacao) < minAllowed) updates.fator_margem_locacao = minAllowed;
               if (Number(prev.fator_margem_instalacao) < minAllowed) updates.fator_margem_instalacao = minAllowed;
@@ -840,7 +832,7 @@ export const OpportunityKitForm = ({
 
             const currentFator = Number(updates.fator_margem_locacao ?? prev.fator_margem_locacao);
             const applicable = sorted
-              .filter((p: any) => Number(p.fator_limite) <= currentFator + 0.00001)
+              .filter((pol: any) => Number(pol.fator_limite) <= currentFator + 0.00001)
               .sort((a: any, b: any) => Number(b.fator_limite) - Number(a.fator_limite))[0] || defaultPolicy;
 
             if (applicable) {
@@ -857,17 +849,17 @@ export const OpportunityKitForm = ({
           setActivePolicy(null);
         }
       } catch (err) {
-        console.error('Failed to load company policies', err);
+        console.error('Failed to load company policies and parameters', err);
       } finally {
         setPoliciesLoaded(true);
       }
     };
 
-    loadPolicies();
-  }, [kitId, form.tipo_contrato, activeCompanyId, opportunitySalesTeamId, form.sales_team_id, initialSalesTeamId]);
+    loadPoliciesAndParams();
+  }, [kitId, form.tipo_contrato, activeCompanyId, isKitLoaded, opportunitySalesTeamId, form.sales_team_id, initialSalesTeamId]);
 
 
-  // ÔöÇÔöÇ Reactive tier update ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  // ── Reactive tier update ────────────────────────────────────────────────────────
   // Effect 1: Detect which tier the current factor falls into.
   // Runs on fator_margem_locacao changes or financials updates (to sync with MKP de Venda).
   useEffect(() => {
@@ -990,11 +982,11 @@ export const OpportunityKitForm = ({
   };
 
   const FACTOR_LABELS: Record<string, string> = {
-    fator_margem_locacao: 'Fator Margem (Produtos / Base)',
-    fator_margem_servicos_produtos: 'Fator Margem Serviços (Produtos)',
+    fator_margem_locacao: 'Fator Margem Produtos',
+    fator_margem_servicos_produtos: 'Fator Margem Serviços',
     fator_margem_instalacao: 'Fator Margem Instalação',
     fator_margem_manutencao: 'Fator Margem Manutenção',
-    fator_manutencao: 'Fator Manutenção',
+    fator_manutencao: 'Fator Margem Manutenção',
   };
 
   const handleFactorBlur = (fieldName: keyof KitFormValues, value: number) => {
@@ -2101,14 +2093,28 @@ export const OpportunityKitForm = ({
 
             // ── Fator Geral Média Dinâmico (Locação/Comodato)
             const activeLocFactors: number[] = [];
-            activeLocFactors.push(Number(form.fator_margem_locacao) || 0);
+            const hasProducts = form.items?.some((i: any) => i.product_id) || (financials?.summary?.custo_aquisicao_produtos > 0);
+            const hasServices = form.items?.some((i: any) => i.own_service_id) || (financials?.summary?.custo_aquisicao_servicos > 0);
 
-            const hasLocMaintenance = !!form.manutencao_inclusa || (custoOpMensal > 0);
-            if (hasLocMaintenance) {
+            if (hasProducts || (!hasProducts && !hasServices)) {
+              activeLocFactors.push(Number(form.fator_margem_locacao) || 0);
+            }
+            if (hasServices) {
+              activeLocFactors.push(Number(form.fator_margem_servicos_produtos) || 0);
+            }
+            if (!form.instalacao_inclusa && ((financials?.summary?.custo_instalacao_total > 0) || (financials?.summary?.valor_venda_instalacao > 0))) {
+              activeLocFactors.push(Number(form.fator_margem_instalacao) || 0);
+            }
+
+            // Manutenção: apenas se houver lançamento influenciando os preços
+            const hasLocMaintenanceLaunched = !form.manutencao_inclusa && (custoOpMensal > 0 || (financials?.summary?.vlt_manut > 0));
+            if (hasLocMaintenanceLaunched && form.fator_manutencao) {
               activeLocFactors.push(Number(form.fator_manutencao) || 0);
             }
 
-            const averageLocFactor = activeLocFactors.reduce((a, b) => a + b, 0) / activeLocFactors.length;
+            const averageLocFactor = activeLocFactors.length > 0
+              ? activeLocFactors.reduce((a, b) => a + b, 0) / activeLocFactors.length
+              : (Number(form.fator_margem_locacao) || 0);
 
             const valorComissaoLocacao = financials?.summary?.valor_comissao_locacao || 0;
             const valorDespesasAdmLocacao = financials?.summary?.valor_despesas_adm_locacao || 0;
@@ -2819,7 +2825,7 @@ export const OpportunityKitForm = ({
 
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem'}
+                  {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem Produtos'}
                 </label>
                 <Decimal4Input
                   value={form.fator_margem_locacao}
@@ -2828,13 +2834,32 @@ export const OpportunityKitForm = ({
                 />
               </div>
 
+              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                <div>
+                  <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">
+                    Fator Margem Serviços
+                  </label>
+                  <Decimal4Input
+                    value={form.fator_margem_servicos_produtos}
+                    onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
+                    onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
+                  />
+                </div>
+              )}
+
               {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Fator Manutenção</label>
+                  <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
                   <Decimal4Input
                     value={form.fator_manutencao}
-                    onChange={(val: number) => handleInputChange('fator_manutencao', val)}
-                    onBlur={(val: number) => handleFactorBlur('fator_manutencao', val)}
+                    onChange={(val: number) => {
+                      handleInputChange('fator_manutencao', val);
+                      handleInputChange('fator_margem_manutencao', val);
+                    }}
+                    onBlur={(val: number) => {
+                      handleFactorBlur('fator_manutencao', val);
+                      handleFactorBlur('fator_margem_manutencao', val);
+                    }}
                     placeholder="Ex: 1.7000"
                   />
                 </div>
@@ -2842,15 +2867,6 @@ export const OpportunityKitForm = ({
 
               {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Fator Monitoramento</label>
-                    <Decimal4Input
-                      value={form.fator_monitoramento}
-                      onChange={(val: number) => handleInputChange('fator_monitoramento', val)}
-                      onBlur={(val: number) => handleFactorBlur('fator_monitoramento', val)}
-                      placeholder="Ex: 1.0000"
-                    />
-                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
                     <Input 
@@ -3080,7 +3096,13 @@ export const OpportunityKitForm = ({
                         type="checkbox"
                         id="chk-manutencao"
                         checked={Boolean(form.manutencao_inclusa)}
-                        onChange={(e) => handleInputChange('manutencao_inclusa', e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          handleInputChange('manutencao_inclusa', checked);
+                          if (checked && (!form.taxa_manutencao_anual || form.taxa_manutencao_anual === 0)) {
+                            handleInputChange('taxa_manutencao_anual', 30);
+                          }
+                        }}
                         className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                       />
                       <label htmlFor="chk-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Manutenção Inclusa na Mensalidade</label>
@@ -3089,7 +3111,7 @@ export const OpportunityKitForm = ({
                       <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 gap-4">
                         <div>
                           <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
-                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 20.00" />
+                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 30.00" />
                           <p className="text-[10px] text-text-muted mt-1">% s/ custo total anual.</p>
                         </div>
                       </div>
@@ -4100,37 +4122,7 @@ export const OpportunityKitForm = ({
             </section>
           )}
 
-          {/* Bloco 8: Monitoramento */}
-          {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
-            <section className="bg-bg-primary rounded-2xl p-6 border border-border-subtle shadow-sm shadow-black/5">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0">
-                  <span className="text-cyan-500 font-bold text-sm">8</span>
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-text-primary">Monitoramento</h2>
-                  <p className="text-sm text-text-secondary">Custo recorrente de monitoramento para o kit de Locação/Comodato.</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-1" title="Custo mensal unitário do monitoramento">Custo Monitoramento Unitário</label>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    value={form.custo_monitoramento_unitario} 
-                    onChange={(e) => handleInputChange('custo_monitoramento_unitario', parseFloat(e.target.value) || 0)} 
-                    className="w-full" 
-                    placeholder="0,00"
-                  />
-                  <p className="text-[10px] text-text-muted mt-1">
-                    Custo por unidade do kit. O preço de venda será este valor multiplicado pelo Fator Monitoramento (Bloco 2).
-                  </p>
-                </div>
-              </div>
-            </section>
-          )}
+
 
           <AddOperationalCostModal
             isOpen={costSearchType !== null}

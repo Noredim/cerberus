@@ -58,6 +58,9 @@ import { TaxRecoveryDetail } from './modules/fiscal/recuperacao-impostos/TaxReco
 import { LeadList } from './modules/leads/LeadList';
 import { LeadDetail } from './modules/leads/LeadDetail';
 import { GoogleCallback } from './modules/integrations/GoogleCallback';
+import { CampaignsList } from './modules/marketing/CampaignsList';
+import { CampaignForm } from './modules/marketing/CampaignForm';
+import { PublicLandingPage } from './modules/marketing/public/PublicLandingPage';
 
 
 import { Loader2, ServerOff } from 'lucide-react';
@@ -188,6 +191,7 @@ function App() {
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/lp/:slug" element={<PublicLandingPage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
@@ -287,6 +291,12 @@ function App() {
             {/* Comercial: Leads */}
             <Route path="/comercial/leads" element={<LeadList />} />
             <Route path="/comercial/leads/:id" element={<LeadDetail />} />
+
+            {/* Marketing & Campanhas */}
+            <Route path="/marketing" element={<CampaignsList />} />
+            <Route path="/marketing/campanhas" element={<CampaignsList />} />
+            <Route path="/marketing/campanhas/nova" element={<CampaignForm />} />
+            <Route path="/marketing/campanhas/:id" element={<CampaignForm />} />
 
             {/* Integrações: Google Calendar Callback */}
             <Route path="/integrations/google/callback" element={<GoogleCallback />} />
