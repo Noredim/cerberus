@@ -53,10 +53,22 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
       setLoadingTeams(true);
       try {
         const [custRes, profRes, teamsRes, fpRes] = await Promise.all([
-          api.get('/cadastro/clientes', { params: { limit: 500 } }),
-          api.get('/professionals', { params: { limit: 500 } }),
-          currentCompanyId ? api.get(`/companies/${currentCompanyId}/sales-teams`) : Promise.resolve({ data: [] }),
-          api.get('/cadastro/formas-pagamento')
+          api.get('/cadastro/clientes', { params: { limit: 500 } }).catch(err => {
+            console.warn('Erro ao carregar clientes:', err);
+            return { data: [] };
+          }),
+          api.get('/professionals', { params: { limit: 500 } }).catch(err => {
+            console.warn('Erro ao carregar profissionais:', err);
+            return { data: [] };
+          }),
+          currentCompanyId ? api.get(`/companies/${currentCompanyId}/sales-teams`).catch(err => {
+            console.warn('Erro ao carregar sales-teams:', err);
+            return { data: [] };
+          }) : Promise.resolve({ data: [] }),
+          api.get('/cadastro/formas-pagamento').catch(err => {
+            console.warn('Erro ao carregar formas de pagamento:', err);
+            return { data: [] };
+          })
         ]);
 
         const fps = Array.isArray(fpRes.data) ? fpRes.data : [];

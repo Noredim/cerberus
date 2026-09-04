@@ -785,11 +785,26 @@ export function SalesBudgetForm() {
     const loadData = async () => {
       try {
         const [custRes, supRes, profRes, usersRes, fpRes] = await Promise.all([
-          api.get('/cadastro/clientes', { params: { limit: 200 } }),
-          api.get('/cadastro/fornecedores', { params: { limit: 200 } }),
-          api.get('/professionals', { params: { limit: 500 } }),
-          api.get('/users', { params: { limit: 500 } }),
-          api.get('/cadastro/formas-pagamento'),
+          api.get('/cadastro/clientes', { params: { limit: 200 } }).catch(err => {
+            console.warn('Erro ao carregar clientes:', err);
+            return { data: [] };
+          }),
+          api.get('/cadastro/fornecedores', { params: { limit: 200 } }).catch(err => {
+            console.warn('Erro ao carregar fornecedores:', err);
+            return { data: [] };
+          }),
+          api.get('/professionals', { params: { limit: 500 } }).catch(err => {
+            console.warn('Erro ao carregar profissionais:', err);
+            return { data: [] };
+          }),
+          api.get('/users', { params: { limit: 500 } }).catch(err => {
+            console.warn('Erro ao carregar usuários:', err);
+            return { data: [] };
+          }),
+          api.get('/cadastro/formas-pagamento').catch(err => {
+            console.warn('Erro ao carregar formas de pagamento:', err);
+            return { data: [] };
+          }),
         ]);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : custRes.data.items || []);
         setSuppliers(Array.isArray(supRes.data) ? supRes.data : supRes.data.items || []);

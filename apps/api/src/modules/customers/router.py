@@ -31,8 +31,17 @@ def list_customers(
     current_user: User = Depends(get_current_user),
     active_company_id: str = Depends(get_active_company)
 ):
-    service = CustomerService(db)
-    return service.list_customers(current_user.tenant_id, q, skip, limit, active_company_id)
+    try:
+        service = CustomerService(db)
+        return service.list_customers(current_user.tenant_id, q, skip, limit, active_company_id)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar clientes: {str(e)}"
+        )
+
 
 @router.get("/{id}", response_model=CustomerOut)
 def get_customer(

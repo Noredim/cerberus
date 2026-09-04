@@ -39,13 +39,23 @@ class CustomerService:
             Customer.tenant_id == tenant_id
         )
         if company_id:
-            query = query.filter(Customer.company_id == company_id)
+            from uuid import UUID
+            try:
+                comp_uuid = UUID(str(company_id)) if not isinstance(company_id, UUID) else company_id
+                query = query.filter(or_(Customer.company_id == comp_uuid, Customer.company_id.is_(None)))
+            except Exception:
+                query = query.filter(or_(Customer.company_id == company_id, Customer.company_id.is_(None)))
         return query.first()
 
     def list_customers(self, tenant_id: str, q: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None) -> List[Customer]:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
         if company_id:
-            query = query.filter(Customer.company_id == company_id)
+            from uuid import UUID
+            try:
+                comp_uuid = UUID(str(company_id)) if not isinstance(company_id, UUID) else company_id
+                query = query.filter(or_(Customer.company_id == comp_uuid, Customer.company_id.is_(None)))
+            except Exception:
+                query = query.filter(or_(Customer.company_id == company_id, Customer.company_id.is_(None)))
         
         if q:
             q_clean = re.sub(r'\D', '', q)
@@ -62,7 +72,12 @@ class CustomerService:
     def count_customers(self, tenant_id: str, q: Optional[str] = None, company_id: Optional[str] = None) -> int:
         query = self.db.query(Customer).filter(Customer.tenant_id == tenant_id)
         if company_id:
-            query = query.filter(Customer.company_id == company_id)
+            from uuid import UUID
+            try:
+                comp_uuid = UUID(str(company_id)) if not isinstance(company_id, UUID) else company_id
+                query = query.filter(or_(Customer.company_id == comp_uuid, Customer.company_id.is_(None)))
+            except Exception:
+                query = query.filter(or_(Customer.company_id == company_id, Customer.company_id.is_(None)))
         if q:
             q_clean = re.sub(r'\D', '', q)
             filters = [

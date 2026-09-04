@@ -89,12 +89,31 @@ class CustomerUpdate(BaseModel):
             return _uppercase_strings(data)
         return data
 
-class CustomerOut(CustomerBase):
+class CustomerOut(BaseModel):
     id: str
-    tenant_id: str
-    active: bool
-    created_at: datetime
-    updated_at: datetime
+    tenant_id: Optional[str] = None
+    company_id: Optional[UUID] = None
+    cnpj: Optional[str] = None
+    razao_social: Optional[str] = ""
+    nome_fantasia: Optional[str] = None
+    email: Optional[str] = None
+    telefone: Optional[str] = None
+    
+    tipo: Optional[str] = "PRIVADO"
+    esfera: Optional[str] = None
+    
+    # Endereço
+    cep: Optional[str] = None
+    logradouro: Optional[str] = None
+    numero: Optional[str] = None
+    complemento: Optional[str] = None
+    bairro: Optional[str] = None
+    municipality_id: Optional[str] = None
+    state_id: Optional[str] = None
+    
+    active: Optional[bool] = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     city_nome: Optional[str] = None
     state_sigla: Optional[str] = None
     

@@ -6,6 +6,10 @@ import uuid
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Optional
 
+# Explicitly ensure related models are registered in the mapper registry
+from src.modules.catalog.models import City, State
+from src.modules.tenants.models import Tenant
+
 class Customer(Base):
     __tablename__ = "customers"
     __table_args__ = (
@@ -51,8 +55,15 @@ class Customer(Base):
 
     @property
     def city_nome(self) -> Optional[str]:
-        return self.city.nome if self.city else None
+        try:
+            return self.city.nome if self.city else None
+        except Exception:
+            return None
 
     @property
     def state_sigla(self) -> Optional[str]:
-        return self.state.sigla if self.state else None
+        try:
+            return self.state.sigla if self.state else None
+        except Exception:
+            return None
+
