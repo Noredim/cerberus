@@ -725,6 +725,34 @@ export function SalesBudgetForm() {
     return isVendedor || isResponsible;
   }, [user, isApprover, vendedorId, responsavelIds]);
 
+  const isManagerOrAdmin = useMemo(() => {
+    if (!user) return false;
+    const hasAdminOrManagerRole = user.roles?.some((r: string) =>
+      ['ADMIN', 'ADMINISTRADOR', 'DIRETORIA', 'GERENTE'].includes(String(r).toUpperCase())
+    );
+    if (hasAdminOrManagerRole) return true;
+    return salesTeams.some((team: any) =>
+      team.members?.some((m: any) => m.user_id === user.id && String(m.cargo).toUpperCase() === 'GERENTE')
+    );
+  }, [user, salesTeams]);
+
+  const isEngenhariaPreco = useMemo(() => {
+    if (!user) return false;
+    return (
+      user.roles?.some((r: string) => String(r).toUpperCase() === 'ENGENHARIA_PRECO') &&
+      !isManagerOrAdmin
+    );
+  }, [user, isManagerOrAdmin]);
+
+  const canViewConsolidacaoDiretoria = isApprover && (isManagerOrAdmin || !isEngenhariaPreco);
+  const canViewDrv = isManagerOrAdmin || !isEngenhariaPreco;
+
+  useEffect(() => {
+    if (!canViewDrv && activeTab === 'dre') {
+      setSearchParams({ tab: 'venda' }, { replace: true });
+    }
+  }, [canViewDrv, activeTab, setSearchParams]);
+
   const isReadonly = status === 'ENVIADO_APROVACAO' || status === 'CANCELADO' || status === 'GANHO' || status === 'PERDIDO';
   const isFactorDisabled = isReadonly && !(status === 'ENVIADO_APROVACAO' && isApprover);
 
@@ -3472,17 +3500,19 @@ export function SalesBudgetForm() {
                       Approval de Locação
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      setShowReportsDropdown(false);
-                      handleDownloadDreReport();
-                    }}
-                    disabled={downloadingDreReport}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2"
-                  >
-                    {downloadingDreReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    DRV da Venda
-                  </button>
+                  {canViewDrv && (
+                    <button
+                      onClick={() => {
+                        setShowReportsDropdown(false);
+                        handleDownloadDreReport();
+                      }}
+                      disabled={downloadingDreReport}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center gap-2"
+                    >
+                      {downloadingDreReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      DRV da Venda
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -3725,16 +3755,18 @@ export function SalesBudgetForm() {
           <History className="w-4 h-4" />
           Histórico da Oportunidade
         </button>
-        <button onClick={() => setSearchParams({ tab: 'dre' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'dre' ? 'text-emerald-600 border-b-2 border-emerald-500' : 'text-text-muted hover:text-text-primary'}`}>
-          <TrendingUp className="w-4 h-4" />
-          DRV da Venda
-        </button>
+        {canViewDrv && (
+          <button onClick={() => setSearchParams({ tab: 'dre' }, { replace: true })} className={`px-6 py-3 text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 ${activeTab === 'dre' ? 'text-emerald-600 border-b-2 border-emerald-500' : 'text-text-muted hover:text-text-primary'}`}>
+            <TrendingUp className="w-4 h-4" />
+            DRV da Venda
+          </button>
+        )}
       </div>
 
       {/* ─── VENDA TAB ─── */}
       {activeTab === 'venda' && (<>
         {/* Consolidação Diretoria — right after header */}
-        {isApprover && (items.length > 0 || vendaKits.length > 0) && (() => {
+        {canViewConsolidacaoDiretoria && (items.length > 0 || vendaKits.length > 0) && (() => {
           const jurosVenda = paymentInterestVenda.jurosVenda;
           const venda_fat = totals.venda + jurosVenda;
           const venda_custo_total = totals.venda - totals.lucro;
@@ -4920,7 +4952,7 @@ export function SalesBudgetForm() {
 
           return (
             <>
-              {isApprover && (
+              {canViewConsolidacaoDiretoria && (
                 <>
                   <div className="bg-surface border border-border-subtle rounded-xl p-6 relative overflow-hidden mt-4">
                 <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none transition-opacity group-hover:opacity-[0.06]">
@@ -6583,7 +6615,7 @@ export function SalesBudgetForm() {
       )}
 
       {/* ─── DRE TAB ─── */}
-      {activeTab === 'dre' && (
+      {canViewDrv && activeTab === 'dre' && (
         <div className="bg-surface border border-border-subtle rounded-xl p-6 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle pb-4">
             <div>

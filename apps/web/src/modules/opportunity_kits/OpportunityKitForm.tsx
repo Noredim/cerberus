@@ -474,6 +474,28 @@ export const OpportunityKitForm = ({
     return user?.roles?.includes('ADMIN') || user?.roles?.includes('ADMINISTRADOR');
   }, [user]);
 
+  const isManagerOrAdmin = useMemo(() => {
+    if (!user) return false;
+    const hasAdminOrManagerRole = user.roles?.some((r: string) =>
+      ['ADMIN', 'ADMINISTRADOR', 'DIRETORIA', 'GERENTE'].includes(String(r).toUpperCase())
+    );
+    if (hasAdminOrManagerRole) return true;
+    return salesTeams.some((team: any) =>
+      team.members?.some((m: any) => m.user_id === user.id && String(m.cargo).toUpperCase() === 'GERENTE')
+    );
+  }, [user, salesTeams]);
+
+  const isEngenhariaPreco = useMemo(() => {
+    if (!user) return false;
+    return (
+      user.roles?.some((r: string) => String(r).toUpperCase() === 'ENGENHARIA_PRECO') &&
+      !isManagerOrAdmin
+    );
+  }, [user, isManagerOrAdmin]);
+
+  const canViewRoiCards = isManagerOrAdmin || !isEngenhariaPreco;
+  const canViewProfitAndMarginCards = isManagerOrAdmin || !isEngenhariaPreco;
+
 
   const allowedTypes = useMemo(() => {
     const isVendaContext = initialTipoContrato === 'VENDA_EQUIPAMENTOS';
@@ -1876,152 +1898,156 @@ export const OpportunityKitForm = ({
 
                   {/* Row 2 — Fechamento: Lucro da Venda + Lucro Manutenção 12m */}
                   <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border-subtle">
-                    {/* Lucro da Venda */}
-                    <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
-                      <div className="min-w-0 flex-1">
-                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Venda</span>
-                        <div className={`text-base font-black truncate ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
-                        <div className="text-[9px] text-text-muted mt-0.5 truncate">
-                          Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
-                        </div>
-                        <div className="text-[9px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
-                          <span className="truncate">Fat: {fmtC(totalVenda)}</span>
-                          <span className="truncate">Aq: {fmtC(custoB4 + custoB5)}</span>
-                          <Tooltip variant="light" content={
-                            <div className="w-72 space-y-2 text-text-secondary p-1">
-                              <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
-                              
-                              {impostosB4 > 0 && (
-                                <div className="space-y-1">
-                                  <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Kit de Venda (Itens)</div>
-                                  {Object.values(taxLabelB4).filter(t => t.total > 0).map(t => {
-                                    const isIcms12 = t.label === 'ICMS' && isInterstate;
-                                    const label = isIcms12 ? 'icms 12% Venda' : t.label;
-                                    const pctStr = t.percent > 0 && !isIcms12 ? ` (${t.percent.toFixed(2)}%)` : '';
-                                    return (
-                                      <div key={t.label} className="flex justify-between text-xs pl-2">
-                                        <span>{label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                    {canViewProfitAndMarginCards && (
+                      <>
+                        {/* Lucro da Venda */}
+                        <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroVenda >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                          <div className="min-w-0 flex-1">
+                            <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Venda</span>
+                            <div className={`text-base font-black truncate ${lucroVenda >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroVenda)}</div>
+                            <div className="text-[9px] text-text-muted mt-0.5 truncate">
+                              Itens {fmtC(lucroB4)} + Inst {fmtC(lucroB5)}
+                            </div>
+                            <div className="text-[9px] text-text-muted/70 mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
+                              <span className="truncate">Fat: {fmtC(totalVenda)}</span>
+                              <span className="truncate">Aq: {fmtC(custoB4 + custoB5)}</span>
+                              <Tooltip variant="light" content={
+                                <div className="w-72 space-y-2 text-text-secondary p-1">
+                                  <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">Impostos — Venda (B4 + B5)</div>
+                                  
+                                  {impostosB4 > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Kit de Venda (Itens)</div>
+                                      {Object.values(taxLabelB4).filter(t => t.total > 0).map(t => {
+                                        const isIcms12 = t.label === 'ICMS' && isInterstate;
+                                        const label = isIcms12 ? 'icms 12% Venda' : t.label;
+                                        const pctStr = t.percent > 0 && !isIcms12 ? ` (${t.percent.toFixed(2)}%)` : '';
+                                        return (
+                                          <div key={t.label} className="flex justify-between text-xs pl-2">
+                                            <span>{label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                      {isInterstate && icmsStCompraDeduction > 0 && (
+                                        <div className="flex justify-between text-xs text-emerald-600 pl-2">
+                                          <span>icms st (compra)</span><span className="font-medium">- ({fmtC(icmsStCompraDeduction)})</span>
+                                        </div>
+                                      )}
+                                      <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
+                                        <span>Subtotal Kit</span><span>{fmtC(impostosB4)}</span>
                                       </div>
-                                    );
-                                  })}
-                                  {isInterstate && icmsStCompraDeduction > 0 && (
-                                    <div className="flex justify-between text-xs text-emerald-600 pl-2">
-                                      <span>icms st (compra)</span><span className="font-medium">- ({fmtC(icmsStCompraDeduction)})</span>
                                     </div>
                                   )}
-                                  <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
-                                    <span>Subtotal Kit</span><span>{fmtC(impostosB4)}</span>
-                                  </div>
-                                </div>
-                              )}
 
-                              {impostosB5 > 0 && (
-                                <div className="space-y-1 pt-2 border-t border-border-subtle/50">
-                                  <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Instalação</div>
-                                  {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => {
-                                    const pctStr = t.percent > 0 ? ` (${t.percent.toFixed(2)}%)` : '';
-                                    return (
-                                      <div key={t.label} className="flex justify-between text-xs pl-2">
-                                        <span>{t.label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                  {impostosB5 > 0 && (
+                                    <div className="space-y-1 pt-2 border-t border-border-subtle/50">
+                                      <div className="font-bold text-[10px] text-text-primary uppercase tracking-wide">Instalação</div>
+                                      {Object.values(taxLabelB5).filter(t => t.total > 0).map(t => {
+                                        const pctStr = t.percent > 0 ? ` (${t.percent.toFixed(2)}%)` : '';
+                                        return (
+                                          <div key={t.label} className="flex justify-between text-xs pl-2">
+                                            <span>{t.label}{pctStr}</span><span className="text-rose-600 font-medium">{fmtC(t.total)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                      <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
+                                        <span>Subtotal Inst.</span><span>{fmtC(impostosB5)}</span>
                                       </div>
-                                    );
-                                  })}
-                                  <div className="flex justify-between text-xs font-semibold text-text-secondary border-t border-border-subtle/30 pt-0.5 mt-0.5 pl-2">
-                                    <span>Subtotal Inst.</span><span>{fmtC(impostosB5)}</span>
+                                    </div>
+                                  )}
+
+                                  <div className="border-t border-border-subtle/70 pt-1.5 mt-1.5 flex justify-between font-bold text-xs">
+                                    <span>Total Impostos</span><span className="text-rose-700">{fmtC(impostosB45)}</span>
                                   </div>
                                 </div>
-                              )}
-
-                              <div className="border-t border-border-subtle/70 pt-1.5 mt-1.5 flex justify-between font-bold text-xs">
-                                <span>Total Impostos</span><span className="text-rose-700">{fmtC(impostosB45)}</span>
-                              </div>
-                            </div>
-                          }>
-                            <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
-                              Imp: {fmtC(impostosB45)}
-                            </span>
-                          </Tooltip>
-                          <Tooltip variant="light" content={
-                            <div className="w-64 space-y-1.5 text-text-secondary p-1">
-                              <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">
-                                Despesas de Venda (B4+B5)
-                              </div>
-                              <div className="flex justify-between text-[11px] font-mono">
-                                <span>Desp. Adm ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
-                                <span className="text-rose-600 font-medium">{fmtC(totalDespAdmB45)}</span>
-                              </div>
-                              <div className="flex justify-between text-[11px] font-mono">
-                                <span>Frete Venda ({Number(form.perc_frete_venda || 0).toFixed(2)}%):</span>
-                                <span className="text-rose-600 font-medium">{fmtC(totalFreteVendaB45)}</span>
-                              </div>
-                              {totalComissaoB45 > 0 && (
-                                <>
+                              }>
+                                <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
+                                  Imp: {fmtC(impostosB45)}
+                                </span>
+                              </Tooltip>
+                              <Tooltip variant="light" content={
+                                <div className="w-64 space-y-1.5 text-text-secondary p-1">
+                                  <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1 text-xs">
+                                    Despesas de Venda (B4+B5)
+                                  </div>
                                   <div className="flex justify-between text-[11px] font-mono">
-                                    <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
-                                    <span className="text-rose-600 font-medium">{fmtC(totalComissaoB45)}</span>
+                                    <span>Desp. Adm ({Number(form.perc_despesas_adm || 0).toFixed(2)}%):</span>
+                                    <span className="text-rose-600 font-medium">{fmtC(totalDespAdmB45)}</span>
                                   </div>
-                                  {(vltComissaoDsr > 0 || vltComissaoFgts > 0 || vltComissaoInss > 0 || vltComissaoDemais > 0) && (
-                                    <div className="bg-bg-subtle/50 rounded-lg p-2 my-1 space-y-1 text-[10px] border border-border-subtle/40 font-mono">
-                                      <div className="flex justify-between text-text-muted">
-                                        <span>(-) DSR:</span>
-                                        <span>-{fmtC(vltComissaoDsr)}</span>
+                                  <div className="flex justify-between text-[11px] font-mono">
+                                    <span>Frete Venda ({Number(form.perc_frete_venda || 0).toFixed(2)}%):</span>
+                                    <span className="text-rose-600 font-medium">{fmtC(totalFreteVendaB45)}</span>
+                                  </div>
+                                  {totalComissaoB45 > 0 && (
+                                    <>
+                                      <div className="flex justify-between text-[11px] font-mono">
+                                        <span>Comissão ({Number(form.perc_comissao || 0).toFixed(2)}%):</span>
+                                        <span className="text-rose-600 font-medium">{fmtC(totalComissaoB45)}</span>
                                       </div>
-                                      <div className="flex justify-between text-text-muted">
-                                        <span>(-) FGTS:</span>
-                                        <span>-{fmtC(vltComissaoFgts)}</span>
-                                      </div>
-                                      <div className="flex justify-between text-text-muted">
-                                        <span>(-) INSS:</span>
-                                        <span>-{fmtC(vltComissaoInss)}</span>
-                                      </div>
-                                      <div className="flex justify-between text-text-muted">
-                                        <span>(-) Outros:</span>
-                                        <span>-{fmtC(vltComissaoDemais)}</span>
-                                      </div>
-                                      <div className="flex justify-between font-bold text-emerald-600 border-t border-border-subtle/40 pt-1 mt-1">
-                                        <span>Comissão Líquida:</span>
-                                        <span>{fmtC(totalComissaoB45 - vltComissaoDsr - vltComissaoFgts - vltComissaoInss - vltComissaoDemais)}</span>
-                                      </div>
-                                    </div>
+                                      {(vltComissaoDsr > 0 || vltComissaoFgts > 0 || vltComissaoInss > 0 || vltComissaoDemais > 0) && (
+                                        <div className="bg-bg-subtle/50 rounded-lg p-2 my-1 space-y-1 text-[10px] border border-border-subtle/40 font-mono">
+                                          <div className="flex justify-between text-text-muted">
+                                            <span>(-) DSR:</span>
+                                            <span>-{fmtC(vltComissaoDsr)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-text-muted">
+                                            <span>(-) FGTS:</span>
+                                            <span>-{fmtC(vltComissaoFgts)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-text-muted">
+                                            <span>(-) INSS:</span>
+                                            <span>-{fmtC(vltComissaoInss)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-text-muted">
+                                            <span>(-) Outros:</span>
+                                            <span>-{fmtC(vltComissaoDemais)}</span>
+                                          </div>
+                                          <div className="flex justify-between font-bold text-emerald-600 border-t border-border-subtle/40 pt-1 mt-1">
+                                            <span>Comissão Líquida:</span>
+                                            <span>{fmtC(totalComissaoB45 - vltComissaoDsr - vltComissaoFgts - vltComissaoInss - vltComissaoDemais)}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
                                   )}
-                                </>
-                              )}
-                              <div className="flex justify-between text-[11px] font-mono">
-                                <span>Desp. Operacional ({Number(form.perc_despesa_operacional || 0).toFixed(2)}%):</span>
-                                <span className="text-rose-600 font-medium">{fmtC(financials?.summary?.vlt_despesa_operacional || 0)}</span>
-                              </div>
-                              <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
-                                <span>Total:</span>
-                                <span className="text-rose-700">{fmtC(despVenda)}</span>
-                              </div>
+                                  <div className="flex justify-between text-[11px] font-mono">
+                                    <span>Desp. Operacional ({Number(form.perc_despesa_operacional || 0).toFixed(2)}%):</span>
+                                    <span className="text-rose-600 font-medium">{fmtC(financials?.summary?.vlt_despesa_operacional || 0)}</span>
+                                  </div>
+                                  <div className="border-t border-border-subtle/70 pt-1 flex justify-between font-bold text-[11px] font-mono">
+                                    <span>Total:</span>
+                                    <span className="text-rose-700">{fmtC(despVenda)}</span>
+                                  </div>
+                                </div>
+                              }>
+                                <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
+                                  Desp: {fmtC(despVenda)}
+                                </span>
+                              </Tooltip>
                             </div>
-                          }>
-                            <span className="truncate cursor-help border-b border-dashed border-text-muted/40">
-                              Desp: {fmtC(despVenda)}
-                            </span>
-                          </Tooltip>
+                          </div>
+                          <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                            <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+                            <span className="text-sm font-black">{margemVenda.toFixed(1)}%</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemVenda >= 15 ? 'bg-brand-success/10 text-brand-success' : margemVenda >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
-                        <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
-                        <span className="text-sm font-black">{margemVenda.toFixed(1)}%</span>
-                      </div>
-                    </div>
 
-                    {/* Lucro Manutenção 12m */}
-                    <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
-                      <div className="min-w-0 flex-1">
-                        <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manut. (12m)</span>
-                        <div className={`text-base font-black truncate ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
-                        <div className="text-[9px] text-text-muted mt-0.5 font-mono truncate">
-                          {fmtC(lucroMensalB6)}/mês em 12m
+                        {/* Lucro Manutenção 12m */}
+                        <div className={`rounded-xl p-3 border flex justify-between items-start gap-4 ${lucroManutencao12m >= 0 ? 'bg-brand-success/5 border-brand-success/20' : 'bg-brand-danger/5 border-brand-danger/20'}`}>
+                          <div className="min-w-0 flex-1">
+                            <span className="block text-[9px] font-bold uppercase tracking-wider text-text-muted mb-0.5">Lucro Manut. (12m)</span>
+                            <div className={`text-base font-black truncate ${lucroManutencao12m >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>{fmtC(lucroManutencao12m)}</div>
+                            <div className="text-[9px] text-text-muted mt-0.5 font-mono truncate">
+                              {fmtC(lucroMensalB6)}/mês em 12m
+                            </div>
+                          </div>
+                          <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
+                            <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
+                            <span className="text-sm font-black">{margemManut12m.toFixed(1)}%</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className={`shrink-0 text-right px-2.5 py-1 rounded-lg ${margemManut12m >= 15 ? 'bg-brand-success/10 text-brand-success' : margemManut12m >= 5 ? 'bg-amber-500/10 text-amber-500' : 'bg-brand-danger/10 text-brand-danger'}`}>
-                        <span className="block text-[8px] font-bold uppercase tracking-wider mb-0.5">Margem</span>
-                        <span className="text-sm font-black">{margemManut12m.toFixed(1)}%</span>
-                      </div>
-                    </div>
+                      </>
+                    )}
 
                     {/* Fator Geral Média & MKP de Venda */}
                     <div className="grid grid-cols-2 gap-3">
@@ -2469,103 +2495,105 @@ export const OpportunityKitForm = ({
                   </div>
 
                   {/* Card 6: ROI Previsto */}
-                  <div className="w-full h-full">
-                    <Tooltip
-                      variant="light"
-                      className="w-full h-full flex"
-                      content={
-                        <div className="w-64 space-y-1.5 text-text-secondary p-1 text-xs">
-                          <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
-                            Cálculo do ROI Previsto (Payback)
-                          </div>
-                          <div className="font-semibold text-text-primary mt-1">1. Investimento (CAPEX + Setup)</div>
-                          <div className="flex justify-between pl-2">
-                            <span>Custo de Aquisição:</span>
-                            <span>{fmtC(custoAq)}</span>
-                          </div>
-                          {impostoInstalacao > 0 && (
-                            <div className="flex justify-between pl-2">
-                              <span>(+) Imposto Instalação:</span>
-                              <span>{fmtC(impostoInstalacao)}</span>
+                  {canViewRoiCards && (
+                    <div className="w-full h-full">
+                      <Tooltip
+                        variant="light"
+                        className="w-full h-full flex"
+                        content={
+                          <div className="w-64 space-y-1.5 text-text-secondary p-1 text-xs">
+                            <div className="font-bold text-text-primary border-b border-border-subtle/70 pb-1 mb-1">
+                              Cálculo do ROI Previsto (Payback)
                             </div>
-                          )}
-                          {valorComissaoLocacao > 0 && (
+                            <div className="font-semibold text-text-primary mt-1">1. Investimento (CAPEX + Setup)</div>
                             <div className="flex justify-between pl-2">
-                              <span>(+) Comissão de Locação:</span>
-                              <span>{fmtC(valorComissaoLocacao)}</span>
+                              <span>Custo de Aquisição:</span>
+                              <span>{fmtC(custoAq)}</span>
                             </div>
-                          )}
-                          {form.tipo_contrato === 'COMODATO' && valorDespesaOperacional > 0 && (
-                            <div className="flex justify-between pl-2">
-                              <span>(+) Despesa Operacional:</span>
-                              <span>{fmtC(valorDespesaOperacional)}</span>
+                            {impostoInstalacao > 0 && (
+                              <div className="flex justify-between pl-2">
+                                <span>(+) Imposto Instalação:</span>
+                                <span>{fmtC(impostoInstalacao)}</span>
+                              </div>
+                            )}
+                            {valorComissaoLocacao > 0 && (
+                              <div className="flex justify-between pl-2">
+                                <span>(+) Comissão de Locação:</span>
+                                <span>{fmtC(valorComissaoLocacao)}</span>
+                              </div>
+                            )}
+                            {form.tipo_contrato === 'COMODATO' && valorDespesaOperacional > 0 && (
+                              <div className="flex justify-between pl-2">
+                                <span>(+) Despesa Operacional:</span>
+                                <span>{fmtC(valorDespesaOperacional)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                              <span>Total Investimento:</span>
+                              <span className="text-text-primary">{fmtC(investimentoTotal)}</span>
                             </div>
-                          )}
-                          <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
-                            <span>Total Investimento:</span>
-                            <span className="text-text-primary">{fmtC(investimentoTotal)}</span>
-                          </div>
 
-                          <div className="font-semibold text-text-primary mt-2">2. Fluxo Caixa Mensal Líquido</div>
-                          <div className="flex justify-between pl-2">
-                            <span>Faturamento antes Impostos:</span>
-                            <span>{fmtC(valorMensalAntesImpostos)}</span>
-                          </div>
-                          {custoMonitoramentoUnitario > 0 && (
-                            <div className="flex justify-between pl-2 text-rose-600">
-                              <span>(-) Custo Monitoramento:</span>
-                              <span>-{fmtC(custoMonitoramentoUnitario)}</span>
+                            <div className="font-semibold text-text-primary mt-2">2. Fluxo Caixa Mensal Líquido</div>
+                            <div className="flex justify-between pl-2">
+                              <span>Faturamento antes Impostos:</span>
+                              <span>{fmtC(valorMensalAntesImpostos)}</span>
                             </div>
-                          )}
-                          {custoOperacionalMensalKit > 0 && (
-                            <div className="flex justify-between pl-2 text-rose-600">
-                              <span>(-) Custo Operacional Bloco 6:</span>
-                              <span>-{fmtC(custoOperacionalMensalKit)}</span>
+                            {custoMonitoramentoUnitario > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Custo Monitoramento:</span>
+                                <span>-{fmtC(custoMonitoramentoUnitario)}</span>
+                              </div>
+                            )}
+                            {custoOperacionalMensalKit > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Custo Operacional Bloco 6:</span>
+                                <span>-{fmtC(custoOperacionalMensalKit)}</span>
+                              </div>
+                            )}
+                            {custoMensalBloco7 > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Custo Operacional Bloco 7:</span>
+                                <span>-{fmtC(custoMensalBloco7)}</span>
+                              </div>
+                            )}
+                            {valorImpostos > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Impostos Faturamento:</span>
+                                <span>-{fmtC(valorImpostos)}</span>
+                              </div>
+                            )}
+                            {valorDespesasAdmLocacao > 0 && (
+                              <div className="flex justify-between pl-2 text-rose-600">
+                                <span>(-) Despesas Adm (mês):</span>
+                                <span>-{fmtC(valorDespesasAdmLocacao)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
+                              <span>Fluxo Mensal Líquido:</span>
+                              <span className="text-text-primary">{fmtC(roiDenominador)}</span>
                             </div>
-                          )}
-                          {custoMensalBloco7 > 0 && (
-                            <div className="flex justify-between pl-2 text-rose-600">
-                              <span>(-) Custo Operacional Bloco 7:</span>
-                              <span>-{fmtC(custoMensalBloco7)}</span>
-                            </div>
-                          )}
-                          {valorImpostos > 0 && (
-                            <div className="flex justify-between pl-2 text-rose-600">
-                              <span>(-) Impostos Faturamento:</span>
-                              <span>-{fmtC(valorImpostos)}</span>
-                            </div>
-                          )}
-                          {valorDespesasAdmLocacao > 0 && (
-                            <div className="flex justify-between pl-2 text-rose-600">
-                              <span>(-) Despesas Adm (mês):</span>
-                              <span>-{fmtC(valorDespesasAdmLocacao)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between font-bold border-t border-border-subtle/40 pt-1 mt-1 pl-2">
-                            <span>Fluxo Mensal Líquido:</span>
-                            <span className="text-text-primary">{fmtC(roiDenominador)}</span>
-                          </div>
 
-                          <div className="border-t border-border-subtle/60 pt-1.5 mt-2 text-[10px] text-text-muted italic">
-                            Fórmula: Investimento / Fluxo Mensal
+                            <div className="border-t border-border-subtle/60 pt-1.5 mt-2 text-[10px] text-text-muted italic">
+                              Fórmula: Investimento / Fluxo Mensal
+                            </div>
+                          </div>
+                        }
+                      >
+                        <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative w-full h-full cursor-pointer ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
+                          {roiMeses > 0 && (
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
+                          )}
+                          <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
+                          <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
+                            {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
                           </div>
                         </div>
-                      }
-                    >
-                      <div className={`border rounded-xl p-3 flex flex-col justify-center overflow-hidden relative w-full h-full cursor-pointer ${roiMeses > 0 ? 'bg-cyan-500/5 border-cyan-500/20 shadow-sm' : 'bg-bg-subtle border-border-subtle'}`}>
-                        {roiMeses > 0 && (
-                          <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none" />
-                        )}
-                        <span className="block text-[9px] text-text-muted font-bold uppercase tracking-wider mb-1 relative z-10">ROI Previsto</span>
-                        <div className={`text-base font-black tabular-nums tracking-tighter relative z-10 ${roiMeses > 0 ? 'text-cyan-500' : 'text-text-muted'}`}>
-                          {roiMeses > 0 ? `${roiMeses.toFixed(1)} meses` : '—'}
-                        </div>
-                      </div>
-                    </Tooltip>
-                  </div>
+                      </Tooltip>
+                    </div>
+                  )}
 
                   {/* Card 6.5: ROI DE EQUIPAMENTO */}
-                  {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                  {canViewRoiCards && (form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
                     <div className="w-full h-full">
                       <Tooltip
                         variant="light"
