@@ -35,6 +35,7 @@ const ROLE_OPTIONS = [
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preço' },
     { value: 'DIRETORIA', label: 'Diretoria' },
     { value: 'FISCAL', label: 'Fiscal' },
+    { value: 'MARKETING', label: 'Marketing' },
 ];
 
 const TriggerForm: React.FC<TriggerFormProps> = ({ trigger, onClose, onSuccess }) => {

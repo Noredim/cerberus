@@ -23,7 +23,7 @@ export interface UserCompany {
 interface AuthContextData {
     user: User | null;
     isAuthenticated: boolean;
-    login: (token: string, userData: User) => void;
+    login: (token: string, userData: User) => Promise<void>;
     logout: () => void;
     isLoading: boolean;
     userCompanies: UserCompany[];
@@ -117,14 +117,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, []);
 
-    const login = (token: string, userData: User) => {
+    const login = async (token: string, userData: User) => {
         setIsLoading(true);
         sessionStorage.setItem('@Cerberus:token', token);
         sessionStorage.setItem('@Cerberus:user', JSON.stringify(userData));
         // Set default Authorization header for subsequent requests
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUser(userData);
-        fetchCompanies().finally(() => setIsLoading(false)); // load context immediately upon login
+        try {
+            await fetchCompanies();
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const logout = () => {

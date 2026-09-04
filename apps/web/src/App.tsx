@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Shell from './components/layout/Shell';
 import Login from './modules/auth/Login';
@@ -67,6 +67,8 @@ import { Loader2, ServerOff } from 'lucide-react';
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading, user, userCompanies, activeCompanyId } = useAuth();
+  const location = useLocation();
+  const path = location.pathname;
 
   if (isLoading) {
     return (
@@ -106,7 +108,6 @@ const ProtectedRoute = () => {
   // Se o usuário tem o perfil ENGENHARIA_PRECO, bloquear rotas não autorizadas
   const isEngenhariaPreco = user?.roles?.includes('ENGENHARIA_PRECO') && !user?.roles?.includes('ADMIN');
   if (isEngenhariaPreco) {
-      const path = window.location.pathname;
       const allowedPaths = [
           '/',                     // Painel Geral / Dashboard
           '/cadastro/produtos',    // Produtos
@@ -146,7 +147,6 @@ const ProtectedRoute = () => {
   // Se o usuário tem o perfil FISCAL, bloquear rotas não autorizadas (apenas acesso a Cadastro -> Produtos, Fiscal -> Análise NF-e, Fiscal -> Acompanhamento Mensal, Dashboard, Settings)
   const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
   if (isFiscal) {
-      const path = window.location.pathname;
       const allowedPaths = [
           '/',                     // Painel Geral / Dashboard
           '/cadastro/produtos',    // Produtos
@@ -170,6 +170,37 @@ const ProtectedRoute = () => {
                      <h2 className="text-xl font-bold text-text-primary mb-2">Acesso Negado</h2>
                      <p className="text-sm text-text-muted">
                          Você não possui permissão para acessar esta página.
+                     </p>
+                 </div>
+             </div>
+          );
+      }
+  }
+
+  // Se o usuário tem o perfil MARKETING, restringir apenas ao módulo marketing
+  const isMarketing = user?.roles?.includes('MARKETING') && !user?.roles?.includes('ADMIN');
+  if (isMarketing) {
+      if (path === '/') {
+          return <Navigate to="/marketing" replace />;
+      }
+      const allowedPaths = [
+          '/marketing',
+      ];
+      
+      const isAllowed = allowedPaths.some(allowed => 
+          path === allowed || path.startsWith(allowed + '/')
+      );
+      
+      if (!isAllowed) {
+          return (
+             <div className="min-h-screen bg-bg-deep flex items-center justify-center p-4 text-center">
+                 <div className="bg-bg-surface p-8 rounded-lg border border-border-subtle max-w-md">
+                     <div className="bg-brand-danger/10 p-3 rounded-full mb-4 mx-auto w-fit">
+                         <ServerOff className="w-8 h-8 text-brand-danger" />
+                     </div>
+                     <h2 className="text-xl font-bold text-text-primary mb-2">Acesso Restrito</h2>
+                     <p className="text-sm text-text-muted">
+                         Seu perfil tem acesso exclusivo ao gerenciamento e acompanhamento de campanhas no módulo de Marketing.
                      </p>
                  </div>
              </div>

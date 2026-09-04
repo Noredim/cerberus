@@ -132,6 +132,8 @@ class PublicLandingPageResponse(BaseModel):
     campaign_nome: str
     company_nome: Optional[str] = None
     company_logo_url: Optional[str] = None
+    url_logo: Optional[str] = None
+    nome_empresa: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

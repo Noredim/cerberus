@@ -34,6 +34,7 @@ const ROLE_LABELS: Record<string, string> = {
     ENGENHARIA_PRECO: 'Eng. de Preços',
     DIRETORIA: 'Diretoria',
     FISCAL: 'Fiscal',
+    MARKETING: 'Marketing',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -41,6 +42,7 @@ const ROLE_COLORS: Record<string, string> = {
     ENGENHARIA_PRECO: 'bg-cyan-400/10 text-cyan-400',
     DIRETORIA: 'bg-pink-400/10 text-pink-400',
     FISCAL: 'bg-emerald-400/10 text-emerald-400',
+    MARKETING: 'bg-amber-400/10 text-amber-400',
 };
 
 const ROLES = [
@@ -48,6 +50,7 @@ const ROLES = [
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preços' },
     { value: 'DIRETORIA', label: 'Diretoria' },
     { value: 'FISCAL', label: 'Fiscal' },
+    { value: 'MARKETING', label: 'Marketing' },
 ];
 
 // ─── Inline Side Panel Form ─────────────────────────────────────────────────

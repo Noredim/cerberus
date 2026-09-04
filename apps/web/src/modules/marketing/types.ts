@@ -19,6 +19,24 @@ export interface MarketingCampaign {
   views_count: number;
 }
 
+export type LayoutBlockId = string;
+
+export interface LayoutBlockItem {
+  id: string;
+  visivel: boolean;
+}
+
+export interface SubtitleItem {
+  id: string;
+  texto: string;
+  rotulo?: string;
+}
+
+export interface LayoutConfig {
+  posicao_formulario: 'right' | 'left' | 'bottom';
+  blocos: LayoutBlockItem[];
+}
+
 export interface MarketingLandingPage {
   id: string;
   tenant_id: string;
@@ -36,10 +54,27 @@ export interface MarketingLandingPage {
   configuracao_formulario: {
     campos: string[];
     obrigatorios: string[];
+    campos_personalizados?: Array<{
+      id: string;
+      label: string;
+      tipo?: string;
+      placeholder?: string;
+      obrigatorio?: boolean;
+    }>;
+    whatsapp_cta?: {
+      ativo: boolean;
+      numero: string;
+      texto: string;
+      mensagem_padrao?: string;
+    };
   };
   configuracao_conteudo: {
+    url_logo?: string | null;
+    nome_empresa?: string | null;
     beneficios?: Array<{ titulo: string; descricao: string; icone?: string }>;
     faq?: Array<{ pergunta: string; resposta: string }>;
+    subtitulos?: SubtitleItem[];
+    layout?: LayoutConfig;
   };
   cor_primaria: string;
   cor_secundaria: string;

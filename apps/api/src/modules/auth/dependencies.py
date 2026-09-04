@@ -79,10 +79,11 @@ def get_active_company(
 
 def check_not_engenharia_preco(current_user: User = Depends(get_current_user)):
     roles = [r.role.value for r in current_user.roles]
-    if "ENGENHARIA_PRECO" in roles and "ADMIN" not in roles:
+    if ("ENGENHARIA_PRECO" in roles or "MARKETING" in roles) and "ADMIN" not in roles:
+        role_label = "Marketing" if "MARKETING" in roles else "Engenharia de Preço"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: Perfil de Engenharia de Preço não possui acesso a esta funcionalidade"
+            detail=f"Acesso negado: Perfil de {role_label} não possui acesso a esta funcionalidade administrativa"
         )
     return current_user
 

@@ -14,7 +14,8 @@ const ROLES = [
     { value: 'ADMIN', label: 'Administrador' },
     { value: 'ENGENHARIA_PRECO', label: 'Engenharia de Preços' },
     { value: 'DIRETORIA', label: 'Diretoria' },
-    { value: 'FISCAL', label: 'Fiscal' }
+    { value: 'FISCAL', label: 'Fiscal' },
+    { value: 'MARKETING', label: 'Marketing' }
 ];
 
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, userData, onSuccess }) => {

@@ -377,8 +377,17 @@ class MarketingService:
         if cidade:
             loc = f"{cidade}/{estado}" if estado else cidade
             obs_linhas.append(f"Localização: {loc}")
+        if razao_social:
+            obs_linhas.append(f"Empresa: {razao_social}")
         if mensagem:
             obs_linhas.append(f"Mensagem/Interesse: {mensagem}")
+
+        # Incluir campos dinâmicos customizados adicionais
+        ignored_keys = {"nome", "nome_contato", "telefone", "whatsapp", "email", "cidade", "estado", "empresa", "razao_social", "mensagem", "interesse", "honeypot", "website_url_check"}
+        for k, v in dados.items():
+            if k not in ignored_keys and v:
+                label_field = k.replace("_", " ").title()
+                obs_linhas.append(f"{label_field}: {v}")
 
         utm_info = []
         if payload.utm_source:

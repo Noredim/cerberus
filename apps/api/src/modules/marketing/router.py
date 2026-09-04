@@ -38,6 +38,13 @@ def resolve_public_landing_page(
     campaign = lp.campaign
     company = db.query(Company).filter(Company.id == campaign.company_id).first() if campaign else None
 
+    cfg_conteudo = lp.configuracao_conteudo or {}
+    custom_logo = cfg_conteudo.get("url_logo")
+    custom_empresa = cfg_conteudo.get("nome_empresa")
+
+    company_nome_final = custom_empresa or (company.nome_fantasia or company.razao_social if company else None)
+    company_logo_final = custom_logo or (company.logo_url if company else None)
+
     return PublicLandingPageResponse(
         id=lp.id,
         slug=lp.slug,
@@ -55,8 +62,10 @@ def resolve_public_landing_page(
         scripts_cabecalho=lp.scripts_cabecalho,
         scripts_rodape=lp.scripts_rodape,
         campaign_nome=campaign.nome if campaign else "Campanha",
-        company_nome=company.nome_fantasia or company.razao_social if company else None,
-        company_logo_url=company.logo_url if company else None
+        company_nome=company_nome_final,
+        company_logo_url=company_logo_final,
+        url_logo=custom_logo,
+        nome_empresa=custom_empresa
     )
 
 

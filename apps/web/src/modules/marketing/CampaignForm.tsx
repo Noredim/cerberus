@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
-import type { MarketingCampaign, MarketingLandingPage } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import type { MarketingCampaign, MarketingLandingPage, LayoutConfig, SubtitleItem } from './types';
+import { CampaignLayoutBuilder } from './components/CampaignLayoutBuilder';
 import {
   ArrowLeft, Save, Globe, Megaphone, Users, Calendar, DollarSign,
-  Palette, Upload, Video, Image, FileText, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy
+  Palette, Upload, Video, Image, FileText, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy,
+  Plus, Trash2, MessageCircle, X, Check, ListChecks, ArrowUp, ArrowDown, AlignJustify
 } from 'lucide-react';
 
 export const CampaignForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { activeCompanyId } = useAuth();
   const isEditing = Boolean(id);
 
   const [activeTab, setActiveTab] = useState<'campanha' | 'landing_page'>('campanha');
@@ -28,7 +32,8 @@ export const CampaignForm: React.FC = () => {
     orcamento_total: '',
     data_inicio: '',
     data_fim: '',
-    sales_team_id: ''
+    sales_team_id: '',
+    company_id: ''
   });
 
   // Landing Page Form State
@@ -36,9 +41,14 @@ export const CampaignForm: React.FC = () => {
   const [lpData, setLpData] = useState({
     slug: '',
     custom_domain: '',
-    is_default_for_domain: false,
+    is_default_for_domain: true,
+    url_logo: '',
+    nome_empresa: '',
     titulo: '',
     subtitulo: '',
+    subtitulos: [
+      { id: 'subtitulo', rotulo: 'Subtítulo Principal', texto: '' }
+    ] as SubtitleItem[],
     texto_cta: 'Quero uma Proposta Personalizada',
     url_imagem_banner: '',
     url_imagem_fundo: '',
@@ -49,6 +59,30 @@ export const CampaignForm: React.FC = () => {
     scripts_rodape: '',
     campos_form: ['nome', 'telefone', 'email', 'cidade', 'mensagem'],
     obrigatorios_form: ['nome', 'telefone'],
+    campos_personalizados: [] as Array<{
+      id: string;
+      label: string;
+      tipo?: string;
+      placeholder?: string;
+      obrigatorio?: boolean;
+    }>,
+    whatsapp_cta: {
+      ativo: false,
+      numero: '',
+      texto: 'Falar direto no WhatsApp',
+      mensagem_padrao: ''
+    },
+    layout: {
+      posicao_formulario: 'right',
+      blocos: [
+        { id: 'badge', visivel: true },
+        { id: 'titulo', visivel: true },
+        { id: 'subtitulo', visivel: true },
+        { id: 'banner', visivel: true },
+        { id: 'video', visivel: true },
+        { id: 'beneficios', visivel: true }
+      ]
+    } as LayoutConfig,
     beneficios: [
       { titulo: 'Atendimento Rápido e Especializado', descricao: 'Equipe técnica certificada pronta para dimensionar o melhor projeto.' },
       { titulo: 'Equipamentos de Última Geração', descricao: 'Tecnologia homologada com garantia total e alta durabilidade.' },
@@ -56,21 +90,34 @@ export const CampaignForm: React.FC = () => {
     ]
   });
 
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [uploadingFundo, setUploadingFundo] = useState(false);
 
-  // Load sales teams
+  // Custom Field Form Modal/Inline state
+  const [showNewFieldModal, setShowNewFieldModal] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
+
+  // Load sales teams for active company or tenant
   useEffect(() => {
     const fetchTeams = async () => {
       try {
-        const res = await api.get('/companies/sales-teams');
+        const targetCompanyId = campaignData.company_id || activeCompanyId;
+        const endpoint = targetCompanyId ? `/companies/${targetCompanyId}/sales-teams` : '/companies/sales-teams';
+        const res = await api.get(endpoint);
         setSalesTeams(res.data || []);
       } catch (err) {
-        console.error('Erro ao buscar equipes de venda:', err);
+        try {
+          const res = await api.get('/companies/sales-teams');
+          setSalesTeams(res.data || []);
+        } catch (e) {
+          console.error('Erro ao buscar equipes de venda:', e);
+        }
       }
     };
     fetchTeams();
-  }, []);
+  }, [activeCompanyId, campaignData.company_id]);
 
   // Load existing campaign & LP
   useEffect(() => {
@@ -88,7 +135,8 @@ export const CampaignForm: React.FC = () => {
           orcamento_total: c.orcamento_total ? String(c.orcamento_total) : '',
           data_inicio: c.data_inicio ? c.data_inicio.substring(0, 10) : '',
           data_fim: c.data_fim ? c.data_fim.substring(0, 10) : '',
-          sales_team_id: c.sales_team_id || ''
+          sales_team_id: c.sales_team_id || '',
+          company_id: c.company_id || ''
         });
 
         // Buscar LP associada à campanha
@@ -99,9 +147,14 @@ export const CampaignForm: React.FC = () => {
           setLpData({
             slug: lp.slug || '',
             custom_domain: lp.custom_domain || '',
-            is_default_for_domain: lp.is_default_for_domain || false,
+            is_default_for_domain: true,
+            url_logo: lp.configuracao_conteudo?.url_logo || '',
+            nome_empresa: lp.configuracao_conteudo?.nome_empresa || '',
             titulo: lp.titulo || '',
             subtitulo: lp.subtitulo || '',
+            subtitulos: (lp.configuracao_conteudo?.subtitulos && lp.configuracao_conteudo.subtitulos.length > 0)
+              ? lp.configuracao_conteudo.subtitulos
+              : [{ id: 'subtitulo', rotulo: 'Subtítulo Principal', texto: lp.subtitulo || '' }],
             texto_cta: lp.texto_cta || 'Quero uma Proposta Personalizada',
             url_imagem_banner: lp.url_imagem_banner || '',
             url_imagem_fundo: lp.url_imagem_fundo || '',
@@ -112,6 +165,24 @@ export const CampaignForm: React.FC = () => {
             scripts_rodape: lp.scripts_rodape || '',
             campos_form: lp.configuracao_formulario?.campos || ['nome', 'telefone', 'email', 'cidade', 'mensagem'],
             obrigatorios_form: lp.configuracao_formulario?.obrigatorios || ['nome', 'telefone'],
+            campos_personalizados: lp.configuracao_formulario?.campos_personalizados || [],
+            whatsapp_cta: {
+              ativo: Boolean(lp.configuracao_formulario?.whatsapp_cta?.ativo),
+              numero: lp.configuracao_formulario?.whatsapp_cta?.numero || '',
+              texto: lp.configuracao_formulario?.whatsapp_cta?.texto || 'Falar direto no WhatsApp',
+              mensagem_padrao: lp.configuracao_formulario?.whatsapp_cta?.mensagem_padrao || ''
+            },
+            layout: lp.configuracao_conteudo?.layout || {
+              posicao_formulario: 'right',
+              blocos: [
+                { id: 'badge', visivel: true },
+                { id: 'titulo', visivel: true },
+                { id: 'subtitulo', visivel: true },
+                { id: 'banner', visivel: true },
+                { id: 'video', visivel: true },
+                { id: 'beneficios', visivel: true }
+              ]
+            },
             beneficios: lp.configuracao_conteudo?.beneficios?.length ? lp.configuracao_conteudo.beneficios : [
               { titulo: 'Atendimento Rápido e Especializado', descricao: 'Equipe técnica certificada pronta para dimensionar o melhor projeto.' },
               { titulo: 'Equipamentos de Última Geração', descricao: 'Tecnologia homologada com garantia total e alta durabilidade.' },
@@ -129,10 +200,11 @@ export const CampaignForm: React.FC = () => {
   }, [id]);
 
   // Upload handler
-  const handleUpload = async (file: File, type: 'banner' | 'fundo') => {
+  const handleUpload = async (file: File, type: 'banner' | 'fundo' | 'logo') => {
     try {
       if (type === 'banner') setUploadingBanner(true);
       if (type === 'fundo') setUploadingFundo(true);
+      if (type === 'logo') setUploadingLogo(true);
 
       const formData = new FormData();
       formData.append('file', file);
@@ -142,15 +214,179 @@ export const CampaignForm: React.FC = () => {
 
       if (type === 'banner') {
         setLpData(prev => ({ ...prev, url_imagem_banner: res.data.url }));
-      } else {
+      } else if (type === 'fundo') {
         setLpData(prev => ({ ...prev, url_imagem_fundo: res.data.url }));
+      } else {
+        setLpData(prev => ({ ...prev, url_logo: res.data.url }));
       }
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Erro ao fazer upload da imagem');
     } finally {
       if (type === 'banner') setUploadingBanner(false);
       if (type === 'fundo') setUploadingFundo(false);
+      if (type === 'logo') setUploadingLogo(false);
     }
+  };
+
+  // Custom Fields Handlers
+  const handleAddCustomField = () => {
+    if (!newFieldLabel.trim()) return;
+    const cleanId = newFieldLabel
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '') || `campo_${Date.now()}`;
+
+    let finalId = cleanId;
+    let counter = 1;
+    while (
+      lpData.campos_form.includes(finalId) ||
+      lpData.campos_personalizados.some(c => c.id === finalId)
+    ) {
+      finalId = `${cleanId}_${counter}`;
+      counter++;
+    }
+
+    const newField = {
+      id: finalId,
+      label: newFieldLabel.trim(),
+      tipo: 'text',
+      placeholder: `Informe ${newFieldLabel.trim().toLowerCase()}...`,
+      obrigatorio: newFieldRequired
+    };
+
+    setLpData(prev => ({
+      ...prev,
+      campos_form: [...prev.campos_form, finalId],
+      obrigatorios_form: newFieldRequired
+        ? [...prev.obrigatorios_form, finalId]
+        : prev.obrigatorios_form,
+      campos_personalizados: [...prev.campos_personalizados, newField]
+    }));
+
+    setNewFieldLabel('');
+    setNewFieldRequired(false);
+    setShowNewFieldModal(false);
+  };
+
+  const handleRemoveCustomField = (fieldId: string) => {
+    if (!confirm('Deseja realmente remover este botão/campo do formulário?')) return;
+    setLpData(prev => ({
+      ...prev,
+      campos_form: prev.campos_form.filter(f => f !== fieldId),
+      obrigatorios_form: prev.obrigatorios_form.filter(f => f !== fieldId),
+      campos_personalizados: prev.campos_personalizados.filter(c => c.id !== fieldId)
+    }));
+  };
+
+  // Benefícios / Diferenciais Handlers
+  const handleAddBeneficio = () => {
+    setLpData(prev => ({
+      ...prev,
+      beneficios: [
+        ...prev.beneficios,
+        { titulo: '', descricao: '' }
+      ]
+    }));
+  };
+
+  const handleUpdateBeneficio = (index: number, field: 'titulo' | 'descricao', value: string) => {
+    setLpData(prev => {
+      const updated = [...prev.beneficios];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, beneficios: updated };
+    });
+  };
+
+  const handleRemoveBeneficio = (index: number) => {
+    setLpData(prev => ({
+      ...prev,
+      beneficios: prev.beneficios.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleMoveBeneficio = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= lpData.beneficios.length) return;
+    setLpData(prev => {
+      const updated = [...prev.beneficios];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return { ...prev, beneficios: updated };
+    });
+  };
+
+  // Subtítulos Explicativos Handlers
+  const handleAddSubtitulo = () => {
+    const newId = `subtitulo_${Date.now()}`;
+    const nextNum = lpData.subtitulos.length + 1;
+    const newItem: SubtitleItem = {
+      id: newId,
+      rotulo: `Subtítulo Explicativo ${nextNum}`,
+      texto: ''
+    };
+    const updatedSubtitulos = [...lpData.subtitulos, newItem];
+    const updatedBlocks = [
+      ...(lpData.layout?.blocos || []),
+      { id: newId, visivel: true }
+    ];
+    setLpData(prev => ({
+      ...prev,
+      subtitulos: updatedSubtitulos,
+      layout: {
+        posicao_formulario: prev.layout?.posicao_formulario || 'right',
+        blocos: updatedBlocks
+      }
+    }));
+  };
+
+  const handleUpdateSubtitulo = (index: number, field: 'rotulo' | 'texto', value: string) => {
+    setLpData(prev => {
+      const updated = [...prev.subtitulos];
+      updated[index] = { ...updated[index], [field]: value };
+      return {
+        ...prev,
+        subtitulos: updated,
+        ...(index === 0 && field === 'texto' ? { subtitulo: value } : {})
+      };
+    });
+  };
+
+  const handleRemoveSubtitulo = (index: number) => {
+    if (lpData.subtitulos.length <= 1) {
+      handleUpdateSubtitulo(0, 'texto', '');
+      return;
+    }
+    const removedId = lpData.subtitulos[index].id;
+    const updated = lpData.subtitulos.filter((_, i) => i !== index);
+    const updatedBlocks = (lpData.layout?.blocos || []).filter(b => b.id !== removedId);
+    setLpData(prev => ({
+      ...prev,
+      subtitulos: updated,
+      subtitulo: updated[0]?.texto || '',
+      layout: {
+        posicao_formulario: prev.layout?.posicao_formulario || 'right',
+        blocos: updatedBlocks
+      }
+    }));
+  };
+
+  const handleMoveSubtitulo = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= lpData.subtitulos.length) return;
+    setLpData(prev => {
+      const updated = [...prev.subtitulos];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return {
+        ...prev,
+        subtitulos: updated,
+        subtitulo: updated[0]?.texto || ''
+      };
+    });
   };
 
   // Submit Handler
@@ -200,21 +436,27 @@ export const CampaignForm: React.FC = () => {
         const lpPayload = {
           campaign_id: targetCampaignId,
           slug: finalSlug,
-          custom_domain: lpData.custom_domain.trim() || null,
-          is_default_for_domain: lpData.is_default_for_domain,
+          custom_domain: lpData.custom_domain ? lpData.custom_domain.trim() : null,
+          is_default_for_domain: true,
           titulo: lpData.titulo || campaignData.nome,
-          subtitulo: lpData.subtitulo || null,
+          subtitulo: lpData.subtitulos[0]?.texto || lpData.subtitulo || null,
           texto_cta: lpData.texto_cta || 'Quero uma Proposta Personalizada',
           url_imagem_banner: lpData.url_imagem_banner || null,
           url_imagem_fundo: lpData.url_imagem_fundo || null,
           url_video: lpData.url_video || null,
           configuracao_formulario: {
             campos: lpData.campos_form,
-            obrigatorios: lpData.obrigatorios_form
+            obrigatorios: lpData.obrigatorios_form,
+            campos_personalizados: lpData.campos_personalizados,
+            whatsapp_cta: lpData.whatsapp_cta
           },
           configuracao_conteudo: {
+            url_logo: lpData.url_logo || null,
+            nome_empresa: lpData.nome_empresa || null,
+            subtitulos: lpData.subtitulos,
             beneficios: lpData.beneficios,
-            faq: []
+            faq: [],
+            layout: lpData.layout
           },
           cor_primaria: lpData.cor_primaria || '#1E40AF',
           cor_secundaria: lpData.cor_secundaria || '#F59E0B',
@@ -500,12 +742,12 @@ export const CampaignForm: React.FC = () => {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Slug e Multi-Domínio */}
-            <div>
+            {/* Slug da Landing Page */}
+            <div className="md:col-span-2">
               <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1">
                 Slug da URL (Identificador) *
               </label>
-              <div className="flex items-center">
+              <div className="flex items-center max-w-xl">
                 <span className="px-3 py-2.5 bg-bg-deep border border-r-0 border-border-subtle rounded-l-xl text-xs text-text-muted">
                   /lp/
                 </span>
@@ -519,33 +761,87 @@ export const CampaignForm: React.FC = () => {
                 />
               </div>
               <span className="text-[11px] text-text-muted mt-1 block">
-                Ex.: {window.location.origin}/lp/{lpData.slug || 'seu-slug'}
+                Link da Landing Page: {window.location.origin}/lp/{lpData.slug || 'seu-slug'}
               </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1">
-                Domínio Personalizado (Opcional)
-              </label>
-              <input
-                type="text"
-                value={lpData.custom_domain}
-                onChange={e => setLpData({ ...lpData, custom_domain: e.target.value })}
-                placeholder="Ex.: promo.stelseg.com.br"
-                className="w-full px-4 py-2.5 bg-bg-deep border border-border-subtle rounded-xl text-text-primary focus:outline-none focus:border-brand-primary text-sm font-mono"
-              />
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  id="is_default_for_domain"
-                  checked={lpData.is_default_for_domain}
-                  onChange={e => setLpData({ ...lpData, is_default_for_domain: e.target.checked })}
-                  className="rounded border-border-subtle text-brand-primary focus:ring-0"
-                />
-                <label htmlFor="is_default_for_domain" className="text-xs text-text-secondary cursor-pointer">
-                  Página principal da raiz deste domínio (ex.: <code>https://{lpData.custom_domain || 'dominio'}/</code>)
-                </label>
+            {/* Identidade Visual do Cabeçalho (Logo & Nome da Empresa) */}
+            <div className="md:col-span-2 border-t border-border-subtle pt-4 pb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Globe className="w-4 h-4 text-brand-primary" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                  Identidade do Cabeçalho Superior (Logo & Empresa)
+                </h3>
               </div>
+              <p className="text-[11px] text-text-muted mb-4">
+                Personalize o logotipo e o nome da marca exibidos no cabeçalho fixo no topo da Landing Page.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Logo da LP */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                      <Image className="w-3.5 h-3.5 text-brand-primary" />
+                      Logo do Cabeçalho
+                    </label>
+                    <span className="text-[10px] font-semibold text-text-muted bg-bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                      PNG com transparência
+                    </span>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={lpData.url_logo}
+                      onChange={e => setLpData({ ...lpData, url_logo: e.target.value })}
+                      placeholder="/uploads/marketing/logo.png"
+                      className="w-full px-4 py-2.5 bg-bg-deep border border-border-subtle rounded-xl text-text-primary text-sm"
+                    />
+                    <label className="cursor-pointer px-4 py-2.5 bg-bg-deep border border-border-subtle hover:bg-bg-surface rounded-xl text-xs font-semibold text-text-secondary flex items-center gap-1.5 whitespace-nowrap">
+                      {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      Upload
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => e.target.files?.[0] && handleUpload(e.target.files[0], 'logo')}
+                      />
+                    </label>
+                  </div>
+                  {lpData.url_logo && (
+                    <div className="mt-2 flex items-center gap-3 p-2 rounded-lg bg-bg-deep border border-border-subtle">
+                      <img src={lpData.url_logo} alt="Preview Logo" className="h-8 max-w-[120px] object-contain rounded" />
+                      <span className="text-[11px] text-text-muted truncate">Logo carregada para o topo</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Nome da Empresa no Topo */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1">
+                    Nome da Empresa ao lado da Logo
+                  </label>
+                  <input
+                    type="text"
+                    value={lpData.nome_empresa}
+                    onChange={e => setLpData({ ...lpData, nome_empresa: e.target.value })}
+                    placeholder="Ex.: STELMAT TELEINFORMÁTICA"
+                    className="w-full px-4 py-2.5 bg-bg-deep border border-border-subtle rounded-xl text-text-primary focus:outline-none focus:border-brand-primary text-sm"
+                  />
+                  <p className="text-[11px] text-text-muted mt-1.5 leading-relaxed">
+                    Este nome aparecerá logo ao lado da logo superior. Caso vazio, usará a razão/fantasia da empresa.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Construtor Visual do Layout (Posicionamento do Formulário e Ordem dos Blocos) */}
+            <div className="md:col-span-2 border-t border-border-subtle pt-4 pb-2">
+              <CampaignLayoutBuilder
+                layout={lpData.layout}
+                subtitulos={lpData.subtitulos}
+                onChange={newLayout => setLpData(prev => ({ ...prev, layout: newLayout }))}
+              />
             </div>
 
             {/* Conteúdo Principal */}
@@ -563,17 +859,100 @@ export const CampaignForm: React.FC = () => {
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1">
-                Subtítulo Explicativo
-              </label>
-              <textarea
-                rows={2}
-                value={lpData.subtitulo}
-                onChange={e => setLpData({ ...lpData, subtitulo: e.target.value })}
-                placeholder="Ex.: Proteja seu patrimônio com câmeras inteligentes, portaria remota e controle de acesso integrado com condições especiais."
-                className="w-full px-4 py-2.5 bg-bg-deep border border-border-subtle rounded-xl text-text-primary focus:outline-none focus:border-brand-primary text-sm"
-              />
+            {/* Subtítulos Explicativos (com suporte a múltiplos blocos organizáveis no layout) */}
+            <div className="md:col-span-2 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                    <AlignJustify className="w-3.5 h-3.5 text-brand-primary" />
+                    Subtítulos Explicativos (Blocos para o Layout)
+                  </label>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    Adicione subtítulos explicativos. Cada um se torna um bloco independente no construtor de layout acima para ser posicionado onde preferir.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddSubtitulo}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 border border-brand-primary/30 transition-colors self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar Outro Subtítulo
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {lpData.subtitulos.map((sub, idx) => (
+                  <div
+                    key={sub.id}
+                    className="p-3.5 rounded-xl border border-border-subtle bg-bg-surface space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                          {idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={sub.rotulo || ''}
+                          onChange={e => handleUpdateSubtitulo(idx, 'rotulo', e.target.value)}
+                          placeholder={idx === 0 ? 'Subtítulo Principal' : `Subtítulo Explicativo ${idx + 1}`}
+                          className="px-2.5 py-1 text-xs font-semibold bg-bg-deep border border-border-subtle rounded-lg text-text-primary focus:outline-none focus:border-brand-primary flex-1 max-w-xs"
+                          title="Rótulo de identificação no construtor de layout"
+                        />
+                        <span className="text-[10px] text-text-muted hidden md:inline truncate">
+                          (bloco: {sub.id})
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveSubtitulo(idx, 'up')}
+                          className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed hover:bg-bg-hover"
+                          title="Mover para cima na lista"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === lpData.subtitulos.length - 1}
+                          onClick={() => handleMoveSubtitulo(idx, 'down')}
+                          className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed hover:bg-bg-hover"
+                          title="Mover para baixo na lista"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        {lpData.subtitulos.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSubtitulo(idx)}
+                            className="p-1 text-text-muted hover:text-rose-500 rounded hover:bg-rose-500/10 transition-colors ml-1"
+                            title="Remover este subtítulo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      value={sub.texto}
+                      onChange={e => handleUpdateSubtitulo(idx, 'texto', e.target.value)}
+                      placeholder={idx === 0
+                        ? "Ex.: Proteja seu patrimônio com câmeras inteligentes, portaria remota e controle de acesso integrado com condições especiais."
+                        : "Ex.: Explicativo sobre diferenciais técnicos, garantias estendidas ou detalhes da proposta."}
+                      className="w-full px-4 py-2.5 bg-bg-deep border border-border-subtle rounded-xl text-text-primary focus:outline-none focus:border-brand-primary text-sm"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-text-muted">
+                      <span>Diagramação diagramada de forma justificada na Landing Page.</span>
+                      <span>{sub.texto.length} caracteres</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>
@@ -716,13 +1095,236 @@ export const CampaignForm: React.FC = () => {
               </div>
             </div>
 
+            {/* Diferenciais e Benefícios Rápidos (Cards com Título e Subtítulo) */}
+            <div className="md:col-span-2 border-t border-border-subtle pt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                    <ListChecks className="w-3.5 h-3.5 text-brand-primary" />
+                    Diferenciais e Benefícios Rápidos (Cards de Destaque)
+                  </label>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    Cadastre, edite ou exclua os cards com selo verde exibidos na Landing Page para destacar diferenciais competitivos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddBeneficio}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary text-xs font-semibold transition-colors self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Novo Card de Benefício
+                </button>
+              </div>
+
+              {lpData.beneficios.length === 0 ? (
+                <div className="p-6 rounded-xl border border-dashed border-border-subtle text-center space-y-2 bg-bg-deep/40">
+                  <p className="text-xs text-text-muted">Nenhum diferencial cadastrado no momento.</p>
+                  <button
+                    type="button"
+                    onClick={handleAddBeneficio}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary text-white text-xs font-semibold hover:bg-brand-primary/90 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Adicionar Primeiro Card
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lpData.beneficios.map((b, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl border border-border-subtle bg-bg-deep/50 space-y-2.5 transition-all hover:border-border-default"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[10px] font-bold">
+                            {idx + 1}º
+                          </span>
+                          <span className="text-xs font-semibold text-text-secondary">
+                            Card de Diferencial #{idx + 1}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveBeneficio(idx, 'up')}
+                            className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed hover:bg-bg-hover"
+                            title="Mover card para cima"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === lpData.beneficios.length - 1}
+                            onClick={() => handleMoveBeneficio(idx, 'down')}
+                            className="p-1 rounded text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed hover:bg-bg-hover"
+                            title="Mover card para baixo"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBeneficio(idx)}
+                            className="p-1 rounded text-text-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors ml-1"
+                            title="Excluir este card"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                        <div className="sm:col-span-5">
+                          <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                            Título do Diferencial *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={b.titulo}
+                            onChange={e => handleUpdateBeneficio(idx, 'titulo', e.target.value)}
+                            placeholder="Ex.: Monitoramento 24h Especializado"
+                            className="w-full px-3 py-2 bg-bg-surface border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-7">
+                          <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                            Subtítulo / Descrição Explicativa
+                          </label>
+                          <input
+                            type="text"
+                            value={b.descricao}
+                            onChange={e => handleUpdateBeneficio(idx, 'descricao', e.target.value)}
+                            placeholder="Ex.: Equipe técnica certificada de prontidão para atuação imediata..."
+                            className="w-full px-3 py-2 bg-bg-surface border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-brand-primary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddBeneficio}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border-subtle hover:border-brand-primary text-xs font-semibold text-text-muted hover:text-brand-primary hover:bg-brand-primary/5 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar Outro Card de Diferencial
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Campos do Formulário */}
             <div className="md:col-span-2 border-t border-border-subtle pt-4">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-brand-primary" />
-                Campos Exibidos no Formulário de Conversão
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-brand-primary" />
+                    Campos Exibidos no Formulário de Conversão
+                  </label>
+                  <p className="text-[11px] text-text-muted mt-0.5">
+                    Clique nos botões abaixo para ativar/desativar campos ou cadastre novos botões para o formulário.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNewFieldModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary text-xs font-semibold transition-colors self-start sm:self-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Novo Botão / Campo
+                </button>
+              </div>
+
+              {/* Caixa Inline para Adicionar Novo Campo */}
+              {showNewFieldModal && (
+                <div className="mb-4 p-4 rounded-xl bg-bg-surface border border-brand-primary/40 shadow-sm space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-brand-primary" />
+                      Cadastrar Novo Botão / Campo no Formulário
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewFieldModal(false)}
+                      className="p-1 rounded text-text-muted hover:text-text-primary"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                        Nome do Campo / Rótulo do Botão *
+                      </label>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newFieldLabel}
+                        onChange={e => setNewFieldLabel(e.target.value)}
+                        placeholder="Ex.: Nome da Empresa, CNPJ, Cargo, Segmento..."
+                        className="w-full px-3 py-2 bg-bg-deep border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-brand-primary"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomField();
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col justify-end">
+                      <div className="flex items-center gap-2 h-9">
+                        <input
+                          type="checkbox"
+                          id="newFieldRequired"
+                          checked={newFieldRequired}
+                          onChange={e => setNewFieldRequired(e.target.checked)}
+                          className="rounded border-border-subtle text-brand-primary focus:ring-0"
+                        />
+                        <label htmlFor="newFieldRequired" className="text-xs text-text-secondary cursor-pointer select-none">
+                          Campo obrigatório
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddCustomField}
+                      disabled={!newFieldLabel.trim()}
+                      className="px-3.5 py-1.5 rounded-lg bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Adicionar Botão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewFieldLabel('');
+                        setNewFieldRequired(false);
+                        setShowNewFieldModal(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-bg-deep hover:bg-bg-surface text-text-secondary text-xs font-medium border border-border-subtle transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Grid de Botões/Campos Padrões e Personalizados */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {/* 1. Campos Padrões */}
                 {[
                   { id: 'nome', label: 'Nome Completo', requiredAlways: true },
                   { id: 'telefone', label: 'WhatsApp / Telefone', requiredAlways: true },
@@ -748,9 +1350,9 @@ export const CampaignForm: React.FC = () => {
                           });
                         }
                       }}
-                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                      className={`p-3 rounded-xl border text-xs cursor-pointer select-none transition-all relative ${
                         isActive
-                          ? 'border-brand-primary/50 bg-brand-primary/10 text-text-primary'
+                          ? 'border-brand-primary/50 bg-brand-primary/10 text-text-primary shadow-sm'
                           : 'border-border-subtle bg-bg-deep text-text-muted hover:border-border-strong'
                       }`}
                     >
@@ -761,6 +1363,155 @@ export const CampaignForm: React.FC = () => {
                     </div>
                   );
                 })}
+
+                {/* 2. Campos/Botões Personalizados Cadastrados */}
+                {lpData.campos_personalizados.map(field => {
+                  const isActive = lpData.campos_form.includes(field.id);
+                  const isRequired = field.obrigatorio || lpData.obrigatorios_form.includes(field.id);
+                  return (
+                    <div
+                      key={field.id}
+                      onClick={() => {
+                        if (isActive) {
+                          setLpData({
+                            ...lpData,
+                            campos_form: lpData.campos_form.filter(f => f !== field.id)
+                          });
+                        } else {
+                          setLpData({
+                            ...lpData,
+                            campos_form: [...lpData.campos_form, field.id]
+                          });
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-xs cursor-pointer select-none transition-all relative group ${
+                        isActive
+                          ? 'border-emerald-500/50 bg-emerald-500/10 text-text-primary shadow-sm'
+                          : 'border-border-subtle bg-bg-deep text-text-muted hover:border-border-strong'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="font-semibold truncate pr-2">{field.label}</div>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleRemoveCustomField(field.id);
+                          }}
+                          title="Excluir este botão/campo"
+                          className="text-text-muted hover:text-rose-500 p-0.5 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="text-[10px] mt-1 flex items-center justify-between">
+                        <span className={isActive ? 'text-emerald-400 font-medium' : 'text-text-muted'}>
+                          {isRequired ? 'Obrigatório' : isActive ? 'Ativo' : 'Desativado'}
+                        </span>
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-bg-surface border border-border-subtle text-text-muted">
+                          Personalizado
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Configuração do Botão WhatsApp (Opcional) */}
+            <div className="md:col-span-2 border-t border-border-subtle pt-4 pb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <MessageCircle className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary">
+                  Botão de Ação Direta via WhatsApp (Opcional)
+                </h3>
+              </div>
+              <p className="text-[11px] text-text-muted mb-3">
+                Exiba um botão secundário para contato direto pelo WhatsApp logo abaixo do formulário da Landing Page.
+              </p>
+
+              <div className="p-4 rounded-xl bg-bg-surface border border-border-subtle space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="whatsapp_cta_ativo"
+                    checked={lpData.whatsapp_cta.ativo}
+                    onChange={e =>
+                      setLpData({
+                        ...lpData,
+                        whatsapp_cta: { ...lpData.whatsapp_cta, ativo: e.target.checked }
+                      })
+                    }
+                    className="rounded border-border-subtle text-emerald-600 focus:ring-0"
+                  />
+                  <label htmlFor="whatsapp_cta_ativo" className="text-xs font-semibold text-text-primary cursor-pointer">
+                    Habilitar botão de WhatsApp no formulário da Landing Page
+                  </label>
+                </div>
+
+                {lpData.whatsapp_cta.ativo && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-subtle animate-fade-in">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                        Número de WhatsApp (DDD + Número) *
+                      </label>
+                      <input
+                        type="text"
+                        value={lpData.whatsapp_cta.numero}
+                        onChange={e =>
+                          setLpData({
+                            ...lpData,
+                            whatsapp_cta: {
+                              ...lpData.whatsapp_cta,
+                              numero: e.target.value.replace(/\D/g, '')
+                            }
+                          })
+                        }
+                        placeholder="Ex.: 65999998888"
+                        className="w-full px-3 py-2 bg-bg-deep border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="text-[10px] text-text-muted mt-1 block">
+                        Apenas dígitos (DDD + 9 dígitos)
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                        Texto do Botão
+                      </label>
+                      <input
+                        type="text"
+                        value={lpData.whatsapp_cta.texto}
+                        onChange={e =>
+                          setLpData({
+                            ...lpData,
+                            whatsapp_cta: { ...lpData.whatsapp_cta, texto: e.target.value }
+                          })
+                        }
+                        placeholder="Falar direto no WhatsApp"
+                        className="w-full px-3 py-2 bg-bg-deep border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                        Mensagem Pré-configurada ao Iniciar Conversa (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={lpData.whatsapp_cta.mensagem_padrao}
+                        onChange={e =>
+                          setLpData({
+                            ...lpData,
+                            whatsapp_cta: { ...lpData.whatsapp_cta, mensagem_padrao: e.target.value }
+                          })
+                        }
+                        placeholder="Olá! Vi a oferta na página e gostaria de mais informações."
+                        className="w-full px-3 py-2 bg-bg-deep border border-border-subtle rounded-lg text-xs text-text-primary focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

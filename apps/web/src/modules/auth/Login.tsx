@@ -45,9 +45,15 @@ const Login: React.FC = () => {
                 headers: { Authorization: `Bearer ${access_token}` }
             });
 
-            login(access_token, meResponse.data);
-            // Navega para a dashboard e recarrega a página para garantir que o contexto de autenticação seja atualizado
-            navigate('/');
+            await login(access_token, meResponse.data);
+
+            const roles = meResponse.data?.roles || [];
+            const isMarketing = roles.includes('MARKETING') && !roles.includes('ADMIN');
+            if (isMarketing) {
+                navigate('/marketing', { replace: true });
+            } else {
+                navigate('/', { replace: true });
+            }
         } catch (err: any) {
             setError(err.response?.data?.detail || 'E-mail ou senha incorretos.');
         } finally {

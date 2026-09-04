@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
     Settings,
@@ -25,15 +26,25 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
     const { user, logout } = useAuth();
-    const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const isEngenhariaPreco = user?.roles?.includes('ENGENHARIA_PRECO') && !user?.roles?.includes('ADMIN');
+    const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
+    const isMarketing = user?.roles?.includes('MARKETING') && !user?.roles?.includes('ADMIN');
+
+    const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
+        const initial: Record<string, boolean> = {};
+        if (isMarketing || window.location.pathname.startsWith('/marketing')) {
+            initial['Marketing'] = true;
+        }
+        return initial;
+    });
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
     const toggleMenu = (label: string) => {
         setExpandedMenus(prev => ({ ...prev, [label]: !prev[label] }));
     };
-
-    const isEngenhariaPreco = user?.roles?.includes('ENGENHARIA_PRECO') && !user?.roles?.includes('ADMIN');
-    const isFiscal = user?.roles?.includes('FISCAL') && !user?.roles?.includes('ADMIN');
 
     const rawMenuItems = [
         { icon: LayoutDashboard, label: 'Painel Geral', path: '/' },
@@ -176,8 +187,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                 })
                 .filter((item): item is NonNullable<typeof item> => item !== null && (!item.subItems || item.subItems.length > 0));
         }
+        if (isMarketing) {
+            return rawMenuItems
+                .filter(item => item.label === 'Marketing');
+        }
         return rawMenuItems;
-    }, [isEngenhariaPreco, isFiscal]);
+    }, [isEngenhariaPreco, isFiscal, isMarketing]);
 
     return (
         <motion.aside
@@ -208,8 +223,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
 
             <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
                 {menuItems.map((item) => {
-                    const isActive = window.location.pathname === item.path || (item.subItems && item.subItems.some(sub => window.location.pathname === sub.path));
-                    const isExpanded = expandedMenus[item.label];
+                    const isActive = location.pathname === item.path || (item.subItems && item.subItems.some(sub => location.pathname === sub.path || (sub.path !== '/marketing' && location.pathname.startsWith(sub.path + '/'))));
+                    const isExpanded = expandedMenus[item.label] ?? (item.label === 'Marketing' && isMarketing);
 
                     return (
                         <div key={item.label} className="space-y-1">
@@ -219,7 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                                         if (!isOpen) toggle();
                                         toggleMenu(item.label);
                                     } else {
-                                        window.location.href = item.path;
+                                        navigate(item.path);
                                     }
                                 }}
                                 className={`flex items-center gap-3 p-2.5 rounded-md cursor-pointer transition-colors group ${isActive ? 'bg-brand-primary/10 text-brand-primary font-semibold' : 'text-text-muted hover:text-text-primary hover:bg-bg-deep'}`}
@@ -250,11 +265,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                                         className="pl-11 border-l border-border-subtle ml-[22px] space-y-1 mt-1 overflow-hidden"
                                     >
                                         {item.subItems.map(sub => {
-                                            const isSubActive = window.location.pathname === sub.path;
+                                            const isSubActive = sub.path === '/marketing'
+                                                ? (location.pathname === '/marketing' || location.pathname === '/marketing/campanhas')
+                                                : (location.pathname === sub.path || location.pathname.startsWith(sub.path + '/'));
                                             return (
                                                 <div
                                                     key={sub.label}
-                                                    onClick={() => window.location.href = sub.path}
+                                                    onClick={() => navigate(sub.path)}
                                                     className={`py-1.5 text-sm cursor-pointer transition-colors relative before:content-[''] before:absolute before:left-[-12px] before:top-1/2 before:-translate-y-1/2 before:w-1.5 before:h-[1px] before:bg-border-subtle ${isSubActive ? 'text-brand-primary font-semibold' : 'text-text-muted hover:text-brand-primary'}`}
                                                 >
                                                     {sub.label}

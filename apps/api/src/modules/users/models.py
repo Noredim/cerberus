@@ -13,6 +13,7 @@ class UserRoleEnum(enum.Enum):
     ENGENHARIA_PRECO = "ENGENHARIA_PRECO"
     DIRETORIA = "DIRETORIA"
     FISCAL = "FISCAL"
+    MARKETING = "MARKETING"
 
 
 class UserRole(Base):

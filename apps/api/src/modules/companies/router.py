@@ -723,6 +723,61 @@ def list_eligible_users(
     return result
 
 
+@router.get("/sales-teams", response_model=List[SalesTeamOut])
+def list_sales_teams_tenant(
+    company_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from .models import SalesTeam, SalesTeamMember, SalesTeamPolicy
+    query = db.query(SalesTeam).options(
+        joinedload(SalesTeam.papel_timbrado),
+        joinedload(SalesTeam.members).joinedload(SalesTeamMember.user),
+        joinedload(SalesTeam.policies).joinedload(SalesTeamPolicy.policy)
+    ).filter(
+        SalesTeam.tenant_id == current_user.tenant_id,
+        SalesTeam.ativo == True
+    )
+
+    if company_id:
+        query = query.filter(SalesTeam.company_id == company_id)
+
+    teams = query.order_by(SalesTeam.nome).all()
+
+    out_teams = []
+    for t in teams:
+        members_out = [
+            SalesTeamMemberOut(
+                id=m.id,
+                user_id=m.user_id,
+                cargo=m.cargo,
+                user_name=m.user.name if m.user else None,
+                user_email=m.user.email if m.user else None
+            )
+            for m in t.members
+        ]
+        policies_out = [
+            SalesTeamPolicyOut(
+                id=p.id,
+                commercial_policy_id=p.commercial_policy_id,
+                nome_politica=p.policy.nome_politica if p.policy else None
+            )
+            for p in t.policies
+        ]
+        out_teams.append(SalesTeamOut(
+            id=t.id,
+            company_id=t.company_id,
+            nome=t.nome,
+            papel_timbrado_id=t.papel_timbrado_id,
+            nome_papel_timbrado=t.papel_timbrado.nome if t.papel_timbrado else None,
+            ativo=t.ativo,
+            members=members_out,
+            policies=policies_out
+        ))
+
+    return out_teams
+
+
 @router.get("/{company_id}/sales-teams", response_model=List[SalesTeamOut])
 def list_sales_teams(
     company_id: UUID,
