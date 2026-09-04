@@ -1139,21 +1139,12 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
     if not forma_pag_str:
         forma_pag_str = "A Combinar / Padrão"
 
-    # ── LOGO DA EMPRESA ──
-    logo_base64 = get_company_logo_base64(budget.company)
-    logo_html = ""
-    if logo_base64:
-        logo_html = f'<img src="{logo_base64}" alt="Logo da Empresa" style="max-height: 52px; max-width: 180px; object-fit: contain; margin-right: 16px;" />'
-
     header_html = f"""
     <div class="proposal-header-block" style="border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center;">
-                {logo_html}
-                <div>
-                    <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">PROPOSTA COMERCIAL</h2>
-                    <div style="font-size: 12.5px; font-weight: 700; color: #475569; margin-top: 2px;">Oportunidade nº {budget.numero_orcamento or ''}</div>
-                </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">PROPOSTA COMERCIAL</h2>
+                <div style="font-size: 12.5px; font-weight: 700; color: #475569; margin-top: 2px;">Oportunidade nº {budget.numero_orcamento or ''}</div>
             </div>
             <div style="text-align: right; font-size: 11px; color: #64748b; line-height: 1.4;">
                 <div><strong>Data:</strong> {data_emissao_str}</div>
