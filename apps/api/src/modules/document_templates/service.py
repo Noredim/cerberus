@@ -1,4 +1,6 @@
+import os
 import re
+import base64
 from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from uuid import UUID
@@ -12,6 +14,70 @@ from src.modules.sales_budgets.models import SalesBudget
 from src.modules.customers.models import Customer
 from src.modules.companies.models import Company, SalesTeam, SalesTeamMember
 from src.modules.users.models import User
+
+
+def resolve_file_to_base64(file_path_or_url: str) -> str:
+    """Converte um caminho de arquivo local do servidor em Data URI Base64 seguro para impressão/PDF."""
+    if not file_path_or_url or str(file_path_or_url).startswith("data:image/"):
+        return file_path_or_url
+
+    clean_path = str(file_path_or_url).strip().lstrip("/")
+    if clean_path.startswith("http://") or clean_path.startswith("https://"):
+        return file_path_or_url
+
+    possible_paths = [
+        f"/app/{clean_path}",
+        f"/app/public/{clean_path}",
+        clean_path,
+        os.path.join(os.getcwd(), clean_path),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), clean_path)
+    ]
+
+    mime_type = "image/png"
+    lower = clean_path.lower()
+    if lower.endswith((".jpg", ".jpeg")):
+        mime_type = "image/jpeg"
+    elif lower.endswith(".svg"):
+        mime_type = "image/svg+xml"
+    elif lower.endswith(".webp"):
+        mime_type = "image/webp"
+
+    for p in possible_paths:
+        if os.path.exists(p) and os.path.isfile(p):
+            try:
+                with open(p, "rb") as f:
+                    data = f.read()
+                if data:
+                    b64 = base64.b64encode(data).decode("utf-8")
+                    return f"data:{mime_type};base64,{b64}"
+            except Exception:
+                pass
+
+    return file_path_or_url
+
+
+def resolve_html_images_to_base64(html_content: str) -> str:
+    """Substitui imagens locais com caminhos /uploads/... por Data URIs Base64 para garantir renderização 100% confiável."""
+    if not html_content:
+        return html_content
+
+    def _replace_src(match):
+        prefix = match.group(1)
+        url = match.group(2)
+        suffix = match.group(3)
+        b64_url = resolve_file_to_base64(url)
+        return f'{prefix}{b64_url}{suffix}'
+
+    return re.sub(r'(src=["\'])(/?[^"\']+\.(?:png|jpg|jpeg|svg|webp))(["\'])', _replace_src, html_content, flags=re.IGNORECASE)
+
+
+def get_company_logo_base64(company: Optional[Company]) -> Optional[str]:
+    """Retorna o data URI base64 da logo da empresa se existir e estiver disponível."""
+    if not company or not getattr(company, 'logo_url', None):
+        return None
+    res = resolve_file_to_base64(str(company.logo_url).strip())
+    return res if res else None
+
 DEFAULT_BASE_CSS = """
 @page {
     size: A4;
@@ -653,11 +719,23 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
     instalacao_kits = [k for k in kits if k.tipo_contrato == "INSTALACAO"]
     locacao_kits = [k for k in kits if k.tipo_contrato in ("COMODATO", "LOCACAO")]
 
+    # Identifica kits que foram vinculados como instalação em rental_items
+    for rit in (budget.rental_items or []):
+        if getattr(rit, "is_kit_instalacao", False) or getattr(rit, "tipo_contrato_kit", None) == "INSTALACAO":
+            if rit.opportunity_kit:
+                if rit.opportunity_kit not in instalacao_kits:
+                    instalacao_kits.append(rit.opportunity_kit)
+                if rit.opportunity_kit in locacao_kits:
+                    locacao_kits.remove(rit.opportunity_kit)
+
     # Verificar itens avulsos de venda (sem kit vinculado)
     standalone_venda_items = [item for item in (budget.items or []) if not item.opportunity_kit_id]
 
     has_venda = bool(venda_kits or standalone_venda_items)
-    has_instalacao = bool(instalacao_kits)
+    has_instalacao = bool(instalacao_kits or any(
+        (getattr(rit, "is_kit_instalacao", False) or getattr(rit, "tipo_contrato_kit", None) == "INSTALACAO")
+        for rit in (budget.rental_items or [])
+    ))
     has_locacao = bool(locacao_kits)
 
     # ── SEÇÃO 1: VENDA DE PRODUTOS ──
@@ -825,17 +903,57 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
                 fin, s = {}, {}
 
             b_item = next((it for it in (budget.items or []) if str(it.opportunity_kit_id) == str(k.id)), None)
-            qtd_inst = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
-            unit_inst = float(b_item.venda_unit if b_item and b_item.venda_unit is not None else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0))
-            if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
-                unit_inst = float(k.venda_unitario)
-            
-            tot_inst = float(b_item.total_venda if b_item and b_item.total_venda is not None else (unit_inst * qtd_inst))
+            r_item = next((rit for rit in (budget.rental_items or []) if str(rit.opportunity_kit_id) == str(k.id)), None)
+
+            if r_item:
+                qtd_inst = float(r_item.quantidade if r_item.quantidade is not None else (k.quantidade_kits or 1))
+                unit_inst = float(
+                    r_item.kit_valor_mensal if r_item.kit_valor_mensal is not None and float(r_item.kit_valor_mensal) > 0
+                    else (r_item.valor_mensal if r_item.valor_mensal is not None and float(r_item.valor_mensal) > 0
+                    else (r_item.valor_instalacao_item if r_item.valor_instalacao_item is not None and float(r_item.valor_instalacao_item) > 0
+                    else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0)))
+                )
+                if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
+                    unit_inst = float(k.venda_unitario)
+                tot_inst = float(unit_inst * qtd_inst)
+            elif b_item:
+                qtd_inst = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
+                unit_inst = float(b_item.venda_unit if b_item and b_item.venda_unit is not None else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0))
+                if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
+                    unit_inst = float(k.venda_unitario)
+                tot_inst = float(b_item.total_venda if b_item and b_item.total_venda is not None else (unit_inst * qtd_inst))
+            else:
+                qtd_inst = float(k.quantidade_kits or 1)
+                unit_inst = float(s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or getattr(k, 'venda_unitario', 0.0) or 0.0)
+                tot_inst = float(unit_inst * qtd_inst)
+
             total_instalacao_geral += tot_inst
 
             rows_inst += f"""
             <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 7px 10px; font-weight: 600; color: #1e293b;">{k.nome_kit}</td>
+                <td style="padding: 7px 10px; text-align: center; color: #334155;">{int(qtd_inst) if qtd_inst.is_integer() else f'{qtd_inst:.2f}'}</td>
+                <td style="padding: 7px 10px; text-align: right; color: #334155;">{format_currency(unit_inst)}</td>
+                <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(tot_inst)}</td>
+            </tr>
+            """
+
+        # Itens avulsos de instalação em rental_items (sem kit vinculado)
+        standalone_inst_rental = [
+            rit for rit in (budget.rental_items or [])
+            if (getattr(rit, "is_kit_instalacao", False) or getattr(rit, "tipo_contrato_kit", None) == "INSTALACAO")
+            and not rit.opportunity_kit_id
+        ]
+        for rit in standalone_inst_rental:
+            nm = rit.product.nome if rit.product else "Serviço de Instalação"
+            qtd_inst = float(rit.quantidade or 1)
+            unit_inst = float(rit.kit_valor_mensal or rit.valor_mensal or rit.valor_instalacao_item or 0.0)
+            tot_inst = float(unit_inst * qtd_inst)
+            total_instalacao_geral += tot_inst
+
+            rows_inst += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 7px 10px; font-weight: 600; color: #1e293b;">{nm}</td>
                 <td style="padding: 7px 10px; text-align: center; color: #334155;">{int(qtd_inst) if qtd_inst.is_integer() else f'{qtd_inst:.2f}'}</td>
                 <td style="padding: 7px 10px; text-align: right; color: #334155;">{format_currency(unit_inst)}</td>
                 <td style="padding: 7px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(tot_inst)}</td>
@@ -1021,12 +1139,21 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
     if not forma_pag_str:
         forma_pag_str = "A Combinar / Padrão"
 
+    # ── LOGO DA EMPRESA ──
+    logo_base64 = get_company_logo_base64(budget.company)
+    logo_html = ""
+    if logo_base64:
+        logo_html = f'<img src="{logo_base64}" alt="Logo da Empresa" style="max-height: 52px; max-width: 180px; object-fit: contain; margin-right: 16px;" />'
+
     header_html = f"""
     <div class="proposal-header-block" style="border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">PROPOSTA COMERCIAL</h2>
-                <div style="font-size: 12.5px; font-weight: 700; color: #475569; margin-top: 2px;">Oportunidade nº {budget.numero_orcamento or ''}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+                {logo_html}
+                <div>
+                    <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">PROPOSTA COMERCIAL</h2>
+                    <div style="font-size: 12.5px; font-weight: 700; color: #475569; margin-top: 2px;">Oportunidade nº {budget.numero_orcamento or ''}</div>
+                </div>
             </div>
             <div style="text-align: right; font-size: 11px; color: #64748b; line-height: 1.4;">
                 <div><strong>Data:</strong> {data_emissao_str}</div>
@@ -1636,6 +1763,7 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "tabela_itens_sintetica": tabela_sintetica_html,
                 "tabela_itens_analitica": tabela_analitica_html,
                 "resumo_condicoes_comerciais": resumo_condicoes_html,
+                "empresa_logo": f'<img src="{get_company_logo_base64(budget.company)}" alt="Logo da Empresa" style="max-height: 50px; max-width: 170px; object-fit: contain;" />' if get_company_logo_base64(budget.company) else "",
             }
 
             # Se for uma PROPOSTA_COMERCIAL e o template estiver vazio, com texto padrão ou sem seções de itens:
@@ -1708,4 +1836,4 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
     db.add(audit)
     db.commit()
 
-    return html
+    return resolve_html_images_to_base64(html)
