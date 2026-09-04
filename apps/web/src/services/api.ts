@@ -45,8 +45,16 @@ api.interceptors.request.use(
                 config.headers.Authorization = `Bearer ${token}`;
             }
             // Add X-Company-Id for all non-login routes
-            if (companyId && !(config.url?.startsWith('/auth/login'))) {
+            if (
+                companyId &&
+                companyId !== 'undefined' &&
+                companyId !== 'null' &&
+                companyId.trim() !== '' &&
+                !(config.url?.startsWith('/auth/login'))
+            ) {
                 config.headers['X-Company-Id'] = companyId;
+            } else if (companyId === 'undefined' || companyId === 'null') {
+                sessionStorage.removeItem('@Cerberus:companyId');
             }
         }
         return config;

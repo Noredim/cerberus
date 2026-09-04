@@ -50,15 +50,22 @@ def get_active_company(
     If no header is provided, this dependency returns None (for endpoints that don't STRICTLY require a company context).
     If an endpoint STRICTLY requires it, the route handler should check `if not company_id: raise HTTPException(400)`.
     """
-    if not x_company_id:
+    if not x_company_id or str(x_company_id).strip().lower() in ("none", "null", "undefined", ""):
         return None
-        
+
+    clean_company_id = str(x_company_id).strip()
+    import uuid
+    try:
+        uuid_obj = uuid.UUID(clean_company_id)
+    except (ValueError, AttributeError, TypeError):
+        return None
+
     from src.modules.users.models import UserCompany
-    
+
     # Check if the user has access to this company
     has_access = db.query(UserCompany).filter(
         UserCompany.user_id == current_user.id,
-        UserCompany.company_id == x_company_id
+        UserCompany.company_id == uuid_obj
     ).first()
     
     if not has_access:
@@ -67,7 +74,7 @@ def get_active_company(
         if is_admin:
             from src.modules.companies.models import Company
             company_exists = db.query(Company).filter(
-                Company.id == x_company_id,
+                Company.id == uuid_obj,
                 Company.tenant_id == current_user.tenant_id
             ).first()
             if not company_exists:
@@ -75,7 +82,7 @@ def get_active_company(
         else:
             raise HTTPException(status_code=403, detail="Você não tem acesso a esta empresa ou ela não existe.")
         
-    return x_company_id
+    return str(uuid_obj)
 
 def check_not_engenharia_preco(current_user: User = Depends(get_current_user)):
     roles = [r.role.value for r in current_user.roles]
