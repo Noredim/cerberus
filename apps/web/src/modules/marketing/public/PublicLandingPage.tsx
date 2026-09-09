@@ -570,17 +570,17 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
           isLight ? 'border-slate-200/90 bg-white/80 shadow-sm' : 'border-slate-800/80 bg-slate-950/70'
         }`}
       >
-        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 sm:py-3.5 flex items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 min-w-0">
             {headerLogo ? (
               <img
                 src={headerLogo}
                 alt={headerNomeEmpresa || 'Logo'}
-                className="h-9 w-auto max-w-[180px] object-contain rounded"
+                className="h-7 sm:h-9 w-auto max-w-[140px] sm:max-w-[180px] object-contain rounded"
               />
             ) : (
               <div
-                className="h-9 px-3 rounded-lg flex items-center justify-center font-bold text-sm shadow"
+                className="h-7 sm:h-9 px-2.5 sm:px-3 rounded-lg flex items-center justify-center font-bold text-xs sm:text-sm shadow"
                 style={{
                   backgroundColor: primaryColor,
                   color: isLight ? '#0f172a' : '#ffffff',
@@ -591,21 +591,21 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
               </div>
             )}
             {headerNomeEmpresa && (
-              <span className={`text-sm font-semibold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
+              <span className={`text-[11px] sm:text-sm font-semibold leading-tight line-clamp-2 sm:line-clamp-1 ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
                 {headerNomeEmpresa}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+              className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold whitespace-nowrap ${
                 isLight
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5" /> Atendimento Exclusivo
+              <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" /> Atendimento Exclusivo
             </span>
           </div>
         </div>
