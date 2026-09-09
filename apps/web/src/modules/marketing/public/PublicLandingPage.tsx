@@ -158,13 +158,6 @@ export const PublicLandingPage: React.FC = () => {
         });
         setLp(res.data);
 
-        // Injetar scripts de cabeçalho se houver (Meta Pixel / Analytics)
-        if (res.data.scripts_cabecalho) {
-          const scriptEl = document.createElement('div');
-          scriptEl.innerHTML = res.data.scripts_cabecalho;
-          document.head.appendChild(scriptEl);
-        }
-
         // Telemetria: PAGE_VIEW
         axios.post('/api/marketing/public/track', {
           landing_page_id: res.data.id,
@@ -179,6 +172,50 @@ export const PublicLandingPage: React.FC = () => {
     };
     fetchLp();
   }, [slug]);
+
+  // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma executável
+  useEffect(() => {
+    if (!lp?.scripts_cabecalho || typeof document === 'undefined') return;
+
+    const createdElements: HTMLElement[] = [];
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = lp.scripts_cabecalho;
+
+    // 1. Processar e instanciar tags <script> dinamicamente para execução imediata no navegador
+    const scripts = tempDiv.querySelectorAll('script');
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.setAttribute('data-lp-tracking', 'true');
+      newScript.text = oldScript.textContent || oldScript.innerText || '';
+      document.head.appendChild(newScript);
+      createdElements.push(newScript);
+    });
+
+    // 2. Processar outros elementos válidos (ex: <noscript>, <style>, <meta>)
+    Array.from(tempDiv.childNodes).forEach((node) => {
+      if (node.nodeName.toLowerCase() !== 'script' && node.nodeType === Node.ELEMENT_NODE) {
+        const el = (node as HTMLElement).cloneNode(true) as HTMLElement;
+        el.setAttribute('data-lp-tracking', 'true');
+        document.head.appendChild(el);
+        createdElements.push(el);
+      }
+    });
+
+    return () => {
+      createdElements.forEach((el) => {
+        try {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        } catch {
+          // Cleanup silencioso
+        }
+      });
+    };
+  }, [lp?.scripts_cabecalho]);
 
   // Telemetria: FORM_START
   const handleFormFocus = () => {
