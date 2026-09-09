@@ -25,6 +25,7 @@ interface User {
     email: string;
     tenant_id: string;
     is_active: boolean;
+    is_lead_admin?: boolean;
     roles: string[];
     companies: string[];
 }
@@ -70,7 +71,7 @@ interface Company {
 const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSuccess }) => {
     const isEditing = !!userData;
     const [formData, setFormData] = useState({
-        name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: [] as string[]
+        name: '', email: '', password: '', role: 'ADMIN', is_active: true, is_lead_admin: false, companies: [] as string[]
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -96,10 +97,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                 password: '',
                 role: userData.roles?.[0] || 'ADMIN',
                 is_active: userData.is_active ?? true,
+                is_lead_admin: !!userData.is_lead_admin,
                 companies: userData.companies || [],
             });
         } else {
-            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true, companies: allCompanies.map(c => c.id) });
+            setFormData({ name: '', email: '', password: '', role: 'ADMIN', is_active: true, is_lead_admin: false, companies: allCompanies.map(c => c.id) });
         }
         setError(null);
     }, [userData, isOpen]);
@@ -115,11 +117,19 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                     email: formData.email,
                     roles: [formData.role],
                     is_active: formData.is_active,
+                    is_lead_admin: formData.is_lead_admin,
                     companies: formData.companies,
                 });
             } else {
                 if (!formData.password) { setError('A senha inicial é obrigatória.'); setLoading(false); return; }
-                await api.post('/users', { name: formData.name, email: formData.email, password: formData.password, role: formData.role, companies: formData.companies });
+                await api.post('/users', {
+                    name: formData.name,
+                    email: formData.email,
+                    password: formData.password,
+                    role: formData.role,
+                    is_lead_admin: formData.is_lead_admin,
+                    companies: formData.companies
+                });
             }
             onSuccess();
             onClose();
@@ -231,6 +241,24 @@ const UserPanel: React.FC<UserPanelProps> = ({ isOpen, onClose, userData, onSucc
                                 <p className="text-[10px] text-text-muted mt-1">
                                     Segure <kbd className="font-sans px-1 bg-border-subtle rounded">Ctrl</kbd> (ou <kbd className="font-sans px-1 bg-border-subtle rounded">Cmd</kbd>) para selecionar múltiplas.
                                 </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-border-subtle">
+                                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        id="is_lead_admin_panel"
+                                        checked={formData.is_lead_admin}
+                                        onChange={e => setFormData({ ...formData, is_lead_admin: e.target.checked })}
+                                        className="mt-0.5 rounded border-border-subtle text-brand-primary focus:ring-brand-primary h-4 w-4"
+                                    />
+                                    <div>
+                                        <span className="text-xs font-semibold text-text-primary block">ADM de Leads</span>
+                                        <span className="text-[11px] text-text-muted block leading-tight">
+                                            Permite visualizar todos os leads e alterar o consultor responsável mesmo após o lead já ter sido assumido.
+                                        </span>
+                                    </div>
+                                </label>
                             </div>
 
                             {isEditing && (
@@ -413,6 +441,12 @@ const UsersList: React.FC = () => {
                                                             {ROLE_LABELS[role] || role}
                                                         </span>
                                                     ))}
+                                                    {user.is_lead_admin && (
+                                                        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="Administrador de Leads">
+                                                            <Shield className="w-3 h-3 text-indigo-400" />
+                                                            ADM LEADS
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">

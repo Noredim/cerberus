@@ -10,7 +10,7 @@ from src.modules.leads.models import (
     Lead, LeadQueueMember, LeadDistributionHistory, LeadTimeline, LeadTask
 )
 from src.modules.leads.schemas import (
-    LeadCreate, LeadUpdate, LeadRejectRequest, LeadLossRequest, LeadConvertRequest,
+    LeadCreate, LeadUpdate, LeadRejectRequest, LeadLossRequest, LeadConvertRequest, LeadReassignRequest,
     LeadTimelineCreate, LeadTaskCreate, LeadTaskUpdate, LeadQueueOrderUpdate,
     LeadSimpleResponse, LeadDetailResponse, LeadMetricsResponse, LeadTimelineResponse,
     LeadTaskResponse, LeadDistributionHistoryResponse, LeadQueueMemberResponse
@@ -402,6 +402,9 @@ def list_leads(
                 is_admin = True
                 break
 
+    if getattr(current_user, "is_lead_admin", False):
+        is_admin = True
+
     # Check if user is GERENTE in any sales team
     gerente_team_ids = [
         m.sales_team_id for m in db.query(SalesTeamMember.sales_team_id).filter(
@@ -727,6 +730,121 @@ def mark_lead_lost(db: Session, lead_id: UUID, tenant_id: str, company_id: UUID,
     db.commit()
     now = datetime.now(timezone.utc)
     return _enrich_lead_response(lead, now)
+
+
+def reassign_lead(
+    db: Session,
+    lead_id: UUID,
+    tenant_id: str,
+    company_id: UUID,
+    current_user: User,
+    data: LeadReassignRequest
+) -> dict:
+    """
+    Permite a um Administrador ou usuário com flag `is_lead_admin` reatribuir
+    o responsável de um Lead, mesmo após o atendimento já ter sido assumido.
+    Registra a alteração na LeadTimeline e no LeadDistributionHistory.
+    """
+    # 1. Permissão: apenas ADMIN, ENGENHARIA_PRECO ou is_lead_admin
+    is_admin = False
+    if current_user and current_user.roles:
+        for r in current_user.roles:
+            role_name = getattr(r, "role", r)
+            if hasattr(role_name, "value"):
+                role_name = role_name.value
+            if str(role_name).upper() in ["ADMIN", "ENGENHARIA_PRECO"]:
+                is_admin = True
+                break
+    if getattr(current_user, "is_lead_admin", False):
+        is_admin = True
+
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Você não tem permissão para reatribuir o responsável deste Lead.")
+
+    lead = db.query(Lead).filter(
+        Lead.id == lead_id,
+        Lead.tenant_id == tenant_id,
+        Lead.company_id == company_id
+    ).with_for_update().first()
+
+    if not lead:
+        raise HTTPException(404, "Lead não encontrado")
+
+    if lead.status in ["CONVERTIDO", "PERDIDO"]:
+        raise HTTPException(400, f"Não é possível reatribuir um Lead com status {lead.status}.")
+
+    novo_vendedor = db.query(User).filter(
+        User.id == data.novo_vendedor_id,
+        User.tenant_id == tenant_id,
+        User.is_active == True
+    ).first()
+
+    if not novo_vendedor:
+        raise HTTPException(404, "Novo consultor não encontrado ou inativo.")
+
+    if lead.vendedor_responsavel_id == novo_vendedor.id or (not lead.vendedor_responsavel_id and lead.vendedor_atribuido_id == novo_vendedor.id):
+        raise HTTPException(400, "O Lead já está sob responsabilidade deste consultor.")
+
+    # Obter nome do vendedor anterior
+    antigo_vendedor_nome = "Nenhum"
+    if lead.vendedor_responsavel_id:
+        antigo_vendedor = db.query(User).filter(User.id == lead.vendedor_responsavel_id).first()
+        if antigo_vendedor:
+            antigo_vendedor_nome = antigo_vendedor.name
+    elif lead.vendedor_atribuido_id:
+        antigo_vendedor = db.query(User).filter(User.id == lead.vendedor_atribuido_id).first()
+        if antigo_vendedor:
+            antigo_vendedor_nome = antigo_vendedor.name
+
+    # Cancelar qualquer tentativa AGUARDANDO anterior no histórico
+    db.query(LeadDistributionHistory).filter(
+        LeadDistributionHistory.lead_id == lead.id,
+        LeadDistributionHistory.resultado == "AGUARDANDO"
+    ).update({"resultado": "CANCELADO", "data_resposta": func.now()})
+
+    # Atualizar dados do Lead
+    lead.vendedor_responsavel_id = novo_vendedor.id
+    lead.vendedor_atribuido_id = novo_vendedor.id
+    lead.data_atribuicao = func.now()
+    lead.data_aceite = func.now()
+    if lead.status == "AGUARDANDO_ACEITE":
+        lead.status = "ASSUMIDO"
+
+    # Criar registro no Histórico de Distribuição
+    last_hist = db.query(LeadDistributionHistory).filter(
+        LeadDistributionHistory.lead_id == lead.id
+    ).order_by(desc(LeadDistributionHistory.tentativa_numero)).first()
+    proxima_tentativa = (last_hist.tentativa_numero + 1) if last_hist else 1
+
+    new_hist = LeadDistributionHistory(
+        lead_id=lead.id,
+        vendedor_id=novo_vendedor.id,
+        tentativa_numero=proxima_tentativa,
+        tipo_atribuicao="DIRECIONADO_MANUAL",
+        resultado="ACEITO_EXPLICITO",
+        data_resposta=func.now()
+    )
+    db.add(new_hist)
+
+    # Criar registro na Timeline do Lead
+    motivo_str = f" Motivo: {data.motivo.strip()}" if (data.motivo and data.motivo.strip()) else ""
+    db.add(LeadTimeline(
+        lead_id=lead.id,
+        user_id=current_user.id,
+        tipo_evento="REATRIBUICAO",
+        titulo="Responsável pelo Lead Alterado",
+        descricao=f"Lead reatribuído por {current_user.name} (ADM de Leads) de '{antigo_vendedor_nome}' para '{novo_vendedor.name}'.{motivo_str}"
+    ))
+
+    # Notificar o novo consultor
+    _notify_vendor_new_lead(db, tenant_id, company_id, novo_vendedor.id, lead)
+
+    db.commit()
+    db.refresh(lead)
+
+    now = datetime.now(timezone.utc)
+    return _enrich_lead_response(lead, now)
+
 
 
 # ─── Timeline / Andamento Management (CNPJ Mandatory) ───
@@ -1220,6 +1338,9 @@ def get_lead_metrics(db: Session, tenant_id: str, company_id: UUID, current_user
                 if str(role_name).upper() in ["ADMIN", "ENGENHARIA_PRECO"]:
                     is_admin = True
                     break
+
+        if getattr(current_user, "is_lead_admin", False):
+            is_admin = True
 
         gerente_team_ids = [
             m.sales_team_id for m in db.query(SalesTeamMember.sales_team_id).filter(

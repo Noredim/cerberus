@@ -42,6 +42,7 @@ def list_users(
             "email": u.email,
             "tenant_id": u.tenant_id,
             "is_active": u.is_active,
+            "is_lead_admin": bool(getattr(u, "is_lead_admin", False)),
             "profile_picture": u.profile_picture,
             "roles": [r.role.value for r in u.roles],
             "companies": [str(c.company_id) for c in u.companies] if hasattr(u, "companies") else [],
@@ -102,7 +103,8 @@ def create_user(
         email=payload.email,
         password_hash=get_password_hash(payload.password),
         tenant_id=current_user.tenant_id,
-        is_active=True
+        is_active=True,
+        is_lead_admin=bool(payload.is_lead_admin) if payload.is_lead_admin is not None else False
     )
     db.add(new_user)
     db.commit()
@@ -154,6 +156,8 @@ def update_user(
         user.email = payload.email
     if payload.is_active is not None:
         user.is_active = payload.is_active
+    if payload.is_lead_admin is not None:
+        user.is_lead_admin = payload.is_lead_admin
         
     if payload.roles is not None:
         # Recreate roles
@@ -256,6 +260,7 @@ def format_user_response(u: User):
         "email": u.email,
         "tenant_id": u.tenant_id,
         "is_active": u.is_active,
+        "is_lead_admin": bool(getattr(u, "is_lead_admin", False)),
         "profile_picture": u.profile_picture,
         "roles": [r.role.value for r in u.roles] if u.roles else [],
         "companies": [str(c.company_id) for c in getattr(u, "companies", [])],

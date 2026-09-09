@@ -8,7 +8,7 @@ from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
 from src.modules.leads import service
 from src.modules.leads.schemas import (
-    LeadCreate, LeadUpdate, LeadRejectRequest, LeadLossRequest, LeadConvertRequest,
+    LeadCreate, LeadUpdate, LeadRejectRequest, LeadLossRequest, LeadConvertRequest, LeadReassignRequest,
     LeadTimelineCreate, LeadTaskCreate, LeadTaskUpdate, LeadQueueOrderUpdate,
     LeadQueueToggleActive, LeadSimpleResponse, LeadDetailResponse, LeadMetricsResponse,
     LeadTimelineResponse, LeadTaskResponse, LeadQueueMemberResponse
@@ -190,6 +190,24 @@ def mark_loss(
     company_id: str = Depends(get_active_company)
 ):
     return service.mark_lead_lost(
+        db=db,
+        lead_id=lead_id,
+        tenant_id=current_user.tenant_id,
+        company_id=UUID(company_id),
+        current_user=current_user,
+        data=data
+    )
+
+
+@router.post("/{lead_id}/reassign", response_model=LeadSimpleResponse)
+def reassign_lead(
+    lead_id: UUID,
+    data: LeadReassignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    return service.reassign_lead(
         db=db,
         lead_id=lead_id,
         tenant_id=current_user.tenant_id,

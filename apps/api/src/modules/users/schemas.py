@@ -8,6 +8,7 @@ class UserResponse(BaseModel):
     email: str
     tenant_id: str
     is_active: bool
+    is_lead_admin: bool = False
     roles: List[str]
     profile_picture: Optional[str] = None
     companies: List[str] = []
@@ -20,6 +21,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str
+    is_lead_admin: Optional[bool] = False
     companies: Optional[List[str]] = []
 
 class UserUpdate(BaseModel):
@@ -27,6 +29,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     roles: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    is_lead_admin: Optional[bool] = None
     companies: Optional[List[str]] = None
 
 class UserCompanyResponse(BaseModel):

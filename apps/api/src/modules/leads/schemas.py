@@ -201,6 +201,11 @@ class LeadLossRequest(BaseModel):
     detalhes_perda: Optional[str] = None
 
 
+class LeadReassignRequest(BaseModel):
+    novo_vendedor_id: str = Field(..., description="ID do novo vendedor responsável")
+    motivo: Optional[str] = Field(None, description="Motivo da reatribuição")
+
+
 class LeadConvertRequest(BaseModel):
     titulo_oportunidade: Optional[str] = None
     customer_id: Optional[str] = None

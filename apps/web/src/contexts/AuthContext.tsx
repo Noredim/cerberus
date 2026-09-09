@@ -8,6 +8,7 @@ interface User {
     name: string;
     email: string;
     roles: string[];
+    is_lead_admin?: boolean;
     profile_picture?: string | null;
 }
 

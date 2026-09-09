@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { api } from '../../services/api';
 import {
   MessageSquare, CheckCircle, XCircle, AlertTriangle,
-  Clock, Calendar, UserCheck, ShieldAlert, Sparkles, Send
+  Clock, Calendar, UserCheck, ShieldAlert, Sparkles, Send, ArrowRightLeft
 } from 'lucide-react';
 
 interface LeadTimelineTabProps {
@@ -19,6 +19,8 @@ const getEventIcon = (type: string) => {
       return <Sparkles className="w-4 h-4 text-brand-primary" />;
     case 'ATRIBUICAO':
       return <UserCheck className="w-4 h-4 text-blue-500" />;
+    case 'REATRIBUICAO':
+      return <ArrowRightLeft className="w-4 h-4 text-indigo-500" />;
     case 'ACEITE':
       return <CheckCircle className="w-4 h-4 text-emerald-500" />;
     case 'RECUSA':

@@ -11,7 +11,7 @@ import Modal from '../../components/modals/Modal';
 import {
   ArrowLeft, CheckCircle, XCircle, Sparkles, AlertTriangle, Clock,
   Building2, Phone, Mail, User, Tag, Users, Edit3,
-  ExternalLink
+  ExternalLink, ArrowRightLeft
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -54,6 +54,15 @@ export const LeadDetail: React.FC = () => {
     observacoes: ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Reassign Modal
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [selectedNewVendorId, setSelectedNewVendorId] = useState('');
+  const [reassignMotivo, setReassignMotivo] = useState('');
+  const [isReassigning, setIsReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const fetchLead = useCallback(async () => {
     if (!id) return;
@@ -129,6 +138,43 @@ export const LeadDetail: React.FC = () => {
     }
   };
 
+  const handleOpenReassign = async () => {
+    setReassignModalOpen(true);
+    setReassignError(null);
+    setReassignMotivo('');
+    setSelectedNewVendorId('');
+    try {
+      setLoadingUsers(true);
+      const { data } = await api.get('/users');
+      const activeUsers = Array.isArray(data) ? data.filter((u: any) => u.is_active) : [];
+      setAvailableUsers(activeUsers);
+    } catch (err) {
+      console.error('Erro ao buscar lista de usuários para reatribuição:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleConfirmReassign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead || !selectedNewVendorId) return;
+    try {
+      setIsReassigning(true);
+      setReassignError(null);
+      await api.post(`/leads/${lead.id}/reassign`, {
+        novo_vendedor_id: selectedNewVendorId,
+        motivo: reassignMotivo.trim() || null
+      });
+      setReassignModalOpen(false);
+      fetchLead();
+    } catch (err: any) {
+      console.error('Erro ao reatribuir lead:', err);
+      setReassignError(err.response?.data?.detail || 'Erro ao reatribuir consultor.');
+    } finally {
+      setIsReassigning(false);
+    }
+  };
+
   const formatSeconds = (sec?: number | null) => {
     if (!sec || sec <= 0) return 'Expirado';
     const hours = Math.floor(sec / 3600);
@@ -157,6 +203,8 @@ export const LeadDetail: React.FC = () => {
   const isConverted = lead.status === 'CONVERTIDO';
   const isLost = lead.status === 'PERDIDO';
   const isActive = !isConverted && !isLost;
+  const isLeadAdmin = !!(user?.is_lead_admin || user?.roles?.includes('ADMIN') || user?.roles?.includes('ENGENHARIA_PRECO'));
+  const canReassign = isLeadAdmin && isActive;
 
   return (
     <div className="space-y-6">
@@ -208,6 +256,18 @@ export const LeadDetail: React.FC = () => {
                 Marcar como Perdido
               </Button>
             </>
+          )}
+
+          {canReassign && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenReassign}
+              className="text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 mr-1" />
+              Reatribuir Responsável
+            </Button>
           )}
 
           <Button variant="outline" size="sm" onClick={handleOpenEdit}>
@@ -335,9 +395,21 @@ export const LeadDetail: React.FC = () => {
                 <span>Distribuição: <strong>{lead.tipo_distribuicao}</strong></span>
               </div>
 
-              <div className="flex items-center gap-2 text-text-secondary">
-                <User className="w-3.5 h-3.5 text-text-muted" />
-                <span>Responsável: <strong>{lead.vendedor_responsavel_nome || lead.vendedor_atribuido_nome || 'Aguardando'}</strong></span>
+              <div className="flex items-center justify-between text-text-secondary">
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5 text-text-muted" />
+                  <span>Responsável: <strong>{lead.vendedor_responsavel_nome || lead.vendedor_atribuido_nome || 'Aguardando'}</strong></span>
+                </div>
+                {canReassign && (
+                  <button
+                    onClick={handleOpenReassign}
+                    className="p-1 px-1.5 rounded hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                    title="Alterar consultor responsável"
+                  >
+                    <ArrowRightLeft className="w-3 h-3" />
+                    Alterar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -608,6 +680,90 @@ export const LeadDetail: React.FC = () => {
             </Button>
             <Button variant="primary" type="submit" disabled={isSavingEdit}>
               {isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal de Reatribuição de Responsável */}
+      <Modal
+        isOpen={reassignModalOpen}
+        onClose={() => setReassignModalOpen(false)}
+        title="Reatribuir Responsável pelo Lead"
+        description="Como Administrador de Leads, você pode alterar o consultor responsável por este atendimento. A alteração será registrada na Linha do Tempo e no Histórico de Distribuição."
+        maxWidth="md"
+      >
+        <form onSubmit={handleConfirmReassign} className="space-y-4">
+          {reassignError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-500 text-xs font-medium">
+              {reassignError}
+            </div>
+          )}
+
+          <div className="p-3 bg-bg-deep rounded-lg border border-border-subtle text-xs space-y-1">
+            <span className="text-text-muted block">Responsável Atual:</span>
+            <span className="font-semibold text-text-primary text-sm block">
+              {lead.vendedor_responsavel_nome || lead.vendedor_atribuido_nome || 'Nenhum consultor definido'}
+            </span>
+            <span className="text-[11px] text-text-muted">
+              Status do Lead: <strong>{statusInfo.label}</strong>
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-text-primary mb-1">
+              Novo Consultor Responsável *
+            </label>
+            {loadingUsers ? (
+              <div className="text-xs text-text-muted py-2">Carregando consultores...</div>
+            ) : (
+              <select
+                required
+                value={selectedNewVendorId}
+                onChange={(e) => setSelectedNewVendorId(e.target.value)}
+                className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary"
+              >
+                <option value="">Selecione o novo consultor...</option>
+                {availableUsers
+                  .filter((u) => u.id !== lead.vendedor_responsavel_id)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-text-primary mb-1">
+              Motivo da Reatribuição (opcional)
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Ex: Consultor anterior de férias/ausente, redistribuição estratégica de carteira, solicitação do cliente..."
+              value={reassignMotivo}
+              onChange={(e) => setReassignMotivo(e.target.value)}
+              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border-subtle">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setReassignModalOpen(false)}
+              disabled={isReassigning}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={isReassigning || !selectedNewVendorId}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {isReassigning ? 'Salvando...' : 'Confirmar Reatribuição'}
             </Button>
           </div>
         </form>

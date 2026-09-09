@@ -47,6 +47,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     profile_picture = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_lead_admin = Column(Boolean, default=False, nullable=False)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     companies = relationship("UserCompany", back_populates="user", cascade="all, delete-orphan")
