@@ -476,12 +476,18 @@ class MarketingService:
         )
         db.add(sub)
 
-        # Evento de FORM_SUBMIT para telemetria
+        # Eventos de FORM_SUBMIT e CTA_CLICK para telemetria
         db.add(MarketingEvent(
             landing_page_id=lp.id,
             session_id=payload.session_id,
             event_type="FORM_SUBMIT",
             metadata_={"lead_id": str(lead.id)}
+        ))
+        db.add(MarketingEvent(
+            landing_page_id=lp.id,
+            session_id=payload.session_id,
+            event_type="CTA_CLICK",
+            metadata_={"button": "form_submit", "lead_id": str(lead.id)}
         ))
 
         db.commit()
@@ -548,6 +554,10 @@ class MarketingService:
         submissions = db.query(func.count(MarketingSubmission.id)).filter(
             MarketingSubmission.campaign_id == campaign.id
         ).scalar() or 0
+
+        # Garantir coerência estatística: o envio de formulário é originado por clique no botão CTA
+        if cta_clicks < submissions:
+            cta_clicks = submissions
 
         leads_generated = db.query(func.count(MarketingSubmission.id)).filter(
             MarketingSubmission.campaign_id == campaign.id,

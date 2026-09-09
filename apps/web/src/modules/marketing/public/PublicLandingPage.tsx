@@ -217,6 +217,51 @@ export const PublicLandingPage: React.FC = () => {
     };
   }, [lp?.scripts_cabecalho]);
 
+// Helper seguro para disparo de eventos no Meta Pixel
+const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
+  try {
+    if (typeof window !== 'undefined' && typeof (window as any).fbq === 'function') {
+      if (params) {
+        (window as any).fbq('track', eventName, params);
+      } else {
+        (window as any).fbq('track', eventName);
+      }
+    }
+  } catch (err) {
+    console.debug('Meta Pixel track error:', err);
+  }
+};
+
+  // Meta Pixel: ViewContent (ao rolar a página até a área de diferenciais/conteúdo)
+  const viewContentFiredRef = useRef(false);
+  useEffect(() => {
+    if (!lp || viewContentFiredRef.current) return;
+
+    const handleScroll = () => {
+      if (viewContentFiredRef.current) return;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+      // Disparar se rolou pelo menos 200px ou 20% da altura da página
+      if (scrollY > 200 || (docHeight > 0 && scrollY / docHeight >= 0.2)) {
+        viewContentFiredRef.current = true;
+        trackPixelEvent('ViewContent', {
+          content_name: lp.titulo,
+          content_category: 'Landing Page'
+        });
+        window.removeEventListener('scroll', handleScroll);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    const timer = setTimeout(handleScroll, 1200);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(timer);
+    };
+  }, [lp]);
+
   // Telemetria: FORM_START
   const handleFormFocus = () => {
     if (!formStartedRef.current && lp) {
@@ -233,6 +278,14 @@ export const PublicLandingPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lp) return;
+
+    // Telemetria Cerberus: Clique no CTA do Formulário
+    axios.post('/api/marketing/public/track', {
+      landing_page_id: lp.id,
+      session_id: sessionId,
+      event_type: 'CTA_CLICK',
+      metadata: { button: 'form_submit' }
+    }).catch(() => {});
 
     setSubmitError(null);
     setSubmitting(true);
@@ -256,6 +309,13 @@ export const PublicLandingPage: React.FC = () => {
 
       await axios.post('/api/marketing/public/submit', payload);
       setSubmitted(true);
+
+      // Meta Pixel: Lead (conversão de formulário concluída)
+      trackPixelEvent('Lead', {
+        content_name: lp.titulo,
+        currency: 'BRL',
+        value: 0
+      });
     } catch (err: any) {
       setSubmitError(err.response?.data?.detail || 'Erro ao enviar dados. Tente novamente.');
     } finally {
@@ -796,6 +856,12 @@ export const PublicLandingPage: React.FC = () => {
                             event_type: 'CTA_CLICK',
                             metadata: { button: 'whatsapp' }
                           }).catch(() => {});
+
+                          // Meta Pixel: Contact (contato iniciado via WhatsApp)
+                          trackPixelEvent('Contact', {
+                            content_name: 'WhatsApp Click',
+                            content_category: lp.titulo
+                          });
                         }}
                         className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 transition-all active:scale-[0.99]"
                       >
