@@ -120,6 +120,7 @@ const ProtectedRoute = () => {
           '/comercial/leads',      // Leads
           '/comercial/comparativos',// Comparativos de soluções
           '/comercial/licitacoes', // Licitações
+          '/integrations/google/callback', // Callback OAuth Google
           '/settings',             // Configurações
       ];
       
@@ -153,6 +154,7 @@ const ProtectedRoute = () => {
           '/fiscal/analise-nfe',   // Análise de NF-e
           '/fiscal/acompanhamento-nfe', // Acompanhamento Mensal de NF-e
           '/fiscal',               // Fiscal
+          '/integrations/google/callback', // Callback OAuth Google
           '/settings',             // Configurações
       ];
       
@@ -185,6 +187,7 @@ const ProtectedRoute = () => {
       }
       const allowedPaths = [
           '/marketing',
+          '/integrations/google/callback',
       ];
       
       const isAllowed = allowedPaths.some(allowed => 
@@ -223,6 +226,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/lp/:slug" element={<PublicLandingPage />} />
+          <Route path="/integrations/google/callback" element={<GoogleCallback />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
@@ -328,10 +332,6 @@ function App() {
             <Route path="/marketing/campanhas" element={<CampaignsList />} />
             <Route path="/marketing/campanhas/nova" element={<CampaignForm />} />
             <Route path="/marketing/campanhas/:id" element={<CampaignForm />} />
-
-            {/* Integrações: Google Calendar Callback */}
-            <Route path="/integrations/google/callback" element={<GoogleCallback />} />
-
 
             {/* Relatórios */}
             <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
