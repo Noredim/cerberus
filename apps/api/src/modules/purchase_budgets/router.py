@@ -84,8 +84,10 @@ async def import_budgets_excel(
     file: UploadFile = File(...),
     dolar_orcamento: bool = Query(False),
     valor_conversao: Optional[float] = Query(None),
+    auto_create_products: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    company_id: Optional[str] = Depends(get_active_company)
 ):
     contents = await file.read()
     result = PurchaseBudgetService.parse_excel_items(
@@ -94,7 +96,9 @@ async def import_budgets_excel(
         supplier_id=supplier_id,
         file_bytes=contents,
         dolar_orcamento=dolar_orcamento,
-        valor_conversao=valor_conversao
+        valor_conversao=valor_conversao,
+        auto_create_products=auto_create_products,
+        company_id=company_id
     )
     return result
 
@@ -113,6 +117,23 @@ def link_product_to_supplier(
         codigo_fornecedor=data.codigo_fornecedor
     )
     return {"message": "Product linked successfully", "id": str(result.id)}
+
+@router.post("/import/batch-create-and-link/{supplier_id}")
+def batch_create_and_link_products(
+    supplier_id: str,
+    data: schemas.BatchProductCreateLinkRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: Optional[str] = Depends(get_active_company)
+):
+    resolved = PurchaseBudgetService.batch_create_and_link_products(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        company_id=company_id or "",
+        supplier_id=supplier_id,
+        items=data.items
+    )
+    return {"message": f"{len(resolved)} produtos criados/vinculados com sucesso", "items": resolved}
 
 @router.delete("/{budget_id}", status_code=204)
 def delete_budget(

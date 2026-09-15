@@ -27,6 +27,9 @@ class ProductSupplierLinkCreate(BaseModel):
     product_id: UUID
     codigo_fornecedor: str
 
+class BatchProductCreateLinkRequest(BaseModel):
+    items: List[dict]
+
 # --- Items ---
 class PurchaseBudgetItemBase(BaseModel):
     product_id: UUID

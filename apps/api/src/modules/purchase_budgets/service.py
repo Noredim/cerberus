@@ -510,7 +510,7 @@ class PurchaseBudgetService:
         return negotiation
 
     @staticmethod
-    def parse_excel_items(db: Session, tenant_id: str, supplier_id: str, file_bytes: bytes, dolar_orcamento: bool = False, valor_conversao: Optional[float] = None):
+    def parse_excel_items(db: Session, tenant_id: str, supplier_id: str, file_bytes: bytes, dolar_orcamento: bool = False, valor_conversao: Optional[float] = None, auto_create_products: bool = False, company_id: Optional[str] = None):
         workbook = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
         sheet = workbook.active
         
@@ -749,6 +749,17 @@ class PurchaseBudgetService:
             else:
                 nao_encontrados.append(item_data)
                 
+        if auto_create_products and nao_encontrados and company_id:
+            created_and_linked = PurchaseBudgetService.batch_create_and_link_products(
+                db=db,
+                tenant_id=tenant_id,
+                company_id=company_id,
+                supplier_id=supplier_id,
+                items=nao_encontrados
+            )
+            encontrados.extend(created_and_linked)
+            nao_encontrados = []
+
         if any_product_updated:
             db.commit()
             
@@ -756,6 +767,126 @@ class PurchaseBudgetService:
             "encontrados": encontrados,
             "nao_encontrados": nao_encontrados
         }
+
+    @staticmethod
+    def batch_create_and_link_products(
+        db: Session,
+        tenant_id: str,
+        company_id: str,
+        supplier_id: str,
+        items: List[dict]
+    ) -> List[dict]:
+        import re
+        from sqlalchemy import func
+        from src.modules.products.models import Product, ProductSupplier
+        from src.modules.companies.models import Company
+
+        if not items:
+            return []
+
+        comp = db.query(Company).filter(Company.id == company_id, Company.tenant_id == tenant_id).first()
+        if not comp:
+            comp = db.query(Company).filter(Company.tenant_id == tenant_id).first()
+            if not comp:
+                raise HTTPException(status_code=400, detail="Empresa não encontrada para vincular os produtos.")
+            company_id = str(comp.id)
+
+        count_products = db.query(Product).filter(Product.tenant_id == tenant_id).count()
+        next_num = count_products + 1
+        used_skus = set()
+
+        def get_unique_sku():
+            nonlocal next_num
+            while True:
+                candidate = f"PRD-{next_num:04d}"
+                if candidate not in used_skus:
+                    existing = db.query(Product.id).filter(
+                        Product.tenant_id == tenant_id,
+                        Product.codigo == candidate
+                    ).first()
+                    if not existing:
+                        used_skus.add(candidate)
+                        next_num += 1
+                        return candidate
+                next_num += 1
+
+        resolved_items = []
+
+        for item in items:
+            codigo_fornecedor = str(item.get("codigo_fornecedor") or "").strip()
+            if not codigo_fornecedor:
+                continue
+
+            raw_nome = item.get("descricao") or item.get("nome") or codigo_fornecedor
+            nome = str(raw_nome).strip()
+            if len(nome) > 300:
+                nome = nome[:300]
+            if not nome:
+                nome = f"PRODUTO {codigo_fornecedor}"
+
+            product = db.query(Product).filter(
+                Product.tenant_id == tenant_id,
+                Product.company_id == company_id,
+                func.lower(Product.nome) == func.lower(nome)
+            ).first()
+
+            if not product:
+                ncm_raw = str(item.get("ncm") or "").strip()
+                ncm_clean = re.sub(r'[^0-9]', '', ncm_raw)
+                ncm_final = ncm_clean if len(ncm_clean) == 8 and int(ncm_clean) != 0 else None
+
+                sku = get_unique_sku()
+                product = Product(
+                    tenant_id=tenant_id,
+                    company_id=company_id,
+                    codigo=sku,
+                    nome=nome,
+                    descricao=item.get("descricao"),
+                    tipo="EQUIPAMENTO",
+                    finalidade="REVENDA",
+                    unidade="UN",
+                    marca=item.get("marca"),
+                    fabricante=item.get("fabricante"),
+                    part_number=item.get("part_number"),
+                    ncm_codigo=ncm_final,
+                    ativo=True
+                )
+                db.add(product)
+                db.flush()
+
+            ps = db.query(ProductSupplier).filter(
+                ProductSupplier.supplier_id == str(supplier_id),
+                ProductSupplier.codigo_externo == codigo_fornecedor
+            ).first()
+
+            if not ps:
+                ps = ProductSupplier(
+                    supplier_id=str(supplier_id),
+                    product_id=product.id,
+                    codigo_externo=codigo_fornecedor,
+                    unidade="UN",
+                    fator_conversao="1"
+                )
+                db.add(ps)
+            elif ps.product_id != product.id:
+                product = db.query(Product).filter(Product.id == ps.product_id).first() or product
+
+            prod_dict = {
+                "id": str(product.id),
+                "nome": product.nome,
+                "codigo": product.codigo,
+                "ncm": product.ncm_codigo,
+                "marca": product.marca,
+                "fabricante": getattr(product, "fabricante", None),
+                "part_number": product.part_number
+            }
+
+            resolved_item = dict(item)
+            resolved_item["product"] = prod_dict
+            resolved_items.append(resolved_item)
+
+        db.commit()
+        return resolved_items
 
     @staticmethod
     def link_supplier_product(db: Session, tenant_id: str, supplier_id: str, product_id: UUID, codigo_fornecedor: str) -> ProductSupplier:

@@ -15,6 +15,7 @@ interface BudgetImportModalProps {
 export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess, dolarOrcamento, valorConversao }: BudgetImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [autoCreateProducts, setAutoCreateProducts] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +61,8 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
       const response = await api.post(`/purchase-budgets/import/${supplierId}`, formData, {
         params: {
           dolar_orcamento: dolarOrcamento,
-          valor_conversao: dolarOrcamento && valorConversao !== '' ? valorConversao : undefined
+          valor_conversao: dolarOrcamento && valorConversao !== '' ? valorConversao : undefined,
+          auto_create_products: autoCreateProducts
         },
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -149,6 +151,20 @@ export function BudgetImportModal({ isOpen, onClose, supplierId, onImportSuccess
                  </Button>
               </div>
             )}
+          </div>
+
+          <div className="mt-4 p-3 bg-brand-primary/5 rounded-lg border border-brand-primary/20 flex items-start gap-3">
+            <input
+              id="auto-create-products"
+              type="checkbox"
+              checked={autoCreateProducts}
+              onChange={(e) => setAutoCreateProducts(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border-subtle text-brand-primary focus:ring-brand-primary cursor-pointer"
+            />
+            <label htmlFor="auto-create-products" className="text-xs text-text-primary cursor-pointer select-none">
+              <span className="font-semibold block text-sm">Cadastrar novos produtos automaticamente em lote</span>
+              Produtos não encontrados no catálogo serão criados com seus respectivos SKUs e vinculados ao fornecedor de uma só vez.
+            </label>
           </div>
           
           <div className="mt-4 text-xs text-text-muted">

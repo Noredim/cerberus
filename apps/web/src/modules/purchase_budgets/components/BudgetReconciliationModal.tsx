@@ -117,6 +117,37 @@ export function BudgetReconciliationModal({
     }
   };
 
+  const [isBatchCreating, setIsBatchCreating] = useState(false);
+
+  const handleBatchCreate = async () => {
+    const remainingItems = notFoundItems.slice(currentIndex);
+    if (remainingItems.length === 0 || !supplierId) return;
+
+    if (!window.confirm(`Deseja cadastrar e vincular automaticamente todos os ${remainingItems.length} produtos restantes em lote?`)) {
+      return;
+    }
+
+    setIsBatchCreating(true);
+    try {
+      const response = await api.post(`/purchase-budgets/import/batch-create-and-link/${supplierId}`, {
+        items: remainingItems
+      });
+
+      const resolvedList = response.data.items || [];
+      resolvedList.forEach((resolvedItem: any) => {
+        onResolved(resolvedItem);
+      });
+
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao cadastrar produtos em lote:', err);
+      const detail = err.response?.data?.detail;
+      alert(detail || 'Ocorreu um erro ao cadastrar produtos em lote.');
+    } finally {
+      setIsBatchCreating(false);
+    }
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
@@ -131,6 +162,32 @@ export function BudgetReconciliationModal({
           <button onClick={onClose} className="p-1 hover:bg-black/10 rounded-md transition-colors">
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Subheader Banner de Ação em Lote */}
+        <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800/40 px-6 py-2.5 flex items-center justify-between">
+          <span className="text-xs text-amber-800 dark:text-amber-200">
+            Restam <strong>{notFoundItems.length - currentIndex}</strong> itens sem vínculo neste orçamento.
+          </span>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleBatchCreate}
+            disabled={isBatchCreating || isLinking}
+            className="bg-brand-primary text-white hover:bg-brand-primary/90 text-xs py-1 px-3 shadow-sm font-medium"
+          >
+            {isBatchCreating ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                Cadastrando em lote...
+              </>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Cadastrar todos em lote ({notFoundItems.length - currentIndex})
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Body */}
@@ -270,13 +327,24 @@ export function BudgetReconciliationModal({
 
         {/* Footer actions */}
         <div className="p-4 border-t border-border-subtle bg-surface flex justify-between items-center">
-          <Button variant="outline" onClick={handleIgnore} className="text-text-muted hover:text-text-primary">
-            Ignorar ({notFoundItems.length - currentIndex - 1} restantes)
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleIgnore} disabled={isBatchCreating || isLinking} className="text-text-muted hover:text-text-primary">
+              Ignorar ({notFoundItems.length - currentIndex - 1} restantes)
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleBatchCreate} 
+              disabled={isBatchCreating || isLinking}
+              className="text-brand-primary border-brand-primary/30 hover:bg-brand-primary/5 text-xs font-semibold"
+            >
+              {isBatchCreating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Plus className="w-4 h-4 mr-1.5" />}
+              Cadastrar em lote ({notFoundItems.length - currentIndex})
+            </Button>
+          </div>
           
           <Button 
             variant="primary" 
-            disabled={!selectedProductId || isLinking}
+            disabled={!selectedProductId || isLinking || isBatchCreating}
             onClick={handleLink}
             className="w-40"
           >
