@@ -2860,12 +2860,20 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
                 vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * qty
             else:
                 # Commission and Despesa Operacional are upfront Capex and do not repeat monthly
-                vlt_comissao += Decimal(str(summary.get("valor_comissao_locacao", 0) or 0)) * qty
-                vlt_dsr += Decimal(str(summary.get("vlt_comissao_dsr_loc", 0) or 0)) * qty
-                vlt_fgts += Decimal(str(summary.get("vlt_comissao_fgts_loc", 0) or 0)) * qty
-                vlt_inss += Decimal(str(summary.get("vlt_comissao_inss_loc", 0) or 0)) * qty
-                vlt_demais += Decimal(str(summary.get("vlt_comissao_demais_loc", 0) or 0)) * qty
-                vlt_despesa_operacional += Decimal(str(summary.get("vlt_despesa_operacional", 0) or 0)) * qty
+                ri_match = next((ri for ri in getattr(opportunity, "rental_items", []) if ri.opportunity_kit_id == kit.id), None)
+                item_liq_com = ri_match.kit_comissao if (ri_match and ri_match.kit_comissao is not None) else (ri_match.comissao_mensal if (ri_match and ri_match.comissao_mensal is not None) else Decimal(str(summary.get("valor_comissao_locacao") or summary.get("vlt_comissao") or 0)))
+                item_dsr = ri_match.dsr_mensal if (ri_match and ri_match.dsr_mensal is not None and ri_match.dsr_mensal > 0) else Decimal(str(summary.get("vlt_comissao_dsr") or summary.get("vlt_comissao_dsr_loc") or 0))
+                item_fgts = ri_match.fgts_mensal if (ri_match and ri_match.fgts_mensal is not None and ri_match.fgts_mensal > 0) else Decimal(str(summary.get("vlt_comissao_fgts") or summary.get("vlt_comissao_fgts_loc") or 0))
+                item_inss = ri_match.inss_mensal if (ri_match and ri_match.inss_mensal is not None and ri_match.inss_mensal > 0) else Decimal(str(summary.get("vlt_comissao_inss") or summary.get("vlt_comissao_inss_loc") or 0))
+                item_demais = ri_match.demais_incidencias_mensal if (ri_match and ri_match.demais_incidencias_mensal is not None and ri_match.demais_incidencias_mensal > 0) else Decimal(str(summary.get("vlt_comissao_demais") or summary.get("vlt_comissao_demais_loc") or 0))
+                item_desp_op = ri_match.despesa_operacional_mensal if (ri_match and ri_match.despesa_operacional_mensal is not None and ri_match.despesa_operacional_mensal > 0) else Decimal(str(summary.get("vlt_despesa_operacional") or summary.get("valor_despesa_operacional_loc") or 0))
+
+                vlt_comissao += Decimal(str(item_liq_com)) * qty
+                vlt_dsr += Decimal(str(item_dsr)) * qty
+                vlt_fgts += Decimal(str(item_fgts)) * qty
+                vlt_inss += Decimal(str(item_inss)) * qty
+                vlt_demais += Decimal(str(item_demais)) * qty
+                vlt_despesa_operacional += Decimal(str(item_desp_op)) * qty
                 # Administrative expenses are recurring and repeat monthly
                 vlt_despesas_adm += Decimal(str(summary.get("vlt_despesas_adm", 0) or 0)) * prazo_contrato * qty
         else:

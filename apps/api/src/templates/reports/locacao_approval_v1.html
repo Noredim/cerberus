@@ -400,6 +400,9 @@
                             (+) Aquisição Equipamentos de Terceiros: R$ {{ kpis.custo_aquisicao_terceiros_str }}<br>
                             (+) Investimento com Serviços Próprios (Stelmat): R$ {{ kpis.custo_servicos_proprios_str }}<br>
                             (+) Comissão Comercial Locação: R$ {{ kpis.comissao_total_str }}<br>
+                            {% if kpis.total_despesa_operacional_val > 0 %}
+                            (+) Despesa Operacional: R$ {{ kpis.total_despesa_operacional }}<br>
+                            {% endif %}
                             (+) Impostos de Instalação/Startup: R$ {{ kpis.impostos_instalacao_str }}<br>
                             {% if kpis.desp_adm_instalacao_val > 0 %}
                             (+) Desp. Adm. Instalação: R$ {{ kpis.desp_adm_instalacao_str }}<br>

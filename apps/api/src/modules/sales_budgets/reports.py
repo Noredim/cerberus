@@ -3336,13 +3336,15 @@ class OpportunitiesReportService:
             if kit_financials_summary:
                 s = kit_financials_summary
                 custo_total = float(s.get("custo_aquisicao_total") or 0.0) * qty
-                comissao_val = (
-                    float(s.get("valor_comissao_locacao") or 0.0) +
-                    float(s.get("vlt_comissao_dsr_loc") or 0.0) +
-                    float(s.get("vlt_comissao_fgts_loc") or 0.0) +
-                    float(s.get("vlt_comissao_inss_loc") or 0.0) +
-                    float(s.get("vlt_comissao_demais_loc") or 0.0)
-                )
+
+                item_liq_com = float(item.kit_comissao if (item.opportunity_kit_id and item.kit_comissao is not None) else (item.comissao_mensal or 0.0)) or float(s.get("valor_comissao_locacao") or s.get("vlt_comissao") or 0.0)
+                item_dsr = float(item.dsr_mensal or 0.0) or float(s.get("vlt_comissao_dsr") or s.get("vlt_comissao_dsr_loc") or 0.0)
+                item_fgts = float(item.fgts_mensal or 0.0) or float(s.get("vlt_comissao_fgts") or s.get("vlt_comissao_fgts_loc") or 0.0)
+                item_inss = float(item.inss_mensal or 0.0) or float(s.get("vlt_comissao_inss") or s.get("vlt_comissao_inss_loc") or 0.0)
+                item_demais = float(item.demais_incidencias_mensal or 0.0) or float(s.get("vlt_comissao_demais") or s.get("vlt_comissao_demais_loc") or 0.0)
+                item_desp_op = float(item.despesa_operacional_mensal or 0.0) or float(s.get("vlt_despesa_operacional") or s.get("valor_despesa_operacional_loc") or 0.0)
+
+                comissao_val = item_liq_com + item_dsr + item_fgts + item_inss + item_demais
                 instalacao_val = float(s.get("valor_venda_instalacao") or s.get("vlr_instal_calc") or 0.0)
 
                 manut_val = float(s.get("vlt_manut") or 0.0)
@@ -3359,12 +3361,12 @@ class OpportunitiesReportService:
                 impostos_mensal_item = impostos_mensal_val * qty
                 custo_op_mensal = custo_op_mensal_val * qty
                 
-                total_comissao_liquida += float(s.get("valor_comissao_locacao") or 0.0) * qty
-                total_comissao_dsr += float(s.get("vlt_comissao_dsr_loc") or 0.0) * qty
-                total_comissao_fgts += float(s.get("vlt_comissao_fgts_loc") or 0.0) * qty
-                total_comissao_inss += float(s.get("vlt_comissao_inss_loc") or 0.0) * qty
-                total_comissao_demais += float(s.get("vlt_comissao_demais_loc") or 0.0) * qty
-                total_despesa_operacional += float(s.get("valor_despesa_operacional_loc") or 0.0) * qty
+                total_comissao_liquida += item_liq_com * qty
+                total_comissao_dsr += item_dsr * qty
+                total_comissao_fgts += item_fgts * qty
+                total_comissao_inss += item_inss * qty
+                total_comissao_demais += item_demais * qty
+                total_despesa_operacional += item_desp_op * qty
                 
                 purchase_tax_unit = float(s.get("total_difal_kit") or 0.0) + float(s.get("total_st_kit") or 0.0) + float(s.get("total_ipi_kit") or 0.0)
             else:
@@ -3805,8 +3807,24 @@ class OpportunitiesReportService:
         custo_total_projeto = float(dre_financials["saidas"]["total_saidas"])
         lucro_contrato = float(dre_financials["resultado"]["resultado_liquido"])
         margem_liquida_val = float(dre_financials["resultado"]["margem_liquida"])
-        payback_meses_str = dre_financials["resultado"]["payback_meses_str"]
+
+        # Real Total Initial Investment (Capex) summing all components:
+        investimento_total_capex = (
+            total_aquisicao_calc +
+            investimento_instalacao +
+            comissao_total_aquisicao +
+            total_despesa_operacional +
+            impostos_instalacao_total +
+            desp_adm_instalacao_total +
+            frete_instalacao_total
+        )
+        saldo_capex_amortizar = max(0.0, investimento_total_capex - total_instalacao)
         retorno_mensal_liquido = (lucro_contrato / prazo_contrato) if prazo_contrato > 0 else 0.0
+        if retorno_mensal_liquido > 0:
+            payback_calc = round(saldo_capex_amortizar / retorno_mensal_liquido, 1)
+            payback_meses_str = f"{payback_calc:.1f} meses"
+        else:
+            payback_meses_str = dre_financials["resultado"]["payback_meses_str"]
         prazo_instalacao_cashflow = opportunity.prazo_instalacao_meses or (1 if any(item.is_kit_instalacao for item in opportunity.rental_items) else 0)
 
         # Determine tax rates based on the first item
@@ -3999,8 +4017,8 @@ class OpportunitiesReportService:
         kpis = {
             "receita_contratada": format_currency(receita_contratada),
             "investimento_total": format_currency(custo_total_projeto),
-            "investimento_capex": format_currency(investimento_total),
-            "investimento_capex_grid": format_currency(investimento_total),
+            "investimento_capex": format_currency(investimento_total_capex),
+            "investimento_capex_grid": format_currency(investimento_total_capex),
             "total_despesa_operacional_val": total_despesa_operacional,
 
             "locacao_mensal": format_currency(locacao_mensal),
@@ -4041,7 +4059,7 @@ class OpportunitiesReportService:
             "custo_servicos_proprios_str": format_currency(investimento_instalacao),
             "custo_servicos_proprios": investimento_instalacao,
             "total_instalacao_str": format_currency(total_instalacao),
-            "saldo_capex_amortizar_str": format_currency(investimento_total - total_instalacao),
+            "saldo_capex_amortizar_str": format_currency(saldo_capex_amortizar),
         }
 
         # Collect and consolidate Bloco 7 Monthly Costs from the kits
@@ -4134,7 +4152,7 @@ class OpportunitiesReportService:
 
         # Generate SVG stacked bar cash flow chart
         cashflow_chart_svg = OpportunitiesReportService.generate_svg_cashflow_chart(
-            investimento=investimento_total,
+            investimento=investimento_total_capex,
             faturamento_mensal=locacao_mensal,
             impostos_mensal=impostos_mensal_total,
             custo_op_mensal=custo_op_mensal_total,
