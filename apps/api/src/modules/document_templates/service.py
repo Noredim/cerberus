@@ -1341,8 +1341,18 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
             <div>
                 <strong>2.</strong> Todo o serviço de monitoramento e serviços táticos serão faturados pelo CNPJ: <strong>43.294.119/0001-27 | Stelseg Tecnologia em Monitoramento e Segurança Eletrônica LTDA</strong>.
             </div>
-            {f'<div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1; color: #475569;"><strong>3. Informações Complementares:</strong> {obs_custom}</div>' if obs_custom else ''}
         </div>
+    </div>
+    """
+
+    observacoes_gerais_html = ""
+    if obs_custom:
+        observacoes_gerais_html = f"""
+    <div class="proposal-general-observations-block" style="margin-top: 14px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+        <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+            Observações Gerais
+        </div>
+        <div style="padding: 10px 12px; background-color: #f8fafc; font-size: 11px; color: #334155; line-height: 1.5; white-space: pre-wrap;">{obs_custom}</div>
     </div>
     """
 
@@ -1363,6 +1373,7 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
         {locacao_html}
         {resumo_html}
         {observacoes_html}
+        {observacoes_gerais_html}
         {assinaturas_html}
         """
 
@@ -1372,7 +1383,8 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
         "instalacao_html": instalacao_html,
         "locacao_html": locacao_html,
         "resumo_html": resumo_html,
-        "observacoes_html": observacoes_html,
+        "observacoes_html": observacoes_html + (f"\n{observacoes_gerais_html}" if observacoes_gerais_html else ""),
+        "observacoes_gerais_html": observacoes_gerais_html,
         "assinaturas_html": assinaturas_html,
         "proposta_completa_html": consolidated_body,
         "total_venda": total_venda_geral,
@@ -1417,6 +1429,10 @@ VARIABLES_CATALOG = {
         {"nome": "tabela_itens_sintetica", "origem": "OPORTUNIDADE", "campo": "tabela_sintetica", "tipo": "TABELA_HTML", "obrigatoria": False},
         {"nome": "tabela_itens_analitica", "origem": "OPORTUNIDADE", "campo": "tabela_analitica", "tipo": "TABELA_HTML", "obrigatoria": False},
         {"nome": "resumo_condicoes_comerciais", "origem": "OPORTUNIDADE", "campo": "condicoes_comerciais", "tipo": "BLOCO_HTML", "obrigatoria": False},
+        {"nome": "observacoes_gerais", "origem": "OPORTUNIDADE", "campo": "observacoes", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "oportunidade_observacoes", "origem": "OPORTUNIDADE", "campo": "observacoes", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "observacoes", "origem": "OPORTUNIDADE", "campo": "observacoes", "tipo": "TEXTO", "obrigatoria": False},
+        {"nome": "bloco_observacoes_gerais", "origem": "OPORTUNIDADE", "campo": "bloco_observacoes_gerais", "tipo": "BLOCO_HTML", "obrigatoria": False},
     ]
 }
 
@@ -1754,6 +1770,10 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "tabela_itens_sintetica": tabela_sintetica_html,
                 "tabela_itens_analitica": tabela_analitica_html,
                 "resumo_condicoes_comerciais": resumo_condicoes_html,
+                "observacoes_gerais": budget.observacoes.strip() if (budget.observacoes and budget.observacoes.strip()) else "",
+                "oportunidade_observacoes": budget.observacoes.strip() if (budget.observacoes and budget.observacoes.strip()) else "",
+                "observacoes": budget.observacoes.strip() if (budget.observacoes and budget.observacoes.strip()) else "",
+                "bloco_observacoes_gerais": prop_data.get("observacoes_gerais_html", ""),
                 "empresa_logo": f'<img src="{get_company_logo_base64(budget.company)}" alt="Logo da Empresa" style="max-height: 50px; max-width: 170px; object-fit: contain;" />' if get_company_logo_base64(budget.company) else "",
             }
 
