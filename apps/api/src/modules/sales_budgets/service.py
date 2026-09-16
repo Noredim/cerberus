@@ -926,7 +926,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         perc_inss=data.perc_inss if "perc_inss" in data.model_fields_set else (policy.inss_percentual if policy else Decimal("0.0")),
         perc_demais_incidencias=data.perc_demais_incidencias if "perc_demais_incidencias" in data.model_fields_set else (policy.demais_incidencias_percentual if policy else Decimal("0.0")),
         perc_despesa_operacional=data.perc_despesa_operacional if "perc_despesa_operacional" in data.model_fields_set else (policy.despesa_operacional_percentual if policy else Decimal("0.0")),
-        usar_produtos_gerais=getattr(data, "usar_produtos_gerais", False),
+        usar_produtos_gerais=getattr(data, "usar_produtos_gerais", True),
     )
     db.add(budget)
     db.flush()
@@ -1155,7 +1155,7 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.commercial_policy_id = data.commercial_policy_id
     budget.sales_team_id = data.sales_team_id
     budget.vendedor_id = data.vendedor_id
-    budget.usar_produtos_gerais = getattr(data, 'usar_produtos_gerais', False)
+    budget.usar_produtos_gerais = getattr(data, 'usar_produtos_gerais', True) if getattr(data, 'usar_produtos_gerais', None) is not None else getattr(budget, 'usar_produtos_gerais', True)
     budget.titulo = data.titulo
     budget.observacoes = data.observacoes
     budget.data_orcamento = data.data_orcamento

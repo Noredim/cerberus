@@ -526,7 +526,7 @@ export function SalesBudgetForm() {
   const [status, setStatus] = useState('EM_LANCAMENTO');
   const [numeroOrcamento, setNumeroOrcamento] = useState('');
   const [responsavelIds, setResponsavelIds] = useState<string[]>([]);
-  const [usarProdutosGerais, setUsarProdutosGerais] = useState(false);
+  const [usarProdutosGerais, setUsarProdutosGerais] = useState(true);
   const [versao, setVersao] = useState(1);
   const [valorTotal, setValorTotal] = useState(0);
   const [history, setHistory] = useState<any[]>([]);
@@ -1062,7 +1062,7 @@ export function SalesBudgetForm() {
       setApprovals(d.approvals || []);
       setNumeroOrcamento(d.numero_orcamento || '');
       setResponsavelIds(d.responsavel_ids || []);
-      setUsarProdutosGerais(d.usar_produtos_gerais || false);
+      setUsarProdutosGerais(d.usar_produtos_gerais !== undefined ? d.usar_produtos_gerais : true);
       setFormaPagamentoId(d.forma_pagamento_id || '');
       setDataVencimentoInicial(d.data_vencimento_inicial ? d.data_vencimento_inicial.slice(0, 10) : '');
       setFinancialPlanning(d.financial_planning || []);
@@ -2670,6 +2670,7 @@ export function SalesBudgetForm() {
       const payload = {
         customer_id: customerId,
         titulo,
+        usar_produtos_gerais: usarProdutosGerais,
         observacoes: observacoes || null,
         data_orcamento: new Date(dataOrcamento).toISOString(),
         forma_pagamento_id: formaPagamentoId || null,

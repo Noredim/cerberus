@@ -228,7 +228,7 @@ class SalesBudgetBase(BaseModel):
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime
-    usar_produtos_gerais: bool = False
+    usar_produtos_gerais: bool = True
 
     # Sale tab defaults
     markup_padrao: Decimal = Field(default=1.0, max_digits=10, decimal_places=4)
