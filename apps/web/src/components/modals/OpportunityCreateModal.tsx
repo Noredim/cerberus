@@ -3,6 +3,7 @@ import { X, Save, Loader2, Receipt, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '../../services/api';
 import { Button } from '../ui/Button';
+import { CustomerCombobox, type CustomerOption } from '../ui/CustomerCombobox';
 import { QuickCustomerCreateModal } from './QuickCustomerCreateModal';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -17,12 +18,13 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
   const [loading, setLoading] = useState(false);
   const [titulo, setTitulo] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null);
   const [vendedorId, setVendedorId] = useState('');
   const [salesTeamId, setSalesTeamId] = useState('');
   const [userSalesTeams, setUserSalesTeams] = useState<any[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
-  const [usarProdutosGerais, setUsarProdutosGerais] = useState(false);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [usarProdutosGerais, setUsarProdutosGerais] = useState(true);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
   const [error, setError] = useState('');
@@ -38,13 +40,14 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
     if (initialData) {
       setTitulo(initialData.titulo || '');
       setCustomerId(initialData.customerId || '');
-      setUsarProdutosGerais(initialData.usarProdutosGerais || false);
+      setUsarProdutosGerais(initialData.usarProdutosGerais ?? true);
     } else {
       setTitulo('');
       setCustomerId('');
+      setSelectedCustomer(null);
       setVendedorId('');
       setSalesTeamId('');
-      setUsarProdutosGerais(false);
+      setUsarProdutosGerais(true);
       setDefaultFormaPagamentoId(null);
     }
     setError('');
@@ -53,7 +56,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
       setLoadingTeams(true);
       try {
         const [custRes, profRes, teamsRes, fpRes] = await Promise.all([
-          api.get('/cadastro/clientes', { params: { limit: 500 } }).catch(err => {
+          api.get('/cadastro/clientes', { params: { limit: 50 } }).catch(err => {
             console.warn('Erro ao carregar clientes:', err);
             return { data: [] };
           }),
@@ -77,8 +80,24 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
           setDefaultFormaPagamentoId(defaultFp.id);
         }
 
-        const custItems = Array.isArray(custRes.data) ? custRes.data : custRes.data.items || [];
+        const custItems: CustomerOption[] = Array.isArray(custRes.data) ? custRes.data : custRes.data.items || [];
         setCustomers(custItems);
+
+        if (initialData?.customerId) {
+          const found = custItems.find(c => c.id === initialData.customerId);
+          if (found) {
+            setSelectedCustomer(found);
+          } else {
+            api.get(`/cadastro/clientes/${initialData.customerId}`)
+              .then(res => {
+                if (res.data) {
+                  setSelectedCustomer(res.data);
+                  setCustomers(prev => [res.data, ...prev.filter(c => c.id !== res.data.id)]);
+                }
+              })
+              .catch(e => console.warn('Erro ao carregar cliente inicial:', e));
+          }
+        }
 
         const profItems = Array.isArray(profRes.data) ? profRes.data : profRes.data.items || [];
         const validSellers = profItems.filter((p: any) => p.role?.can_perform_sale === true);
@@ -153,8 +172,9 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
   };
 
   const handleCustomerCreated = (newCustomer: any) => {
-    setCustomers(prev => [...prev, newCustomer]);
+    setCustomers(prev => [newCustomer, ...prev]);
     setCustomerId(newCustomer.id);
+    setSelectedCustomer(newCustomer);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -221,9 +241,9 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg bg-surface rounded-2xl shadow-xl overflow-hidden flex flex-col"
+            className="relative w-full max-w-lg bg-surface rounded-2xl shadow-xl flex flex-col"
         >
-            <div className="p-6 border-b border-border-subtle bg-bg-deep flex items-center justify-between">
+            <div className="p-6 border-b border-border-subtle bg-bg-deep flex items-center justify-between rounded-t-2xl">
             <div className="flex items-center gap-3">
                 <div className="p-2 bg-brand-primary/10 rounded-lg text-brand-primary">
                 <Receipt className="w-5 h-5" />
@@ -270,28 +290,25 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                    <button 
                      type="button" 
                      onClick={() => setShowQuickCustomer(true)}
-                     className="text-brand-primary hover:underline normal-case text-xs flex items-center gap-1"
+                     className="text-brand-primary hover:underline normal-case text-xs flex items-center gap-1 cursor-pointer"
                    >
                      <Plus className="w-3 h-3" /> Novo
                    </button>
                 </label>
-                <select
-                    required
-                    value={customerId}
-                    onChange={e => setCustomerId(e.target.value)}
-                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 outline-none focus:border-brand-primary transition-colors text-sm text-text-primary h-11"
-                >
-                    <option value="">Selecione um cliente...</option>
-                    {customers.map(c => (
-                        <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>
-                    ))}
-                </select>
+                <CustomerCombobox
+                  value={customerId}
+                  onChange={(newId, customerObj) => {
+                    setCustomerId(newId);
+                    setSelectedCustomer(customerObj || null);
+                  }}
+                  initialCustomers={customers}
+                  selectedCustomerObject={selectedCustomer}
+                  onOpenQuickModal={() => setShowQuickCustomer(true)}
+                  placeholder="Buscar cliente por Nome ou CNPJ..."
+                />
             </div>
 
-            {customerId && (() => {
-              const selectedCustomer = customers.find(c => c.id === customerId);
-              if (!selectedCustomer) return null;
-              return (
+            {customerId && selectedCustomer && (
                 <div className="grid grid-cols-2 gap-4 pt-1">
                   <div className="space-y-1.5">
                     <label className="text-sm font-bold text-text-muted uppercase tracking-wider">Cidade</label>
@@ -312,8 +329,7 @@ export function OpportunityCreateModal({ isOpen, onClose, onSuccess, initialData
                     />
                   </div>
                 </div>
-              );
-            })()}
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
