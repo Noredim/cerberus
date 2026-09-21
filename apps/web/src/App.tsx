@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Shell from './components/layout/Shell';
 import PWAManager from './components/pwa/PWAManager';
 import { Loader2, ServerOff } from 'lucide-react';
+
+const Shell = lazy(() => import('./components/layout/Shell'));
 
 // Lazy-loaded routes for code-splitting
 const Login = lazy(() => import('./modules/auth/Login'));
@@ -231,9 +232,11 @@ const ProtectedRoute = () => {
   }
 
   return (
-    <Shell>
-      <Outlet />
-    </Shell>
+    <Suspense fallback={<PageLoadingFallback />}>
+      <Shell>
+        <Outlet />
+      </Shell>
+    </Suspense>
   );
 };
 
