@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
 import { api, resolvePendingRequests, rejectPendingRequests } from '../services/api';
-import { ReauthModal } from '../modules/auth/ReauthModal';
+
+const ReauthModal = lazy(() => import('../modules/auth/ReauthModal').then(m => ({ default: m.ReauthModal })));
 
 interface User {
     id: string;
@@ -163,12 +164,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }}>
             {children}
             {showReauthModal && user && (
-                <ReauthModal
-                    isOpen={showReauthModal}
-                    email={user.email}
-                    onSuccess={handleReauthSuccess}
-                    onCancel={handleReauthCancel}
-                />
+                <Suspense fallback={null}>
+                    <ReauthModal
+                        isOpen={showReauthModal}
+                        email={user.email}
+                        onSuccess={handleReauthSuccess}
+                        onCancel={handleReauthCancel}
+                    />
+                </Suspense>
             )}
         </AuthContext.Provider>
     );

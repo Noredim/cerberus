@@ -30,6 +30,15 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react')) {
             return 'lucide-icons';
           }
+          if (id.includes('node_modules/framer-motion')) {
+            return 'vendor-motion';
+          }
+          if (id.includes('node_modules/axios')) {
+            return 'vendor-axios';
+          }
+          if (id.includes('node_modules/react-router-dom') || id.includes('node_modules/@remix-run')) {
+            return 'vendor-router';
+          }
         }
       }
     }

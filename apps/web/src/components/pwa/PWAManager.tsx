@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { WifiOff, Wifi, RefreshCw, X, Download } from 'lucide-react';
 import { versionInfo } from '../../version';
 
@@ -191,128 +190,105 @@ export default function PWAManager() {
 
   return (
     <>
-      <AnimatePresence>
-        {/* Offline Banner (P2 & Offline Status Alert) */}
-        {!isOnline && (
-          <motion.div
-            initial={{ y: -50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -50, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 120, damping: 14 }}
-            className="fixed top-0 left-0 right-0 z-[9999] bg-brand-danger text-white py-2.5 px-4 text-center text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-md"
-          >
-            <WifiOff className="w-4 h-4 animate-pulse" />
-            <span>Você está sem conexão com a internet. Algumas funcionalidades podem estar indisponíveis.</span>
-          </motion.div>
-        )}
+      {/* Offline Banner (P2 & Offline Status Alert) */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-brand-danger text-white py-2.5 px-4 text-center text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-md transition-transform duration-300">
+          <WifiOff className="w-4 h-4 animate-pulse" />
+          <span>Você está sem conexão com a internet. Algumas funcionalidades podem estar indisponíveis.</span>
+        </div>
+      )}
 
-        {/* Connection Restored Toast (P2) */}
-        {showRestoredToast && (
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-6 right-6 z-[9999] bg-brand-success text-white py-3 px-5 rounded-lg shadow-xl border border-brand-success/20 flex items-center gap-3 text-sm font-medium"
-          >
-            <Wifi className="w-4 h-4" />
-            <span>Conexão restabelecida.</span>
-          </motion.div>
-        )}
+      {/* Connection Restored Toast (P2) */}
+      {showRestoredToast && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-brand-success text-white py-3 px-5 rounded-lg shadow-xl border border-brand-success/20 flex items-center gap-3 text-sm font-medium transition-all duration-300">
+          <Wifi className="w-4 h-4" />
+          <span>Conexão restabelecida.</span>
+        </div>
+      )}
 
-        {/* Update Application Toast (P4) */}
-        {showUpdateToast && (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 50 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 50 }}
-            className="fixed bottom-6 right-6 z-[9998] bg-bg-surface border border-border-subtle p-5 rounded-xl shadow-2xl flex flex-col gap-3 max-w-sm glass"
-          >
-            <div className="flex justify-between items-start gap-4">
-              <div className="flex gap-3">
-                <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
-                  <RefreshCw className="w-4 h-4 animate-spin-slow" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-text-primary">Nova versão disponível</h4>
-                  <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                    Deseja atualizar a aplicação agora? A atualização é segura e não perderá sua sessão atual.
-                  </p>
-                </div>
+      {/* Update Application Toast (P4) */}
+      {showUpdateToast && (
+        <div className="fixed bottom-6 right-6 z-[9998] bg-bg-surface border border-border-subtle p-5 rounded-xl shadow-2xl flex flex-col gap-3 max-w-sm glass transition-all duration-300">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex gap-3">
+              <div className="w-9 h-9 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
+                <RefreshCw className="w-4 h-4 animate-spin-slow" />
               </div>
-              <button 
-                onClick={handleDismissUpdate} 
-                className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-deep transition-colors"
-                aria-label="Ignorar"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex gap-2 justify-end mt-1">
-              <button
-                onClick={handleDismissUpdate}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-text-muted hover:text-text-primary hover:bg-bg-deep transition-all cursor-pointer"
-              >
-                Depois
-              </button>
-              <button
-                onClick={handleUpdateApp}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Atualizar Agora
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Custom PWA Installation Banner (P8) */}
-        {showInstallBanner && (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 50 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 50 }}
-            className="fixed bottom-6 left-6 z-[9997] bg-bg-surface border border-border-subtle p-5 rounded-xl shadow-2xl flex flex-col gap-3 max-w-sm glass"
-          >
-            <div className="flex justify-between items-start gap-4">
-              <div className="flex gap-3">
-                <img 
-                  src="/cerberus-logo.png" 
-                  alt="Cerberus Logo" 
-                  className="w-9 h-9 object-contain rounded bg-white p-0.5 border border-border-subtle shrink-0" 
-                />
-                <div>
-                  <h4 className="text-sm font-bold text-text-primary">Instalar o Cerberus?</h4>
-                  <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                    Acesse o motor de vendas e inteligência tributária diretamente da sua área de trabalho ou tela inicial.
-                  </p>
-                </div>
+              <div>
+                <h4 className="text-sm font-bold text-text-primary">Nova versão disponível</h4>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Deseja atualizar a aplicação agora? A atualização é segura e não perderá sua sessão atual.
+                </p>
               </div>
-              <button 
-                onClick={handleIgnoreInstall} 
-                className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-deep transition-colors"
-                aria-label="Ignorar"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
-            <div className="flex gap-2 justify-end mt-1">
-              <button
-                onClick={handleIgnoreInstall}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-text-muted hover:text-text-primary hover:bg-bg-deep transition-all cursor-pointer"
-              >
-                Agora não
-              </button>
-              <button
-                onClick={handleInstallApp}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Instalar
-              </button>
+            <button 
+              onClick={handleDismissUpdate} 
+              className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-deep transition-colors"
+              aria-label="Ignorar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex gap-2 justify-end mt-1">
+            <button
+              onClick={handleDismissUpdate}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-text-muted hover:text-text-primary hover:bg-bg-deep transition-all cursor-pointer"
+            >
+              Depois
+            </button>
+            <button
+              onClick={handleUpdateApp}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Atualizar Agora
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom PWA Installation Banner (P8) */}
+      {showInstallBanner && (
+        <div className="fixed bottom-6 left-6 z-[9997] bg-bg-surface border border-border-subtle p-5 rounded-xl shadow-2xl flex flex-col gap-3 max-w-sm glass transition-all duration-300">
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex gap-3">
+              <img 
+                src="/cerberus-logo.png" 
+                alt="Cerberus Logo" 
+                className="w-9 h-9 object-contain rounded bg-white p-0.5 border border-border-subtle shrink-0" 
+              />
+              <div>
+                <h4 className="text-sm font-bold text-text-primary">Instalar o Cerberus?</h4>
+                <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                  Acesse o motor de vendas e inteligência tributária diretamente da sua área de trabalho ou tela inicial.
+                </p>
+              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <button 
+              onClick={handleIgnoreInstall} 
+              className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-deep transition-colors"
+              aria-label="Ignorar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex gap-2 justify-end mt-1">
+            <button
+              onClick={handleIgnoreInstall}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-text-muted hover:text-text-primary hover:bg-bg-deep transition-all cursor-pointer"
+            >
+              Agora não
+            </button>
+            <button
+              onClick={handleInstallApp}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-primary hover:bg-brand-primary-hover shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Instalar
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
