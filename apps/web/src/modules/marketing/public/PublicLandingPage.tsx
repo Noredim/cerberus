@@ -249,38 +249,50 @@ export const PublicLandingPage: React.FC = () => {
     fetchLp();
   }, [slug]);
 
-  // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma executável
+  // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma não-bloqueante
   useEffect(() => {
     if (!lp?.scripts_cabecalho || typeof document === 'undefined') return;
 
     const createdElements: HTMLElement[] = [];
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = lp.scripts_cabecalho;
 
-    // 1. Processar e instanciar tags <script> dinamicamente para execução imediata no navegador
-    const scripts = tempDiv.querySelectorAll('script');
-    scripts.forEach((oldScript) => {
-      const newScript = document.createElement('script');
-      Array.from(oldScript.attributes).forEach((attr) => {
-        newScript.setAttribute(attr.name, attr.value);
+    const injectScripts = () => {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = lp.scripts_cabecalho || '';
+
+      // 1. Processar e instanciar tags <script>
+      const scripts = tempDiv.querySelectorAll('script');
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach((attr) => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.setAttribute('data-lp-tracking', 'true');
+        newScript.text = oldScript.textContent || oldScript.innerText || '';
+        document.head.appendChild(newScript);
+        createdElements.push(newScript);
       });
-      newScript.setAttribute('data-lp-tracking', 'true');
-      newScript.text = oldScript.textContent || oldScript.innerText || '';
-      document.head.appendChild(newScript);
-      createdElements.push(newScript);
-    });
 
-    // 2. Processar outros elementos válidos (ex: <noscript>, <style>, <meta>)
-    Array.from(tempDiv.childNodes).forEach((node) => {
-      if (node.nodeName.toLowerCase() !== 'script' && node.nodeType === Node.ELEMENT_NODE) {
-        const el = (node as HTMLElement).cloneNode(true) as HTMLElement;
-        el.setAttribute('data-lp-tracking', 'true');
-        document.head.appendChild(el);
-        createdElements.push(el);
-      }
-    });
+      // 2. Processar outros elementos válidos (ex: <noscript>, <style>, <meta>)
+      Array.from(tempDiv.childNodes).forEach((node) => {
+        if (node.nodeName.toLowerCase() !== 'script' && node.nodeType === Node.ELEMENT_NODE) {
+          const el = (node as HTMLElement).cloneNode(true) as HTMLElement;
+          el.setAttribute('data-lp-tracking', 'true');
+          document.head.appendChild(el);
+          createdElements.push(el);
+        }
+      });
+    };
+
+    // Adiar execução para após o primeiro frame/paint para não competir com o LCP
+    let timerId: any;
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(injectScripts, { timeout: 800 });
+    } else {
+      timerId = setTimeout(injectScripts, 400);
+    }
 
     return () => {
+      if (timerId) clearTimeout(timerId);
       createdElements.forEach((el) => {
         try {
           if (el.parentNode) {
@@ -637,6 +649,8 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
               <img
                 src={headerLogo}
                 alt={headerNomeEmpresa || 'Logo'}
+                width={140}
+                height={28}
                 loading="lazy"
                 decoding="async"
                 className="h-7 sm:h-9 w-auto max-w-[140px] sm:max-w-[180px] object-contain rounded"
