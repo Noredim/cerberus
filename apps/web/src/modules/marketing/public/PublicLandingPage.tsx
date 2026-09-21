@@ -251,7 +251,7 @@ export const PublicLandingPage: React.FC = () => {
 
   // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma não-bloqueante
   useEffect(() => {
-    if (!lp?.scripts_cabecalho || typeof document === 'undefined') return;
+    if (!lp?.scripts_cabecalho || loading) return;
 
     const createdElements: HTMLElement[] = [];
 
@@ -283,12 +283,16 @@ export const PublicLandingPage: React.FC = () => {
       });
     };
 
-    // Adiar execução para após o primeiro frame/paint para não competir com o LCP
+    // Adiar injeção do Pixel para após a pintura inicial do LCP
     let timerId: any;
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(injectScripts, { timeout: 800 });
+    const scheduleInjection = () => {
+      timerId = setTimeout(injectScripts, 800);
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(scheduleInjection, { timeout: 2000 });
     } else {
-      timerId = setTimeout(injectScripts, 400);
+      timerId = setTimeout(scheduleInjection, 800);
     }
 
     return () => {
@@ -303,7 +307,7 @@ export const PublicLandingPage: React.FC = () => {
         }
       });
     };
-  }, [lp?.scripts_cabecalho]);
+  }, [lp?.scripts_cabecalho, loading]);
 
 // Helper seguro para disparo de eventos no Meta Pixel
 const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
@@ -413,9 +417,44 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-        <span className="text-sm text-slate-400 font-medium">Carregando apresentação...</span>
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+        {/* Header Skeleton */}
+        <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
+          <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="h-7 w-32 bg-slate-800/80 rounded-lg animate-pulse" />
+            <div className="h-8 w-28 bg-slate-800/60 rounded-full animate-pulse" />
+          </div>
+        </header>
+
+        {/* Hero Skeleton */}
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 lg:py-12">
+          <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+            <div className="lg:col-span-7 space-y-6">
+              <div className="h-7 w-44 bg-slate-800/80 rounded-full animate-pulse" />
+              <div className="space-y-3">
+                <div className="h-10 w-full bg-slate-800/80 rounded-xl animate-pulse" />
+                <div className="h-10 w-4/5 bg-slate-800/80 rounded-xl animate-pulse" />
+              </div>
+              <div className="h-5 w-3/4 bg-slate-800/50 rounded-lg animate-pulse" />
+              <div className="aspect-video w-full rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              </div>
+            </div>
+
+            <div className="lg:col-span-5">
+              <div className="p-6 md:p-8 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4">
+                <div className="h-5 w-40 bg-slate-800/80 rounded-md animate-pulse" />
+                <div className="h-7 w-56 bg-slate-800/80 rounded-md animate-pulse" />
+                <div className="space-y-3 pt-2">
+                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
+                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
+                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
+                  <div className="h-12 w-full bg-blue-600/30 rounded-xl animate-pulse mt-4" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -765,9 +804,9 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
                     >
                       Receba uma Proposta Sem Compromisso
                     </span>
-                    <h3 className={`text-xl font-bold mt-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    <h2 className={`text-xl font-bold mt-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                       Preencha seus dados abaixo
-                    </h3>
+                    </h2>
                   </div>
 
                   {submitError && (
@@ -781,6 +820,8 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
                   <input
                     type="text"
                     name="website_url_check"
+                    aria-label="website_url_check"
+                    aria-hidden="true"
                     tabIndex={-1}
                     autoComplete="off"
                     value={formData.honeypot}
@@ -973,7 +1014,7 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
       >
         <div className="max-w-6xl mx-auto px-4 space-y-2">
           <p>© {new Date().getFullYear()} {headerNomeEmpresa || 'Cerberus'}. Todos os direitos reservados.</p>
-          <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-600'}`}>
+          <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Página de divulgação comercial oficial. Desenvolvido e monitorado via Cerberus Engine.
           </p>
         </div>
