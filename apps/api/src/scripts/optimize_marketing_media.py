@@ -12,18 +12,10 @@ import argparse
 # Adicionar path raiz do backend para imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from sqlalchemy.orm import configure_mappers
+# Importar main para carregar todos os modelos do Cerberus e inicializar mapeadores
+import src.main  # noqa: F401
 from src.core.database import SessionLocal
-import src.modules.companies.models
-import src.modules.users.models
-import src.modules.leads.models
-import src.modules.marketing.models
 from src.modules.marketing.models import MarketingLandingPage
-
-try:
-    configure_mappers()
-except Exception:
-    pass
 
 try:
     from PIL import Image
