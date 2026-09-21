@@ -271,13 +271,20 @@ export const PublicLandingPage: React.FC = () => {
     };
   }, [slug, sessionId]);
 
-  // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma não-bloqueante
+  // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) sob interação ou delay seguro
   useEffect(() => {
     if (!lp?.scripts_cabecalho || loading) return;
 
+    let injected = false;
     const createdElements: HTMLElement[] = [];
 
     const injectScripts = () => {
+      if (injected) return;
+      injected = true;
+
+      // Remover listeners de interação
+      removeListeners();
+
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = lp.scripts_cabecalho || '';
 
@@ -305,20 +312,28 @@ export const PublicLandingPage: React.FC = () => {
       });
     };
 
-    // Adiar injeção do Pixel para após a pintura inicial do LCP
-    let timerId: any;
-    const scheduleInjection = () => {
-      timerId = setTimeout(injectScripts, 800);
+    const triggerEvents = ['scroll', 'touchstart', 'mousemove', 'keydown', 'click'];
+    const onUserInteraction = () => {
+      injectScripts();
     };
 
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(scheduleInjection, { timeout: 2000 });
-    } else {
-      timerId = setTimeout(scheduleInjection, 800);
-    }
+    const removeListeners = () => {
+      triggerEvents.forEach((ev) => {
+        window.removeEventListener(ev, onUserInteraction);
+      });
+    };
+
+    // Adicionar listeners de interação do usuário
+    triggerEvents.forEach((ev) => {
+      window.addEventListener(ev, onUserInteraction, { once: true, passive: true });
+    });
+
+    // Fallback: se o usuário não interagir em 4.5s, injeta suavemente
+    const fallbackTimer = setTimeout(injectScripts, 4500);
 
     return () => {
-      if (timerId) clearTimeout(timerId);
+      clearTimeout(fallbackTimer);
+      removeListeners();
       createdElements.forEach((el) => {
         try {
           if (el.parentNode) {
