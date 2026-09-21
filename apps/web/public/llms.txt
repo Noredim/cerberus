@@ -1,0 +1,11 @@
+# Cerberus
+
+> Plataforma integrada de inteligência tributária municipal, engenharia de custos, orçamentação e motores de conversão e vendas.
+
+## Principais Recursos
+- [Cerberus Web](https://cerberus.warslab.com.br): Sistema operacional de vendas e gestão.
+- [Landing Pages](https://cerberus.warslab.com.br/lp/stelsegvision): Páginas de alta conversão para serviços e produtos especializados.
+
+## Estrutura
+- [API Documentation](https://cerberus.warslab.com.br/api/docs): Documentação interativa dos serviços e integrações.
+- [Privacidade e Segurança](https://cerberus.warslab.com.br): Governança corporativa, conformidade LGPD e segurança de dados.

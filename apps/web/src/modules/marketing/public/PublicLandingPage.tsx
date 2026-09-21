@@ -690,11 +690,11 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
               <img
                 src={headerLogo}
                 alt={headerNomeEmpresa || 'Logo'}
-                width={140}
-                height={28}
-                loading="lazy"
+                width={245}
+                height={49}
+                loading="eager"
                 decoding="async"
-                className="h-7 sm:h-9 w-auto max-w-[140px] sm:max-w-[180px] object-contain rounded"
+                className="h-7 sm:h-9 w-auto max-w-[140px] sm:max-w-[200px] object-contain rounded"
               />
             ) : (
               <div
