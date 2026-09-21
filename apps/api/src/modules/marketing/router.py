@@ -21,7 +21,10 @@ from src.modules.companies.models import Company
 router = APIRouter(prefix="/marketing", tags=["Marketing"])
 
 
-# ─── ROTAS PÚBLICAS (LANDING PAGES & CONVERSÃO) ───
+import time
+
+_RESOLVE_CACHE: dict = {}
+_RESOLVE_CACHE_TTL = 60  # segundos
 
 @router.get("/public/resolve", response_model=PublicLandingPageResponse)
 def resolve_public_landing_page(
@@ -33,6 +36,14 @@ def resolve_public_landing_page(
     Resolve uma Landing Page pública ativa pelo domínio customizado e/ou pelo slug.
     Usado tanto pela rota padrão /lp/:slug quanto por domínios/subdomínios personalizados.
     """
+    cache_key = f"{domain or ''}:{slug or ''}"
+    now = time.time()
+    
+    if cache_key in _RESOLVE_CACHE:
+        cached_time, cached_response = _RESOLVE_CACHE[cache_key]
+        if now - cached_time < _RESOLVE_CACHE_TTL:
+            return cached_response
+
     lp = MarketingService.resolve_public_landing_page(db, domain=domain, slug=slug)
 
     campaign = lp.campaign
@@ -45,7 +56,7 @@ def resolve_public_landing_page(
     company_nome_final = custom_empresa or (company.nome_fantasia or company.razao_social if company else None)
     company_logo_final = custom_logo or (company.logo_url if company else None)
 
-    return PublicLandingPageResponse(
+    response = PublicLandingPageResponse(
         id=lp.id,
         slug=lp.slug,
         custom_domain=lp.custom_domain,
@@ -67,6 +78,9 @@ def resolve_public_landing_page(
         url_logo=custom_logo,
         nome_empresa=custom_empresa
     )
+
+    _RESOLVE_CACHE[cache_key] = (now, response)
+    return response
 
 
 @router.post("/public/submit", response_model=PublicSubmissionResponse)
