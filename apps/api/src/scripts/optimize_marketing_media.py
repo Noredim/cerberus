@@ -166,9 +166,15 @@ def main():
                 if lower.endswith((".png", ".jpg", ".jpeg")):
                     convert_image_to_webp(fpath, max_width=1200, quality=78)
                 elif lower.endswith(".webp"):
-                    # Se for o logo específico ou logo genérico
-                    if "869b946a2d8f47fb856c0a5b4c00c753" in lower:
-                        convert_image_to_webp(fpath, max_width=300, quality=78, force_recompress=True)
+                    try:
+                        with Image.open(fpath) as img:
+                            w, h = img.size
+                        if "869b946a2d8f47fb856c0a5b4c00c753" in lower or (w <= 700 and h <= 250):
+                            convert_image_to_webp(fpath, max_width=300, quality=78, force_recompress=True)
+                        elif w > 1200:
+                            convert_image_to_webp(fpath, max_width=1200, quality=78, force_recompress=True)
+                    except Exception as err:
+                        print(f"  [AVISO] Não foi possível verificar {fname}: {err}")
 
         if not args.dry_run:
             db.commit()
