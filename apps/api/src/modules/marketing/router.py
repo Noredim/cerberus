@@ -299,14 +299,20 @@ async def upload_marketing_media(
             webp_filepath = os.path.join(upload_dir, webp_filename)
 
             with Image.open(raw_filepath) as img:
-                # Se exceder 1920px de largura, redimensionar proporcionalmente
-                max_width = 1920
+                # Se for RGBA ou tiver canal alfa, preservar; caso contrário converter modo
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                    pass
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                # Redimensionar proporcionalmente para padrões preconizados na web
+                max_width = 1200
                 if img.width > max_width:
-                    new_height = int((max_width / img.width) * img.height)
+                    new_height = max(1, int((max_width / img.width) * img.height))
                     img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
                 # Salvar em formato WebP comprimido com alta fidelidade
-                img.save(webp_filepath, "WEBP", quality=82, method=6)
+                img.save(webp_filepath, "WEBP", quality=78, method=6)
 
             # Remover arquivo cru se convertemos com sucesso para webp
             if os.path.exists(raw_filepath) and raw_filepath != webp_filepath:
