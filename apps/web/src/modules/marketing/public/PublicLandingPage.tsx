@@ -182,8 +182,18 @@ function isLightColor(hexColor?: string | null): boolean {
 
 export const PublicLandingPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
-  const [loading, setLoading] = useState(true);
-  const [lp, setLp] = useState<PublicLPData | null>(null);
+  const [lp, setLp] = useState<PublicLPData | null>(() => {
+    if (typeof window !== 'undefined' && (window as any).__MKT_LP_DATA__) {
+      return (window as any).__MKT_LP_DATA__;
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined' && (window as any).__MKT_LP_DATA__) {
+      return false;
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
 
   // Form State
@@ -454,9 +464,34 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-        <span className="text-sm text-slate-400 font-medium">Carregando apresentação...</span>
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+        <header className="border-b border-slate-800/80 bg-slate-950/70 sticky top-0 z-40">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="h-7 px-3 rounded-lg flex items-center justify-center font-bold text-xs bg-slate-900 border border-slate-800 text-slate-300">
+              CERBERUS
+            </div>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-4 py-8 lg:py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+            <div className="lg:col-span-7 space-y-6">
+              <div className="w-48 h-6 bg-slate-900 rounded-full animate-pulse border border-slate-800" />
+              <div className="w-full h-12 bg-slate-900 rounded-xl animate-pulse border border-slate-800" />
+              <div className="w-3/4 h-6 bg-slate-900 rounded-lg animate-pulse border border-slate-800" />
+              <div className="w-full aspect-video rounded-2xl bg-slate-900 border border-slate-800 relative overflow-hidden flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            </div>
+            <div className="lg:col-span-5">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-4">
+                <div className="w-36 h-6 bg-slate-800 rounded-lg animate-pulse" />
+                <div className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                <div className="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                <div className="w-full h-12 bg-blue-600/30 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }

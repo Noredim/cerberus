@@ -37,8 +37,40 @@
         if (p && p.indexOf('/lp/') === 0) {
           var s = p.split('/')[2];
           if (s) {
+            if (s === 'stelsegvision') {
+              var l = document.createElement('link');
+              l.rel = 'preload';
+              l.as = 'image';
+              l.href = 'https://img.youtube.com/vi/xVQnt2qD7VY/hqdefault.jpg';
+              l.fetchPriority = 'high';
+              document.head.appendChild(l);
+            }
             window.__MKT_LP_PRELOAD__ = fetch('/api/marketing/public/resolve?domain=' + encodeURIComponent(window.location.host) + '&slug=' + encodeURIComponent(s))
               .then(function(res){ return res.ok ? res.json() : null; })
+              .then(function(data){
+                if (data) {
+                  window.__MKT_LP_DATA__ = data;
+                  var v = data.url_video;
+                  var imgUrl = null;
+                  if (v) {
+                    var m = v.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                    if (m && m[1]) {
+                      imgUrl = 'https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg';
+                    }
+                  } else if (data.url_imagem_banner) {
+                    imgUrl = data.url_imagem_banner;
+                  }
+                  if (imgUrl && !document.querySelector('link[href="' + imgUrl + '"]')) {
+                    var link = document.createElement('link');
+                    link.rel = 'preload';
+                    link.as = 'image';
+                    link.href = imgUrl;
+                    link.fetchPriority = 'high';
+                    document.head.appendChild(link);
+                  }
+                }
+                return data;
+              })
               .catch(function(){ return null; });
           }
         }
