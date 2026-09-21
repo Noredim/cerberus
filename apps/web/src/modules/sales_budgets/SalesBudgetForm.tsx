@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off, AlertTriangle, FileText } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off, AlertTriangle, FileText, Layers } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api, resolveHtmlMediaUrls } from '../../services/api';
@@ -19,6 +19,7 @@ import { QuickSupplierCreateModal } from '../../components/modals/QuickSupplierC
 import { SupplierCombobox } from '../../components/ui/SupplierCombobox';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 import { RentalROIAnalysis } from './components/RentalROIAnalysis';
+import { ProposalGroupingModal, type ProposalKitInfo, type ProposalKitGroup } from './components/ProposalGroupingModal';
 
 interface CostComposition {
   base_unitario: number;
@@ -712,6 +713,8 @@ export function SalesBudgetForm() {
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
   const [generatingProposal, setGeneratingProposal] = useState(false);
   const [noDocumentRuleModalOpen, setNoDocumentRuleModalOpen] = useState(false);
+  const [proposalCustomGroupings, setProposalCustomGroupings] = useState<ProposalKitGroup[]>([]);
+  const [isGroupingModalOpen, setIsGroupingModalOpen] = useState(false);
 
   const canManageParticipants = useMemo(() => {
     if (!user) return false;
@@ -1100,6 +1103,7 @@ export function SalesBudgetForm() {
       setPercIssRental(Number(d.perc_iss_rental) || 0);
       setPercComissaoDiretoria(Number(d.perc_comissao_diretoria) || 0);
       setPercDespesaOperacional(Number(d.perc_despesa_operacional) || 0);
+      setProposalCustomGroupings(d.proposal_custom_groupings || []);
 
       // Load sale items and separate kits from regular items
       const loadedItems: SalesBudgetItem[] = d.items || [];
@@ -2810,6 +2814,7 @@ export function SalesBudgetForm() {
           despesa_operacional_mensal: i.desp_operacional != null ? +i.desp_operacional : null,
           kit_comissionamento_detalhado: i.kit_comissionamento_detalhado || null,
         })),
+        proposal_custom_groupings: proposalCustomGroupings,
       };
 
       let currentSalesBudgetId = id;
@@ -3287,6 +3292,72 @@ export function SalesBudgetForm() {
     handleGenerateCommercialProposal();
   };
 
+  const availableKitsForGrouping = useMemo<ProposalKitInfo[]>(() => {
+    const list: ProposalKitInfo[] = [];
+
+    // Locação Kits
+    rentalItems.forEach((ri, idx) => {
+      if (ri.opportunity_kit_id) {
+        const kObj = (ri as any).opportunity_kit || (ri as any).kit_raw;
+        const nomeKit = kObj?.nome_kit || (ri as any).kit_nome || (ri as any).descricao || `Kit de Locação #${idx + 1}`;
+        const valorM = Number(ri.kit_valor_mensal || ri.valor_mensal || 0);
+        const prazo = Number(ri.prazo_contrato || prazoContratoMeses || 36);
+
+        list.push({
+          id: ri.opportunity_kit_id,
+          nome: `[Locação] ${nomeKit}`,
+          tipo: 'LOCACAO',
+          valorMensal: valorM,
+          prazoMeses: prazo,
+        });
+      }
+    });
+
+    // Venda Kits
+    vendaKits.forEach((vk, idx) => {
+      const vkId = vk.opportunity_kit_id || (vk as any).data?.opportunity_kit_id;
+      if (vkId) {
+        const nomeKit = vk.nome_kit || (vk as any).data?.nome_kit || `Kit de Venda #${idx + 1}`;
+        const totalV = Number((vk as any).total_venda || (vk as any).faturamento_total || (vk as any).summary?.venda_equipamentos_total || 0);
+
+        list.push({
+          id: vkId,
+          nome: `[Venda] ${nomeKit}`,
+          tipo: 'VENDA',
+          valorTotal: totalV,
+        });
+      }
+    });
+
+    return list;
+  }, [rentalItems, vendaKits, prazoContratoMeses]);
+
+  const handleSaveGroupings = (newGroupings: ProposalKitGroup[]) => {
+    setProposalCustomGroupings(newGroupings);
+    setHasUnsavedChanges(true);
+    if (id) {
+      api.patch(`/sales-budgets/${id}/header`, {
+        proposal_custom_groupings: newGroupings,
+      }).catch(err => console.error('Erro ao sincronizar agrupamentos:', err));
+    }
+  };
+
+  const handleSaveAndGenerateGroupings = async (newGroupings: ProposalKitGroup[]) => {
+    setProposalCustomGroupings(newGroupings);
+    if (!id) return;
+    try {
+      setGeneratingProposal(true);
+      await api.patch(`/sales-budgets/${id}/header`, {
+        proposal_custom_groupings: newGroupings,
+      });
+      await handleGenerateCommercialProposal();
+    } catch (err: any) {
+      console.error('Erro ao salvar agrupamentos e gerar proposta:', err);
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-brand-primary" /></div>;
 
   return (
@@ -3480,6 +3551,23 @@ export function SalesBudgetForm() {
                   >
                     {generatingProposal ? <Loader2 className="w-4 h-4 animate-spin text-brand-primary" /> : <FileText className="w-4 h-4 text-brand-primary" />}
                     Proposta Comercial
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowReportsDropdown(false);
+                      setIsGroupingModalOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-bg-deep text-text-primary flex items-center justify-between border-b border-border-subtle"
+                  >
+                    <div className="flex items-center gap-2 font-medium">
+                      <Layers className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      Agrupar Kits na Proposta
+                    </div>
+                    {proposalCustomGroupings.length > 0 && (
+                      <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {proposalCustomGroupings.length} {proposalCustomGroupings.length === 1 ? 'grupo' : 'grupos'}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => {
@@ -8015,6 +8103,16 @@ export function SalesBudgetForm() {
           </div>
         </Modal>
       )}
+
+      {/* Modal de Agrupamento Customizado de Kits para Proposta Comercial */}
+      <ProposalGroupingModal
+        isOpen={isGroupingModalOpen}
+        onClose={() => setIsGroupingModalOpen(false)}
+        availableKits={availableKitsForGrouping}
+        initialGroupings={proposalCustomGroupings}
+        onSave={handleSaveGroupings}
+        onSaveAndGenerate={handleSaveAndGenerateGroupings}
+      />
 
     </div>
   );

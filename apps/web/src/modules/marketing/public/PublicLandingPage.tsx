@@ -55,6 +55,12 @@ interface PublicLPData {
   nome_empresa?: string | null;
 }
 
+function getYouTubeId(rawUrl?: string | null): string | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const match = rawUrl.trim().match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i);
+  return match && match[1] ? match[1] : null;
+}
+
 function getEmbedVideoUrl(rawUrl?: string | null): string | null {
   if (!rawUrl || typeof rawUrl !== 'string') return null;
   const url = rawUrl.trim();
@@ -83,6 +89,76 @@ function getEmbedVideoUrl(rawUrl?: string | null): string | null {
 
   return null;
 }
+
+const LiteVideoPlayer: React.FC<{ url: string; isLight: boolean; titulo?: string }> = ({ url, isLight, titulo }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const ytId = getYouTubeId(url);
+  const embedUrl = getEmbedVideoUrl(url);
+
+  if (!embedUrl) return null;
+
+  // Se for arquivo direto (MP4/WebM)
+  if (embedUrl.endsWith('.mp4') || embedUrl.endsWith('.webm') || embedUrl.includes('/uploads/')) {
+    return (
+      <div className={`aspect-video w-full rounded-2xl overflow-hidden border shadow-2xl ${
+        isLight ? 'border-slate-200 bg-black/80' : 'border-slate-800 bg-black/60'
+      }`}>
+        <video src={embedUrl} controls preload="metadata" className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+
+  // Se for YouTube e o usuário ainda não clicou em Play: Padrão Facade Ultraleve
+  if (ytId && !isPlaying) {
+    const thumbUrl = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+    return (
+      <div
+        className={`aspect-video w-full rounded-2xl overflow-hidden border shadow-2xl relative group cursor-pointer ${
+          isLight ? 'border-slate-200 bg-black/80' : 'border-slate-800 bg-black/60'
+        }`}
+        onClick={() => setIsPlaying(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsPlaying(true); }}
+        aria-label="Assistir ao vídeo de apresentação"
+      >
+        <img
+          src={thumbUrl}
+          alt={titulo || 'Vídeo de apresentação'}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-105 group-hover:opacity-100"
+        />
+        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+          <div className="w-16 h-12 sm:w-20 sm:h-14 bg-red-600/90 group-hover:bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-300 group-hover:scale-110">
+            <svg className="w-6 h-6 sm:w-7 sm:h-7 fill-current translate-x-0.5" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Iframe ativo (carregado apenas sob demanda com autoplay)
+  const fullEmbedUrl = ytId
+    ? `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&rel=0`
+    : embedUrl;
+
+  return (
+    <div className={`aspect-video w-full rounded-2xl overflow-hidden border shadow-2xl ${
+      isLight ? 'border-slate-200 bg-black/80' : 'border-slate-800 bg-black/60'
+    }`}>
+      <iframe
+        src={fullEmbedUrl}
+        title={titulo || "Vídeo Apresentação"}
+        className="w-full h-full"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+      />
+    </div>
+  );
+};
 
 function isLightColor(hexColor?: string | null): boolean {
   if (!hexColor || typeof hexColor !== 'string') return false;
@@ -435,14 +511,15 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
             <img
               src={lp.url_imagem_banner}
               alt={lp.titulo}
+              fetchPriority="high"
+              decoding="async"
               className="w-full h-auto max-h-[440px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
             />
           </div>
         );
 
       case 'video': {
-        const embedUrl = getEmbedVideoUrl(lp.url_video);
-        if (!embedUrl) return null;
+        if (!lp.url_video) return null;
         return (
           <div key="video" className="space-y-2">
             <div
@@ -453,23 +530,7 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
               <Video className={`w-3.5 h-3.5 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
               <span>Vídeo Demonstrativo</span>
             </div>
-            <div
-              className={`aspect-video w-full rounded-2xl overflow-hidden border shadow-2xl ${
-                isLight ? 'border-slate-200 bg-black/80' : 'border-slate-800 bg-black/60'
-              }`}
-            >
-              {embedUrl.endsWith('.mp4') || embedUrl.endsWith('.webm') || embedUrl.includes('/uploads/') ? (
-                <video src={embedUrl} controls className="w-full h-full object-cover" />
-              ) : (
-                <iframe
-                  src={embedUrl}
-                  title="Vídeo Apresentação"
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              )}
-            </div>
+            <LiteVideoPlayer url={lp.url_video} isLight={isLight} titulo={lp.titulo} />
           </div>
         );
       }
@@ -576,6 +637,8 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
               <img
                 src={headerLogo}
                 alt={headerNomeEmpresa || 'Logo'}
+                loading="lazy"
+                decoding="async"
                 className="h-7 sm:h-9 w-auto max-w-[140px] sm:max-w-[180px] object-contain rounded"
               />
             ) : (

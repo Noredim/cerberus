@@ -21,6 +21,7 @@ class SalesBudget(Base):
     forma_pagamento_snapshot = Column(JSONB, nullable=True)
     commercial_policy_id = Column(UUID(as_uuid=True), ForeignKey("company_commercial_policies.id", ondelete="SET NULL"), nullable=True, index=True)
     sales_team_id = Column(UUID(as_uuid=True), ForeignKey("company_sales_teams.id", ondelete="SET NULL"), nullable=True, index=True)
+    proposal_custom_groupings = Column(JSONB, nullable=True, default=list)
 
     numero_orcamento = Column(String(50), nullable=True)
     titulo = Column(String(255), nullable=False)

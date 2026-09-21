@@ -101,9 +101,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Servir arquivos estáticos (Uploads da Logo e afins)
+class CachedStaticFiles(StaticFiles):
+    """StaticFiles com cabeçalhos de Cache-Control para alta performance e cache de navegador."""
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=2592000, stale-while-revalidate=86400"
+        return response
+
+
+# Servir arquivos estáticos (Uploads com Cache-Control)
 os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", CachedStaticFiles(directory="uploads"), name="uploads")
 
 # CORS configuration — must be first middleware
 app.add_middleware(
@@ -223,7 +232,4 @@ app.include_router(tax_recovery_router)
 app.include_router(leads_router)
 app.include_router(google_integrations_router)
 app.include_router(marketing_router)
-
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

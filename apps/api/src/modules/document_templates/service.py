@@ -713,6 +713,7 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
 
     kit_service = OpportunityKitService(db)
     kits = db.query(OpportunityKit).filter_by(sales_budget_id=budget.id).all() if budget else []
+    custom_groupings = getattr(budget, 'proposal_custom_groupings', []) or []
 
     # 1. Agrupar por modalidade de contrato
     venda_kits = [k for k in kits if k.tipo_contrato == "VENDA_EQUIPAMENTOS"]
@@ -744,9 +745,48 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
 
     if has_venda:
         venda_tables = ""
-        
-        # Kits de Venda
+        processed_venda_kit_ids = set()
+
+        # 1.1 Processar Grupos Customizados de Venda
+        for grp in custom_groupings:
+            grp_kit_ids = [str(kid) for kid in grp.get("kit_ids", [])]
+            kits_in_grp = [k for k in venda_kits if str(k.id) in grp_kit_ids]
+            if kits_in_grp:
+                tot_grp_venda = 0.0
+                for k in kits_in_grp:
+                    try:
+                        fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                        s = fin.get("summary", {})
+                    except Exception:
+                        s = {}
+                    b_item = next((it for it in (budget.items or []) if str(it.opportunity_kit_id) == str(k.id)), None)
+                    qtd_kit = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
+                    tot_kit = float(b_item.total_venda if b_item and b_item.total_venda is not None else (s.get("venda_equipamentos_total") or 0.0))
+                    if tot_kit == 0.0 and getattr(k, 'venda_total', None):
+                        tot_kit = float(k.venda_total) * qtd_kit
+                    tot_grp_venda += tot_kit
+                    processed_venda_kit_ids.add(str(k.id))
+
+                total_venda_geral += tot_grp_venda
+                nome_grp = grp.get("nome_grupo") or "Pacote de Venda Agrupado"
+
+                venda_tables += f"""
+                <div class="proposal-kit-block" style="margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                    <div style="background-color: #0f172a; color: #ffffff; padding: 7px 12px; font-size: 11.5px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                        <span>📦 {nome_grp}</span>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 12px; color: #334155;">
+                        <div><strong>Valor Total do Pacote:</strong></div>
+                        <div style="color: #0f172a; font-weight: 800; font-size: 13px;">{format_currency(tot_grp_venda)}</div>
+                    </div>
+                </div>
+                """
+
+        # 1.2 Kits de Venda Individuais (Não agrupados)
         for k in venda_kits:
+            if str(k.id) in processed_venda_kit_ids:
+                continue
+
             try:
                 fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
                 s = fin.get("summary", {})
@@ -826,7 +866,7 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
             </div>
             """
 
-        # Itens Avulsos de Venda
+        # 1.3 Itens Avulsos de Venda
         if standalone_venda_items:
             tot_avulso = 0.0
             rows_avulso = ""
@@ -895,7 +935,65 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
 
     if has_instalacao:
         rows_inst = ""
+        processed_inst_kit_ids = set()
+
+        # 2.1 Processar Grupos de Instalação
+        for grp in custom_groupings:
+            grp_kit_ids = [str(kid) for kid in grp.get("kit_ids", [])]
+            kits_in_grp = [k for k in instalacao_kits if str(k.id) in grp_kit_ids]
+            if kits_in_grp:
+                tot_grp_inst = 0.0
+                for k in kits_in_grp:
+                    try:
+                        fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                        s = fin.get("summary", {})
+                    except Exception:
+                        s = {}
+                    b_item = next((it for it in (budget.items or []) if str(it.opportunity_kit_id) == str(k.id)), None)
+                    r_item = next((rit for rit in (budget.rental_items or []) if str(rit.opportunity_kit_id) == str(k.id)), None)
+
+                    if r_item:
+                        qtd_inst = float(r_item.quantidade if r_item.quantidade is not None else (k.quantidade_kits or 1))
+                        unit_inst = float(
+                            r_item.kit_valor_mensal if r_item.kit_valor_mensal is not None and float(r_item.kit_valor_mensal) > 0
+                            else (r_item.valor_mensal if r_item.valor_mensal is not None and float(r_item.valor_mensal) > 0
+                            else (r_item.valor_instalacao_item if r_item.valor_instalacao_item is not None and float(r_item.valor_instalacao_item) > 0
+                            else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0)))
+                        )
+                        if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
+                            unit_inst = float(k.venda_unitario)
+                        tot_inst = float(unit_inst * qtd_inst)
+                    elif b_item:
+                        qtd_inst = float(b_item.quantidade if b_item and b_item.quantidade is not None else (k.quantidade_kits or 1))
+                        unit_inst = float(b_item.venda_unit if b_item and b_item.venda_unit is not None else (s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or 0.0))
+                        if unit_inst == 0.0 and getattr(k, 'venda_unitario', None):
+                            unit_inst = float(k.venda_unitario)
+                        tot_inst = float(b_item.total_venda if b_item and b_item.total_venda is not None else (unit_inst * qtd_inst))
+                    else:
+                        qtd_inst = float(k.quantidade_kits or 1)
+                        unit_inst = float(s.get("valor_mensal_kit") or s.get("venda_equipamentos_total") or s.get("valor_base_final") or getattr(k, 'venda_unitario', 0.0) or 0.0)
+                        tot_inst = float(unit_inst * qtd_inst)
+
+                    tot_grp_inst += tot_inst
+                    processed_inst_kit_ids.add(str(k.id))
+
+                total_instalacao_geral += tot_grp_inst
+                nome_grp = grp.get("nome_grupo") or "Instalação Agrupada"
+
+                rows_inst += f"""
+                <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
+                    <td style="padding: 7px 10px; font-weight: 700; color: #1e293b;">{nome_grp} <span style="font-size: 10px; font-weight: normal; color: #64748b;">({len(kits_in_grp)} Kits)</span></td>
+                    <td style="padding: 7px 10px; text-align: center; color: #334155;">1</td>
+                    <td style="padding: 7px 10px; text-align: right; color: #334155;">{format_currency(tot_grp_inst)}</td>
+                    <td style="padding: 7px 10px; text-align: right; font-weight: 700; color: #0f172a;">{format_currency(tot_grp_inst)}</td>
+                </tr>
+                """
+
+        # 2.2 Kits de Instalação Individuais
         for k in instalacao_kits:
+            if str(k.id) in processed_inst_kit_ids:
+                continue
+
             try:
                 fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
                 s = fin.get("summary", {})
@@ -969,7 +1067,7 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
                 <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
                     <thead>
                         <tr style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; color: #334155; text-align: left;">
-                            <th style="padding: 6px 10px;">Kit</th>
+                            <th style="padding: 6px 10px;">Kit / Serviço</th>
                             <th style="padding: 6px 10px; text-align: center; width: 14%;">Quantidade</th>
                             <th style="padding: 6px 10px; text-align: right; width: 22%;">Valor Unitário</th>
                             <th style="padding: 6px 10px; text-align: right; width: 22%;">Valor Total</th>
@@ -995,7 +1093,57 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
 
     if has_locacao:
         locacao_blocks = ""
+        processed_locacao_kit_ids = set()
+
+        # 3.1 Processar Grupos de Locação / Comodato (com soma mensal e sem lista de itens individuais)
+        for grp in custom_groupings:
+            grp_kit_ids = [str(kid) for kid in grp.get("kit_ids", [])]
+            kits_in_grp = [k for k in locacao_kits if str(k.id) in grp_kit_ids]
+            if kits_in_grp:
+                tot_grp_mensal = 0.0
+                grp_meses = None
+                for k in kits_in_grp:
+                    try:
+                        fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
+                        s = fin.get("summary", {})
+                    except Exception:
+                        s = {}
+
+                    rental_item = next((rit for rit in (budget.rental_items or []) if str(rit.opportunity_kit_id) == str(k.id)), None)
+                    qtd_kit = float(rental_item.quantidade if rental_item and rental_item.quantidade is not None else (k.quantidade_kits or 1))
+                    
+                    mensal_unit = float(rental_item.kit_valor_mensal or rental_item.valor_mensal if rental_item and (rental_item.kit_valor_mensal or rental_item.valor_mensal) is not None else (s.get("valor_mensal_antes_impostos") or s.get("valor_mensal_kit") or 0.0))
+                    if mensal_unit == 0.0 and getattr(k, 'custo_total', None):
+                        mensal_unit = float(k.custo_total)
+
+                    mensal_tot = mensal_unit * qtd_kit
+                    tot_grp_mensal += mensal_tot
+                    if grp_meses is None:
+                        grp_meses = k.prazo_contrato_meses or budget.prazo_contrato_meses or 36
+                    processed_locacao_kit_ids.add(str(k.id))
+
+                total_locacao_mensal += tot_grp_mensal
+                nome_grp = grp.get("nome_grupo") or "Pacote de Locação Agrupado"
+                meses_final = grp_meses or budget.prazo_contrato_meses or 36
+
+                # Renderiza Bloco Consolidado do Grupo (Sem itens analíticos)
+                locacao_blocks += f"""
+                <div class="proposal-kit-block" style="margin-bottom: 10px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                    <div style="background-color: #0f172a; color: #ffffff; padding: 7px 12px; font-size: 11.5px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                        <span>📦 {nome_grp}</span>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 12px; color: #334155;">
+                        <div><strong>Valor da Mensalidade:</strong> <span style="color: #0f172a; font-weight: 800; font-size: 13px;">{format_currency(tot_grp_mensal)}/mês</span></div>
+                        <div><strong>Quantidade de Meses:</strong> <span style="color: #0f172a; font-weight: 700;">{meses_final} meses</span></div>
+                    </div>
+                </div>
+                """
+
+        # 3.2 Kits de Locação Individuais (Não agrupados)
         for k in locacao_kits:
+            if str(k.id) in processed_locacao_kit_ids:
+                continue
+
             try:
                 fin = kit_service.calculate_financials(k, tenant_id=budget.tenant_id, sales_budget_id=str(budget.id))
                 s = fin.get("summary", {})
@@ -1087,11 +1235,11 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
         locacao_html = f"""
         <div class="section-comodato-locacao" style="margin-bottom: 14px;">
             <div style="border-bottom: 2px solid #0f172a; padding-bottom: 3px; margin-bottom: 8px;">
-                <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">3. Comodato / Locação</h3>
+                <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">3. Serviços de Recorrência Mensal</h3>
             </div>
             {locacao_blocks}
             <div style="text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; padding: 6px 10px; background-color: #e2e8f0; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 4px;">
-                TOTAL MENSAL COMODATO / LOCAÇÃO: {format_currency(total_locacao_mensal)}/mês
+                TOTAL MENSAL - SERVIÇOS DE RECORRÊNCIA MENSAL: {format_currency(total_locacao_mensal)}/mês
             </div>
         </div>
         """
@@ -1282,12 +1430,12 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
         </div>
         """
 
-    # 2. Tabela Demonstrativo de Valores Recorrentes (Comodato / Locação)
+    # 2. Tabela Demonstrativo de Valores Recorrentes (Serviços de Recorrência Mensal)
     if has_locacao:
         tabelas_demonstrativo += f"""
         <div style="margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
             <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
-                Demonstrativo de Valores — Comodato / Locação (Mensal Recorrente)
+                Demonstrativo de Valores — Serviços de Recorrência Mensal
             </div>
             <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
                 <thead>
@@ -1299,7 +1447,7 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
                 </thead>
                 <tbody>
                     <tr style="border-bottom: 1px solid #e2e8f0;">
-                        <td style="padding: 6px 10px; color: #1e293b;">Serviços e Equipamentos em Comodato / Locação</td>
+                        <td style="padding: 6px 10px; color: #1e293b;">Serviços de Recorrência Mensal</td>
                         <td style="padding: 6px 10px; text-align: center; font-weight: 600; color: #0f172a;">{prazo_contrato} meses</td>
                         <td style="padding: 6px 10px; text-align: right; font-weight: 600; color: #0f172a;">{format_currency(total_locacao_mensal)}/mês</td>
                     </tr>

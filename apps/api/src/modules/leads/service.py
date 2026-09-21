@@ -271,6 +271,19 @@ def check_and_process_timeouts(db: Session, tenant_id: str, company_id: UUID):
 # ─── Lead CRUD ───
 
 def create_lead(db: Session, tenant_id: str, company_id: UUID, current_user: User, data: LeadCreate) -> Lead:
+    # Restrição de Engenharia de Preço sem ADM de Leads
+    user_roles = [
+        getattr(r, "role", r).value if hasattr(getattr(r, "role", r), "value") else str(getattr(r, "role", r)).upper()
+        for r in (current_user.roles or [])
+    ]
+    is_admin = "ADMIN" in user_roles
+    is_lead_adm = getattr(current_user, "is_lead_admin", False)
+    is_engenharia = "ENGENHARIA_PRECO" in user_roles or "ENGENHARIA_PRECOS" in user_roles
+
+    if is_engenharia and not is_admin and not is_lead_adm:
+        data.tipo_distribuicao = "DIRETA_VENDEDOR"
+        data.vendedor_especifico_id = None
+
     # Verify if current user is a vendor registering their own lead
     is_direct_vendor = (data.tipo_distribuicao == "DIRETA_VENDEDOR")
 

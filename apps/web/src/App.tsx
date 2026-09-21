@@ -1,69 +1,88 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Shell from './components/layout/Shell';
-import Login from './modules/auth/Login';
-import SelectCompany from './modules/auth/SelectCompany';
-import StatesList from './modules/catalog/StatesList';
-import CitiesList from './modules/catalog/CitiesList';
-import SyncJobsList from './modules/catalog/SyncJobsList';
-import UsersList from './modules/users/UsersList';
-import EmpresasList from './modules/companies/EmpresasList';
-import EmpresaForm from './modules/companies/EmpresaForm';
-import TaxBenefitsList from './modules/tax-benefits/TaxBenefitsList';
-import TaxBenefitForm from './modules/tax-benefits/TaxBenefitForm';
-import ProfileDashboard from './modules/profiles/ProfileDashboard';
-import BackupDashboard from './modules/security/backup/BackupDashboard';
-import NcmList from './modules/ncm/NcmList';
-import NcmForm from './modules/ncm/NcmForm';
-import { TipiList } from './modules/ncm-tipi/TipiList';
-import NcmStList from './modules/ncm-st/NcmStList';
-import NcmStForm from './modules/ncm-st/NcmStForm';
-import NcmStDetails from './modules/ncm-st/NcmStDetails';
-import SupplierList from './modules/suppliers/SupplierList';
-import SupplierForm from './modules/suppliers/SupplierForm';
-import ProductList from './modules/products/ProductList';
-import ProductForm from './modules/products/ProductForm';
-import CustomerList from './modules/customers/CustomerList';
-import CustomerForm from './modules/customers/CustomerForm';
-import { BudgetsList } from './modules/purchase_budgets/BudgetsList';
-import { BudgetForm } from './modules/purchase_budgets/BudgetForm';
-import { SalesBudgetList } from './modules/sales_budgets/SalesBudgetList';
-import { SalesBudgetForm } from './modules/sales_budgets/SalesBudgetForm';
-import { OpportunityKitList } from './modules/opportunity_kits/OpportunityKitList';
-import { OpportunityKitForm } from './modules/opportunity_kits/OpportunityKitForm';
-import RolesDashboard from './modules/roles/RolesDashboard';
-import ManHoursDashboard from './modules/man_hours/ManHoursDashboard';
-import OwnServicesDashboard from './modules/own_services/OwnServicesDashboard';
-import ProfessionalsDashboard from './modules/professionals/ProfessionalsDashboard';
-import Dashboard from './modules/dashboard/Dashboard';
-import { SolutionAnalysisList } from './modules/solution_analysis/SolutionAnalysisList';
-import { SolutionAnalysisForm } from './modules/solution_analysis/SolutionAnalysisForm';
-import { SalesProposalList } from './modules/sales_proposals/SalesProposalList';
-import { SalesProposalForm } from './modules/sales_proposals/SalesProposalForm';
-import { LicitacaoList } from './modules/licitacoes/LicitacaoList';
-import { LicitacaoForm } from './modules/licitacoes/LicitacaoForm';
-import KitAnalyticReport from './modules/reports/KitAnalyticReport';
-import FormasPagamentoList from './modules/payment_methods/FormasPagamentoList';
-import FormasPagamentoForm from './modules/payment_methods/FormasPagamentoForm';
-import DocumentTemplateList from './modules/document_templates/DocumentTemplateList';
-import DocumentTemplateForm from './modules/document_templates/DocumentTemplateForm';
 import PWAManager from './components/pwa/PWAManager';
-import MessagingDashboard from './modules/messaging/MessagingDashboard';
-import NfeAnalysisList from './modules/fiscal/analise-nfe/NfeAnalysisList';
-import NfeAnalysisDetail from './modules/fiscal/analise-nfe/NfeAnalysisDetail';
-import { NfeMonthlyTrackerList } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyTrackerList';
-import { NfeMonthlyDetailView } from './modules/fiscal/acompanhamento-nfe/NfeMonthlyDetailView';
-import { TaxRecoveryList } from './modules/fiscal/recuperacao-impostos/TaxRecoveryList';
-import { TaxRecoveryDetail } from './modules/fiscal/recuperacao-impostos/TaxRecoveryDetail';
-import { LeadList } from './modules/leads/LeadList';
-import { LeadDetail } from './modules/leads/LeadDetail';
-import { GoogleCallback } from './modules/integrations/GoogleCallback';
-import { CampaignsList } from './modules/marketing/CampaignsList';
-import { CampaignForm } from './modules/marketing/CampaignForm';
-import { PublicLandingPage } from './modules/marketing/public/PublicLandingPage';
-
-
 import { Loader2, ServerOff } from 'lucide-react';
+
+// Lazy-loaded routes for code-splitting
+const Login = lazy(() => import('./modules/auth/Login'));
+const SelectCompany = lazy(() => import('./modules/auth/SelectCompany'));
+const PublicLandingPage = lazy(() => import('./modules/marketing/public/PublicLandingPage').then(m => ({ default: m.PublicLandingPage })));
+const GoogleCallback = lazy(() => import('./modules/integrations/GoogleCallback').then(m => ({ default: m.GoogleCallback })));
+
+// Admin & App Dashboard
+const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
+const UsersList = lazy(() => import('./modules/users/UsersList'));
+const StatesList = lazy(() => import('./modules/catalog/StatesList'));
+const CitiesList = lazy(() => import('./modules/catalog/CitiesList'));
+const SyncJobsList = lazy(() => import('./modules/catalog/SyncJobsList'));
+const RolesDashboard = lazy(() => import('./modules/roles/RolesDashboard'));
+const ProfessionalsDashboard = lazy(() => import('./modules/professionals/ProfessionalsDashboard'));
+const ManHoursDashboard = lazy(() => import('./modules/man_hours/ManHoursDashboard'));
+const OwnServicesDashboard = lazy(() => import('./modules/own_services/OwnServicesDashboard'));
+const ProfileDashboard = lazy(() => import('./modules/profiles/ProfileDashboard'));
+const MessagingDashboard = lazy(() => import('./modules/messaging/MessagingDashboard'));
+const BackupDashboard = lazy(() => import('./modules/security/backup/BackupDashboard'));
+
+// Empresas & Benefícios
+const EmpresasList = lazy(() => import('./modules/companies/EmpresasList'));
+const EmpresaForm = lazy(() => import('./modules/companies/EmpresaForm'));
+const TaxBenefitsList = lazy(() => import('./modules/tax-benefits/TaxBenefitsList'));
+const TaxBenefitForm = lazy(() => import('./modules/tax-benefits/TaxBenefitForm'));
+
+// Cadastros Fiscais & Produtos
+const NcmList = lazy(() => import('./modules/ncm/NcmList'));
+const NcmForm = lazy(() => import('./modules/ncm/NcmForm'));
+const TipiList = lazy(() => import('./modules/ncm-tipi/TipiList').then(m => ({ default: m.TipiList })));
+const NcmStList = lazy(() => import('./modules/ncm-st/NcmStList'));
+const NcmStForm = lazy(() => import('./modules/ncm-st/NcmStForm'));
+const NcmStDetails = lazy(() => import('./modules/ncm-st/NcmStDetails'));
+const SupplierList = lazy(() => import('./modules/suppliers/SupplierList'));
+const SupplierForm = lazy(() => import('./modules/suppliers/SupplierForm'));
+const CustomerList = lazy(() => import('./modules/customers/CustomerList'));
+const CustomerForm = lazy(() => import('./modules/customers/CustomerForm'));
+const ProductList = lazy(() => import('./modules/products/ProductList'));
+const ProductForm = lazy(() => import('./modules/products/ProductForm'));
+const FormasPagamentoList = lazy(() => import('./modules/payment_methods/FormasPagamentoList'));
+const FormasPagamentoForm = lazy(() => import('./modules/payment_methods/FormasPagamentoForm'));
+const DocumentTemplateList = lazy(() => import('./modules/document_templates/DocumentTemplateList'));
+const DocumentTemplateForm = lazy(() => import('./modules/document_templates/DocumentTemplateForm'));
+
+// Orçamentos & Oportunidades
+const BudgetsList = lazy(() => import('./modules/purchase_budgets/BudgetsList').then(m => ({ default: m.BudgetsList })));
+const BudgetForm = lazy(() => import('./modules/purchase_budgets/BudgetForm').then(m => ({ default: m.BudgetForm })));
+const SalesBudgetList = lazy(() => import('./modules/sales_budgets/SalesBudgetList').then(m => ({ default: m.SalesBudgetList })));
+const SalesBudgetForm = lazy(() => import('./modules/sales_budgets/SalesBudgetForm').then(m => ({ default: m.SalesBudgetForm })));
+const OpportunityKitList = lazy(() => import('./modules/opportunity_kits/OpportunityKitList').then(m => ({ default: m.OpportunityKitList })));
+const OpportunityKitForm = lazy(() => import('./modules/opportunity_kits/OpportunityKitForm').then(m => ({ default: m.OpportunityKitForm })));
+const SolutionAnalysisList = lazy(() => import('./modules/solution_analysis/SolutionAnalysisList').then(m => ({ default: m.SolutionAnalysisList })));
+const SolutionAnalysisForm = lazy(() => import('./modules/solution_analysis/SolutionAnalysisForm').then(m => ({ default: m.SolutionAnalysisForm })));
+const SalesProposalList = lazy(() => import('./modules/sales_proposals/SalesProposalList').then(m => ({ default: m.SalesProposalList })));
+const SalesProposalForm = lazy(() => import('./modules/sales_proposals/SalesProposalForm').then(m => ({ default: m.SalesProposalForm })));
+const LicitacaoList = lazy(() => import('./modules/licitacoes/LicitacaoList').then(m => ({ default: m.LicitacaoList })));
+const LicitacaoForm = lazy(() => import('./modules/licitacoes/LicitacaoForm').then(m => ({ default: m.LicitacaoForm })));
+const LeadList = lazy(() => import('./modules/leads/LeadList').then(m => ({ default: m.LeadList })));
+const LeadDetail = lazy(() => import('./modules/leads/LeadDetail').then(m => ({ default: m.LeadDetail })));
+
+// Marketing & Campanhas
+const CampaignsList = lazy(() => import('./modules/marketing/CampaignsList').then(m => ({ default: m.CampaignsList })));
+const CampaignForm = lazy(() => import('./modules/marketing/CampaignForm').then(m => ({ default: m.CampaignForm })));
+
+// Relatórios & Fiscal
+const KitAnalyticReport = lazy(() => import('./modules/reports/KitAnalyticReport'));
+const NfeAnalysisList = lazy(() => import('./modules/fiscal/analise-nfe/NfeAnalysisList'));
+const NfeAnalysisDetail = lazy(() => import('./modules/fiscal/analise-nfe/NfeAnalysisDetail'));
+const NfeMonthlyTrackerList = lazy(() => import('./modules/fiscal/acompanhamento-nfe/NfeMonthlyTrackerList').then(m => ({ default: m.NfeMonthlyTrackerList })));
+const NfeMonthlyDetailView = lazy(() => import('./modules/fiscal/acompanhamento-nfe/NfeMonthlyDetailView').then(m => ({ default: m.NfeMonthlyDetailView })));
+const TaxRecoveryList = lazy(() => import('./modules/fiscal/recuperacao-impostos/TaxRecoveryList').then(m => ({ default: m.TaxRecoveryList })));
+const TaxRecoveryDetail = lazy(() => import('./modules/fiscal/recuperacao-impostos/TaxRecoveryDetail').then(m => ({ default: m.TaxRecoveryDetail })));
+
+const PageLoadingFallback = () => (
+  <div className="min-h-screen bg-bg-deep flex items-center justify-center">
+    <Loader2 className="w-8 h-8 animate-spin text-brand-primary" />
+  </div>
+);
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading, user, userCompanies, activeCompanyId } = useAuth();
@@ -223,129 +242,130 @@ function App() {
     <AuthProvider>
       <PWAManager />
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/lp/:slug" element={<PublicLandingPage />} />
-          <Route path="/integrations/google/callback" element={<GoogleCallback />} />
+        <Suspense fallback={<PageLoadingFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/lp/:slug" element={<PublicLandingPage />} />
+            <Route path="/integrations/google/callback" element={<GoogleCallback />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/cadastros/usuarios" element={<UsersList />} />
-            <Route path="/cadastros/estados" element={<StatesList />} />
-            <Route path="/cadastros/municipios" element={<CitiesList />} />
-            <Route path="/cadastros/jobs" element={<SyncJobsList />} />
-            <Route path="/cadastros/cargos" element={<RolesDashboard />} />
-            <Route path="/cadastros/profissionais" element={<ProfessionalsDashboard />} />
-            <Route path="/cadastros/hora-homem" element={<ManHoursDashboard />} />
-            <Route path="/cadastros/servicos-proprios" element={<OwnServicesDashboard />} />
-            <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
-            <Route path="/seguranca/mensageria" element={<MessagingDashboard />} />
-            <Route path="/seguranca/backup" element={<BackupDashboard />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/cadastros/usuarios" element={<UsersList />} />
+              <Route path="/cadastros/estados" element={<StatesList />} />
+              <Route path="/cadastros/municipios" element={<CitiesList />} />
+              <Route path="/cadastros/jobs" element={<SyncJobsList />} />
+              <Route path="/cadastros/cargos" element={<RolesDashboard />} />
+              <Route path="/cadastros/profissionais" element={<ProfessionalsDashboard />} />
+              <Route path="/cadastros/hora-homem" element={<ManHoursDashboard />} />
+              <Route path="/cadastros/servicos-proprios" element={<OwnServicesDashboard />} />
+              <Route path="/seguranca/perfil" element={<ProfileDashboard />} />
+              <Route path="/seguranca/mensageria" element={<MessagingDashboard />} />
+              <Route path="/seguranca/backup" element={<BackupDashboard />} />
 
+              {/* Empresas */}
+              <Route path="/empresas" element={<EmpresasList />} />
+              <Route path="/empresas/novo" element={<EmpresaForm />} />
+              <Route path="/empresas/editar/:id" element={<EmpresaForm />} />
+              <Route path="/empresas/detalhes/:id" element={<EmpresaForm />} />
 
-            {/* Empresas */}
-            <Route path="/empresas" element={<EmpresasList />} />
-            <Route path="/empresas/novo" element={<EmpresaForm />} />
-            <Route path="/empresas/editar/:id" element={<EmpresaForm />} />
-            <Route path="/empresas/detalhes/:id" element={<EmpresaForm />} />
+              {/* Benefícios */}
+              <Route path="/beneficios" element={<TaxBenefitsList />} />
+              <Route path="/beneficios/novo" element={<TaxBenefitForm />} />
+              <Route path="/beneficios/editar/:id" element={<TaxBenefitForm />} />
 
-            {/* BenefÃ­cios */}
-            <Route path="/beneficios" element={<TaxBenefitsList />} />
-            <Route path="/beneficios/novo" element={<TaxBenefitForm />} />
-            <Route path="/beneficios/editar/:id" element={<TaxBenefitForm />} />
+              {/* NCM */}
+              <Route path="/ncms" element={<NcmList />} />
+              <Route path="/ncms/novo" element={<NcmForm />} />
+              <Route path="/ncms/editar/:id" element={<NcmForm />} />
+              <Route path="/ncms/detalhes/:id" element={<NcmForm />} />
 
-            {/* NCM */}
-            <Route path="/ncms" element={<NcmList />} />
-            <Route path="/ncms/novo" element={<NcmForm />} />
-            <Route path="/ncms/editar/:id" element={<NcmForm />} />
-            <Route path="/ncms/detalhes/:id" element={<NcmForm />} />
+              {/* Tabela TIPI */}
+              <Route path="/cadastros/tipi" element={<TipiList />} />
 
-            {/* Tabela TIPI */}
-            <Route path="/cadastros/tipi" element={<TipiList />} />
+              {/* NCM ST */}
+              <Route path="/cadastros/ncm-st" element={<NcmStList />} />
+              <Route path="/cadastros/ncm-st/novo" element={<NcmStForm />} />
+              <Route path="/cadastros/ncm-st/editar/:id" element={<NcmStForm />} />
+              <Route path="/cadastros/ncm-st/:id" element={<NcmStDetails />} />
 
-            {/* NCM ST */}
-            <Route path="/cadastros/ncm-st" element={<NcmStList />} />
-            <Route path="/cadastros/ncm-st/novo" element={<NcmStForm />} />
-            <Route path="/cadastros/ncm-st/editar/:id" element={<NcmStForm />} />
-            <Route path="/cadastros/ncm-st/:id" element={<NcmStDetails />} />
+              {/* Fornecedores */}
+              <Route path="/cadastros/fornecedores" element={<SupplierList />} />
+              <Route path="/cadastros/fornecedores/novo" element={<SupplierForm />} />
+              <Route path="/cadastros/fornecedores/editar/:id" element={<SupplierForm />} />
 
-            {/* Fornecedores */}
-            <Route path="/cadastros/fornecedores" element={<SupplierList />} />
-            <Route path="/cadastros/fornecedores/novo" element={<SupplierForm />} />
-            <Route path="/cadastros/fornecedores/editar/:id" element={<SupplierForm />} />
+              {/* Clientes */}
+              <Route path="/cadastros/clientes" element={<CustomerList />} />
+              <Route path="/cadastros/clientes/novo" element={<CustomerForm />} />
+              <Route path="/cadastros/clientes/editar/:id" element={<CustomerForm />} />
 
-            {/* Clientes */}
-            <Route path="/cadastros/clientes" element={<CustomerList />} />
-            <Route path="/cadastros/clientes/novo" element={<CustomerForm />} />
-            <Route path="/cadastros/clientes/editar/:id" element={<CustomerForm />} />
+              {/* Produtos */}
+              <Route path="/cadastro/produtos" element={<ProductList />} />
+              <Route path="/cadastro/produtos/novo" element={<ProductForm />} />
+              <Route path="/cadastro/produtos/editar/:id" element={<ProductForm />} />
+              <Route path="/cadastro/produtos/detalhes/:id" element={<ProductForm />} />
 
-            {/* Produtos */}
-            <Route path="/cadastro/produtos" element={<ProductList />} />
-            <Route path="/cadastro/produtos/novo" element={<ProductForm />} />
-            <Route path="/cadastro/produtos/editar/:id" element={<ProductForm />} />
-            <Route path="/cadastro/produtos/detalhes/:id" element={<ProductForm />} />
+              {/* Formas de Pagamento */}
+              <Route path="/cadastros/formas-pagamento" element={<FormasPagamentoList />} />
+              <Route path="/cadastros/formas-pagamento/novo" element={<FormasPagamentoForm />} />
+              <Route path="/cadastros/formas-pagamento/editar/:id" element={<FormasPagamentoForm />} />
 
-            {/* Formas de Pagamento */}
-            <Route path="/cadastros/formas-pagamento" element={<FormasPagamentoList />} />
-            <Route path="/cadastros/formas-pagamento/novo" element={<FormasPagamentoForm />} />
-            <Route path="/cadastros/formas-pagamento/editar/:id" element={<FormasPagamentoForm />} />
+              {/* Modelos de Documentos */}
+              <Route path="/cadastros/modelos-documentos" element={<DocumentTemplateList />} />
+              <Route path="/cadastros/modelos-documentos/novo" element={<DocumentTemplateForm />} />
+              <Route path="/cadastros/modelos-documentos/:id" element={<DocumentTemplateForm />} />
 
-            {/* Modelos de Documentos */}
-            <Route path="/cadastros/modelos-documentos" element={<DocumentTemplateList />} />
-            <Route path="/cadastros/modelos-documentos/novo" element={<DocumentTemplateForm />} />
-            <Route path="/cadastros/modelos-documentos/:id" element={<DocumentTemplateForm />} />
+              {/* Purchase Budgets */}
+              <Route path="/orcamentos-compras" element={<BudgetsList />} />
+              <Route path="/orcamentos-compras/novo" element={<BudgetForm />} />
+              <Route path="/orcamentos-compras/:id" element={<BudgetForm />} />
 
-            {/* Purchase Budgets */}
-            <Route path="/orcamentos-compras" element={<BudgetsList />} />
-            <Route path="/orcamentos-compras/novo" element={<BudgetForm />} />
-            <Route path="/orcamentos-compras/:id" element={<BudgetForm />} />
+              {/* Sales Budgets */}
+              <Route path="/orcamentos-vendas" element={<SalesBudgetList />} />
+              <Route path="/orcamentos-vendas/novo" element={<SalesBudgetForm />} />
+              <Route path="/orcamentos-vendas/:id" element={<SalesBudgetForm />} />
 
-            {/* Sales Budgets */}
-            <Route path="/orcamentos-vendas" element={<SalesBudgetList />} />
-            <Route path="/orcamentos-vendas/novo" element={<SalesBudgetForm />} />
-            <Route path="/orcamentos-vendas/:id" element={<SalesBudgetForm />} />
+              {/* Opportunity Kits */}
+              <Route path="/cadastros/kits" element={<OpportunityKitList />} />
+              <Route path="/cadastros/kits/novo" element={<OpportunityKitForm />} />
+              <Route path="/cadastros/kits/:kitId" element={<OpportunityKitForm />} />
 
-            {/* Opportunity Kits */}
-            <Route path="/cadastros/kits" element={<OpportunityKitList />} />
-            <Route path="/cadastros/kits/novo" element={<OpportunityKitForm />} />
-            <Route path="/cadastros/kits/:kitId" element={<OpportunityKitForm />} />
+              {/* Comercial: Análise de Soluções */}
+              <Route path="/comercial/comparativos" element={<SolutionAnalysisList />} />
+              <Route path="/comercial/comparativos/novo" element={<SolutionAnalysisForm />} />
+              <Route path="/comercial/comparativos/:id" element={<SolutionAnalysisForm />} />
 
-            {/* Comercial: AnÃ¡lise de SoluÃ§Ãµes */}
-            <Route path="/comercial/comparativos" element={<SolutionAnalysisList />} />
-            <Route path="/comercial/comparativos/novo" element={<SolutionAnalysisForm />} />
-            <Route path="/comercial/comparativos/:id" element={<SolutionAnalysisForm />} />
+              {/* Comercial: Propostas de Venda */}
+              <Route path="/comercial/propostas" element={<SalesProposalList />} />
+              <Route path="/comercial/propostas/:id" element={<SalesProposalForm />} />
 
-            {/* Comercial: Propostas de Venda */}
-            <Route path="/comercial/propostas" element={<SalesProposalList />} />
-            <Route path="/comercial/propostas/:id" element={<SalesProposalForm />} />
+              {/* Comercial: Licitações */}
+              <Route path="/comercial/licitacoes" element={<LicitacaoList />} />
+              <Route path="/comercial/licitacoes/:id" element={<LicitacaoForm />} />
 
-            {/* Comercial: Licitações */}
-            <Route path="/comercial/licitacoes" element={<LicitacaoList />} />
-            <Route path="/comercial/licitacoes/:id" element={<LicitacaoForm />} />
+              {/* Comercial: Leads */}
+              <Route path="/comercial/leads" element={<LeadList />} />
+              <Route path="/comercial/leads/:id" element={<LeadDetail />} />
 
-            {/* Comercial: Leads */}
-            <Route path="/comercial/leads" element={<LeadList />} />
-            <Route path="/comercial/leads/:id" element={<LeadDetail />} />
+              {/* Marketing & Campanhas */}
+              <Route path="/marketing" element={<CampaignsList />} />
+              <Route path="/marketing/campanhas" element={<CampaignsList />} />
+              <Route path="/marketing/campanhas/nova" element={<CampaignForm />} />
+              <Route path="/marketing/campanhas/:id" element={<CampaignForm />} />
 
-            {/* Marketing & Campanhas */}
-            <Route path="/marketing" element={<CampaignsList />} />
-            <Route path="/marketing/campanhas" element={<CampaignsList />} />
-            <Route path="/marketing/campanhas/nova" element={<CampaignForm />} />
-            <Route path="/marketing/campanhas/:id" element={<CampaignForm />} />
+              {/* Relatórios */}
+              <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
 
-            {/* Relatórios */}
-            <Route path="/relatorios/kit-analitico" element={<KitAnalyticReport />} />
+              {/* Fiscal: Análise de NF-e, Acompanhamento Mensal e Recuperação de Impostos */}
+              <Route path="/fiscal/analise-nfe" element={<NfeAnalysisList />} />
+              <Route path="/fiscal/analise-nfe/:id" element={<NfeAnalysisDetail />} />
+              <Route path="/fiscal/acompanhamento-nfe" element={<NfeMonthlyTrackerList />} />
+              <Route path="/fiscal/acompanhamento-nfe/:id" element={<NfeMonthlyDetailView />} />
+              <Route path="/fiscal/recuperacao-impostos" element={<TaxRecoveryList />} />
+              <Route path="/fiscal/recuperacao-impostos/:id" element={<TaxRecoveryDetail />} />
 
-            {/* Fiscal: Análise de NF-e, Acompanhamento Mensal e Recuperação de Impostos */}
-            <Route path="/fiscal/analise-nfe" element={<NfeAnalysisList />} />
-            <Route path="/fiscal/analise-nfe/:id" element={<NfeAnalysisDetail />} />
-            <Route path="/fiscal/acompanhamento-nfe" element={<NfeMonthlyTrackerList />} />
-            <Route path="/fiscal/acompanhamento-nfe/:id" element={<NfeMonthlyDetailView />} />
-            <Route path="/fiscal/recuperacao-impostos" element={<TaxRecoveryList />} />
-            <Route path="/fiscal/recuperacao-impostos/:id" element={<TaxRecoveryDetail />} />
-
-          </Route>
-        </Routes>
+            </Route>
+          </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );

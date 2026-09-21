@@ -214,6 +214,14 @@ class SalesBudgetItemOut(SalesBudgetItemBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProposalKitGrouping(BaseModel):
+    id: str
+    nome_grupo: str
+    tipo_contrato: str = "LOCACAO"  # LOCACAO, VENDA, INSTALACAO
+    kit_ids: List[str] = []
+    hide_items: bool = True
+
+
 # ─── Budget ───
 
 class SalesBudgetBase(BaseModel):
@@ -225,6 +233,7 @@ class SalesBudgetBase(BaseModel):
     forma_pagamento_snapshot: Optional[dict] = None
     commercial_policy_id: Optional[UUID] = None
     sales_team_id: Optional[UUID] = None
+    proposal_custom_groupings: Optional[List[ProposalKitGrouping]] = []
     titulo: str
     observacoes: Optional[str] = None
     data_orcamento: datetime
@@ -321,6 +330,7 @@ class SalesBudgetHeaderUpdate(BaseModel):
     customer_id: Optional[str] = None
     sales_team_id: Optional[UUID] = None
     usar_produtos_gerais: Optional[bool] = None
+    proposal_custom_groupings: Optional[List[ProposalKitGrouping]] = None
 
 
 class SalesBudgetStatusUpdate(BaseModel):

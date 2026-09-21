@@ -281,15 +281,48 @@ async def upload_marketing_media(
     upload_dir = "uploads/marketing"
     os.makedirs(upload_dir, exist_ok=True)
 
-    file_ext = file.filename.split(".")[-1].lower()
-    filename = f"{uuid.uuid4().hex}.{file_ext}"
-    filepath = os.path.join(upload_dir, filename)
+    file_ext = file.filename.split(".")[-1].lower() if file.filename else "bin"
+    raw_filename = f"{uuid.uuid4().hex}.{file_ext}"
+    raw_filepath = os.path.join(upload_dir, raw_filename)
 
-    with open(filepath, "wb") as buffer:
+    with open(raw_filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    final_filename = raw_filename
+    final_content_type = file.content_type
+
+    # Otimização automática de imagens (Conversão para WebP e Redimensionamento)
+    if file.content_type in ["image/jpeg", "image/png", "image/webp"]:
+        try:
+            from PIL import Image
+            webp_filename = f"{uuid.uuid4().hex}.webp"
+            webp_filepath = os.path.join(upload_dir, webp_filename)
+
+            with Image.open(raw_filepath) as img:
+                # Se exceder 1920px de largura, redimensionar proporcionalmente
+                max_width = 1920
+                if img.width > max_width:
+                    new_height = int((max_width / img.width) * img.height)
+                    img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+                # Salvar em formato WebP comprimido com alta fidelidade
+                img.save(webp_filepath, "WEBP", quality=82, method=6)
+
+            # Remover arquivo cru se convertemos com sucesso para webp
+            if os.path.exists(raw_filepath) and raw_filepath != webp_filepath:
+                try:
+                    os.remove(raw_filepath)
+                except Exception:
+                    pass
+
+            final_filename = webp_filename
+            final_content_type = "image/webp"
+        except Exception:
+            # Fallback seguro: mantém o arquivo original intacto se PIL não estiver disponível
+            pass
+
     return {
-        "url": f"/uploads/marketing/{filename}",
-        "filename": filename,
-        "content_type": file.content_type
+        "url": f"/uploads/marketing/{final_filename}",
+        "filename": final_filename,
+        "content_type": final_content_type
     }

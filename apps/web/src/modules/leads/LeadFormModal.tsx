@@ -24,7 +24,16 @@ const ORIGENS = [
 ];
 
 export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
+
+  const isEngenhariaPreco = Boolean(
+    user?.roles?.some(r => r === 'ENGENHARIA_PRECO' || r === 'ENGENHARIA_PRECOS')
+  );
+  const isAdmin = Boolean(user?.roles?.includes('ADMIN'));
+  const isLeadAdmin = Boolean(user?.is_lead_admin);
+
+  // Usuário de Engenharia de Preço sem ADM de Leads não pode distribuir lead para terceiros/fila
+  const isRestrictedToDirectLead = isEngenhariaPreco && !isLeadAdmin && !isAdmin;
 
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -41,7 +50,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
   const [origem, setOrigem] = useState('LIGACAO');
   const [canal, setCanal] = useState('');
   const [salesTeamId, setSalesTeamId] = useState('');
-  const [tipoDistribuicao, setTipoDistribuicao] = useState('ROUND_ROBIN');
+  const [tipoDistribuicao, setTipoDistribuicao] = useState(isRestrictedToDirectLead ? 'DIRETA_VENDEDOR' : 'ROUND_ROBIN');
   const [vendedorEspecificoId, setVendedorEspecificoId] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
@@ -87,7 +96,7 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
     setCargoContato('');
     setOrigem('LIGACAO');
     setCanal('');
-    setTipoDistribuicao('ROUND_ROBIN');
+    setTipoDistribuicao(isRestrictedToDirectLead ? 'DIRETA_VENDEDOR' : 'ROUND_ROBIN');
     setVendedorEspecificoId('');
     setObservacoes('');
     setErrorMessage(null);
@@ -103,7 +112,10 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
       setErrorMessage('Selecione uma Equipe de Vendas para o Lead.');
       return;
     }
-    if (tipoDistribuicao === 'DIRECIONADO_MANUAL' && !vendedorEspecificoId) {
+
+    const effectiveDistribuicao = isRestrictedToDirectLead ? 'DIRETA_VENDEDOR' : tipoDistribuicao;
+
+    if (effectiveDistribuicao === 'DIRECIONADO_MANUAL' && !vendedorEspecificoId) {
       setErrorMessage('Selecione o consultor específico para o direcionamento.');
       return;
     }
@@ -122,8 +134,8 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
         origem,
         canal: canal.trim() || null,
         sales_team_id: salesTeamId,
-        tipo_distribuicao: tipoDistribuicao,
-        vendedor_especifico_id: tipoDistribuicao === 'DIRECIONADO_MANUAL' ? vendedorEspecificoId : null,
+        tipo_distribuicao: effectiveDistribuicao,
+        vendedor_especifico_id: effectiveDistribuicao === 'DIRECIONADO_MANUAL' ? vendedorEspecificoId : null,
         observacoes: observacoes.trim() || null
       };
 
@@ -284,81 +296,83 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
         </div>
 
         {/* Modo de Distribuição */}
-        <div className="p-3 bg-bg-deep rounded-xl border border-border-subtle space-y-3">
-          <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">
-            Distribuição do Lead
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
-              tipoDistribuicao === 'ROUND_ROBIN'
-                ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
-                : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
-            }`}>
-              <input
-                type="radio"
-                name="dist"
-                value="ROUND_ROBIN"
-                checked={tipoDistribuicao === 'ROUND_ROBIN'}
-                onChange={() => setTipoDistribuicao('ROUND_ROBIN')}
-                className="sr-only"
-              />
-              <Users className="w-4 h-4 shrink-0" />
-              <span>Fila Automática</span>
+        {!isRestrictedToDirectLead && (
+          <div className="p-3 bg-bg-deep rounded-xl border border-border-subtle space-y-3">
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">
+              Distribuição do Lead
             </label>
-
-            <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
-              tipoDistribuicao === 'DIRECIONADO_MANUAL'
-                ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
-                : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
-            }`}>
-              <input
-                type="radio"
-                name="dist"
-                value="DIRECIONADO_MANUAL"
-                checked={tipoDistribuicao === 'DIRECIONADO_MANUAL'}
-                onChange={() => setTipoDistribuicao('DIRECIONADO_MANUAL')}
-                className="sr-only"
-              />
-              <UserCheck className="w-4 h-4 shrink-0" />
-              <span>Consultor Solicitado</span>
-            </label>
-
-            <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
-              tipoDistribuicao === 'DIRETA_VENDEDOR'
-                ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
-                : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
-            }`}>
-              <input
-                type="radio"
-                name="dist"
-                value="DIRETA_VENDEDOR"
-                checked={tipoDistribuicao === 'DIRETA_VENDEDOR'}
-                onChange={() => setTipoDistribuicao('DIRETA_VENDEDOR')}
-                className="sr-only"
-              />
-              <HelpCircle className="w-4 h-4 shrink-0" />
-              <span>Meu Lead Direto</span>
-            </label>
-          </div>
-
-          {tipoDistribuicao === 'DIRECIONADO_MANUAL' && (
-            <div className="pt-2">
-              <label className="block text-xs font-semibold text-text-primary mb-1">
-                Selecione o Consultor Solicitado <span className="text-rose-500">*</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                tipoDistribuicao === 'ROUND_ROBIN'
+                  ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
+                  : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
+              }`}>
+                <input
+                  type="radio"
+                  name="dist"
+                  value="ROUND_ROBIN"
+                  checked={tipoDistribuicao === 'ROUND_ROBIN'}
+                  onChange={() => setTipoDistribuicao('ROUND_ROBIN')}
+                  className="sr-only"
+                />
+                <Users className="w-4 h-4 shrink-0" />
+                <span>Fila Automática</span>
               </label>
-              <select
-                value={vendedorEspecificoId}
-                onChange={(e) => setVendedorEspecificoId(e.target.value)}
-                className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary"
-              >
-                <option value="">Selecione um vendedor da equipe...</option>
-                {teamMembers.map((m: any) => (
-                  <option key={m.user_id} value={m.user_id}>{m.user_name || m.user?.name || m.user_email || m.user_id}</option>
-                ))}
-              </select>
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                tipoDistribuicao === 'DIRECIONADO_MANUAL'
+                  ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
+                  : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
+              }`}>
+                <input
+                  type="radio"
+                  name="dist"
+                  value="DIRECIONADO_MANUAL"
+                  checked={tipoDistribuicao === 'DIRECIONADO_MANUAL'}
+                  onChange={() => setTipoDistribuicao('DIRECIONADO_MANUAL')}
+                  className="sr-only"
+                />
+                <UserCheck className="w-4 h-4 shrink-0" />
+                <span>Consultor Solicitado</span>
+              </label>
+
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                tipoDistribuicao === 'DIRETA_VENDEDOR'
+                  ? 'border-brand-primary bg-brand-primary/10 text-brand-primary font-bold'
+                  : 'border-border-subtle hover:bg-bg-surface text-text-secondary'
+              }`}>
+                <input
+                  type="radio"
+                  name="dist"
+                  value="DIRETA_VENDEDOR"
+                  checked={tipoDistribuicao === 'DIRETA_VENDEDOR'}
+                  onChange={() => setTipoDistribuicao('DIRETA_VENDEDOR')}
+                  className="sr-only"
+                />
+                <HelpCircle className="w-4 h-4 shrink-0" />
+                <span>Meu Lead Direto</span>
+              </label>
             </div>
-          )}
-        </div>
+
+            {tipoDistribuicao === 'DIRECIONADO_MANUAL' && (
+              <div className="pt-2">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  Selecione o Consultor Solicitado <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={vendedorEspecificoId}
+                  onChange={(e) => setVendedorEspecificoId(e.target.value)}
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary"
+                >
+                  <option value="">Selecione um vendedor da equipe...</option>
+                  {teamMembers.map((m: any) => (
+                    <option key={m.user_id} value={m.user_id}>{m.user_name || m.user?.name || m.user_email || m.user_id}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Observações */}
         <div>

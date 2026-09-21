@@ -879,6 +879,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         customer_id=data.customer_id,
         vendedor_id=data.vendedor_id,
         sales_team_id=data.sales_team_id,
+        proposal_custom_groupings=[g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g) for g in data.proposal_custom_groupings] if getattr(data, 'proposal_custom_groupings', None) else [],
         forma_pagamento_id=data.forma_pagamento_id,
         data_vencimento_inicial=data.data_vencimento_inicial,
         forma_pagamento_snapshot=data.forma_pagamento_snapshot,
@@ -1155,6 +1156,8 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
     budget.commercial_policy_id = data.commercial_policy_id
     budget.sales_team_id = data.sales_team_id
     budget.vendedor_id = data.vendedor_id
+    if getattr(data, 'proposal_custom_groupings', None) is not None:
+        budget.proposal_custom_groupings = [g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g) for g in data.proposal_custom_groupings]
     budget.usar_produtos_gerais = getattr(data, 'usar_produtos_gerais', True) if getattr(data, 'usar_produtos_gerais', None) is not None else getattr(budget, 'usar_produtos_gerais', True)
     budget.titulo = data.titulo
     budget.observacoes = data.observacoes
@@ -1419,6 +1422,8 @@ def update_header(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
         budget.sales_team_id = data.sales_team_id
     if data.usar_produtos_gerais is not None:
         budget.usar_produtos_gerais = data.usar_produtos_gerais
+    if data.proposal_custom_groupings is not None:
+        budget.proposal_custom_groupings = [g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g) for g in data.proposal_custom_groupings]
         
     recalculate_budget_total(db, budget)
     
