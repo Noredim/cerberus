@@ -31,6 +31,21 @@
     content="Motor de vendas premium para engenharia de custos, precificação e inteligência tributária municipal." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/cerberus-logo.png" />
+  <script>
+    (function(){
+      try {
+        var p = window.location.pathname;
+        if (p && p.indexOf('/lp/') === 0) {
+          var s = p.split('/')[2];
+          if (s) {
+            window.__MKT_LP_PRELOAD__ = fetch('/api/marketing/public/resolve?domain=' + encodeURIComponent(window.location.host) + '&slug=' + encodeURIComponent(s))
+              .then(function(res){ return res.ok ? res.json() : null; })
+              .catch(function(){ return null; });
+          }
+        }
+      } catch(e){}
+    })();
+  </script>
 </head>
 
 <body>

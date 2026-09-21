@@ -223,31 +223,52 @@ export const PublicLandingPage: React.FC = () => {
     };
   };
 
-  // Fetch Public LP
+  // Fetch Public LP (com suporte a Preload antecipado no index.html)
   useEffect(() => {
+    let isMounted = true;
+
+    const applyData = (data: PublicLPData) => {
+      if (!isMounted) return;
+      setLp(data);
+      setLoading(false);
+
+      // Telemetria: PAGE_VIEW
+      axios.post('/api/marketing/public/track', {
+        landing_page_id: data.id,
+        session_id: sessionId,
+        event_type: 'PAGE_VIEW'
+      }).catch(() => {});
+    };
+
     const fetchLp = async () => {
       try {
-        setLoading(true);
+        if (typeof window !== 'undefined' && (window as any).__MKT_LP_PRELOAD__) {
+          const preloaded = await (window as any).__MKT_LP_PRELOAD__;
+          if (preloaded && preloaded.id) {
+            applyData(preloaded);
+            return;
+          }
+        }
+
         const hostname = window.location.hostname;
         const res = await axios.get('/api/marketing/public/resolve', {
           params: { domain: hostname, slug: slug || undefined }
         });
-        setLp(res.data);
-
-        // Telemetria: PAGE_VIEW
-        axios.post('/api/marketing/public/track', {
-          landing_page_id: res.data.id,
-          session_id: sessionId,
-          event_type: 'PAGE_VIEW'
-        }).catch(() => {});
+        applyData(res.data);
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Página não encontrada ou inativa.');
-      } finally {
-        setLoading(false);
+        if (isMounted) {
+          setError(err.response?.data?.detail || 'Página não encontrada ou inativa.');
+          setLoading(false);
+        }
       }
     };
+
     fetchLp();
-  }, [slug]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [slug, sessionId]);
 
   // Injetar scripts de rastreamento (Meta Pixel / Analytics / GTM) de forma não-bloqueante
   useEffect(() => {
@@ -417,44 +438,9 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-        {/* Header Skeleton */}
-        <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="h-7 w-32 bg-slate-800/80 rounded-lg animate-pulse" />
-            <div className="h-8 w-28 bg-slate-800/60 rounded-full animate-pulse" />
-          </div>
-        </header>
-
-        {/* Hero Skeleton */}
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 lg:py-12">
-          <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-            <div className="lg:col-span-7 space-y-6">
-              <div className="h-7 w-44 bg-slate-800/80 rounded-full animate-pulse" />
-              <div className="space-y-3">
-                <div className="h-10 w-full bg-slate-800/80 rounded-xl animate-pulse" />
-                <div className="h-10 w-4/5 bg-slate-800/80 rounded-xl animate-pulse" />
-              </div>
-              <div className="h-5 w-3/4 bg-slate-800/50 rounded-lg animate-pulse" />
-              <div className="aspect-video w-full rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-              </div>
-            </div>
-
-            <div className="lg:col-span-5">
-              <div className="p-6 md:p-8 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4">
-                <div className="h-5 w-40 bg-slate-800/80 rounded-md animate-pulse" />
-                <div className="h-7 w-56 bg-slate-800/80 rounded-md animate-pulse" />
-                <div className="space-y-3 pt-2">
-                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
-                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
-                  <div className="h-11 w-full bg-slate-800/50 rounded-xl animate-pulse" />
-                  <div className="h-12 w-full bg-blue-600/30 rounded-xl animate-pulse mt-4" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
+        <span className="text-sm text-slate-400 font-medium">Carregando apresentação...</span>
       </div>
     );
   }
@@ -659,7 +645,7 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
 
   return (
     <div
-      className={`min-h-screen font-sans transition-colors duration-300 ${
+      className={`min-h-screen font-sans ${
         isLight ? 'text-slate-900 selection:bg-blue-600 selection:text-white' : 'text-slate-100 selection:bg-blue-600 selection:text-white'
       }`}
       style={{
@@ -678,7 +664,7 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
     >
       {/* Top Header */}
       <header
-        className={`border-b sticky top-0 z-40 backdrop-blur-md transition-colors ${
+        className={`border-b sticky top-0 z-40 backdrop-blur-md ${
           isLight ? 'border-slate-200/90 bg-white/80 shadow-sm' : 'border-slate-800/80 bg-slate-950/70'
         }`}
       >
@@ -1006,15 +992,15 @@ const trackPixelEvent = (eventName: string, params?: Record<string, any>) => {
 
       {/* Footer */}
       <footer
-        className={`border-t py-8 text-center text-xs transition-colors ${
+        className={`border-t py-8 text-center text-xs ${
           isLight
-            ? 'border-slate-200 bg-white/80 text-slate-600'
-            : 'border-slate-900 bg-slate-950 text-slate-500'
+            ? 'border-slate-200 bg-white/90 text-slate-700'
+            : 'border-slate-900 bg-slate-950 text-slate-300'
         }`}
       >
         <div className="max-w-6xl mx-auto px-4 space-y-2">
           <p>© {new Date().getFullYear()} {headerNomeEmpresa || 'Cerberus'}. Todos os direitos reservados.</p>
-          <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+          <p className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
             Página de divulgação comercial oficial. Desenvolvido e monitorado via Cerberus Engine.
           </p>
         </div>
