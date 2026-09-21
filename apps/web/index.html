@@ -49,7 +49,18 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <style>
+      .initial-app-shell { min-height: 100vh; background-color: #020617; color: #ffffff; display: flex; flex-direction: column; font-family: system-ui, -apple-system, sans-serif; }
+      .initial-header { height: 56px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; padding: 0 1.5rem; }
+      .initial-logo { font-size: 0.9rem; font-weight: 700; color: #f8fafc; letter-spacing: 0.05em; }
+    </style>
+    <div class="initial-app-shell">
+      <div class="initial-header">
+        <span class="initial-logo">CERBERUS</span>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

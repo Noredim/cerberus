@@ -8,6 +8,17 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules/lucide-react')) {
+            return 'lucide-icons';
+          }
+        }
+      }
+    }
+  },
   server: {
     proxy: {
       '/uploads': {

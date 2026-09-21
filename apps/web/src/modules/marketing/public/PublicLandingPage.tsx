@@ -125,7 +125,8 @@ const LiteVideoPlayer: React.FC<{ url: string; isLight: boolean; titulo?: string
         <img
           src={thumbUrl}
           alt={titulo || 'Vídeo de apresentação'}
-          loading="lazy"
+          fetchPriority="high"
+          loading="eager"
           decoding="async"
           className="w-full h-full object-cover opacity-90 transition-transform duration-500 group-hover:scale-105 group-hover:opacity-100"
         />
