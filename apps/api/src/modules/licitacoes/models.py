@@ -7,6 +7,8 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from src.core.base import Base
+import src.modules.purchase_budgets.models  # ensure PurchaseBudget is in registry
+import src.modules.opportunity_kits.models  # ensure OpportunityKit is in registry
 
 class Licitacao(Base):
     __tablename__ = "licitacoes"
