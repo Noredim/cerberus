@@ -33,6 +33,9 @@ class Settings(BaseSettings):
             else:
                 scheme, rest = "postgresql", url
 
+            if scheme in ("postgres", "postgresql"):
+                scheme = "postgresql+psycopg2"
+
             if "@" in rest:
                 parts = rest.rsplit("@", 1)
                 user_pass = parts[0]
@@ -42,5 +45,7 @@ class Settings(BaseSettings):
                     if "%" not in pwd or not re.match(r'%[0-9a-fA-F]{2}', pwd):
                         pwd = quote_plus(pwd)
                     self.DATABASE_URL = f"{scheme}://{user}:{pwd}@{host_db}"
+            else:
+                self.DATABASE_URL = f"{scheme}://{rest}"
 
 settings = Settings()

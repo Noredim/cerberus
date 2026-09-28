@@ -92,7 +92,7 @@ class ProductService:
             self._attach_benefits(product)
         return product
 
-    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None) -> List[Product]:
+    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, licitacao_id: Optional[str] = None) -> List[Product]:
         query = self.db.query(Product).filter(Product.tenant_id == tenant_id)
         
         if company_id:
@@ -108,6 +108,18 @@ class ProductService:
                         self.db.query(PurchaseBudgetItem.product_id)
                         .join(PurchaseBudget)
                         .filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+                    )
+                )
+        elif licitacao_id:
+            from src.modules.licitacoes.models import Licitacao
+            lic = self.db.query(Licitacao).filter(Licitacao.id == licitacao_id).first()
+            if not lic or not getattr(lic, "usar_produtos_gerais", False):
+                from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
+                query = query.filter(
+                    Product.id.in_(
+                        self.db.query(PurchaseBudgetItem.product_id)
+                        .join(PurchaseBudget)
+                        .filter(PurchaseBudget.licitacao_id == licitacao_id)
                     )
                 )
         

@@ -67,20 +67,12 @@ def create_kit(
     if not active_company_id or str(company_id) != active_company_id:
         raise HTTPException(status_code=400, detail="X-Company-Id inválido")
         
-    factors_to_validate = [
-        data.fator_margem_locacao,
-        data.fator_margem_servicos_produtos,
-        data.fator_margem_instalacao,
-        data.fator_margem_manutencao,
-        data.fator_manutencao
-    ]
-    validate_commercial_policy_limits(db, current_user, str(company_id), factors_to_validate)
-    
     service = OpportunityKitService(db)
     try:
         return service.create_kit(current_user.tenant_id, str(company_id), data, current_user=current_user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.put("/{kit_id}", response_model=OpportunityKitResponse)

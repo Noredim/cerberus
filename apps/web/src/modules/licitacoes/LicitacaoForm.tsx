@@ -14,7 +14,9 @@ import Modal from '../../components/modals/Modal';
 import { useCompanies } from '../companies/hooks/useCompanies';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { LicitacaoDashboard } from './components/LicitacaoDashboard';
+import { LicitacaoItemImportModal } from './components/LicitacaoItemImportModal';
 import { PurchaseBudgetSearchModal } from '../../components/modals/PurchaseBudgetSearchModal';
+import { Badge } from '../../components/ui/Badge';
 
 interface KitItem {
   id: string;
@@ -58,6 +60,8 @@ interface LicitacaoItemData {
   tipo_fornecimento: string;
   total_meses?: number | null;
   quantidade_total: number;
+  valor_unitario_estimado?: number | null;
+  valor_total_estimado?: number | null;
   kits: KitItem[];
   custo_unitario?: number | null;
   custo_total?: number;
@@ -65,6 +69,7 @@ interface LicitacaoItemData {
   venda_total?: number;
   lucro_estimado?: number;
   margem_geral?: number;
+  created_at?: string;
 }
 
 interface LicitacaoLoteData {
@@ -74,11 +79,28 @@ interface LicitacaoLoteData {
   nome: string;
   descricao?: string;
   items: LicitacaoItemData[];
+  valor_total_estimado?: number;
   custo_total?: number;
   venda_total?: number;
   lucro_estimado?: number;
   margem_geral?: number;
+  created_at?: string;
 }
+
+const sortItemsByCodigo = (items: LicitacaoItemData[]) => {
+  return [...items].sort((a, b) => 
+    String(a.codigo || '').localeCompare(String(b.codigo || ''), undefined, { numeric: true, sensitivity: 'base' })
+  );
+};
+
+const sortLotesByOrder = (lotes: LicitacaoLoteData[]) => {
+  return [...lotes].sort((a, b) => {
+    if (a.created_at && b.created_at) {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+    return String(a.numero || '').localeCompare(String(b.numero || ''), undefined, { numeric: true, sensitivity: 'base' });
+  });
+};
 
 interface LicitacaoDetail {
   id: string;
@@ -115,6 +137,9 @@ interface PurchaseBudgetSummary {
   vendedor_nome?: string;
   supplier_id?: string;
   supplier_nome?: string;
+  supplier_nome_fantasia?: string;
+  tipo_orcamento?: string;
+  valor_total?: number;
   licitacao_id?: string | null;
 }
 
@@ -219,7 +244,8 @@ export function LicitacaoForm() {
 
   // CRUD Modals
   const [loteModal, setLoteModal] = useState<{ open: boolean; editId?: string; numero: string; nome: string; descricao: string } | null>(null);
-  const [itemModal, setItemModal] = useState<{ open: boolean; editId?: string; loteId: string; codigo: string; nome: string; descricao: string; quantidade: number; tipo_fornecimento: string; total_meses: number | null } | null>(null);
+  const [itemModal, setItemModal] = useState<{ open: boolean; editId?: string; loteId: string; codigo: string; nome: string; descricao: string; quantidade: number; tipo_fornecimento: string; total_meses: number | null; valor_unitario_estimado?: number } | null>(null);
+  const [importModalLote, setImportModalLote] = useState<{ id: string; numero: string; nome: string } | null>(null);
   const [kitCreateModal, setKitCreateModal] = useState<{ open: boolean; itemId: string; nome_kit: string; tipo_contrato: string; prazo_contrato_meses: number; prazo_instalacao_meses: number } | null>(null);
 
   // Deletions Warnings
@@ -848,7 +874,8 @@ export function LicitacaoForm() {
           descricao: item.descricao || '', 
           quantidade: item.quantidade,
           tipo_fornecimento: item.tipo_fornecimento || 'Unitário',
-          total_meses: item.total_meses ?? 1
+          total_meses: item.total_meses ?? 1,
+          valor_unitario_estimado: item.valor_unitario_estimado ?? 0
         });
       }
     } else {
@@ -860,7 +887,8 @@ export function LicitacaoForm() {
         descricao: '', 
         quantidade: 1,
         tipo_fornecimento: 'Unitário',
-        total_meses: 1
+        total_meses: 1,
+        valor_unitario_estimado: 0
       });
     }
   };
@@ -868,7 +896,7 @@ export function LicitacaoForm() {
   const handleItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemModal) return;
-    const { editId, loteId, codigo, nome, descricao, quantidade, tipo_fornecimento, total_meses } = itemModal;
+    const { editId, loteId, codigo, nome, descricao, quantidade, tipo_fornecimento, total_meses, valor_unitario_estimado } = itemModal;
     if (!codigo || !nome || quantidade <= 0) return;
 
     if (tipo_fornecimento === 'Mensal' && (!total_meses || total_meses <= 0)) {
@@ -883,7 +911,8 @@ export function LicitacaoForm() {
         descricao,
         quantidade,
         tipo_fornecimento,
-        total_meses: tipo_fornecimento === 'Mensal' ? total_meses : null
+        total_meses: tipo_fornecimento === 'Mensal' ? total_meses : null,
+        valor_unitario_estimado: Number(valor_unitario_estimado || 0)
       };
 
       if (editId) {
@@ -938,11 +967,6 @@ export function LicitacaoForm() {
         prazo_contrato_meses,
         prazo_instalacao_meses,
         considerar_st_ou_difal: 'DIFAL',
-        fator_margem_locacao: 1.0,
-        fator_margem_instalacao: 1.0,
-        fator_margem_manutencao: 1.0,
-        fator_margem_servicos_produtos: 1.0,
-        aliq_pis: 0, aliq_cofins: 0, aliq_csll: 0, aliq_irpj: 0, aliq_iss: 0, aliq_icms: 0,
         items: [],
         costs: [],
         monthly_costs: []
@@ -1452,121 +1476,165 @@ export function LicitacaoForm() {
         {activeTab === 'lotes' && (
           <div className="space-y-6">
             {/* Nível 1: Licitação Consolidated Totals */}
-            <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-bg-deep/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2'}`}>
-              <div className="space-y-1">
-                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Venda Global</span>
-                <span className="text-lg font-extrabold text-brand-primary tabular-nums block">
-                  {Number(detail.valor_total_venda || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-              </div>
-              {canSeeCostAndProfit && (
-                <>
-                  {/* Custo de Aquisição (NEW) */}
-                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo de Aquisição</span>
-                    <Tooltip
-                      variant="light"
-                      content={
-                        <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
-                          <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição Global</div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">Custo Base (Compra):</span>
-                            <span className="font-mono font-semibold">
-                              {globalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">IPI de Compra:</span>
-                            <span className="font-mono font-semibold">
-                              {globalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">ICMS ST de Compra:</span>
-                            <span className="font-mono font-semibold">
-                              {globalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">DIFAL de Compra:</span>
-                            <span className="font-mono font-semibold">
-                              {globalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
-                            <span>Total Aquisição:</span>
-                            <span className="font-mono">
-                              {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                        </div>
-                      }
-                    >
-                      <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
-                        {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                    </Tooltip>
-                  </div>
+            {(() => {
+              const totalEstimado = Number(detail.valor_total_estimado || 0);
+              const totalLancado = Number(detail.valor_total_venda || 0);
+              const pctAtingido = totalEstimado > 0 ? (totalLancado / totalEstimado) * 100 : 0;
+              const diffEstimado = totalLancado - totalEstimado;
+              const hasEstimado = totalEstimado > 0;
 
-                  {/* Custos de Venda (NEW) */}
-                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
-                    <Tooltip
-                      variant="light"
-                      content={
-                        <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
-                          <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda Global</div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">Impostos sobre Venda:</span>
-                            <span className="font-mono font-semibold">
-                              {globalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6">
-                            <span className="text-slate-500">Despesas / Comissões / Frete:</span>
-                            <span className="font-mono font-semibold">
-                              {globalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
-                            <span>Total Venda:</span>
-                            <span className="font-mono">
-                              {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                        </div>
-                      }
-                    >
-                      <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
-                        {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                    </Tooltip>
-                  </div>
-
-                  {/* Custo Global */}
-                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo Global</span>
+              return (
+                <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-bg-deep/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-8' : 'grid-cols-3'}`}>
+                  {/* Total Estimado */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total Estimado</span>
                     <span className="text-lg font-extrabold text-text-primary tabular-nums block">
-                      {Number(detail.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {totalEstimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <span className="text-[10px] text-text-muted block">Meta de Edital</span>
+                  </div>
+
+                  {/* Total Lançado (Venda Global) */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total Lançado (Venda)</span>
+                    <span className="text-lg font-extrabold text-brand-primary tabular-nums block">
+                      {totalLancado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <span className="text-[10px] text-brand-primary/80 font-medium block">Kits de Oportunidade</span>
+                  </div>
+
+                  {/* % Atingido / Deságio */}
+                  <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">% do Estimado</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-lg font-extrabold tabular-nums block ${!hasEstimado ? 'text-text-muted' : diffEstimado <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {hasEstimado ? `${pctAtingido.toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-muted block truncate" title={hasEstimado ? (diffEstimado <= 0 ? `Deságio: ${Math.abs(diffEstimado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : `Excedente: ${diffEstimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`) : 'Sem estimativa'}>
+                      {hasEstimado ? (
+                        diffEstimado <= 0 
+                          ? `Deságio: ${Math.abs(diffEstimado).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}` 
+                          : `Acima: ${diffEstimado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}`
+                      ) : 'Sem estimativa'}
                     </span>
                   </div>
 
-                  {/* Lucro Estimado */}
+                  {canSeeCostAndProfit && (
+                    <>
+                      {/* Custo de Aquisição */}
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo Aquisição</span>
+                        <Tooltip
+                          variant="light"
+                          content={
+                            <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                              <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição Global</div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">Custo Base (Compra):</span>
+                                <span className="font-mono font-semibold">
+                                  {globalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">IPI de Compra:</span>
+                                <span className="font-mono font-semibold">
+                                  {globalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">ICMS ST de Compra:</span>
+                                <span className="font-mono font-semibold">
+                                  {globalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">DIFAL de Compra:</span>
+                                <span className="font-mono font-semibold">
+                                  {globalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                <span>Total Aquisição:</span>
+                                <span className="font-mono">
+                                  {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                            </div>
+                          }
+                        >
+                          <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                            {globalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </Tooltip>
+                        <span className="text-[10px] text-text-muted block">Produtos & Tributos</span>
+                      </div>
+
+                      {/* Custos de Venda */}
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
+                        <Tooltip
+                          variant="light"
+                          content={
+                            <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                              <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda Global</div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">Impostos sobre Venda:</span>
+                                <span className="font-mono font-semibold">
+                                  {globalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6">
+                                <span className="text-slate-500">Despesas / Comissões / Frete:</span>
+                                <span className="font-mono font-semibold">
+                                  {globalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                <span>Total Venda:</span>
+                                <span className="font-mono">
+                                  {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                              </div>
+                            </div>
+                          }
+                        >
+                          <span className="text-lg font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                            {globalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </Tooltip>
+                        <span className="text-[10px] text-text-muted block">Impostos & Despesas</span>
+                      </div>
+
+                      {/* Custo Global */}
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo Global</span>
+                        <span className="text-lg font-extrabold text-text-primary tabular-nums block">
+                          {Number(detail.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                        <span className="text-[10px] text-text-muted block">Aquisição + Venda</span>
+                      </div>
+
+                      {/* Lucro Estimado */}
+                      <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                        <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
+                        <span className="text-lg font-extrabold text-text-primary tabular-nums block">
+                          {Number(detail.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                        <span className="text-[10px] text-text-muted block">Resultado Líquido</span>
+                      </div>
+                    </>
+                  )}
                   <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
-                    <span className="text-lg font-extrabold text-text-primary tabular-nums block">
-                      {Number(detail.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Global</span>
+                    <span className="text-lg font-extrabold text-emerald-600 tabular-nums block">
+                      {Number(detail.margem_ponderada_global || 0).toFixed(2)}%
                     </span>
+                    <span className="text-[10px] text-emerald-600/80 font-medium block">Margem Líquida</span>
                   </div>
-                </>
-              )}
-              <div className={`space-y-1 ${canSeeCostAndProfit ? 'border-l border-border-subtle/30 pl-4' : ''}`}>
-                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Global</span>
-                <span className="text-lg font-extrabold text-emerald-600 tabular-nums block">
-                  {Number(detail.margem_ponderada_global || 0).toFixed(2)}%
-                </span>
-              </div>
-            </div>
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column: Tree Navigation Card */}
@@ -1592,7 +1660,7 @@ export function LicitacaoForm() {
                     <p className="text-xs text-text-muted text-center py-6">Nenhum lote criado neste edital.</p>
                   ) : (
                     <div className="space-y-2">
-                      {detail.lotes.map(l => {
+                      {sortLotesByOrder(detail.lotes).map(l => {
                         const isExpanded = expandedLotes[l.id];
                         return (
                           <div key={l.id} className="border border-border-subtle/50 rounded-lg p-2 bg-bg-deep/15">
@@ -1612,6 +1680,14 @@ export function LicitacaoForm() {
                                   <button type="button" onClick={() => handleOpenItemModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Adicionar Item">
                                     <Plus className="w-3 h-3" />
                                   </button>
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setImportModalLote({ id: l.id, numero: String(l.numero), nome: l.nome })} 
+                                    className="p-1 text-text-muted hover:text-emerald-500" 
+                                    title="Importar Itens da Planilha"
+                                  >
+                                    <FileSpreadsheet className="w-3 h-3" />
+                                  </button>
                                   <button type="button" onClick={() => handleOpenLoteModal(l.id)} className="p-1 text-text-muted hover:text-brand-primary" title="Editar Lote">
                                     <Edit2 className="w-3 h-3" />
                                   </button>
@@ -1624,6 +1700,9 @@ export function LicitacaoForm() {
 
                             {/* Nível 2: Lote inline totals */}
                             <div className="mt-1 pl-5 text-[10px] text-text-muted flex flex-wrap gap-x-2">
+                              {Number(l.valor_total_estimado || 0) > 0 && (
+                                <span>Est: <strong className="text-slate-600 dark:text-slate-400">{Number(l.valor_total_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
+                              )}
                               <span>Venda: <strong className="text-text-primary">{Number(l.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
                               {canSeeCostAndProfit && (
                                 <span>Custo: <strong className="text-text-primary">{Number(l.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
@@ -1635,9 +1714,21 @@ export function LicitacaoForm() {
                             {isExpanded && (
                               <div className="mt-2 pl-4 space-y-1 border-l border-border-subtle/40 ml-1.5">
                                 {l.items.length === 0 ? (
-                                  <p className="text-[10px] text-text-muted py-1.5">Sem itens neste lote.</p>
+                                  <div className="py-2 flex items-center justify-between text-[10px] text-text-muted">
+                                    <span>Sem itens neste lote.</span>
+                                    {!isLocked && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setImportModalLote({ id: l.id, numero: String(l.numero), nome: l.nome })}
+                                        className="flex items-center gap-1 text-brand-primary hover:underline font-medium cursor-pointer"
+                                      >
+                                        <FileSpreadsheet className="w-3 h-3" />
+                                        <span>Importar Planilha</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 ) : (
-                                  l.items.map(item => {
+                                  sortItemsByCodigo(l.items).map(item => {
                                     const isSelected = selectedItemId === item.id;
                                     return (
                                       <div
@@ -1674,6 +1765,9 @@ export function LicitacaoForm() {
                                         </div>
                                         {/* Item inline totals */}
                                         <div className="mt-0.5 pl-1 text-[10px] text-text-muted flex flex-wrap gap-x-2">
+                                          {Number(item.valor_total_estimado || 0) > 0 && (
+                                            <span>Est: <strong className="text-slate-600 dark:text-slate-400">{Number(item.valor_total_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</strong></span>
+                                          )}
                                           <span>V: <strong className={isSelected ? 'text-brand-primary' : 'text-text-primary'}>{Number(item.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                                           {canSeeCostAndProfit && (
                                             <span>C: <strong className={isSelected ? 'text-brand-primary' : 'text-text-primary'}>{Number(item.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
@@ -1695,9 +1789,9 @@ export function LicitacaoForm() {
               </div>
 
               {/* Right Column: Selected Item Detail & Opportunity Kits */}
-              <div className="lg:col-span-2 space-y-4">
+              <div className="lg:col-span-2 space-y-4 min-w-0 w-full">
                 {selectedItem ? (
-                  <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-6 space-y-6">
+                  <div className="bg-bg-surface border border-border-subtle/80 rounded-xl shadow-sm p-6 space-y-6 min-w-0 w-full overflow-hidden">
                     {/* Item Details */}
                     <div className="flex items-start justify-between border-b border-border-subtle/40 pb-4">
                       <div className="space-y-1">
@@ -1713,6 +1807,17 @@ export function LicitacaoForm() {
                         </div>
                       </div>
                       <div className="flex gap-4">
+                        {Number(selectedItem.valor_total_estimado || 0) > 0 && (
+                          <div className="text-right border-r border-border-subtle/40 pr-4">
+                            <span className="text-[10px] text-text-muted block uppercase font-bold">Total Estimado</span>
+                            <span className="text-lg font-bold text-text-primary mt-0.5 block font-mono">
+                              {Number(selectedItem.valor_total_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                            <span className="text-[10px] text-text-muted block">
+                              Unit: {Number(selectedItem.valor_unitario_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                        )}
                         <div className="text-right border-r border-border-subtle/40 pr-4">
                           <span className="text-[10px] text-text-muted block uppercase font-bold">Qtd. Unitária</span>
                           <span className="text-lg font-bold text-text-primary mt-0.5 block">{Number(selectedItem.quantidade)}</span>
@@ -1725,128 +1830,156 @@ export function LicitacaoForm() {
                     </div>
 
                     {/* Nível 3: Item Consolidated Totalizer */}
-                    {selectedItem.kits.length > 0 && (
-                      <div className="space-y-4">
-                        <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-slate-50/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6' : 'grid-cols-2'}`}>
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Venda</span>
-                            <span className="text-base font-extrabold text-brand-primary tabular-nums block">
-                              {Number(selectedItem.venda_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                          </div>
-                          {canSeeCostAndProfit && (
-                            <>
-                              {/* Custo de Aquisição (NEW) */}
-                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo de Aquisição</span>
-                                <Tooltip
-                                  variant="light"
-                                  content={
-                                    <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
-                                      <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição</div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">Custo Base (Compra):</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
+                    {selectedItem.kits.length > 0 && (() => {
+                      const itemCustoAquisicao = totalAquisicaoTributada || Number(selectedItem.custo_total || 0);
+                      const itemVenda = Number(selectedItem.venda_total || 0);
+                      const itemEstimado = Number(selectedItem.valor_total_estimado || 0);
+                      const mkpGeralLancado = itemCustoAquisicao > 0 ? (itemVenda / itemCustoAquisicao) : 0;
+                      const mkpGeralSugerido = (itemCustoAquisicao > 0 && itemEstimado > 0) ? (itemEstimado / itemCustoAquisicao) : 0;
+
+                      return (
+                        <div className="space-y-4">
+                          <div className={`grid gap-4 p-4 rounded-xl border border-border-subtle/80 bg-slate-50/10 shadow-sm ${canSeeCostAndProfit ? 'grid-cols-2 md:grid-cols-4 xl:grid-cols-8' : 'grid-cols-2'}`}>
+                            {/* Total de Venda */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Venda</span>
+                              <span className="text-base font-extrabold text-brand-primary tabular-nums block">
+                                {itemVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </div>
+
+                            {/* MKP Geral Lançado */}
+                            <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                              <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">MKP Lançado</span>
+                              <span className="text-base font-extrabold text-brand-primary tabular-nums block font-mono">
+                                {mkpGeralLancado > 0 ? `${mkpGeralLancado.toFixed(2)}x` : '—'}
+                              </span>
+                              <span className="text-[10px] text-text-muted block">Venda / Aquisição</span>
+                            </div>
+
+                            {/* MKP Sugerido (Estimado) */}
+                            <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                              <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">MKP Sugerido</span>
+                              <span className={`text-base font-extrabold tabular-nums block font-mono ${mkpGeralSugerido > 0 ? 'text-amber-600' : 'text-text-muted'}`}>
+                                {mkpGeralSugerido > 0 ? `${mkpGeralSugerido.toFixed(4)}x` : '—'}
+                              </span>
+                              <span className="text-[10px] text-amber-600/80 font-medium block">Meta Edital</span>
+                            </div>
+
+                            {canSeeCostAndProfit && (
+                              <>
+                                {/* Custo de Aquisição */}
+                                <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                  <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custo de Aquisição</span>
+                                  <Tooltip
+                                    variant="light"
+                                    content={
+                                      <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                                        <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custo de Aquisição</div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">Custo Base (Compra):</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalAquisicaoBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">IPI de Compra:</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">ICMS ST de Compra:</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">DIFAL de Compra:</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                          <span>Total Aquisição:</span>
+                                          <span className="font-mono">
+                                            {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">IPI de Compra:</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalIpi.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
+                                    }
+                                  >
+                                    <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                                      {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </Tooltip>
+                                </div>
+
+                                {/* Custos de Venda */}
+                                <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                  <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
+                                  <Tooltip
+                                    variant="light"
+                                    content={
+                                      <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
+                                        <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda</div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">Impostos sobre Venda:</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6">
+                                          <span className="text-slate-500">Despesas / Comissões / Frete:</span>
+                                          <span className="font-mono font-semibold">
+                                            {totalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
+                                          <span>Total Venda:</span>
+                                          <span className="font-mono">
+                                            {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">ICMS ST de Compra:</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalSt.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">DIFAL de Compra:</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalDifal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
-                                        <span>Total Aquisição:</span>
-                                        <span className="font-mono">
-                                          {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  }
-                                >
-                                  <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
-                                    {totalAquisicaoTributada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    }
+                                  >
+                                    <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
+                                      {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </Tooltip>
+                                </div>
+
+                                {/* Total de Custo */}
+                                <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                  <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total Custo Real</span>
+                                  <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                                    {Number(selectedItem.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                   </span>
-                                </Tooltip>
-                              </div>
+                                </div>
 
-                              {/* Custos de Venda (NEW) */}
-                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Custos de Venda</span>
-                                <Tooltip
-                                  variant="light"
-                                  content={
-                                    <div className="space-y-1.5 text-xs text-left p-1 text-slate-800">
-                                      <div className="font-bold border-b border-slate-200 pb-1 mb-1">Custos de Venda</div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">Impostos sobre Venda:</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalVendaImpostos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between gap-6">
-                                        <span className="text-slate-500">Despesas / Comissões / Frete:</span>
-                                        <span className="font-mono font-semibold">
-                                          {totalVendaDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between gap-6 border-t border-dashed border-slate-200 pt-1 mt-1 font-bold">
-                                        <span>Total Venda:</span>
-                                        <span className="font-mono">
-                                          {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  }
-                                >
-                                  <span className="text-base font-extrabold text-text-primary tabular-nums block hover:text-brand-primary cursor-help decoration-dotted underline underline-offset-2 decoration-border-subtle">
-                                    {totalCustosVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                {/* Lucro Estimado */}
+                                <div className="space-y-1 border-l border-border-subtle/30 pl-4">
+                                  <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
+                                  <span className="text-base font-extrabold text-text-primary tabular-nums block">
+                                    {Number(selectedItem.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                   </span>
-                                </Tooltip>
-                              </div>
-
-                              {/* Total de Custo */}
-                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Total de Custo</span>
-                                <span className="text-base font-extrabold text-text-primary tabular-nums block">
-                                  {Number(selectedItem.custo_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </span>
-                              </div>
-
-                              {/* Lucro Estimado */}
-                              <div className="space-y-1 border-l border-border-subtle/30 pl-4">
-                                <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Lucro Estimado</span>
-                                <span className="text-base font-extrabold text-text-primary tabular-nums block">
-                                  {Number(selectedItem.lucro_estimado || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </span>
-                              </div>
-                            </>
-                          )}
-                          <div className={`space-y-1 ${canSeeCostAndProfit ? 'border-l border-border-subtle/30 pl-4' : ''}`}>
-                            <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Geral</span>
-                            <span className="text-base font-extrabold text-emerald-600 tabular-nums block">
-                              {Number(selectedItem.margem_geral || 0).toFixed(2)}%
-                            </span>
+                                </div>
+                              </>
+                            )}
+                            <div className={`space-y-1 ${canSeeCostAndProfit ? 'border-l border-border-subtle/30 pl-4' : ''}`}>
+                              <span className="text-[10px] text-text-muted block uppercase font-bold tracking-wide">Margem Geral</span>
+                              <span className="text-base font-extrabold text-emerald-600 tabular-nums block">
+                                {Number(selectedItem.margem_geral || 0).toFixed(2)}%
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Kits Section */}
-                    <div className="space-y-4">
+                    <div className="space-y-4 min-w-0 w-full">
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-bold text-text-primary uppercase tracking-wide flex items-center gap-1.5">
                           <Package className="w-4 h-4 text-brand-primary" />
@@ -1865,10 +1998,10 @@ export function LicitacaoForm() {
                           <p className="text-[10px]">Toda precificação de item de licitação deve ser feita através de um Kit customizado.</p>
                         </div>
                       ) : (
-                        <div className="overflow-hidden rounded-lg border border-border-subtle/60 bg-bg-surface">
-                          <table className="w-full text-xs text-left border-collapse">
+                        <div className="w-full max-w-full overflow-x-auto rounded-lg border border-border-subtle/60 bg-bg-surface shadow-2xs block">
+                          <table className="w-full text-xs text-left border-collapse min-w-[1050px] table-auto">
                             <thead>
-                              <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold">
+                              <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold whitespace-nowrap">
                                 <th className="py-2.5 px-4">Nome do Kit</th>
                                 <th className="py-2.5 px-4">Operação / Contrato</th>
                                 <th className="py-2.5 px-4 text-right">Quantidade</th>
@@ -1891,10 +2024,14 @@ export function LicitacaoForm() {
                                   </>
                                 )}
                                 {canSeeCostAndProfit && (
-                                  <th className="py-2.5 px-4 text-right">Lucro Est.</th>
+                                  <>
+                                    <th className="py-2.5 px-4 text-right">MKP Lançado</th>
+                                    <th className="py-2.5 px-4 text-right">MKP Sugerido</th>
+                                    <th className="py-2.5 px-4 text-right">Lucro Est.</th>
+                                  </>
                                 )}
                                 <th className="py-2.5 px-4 text-right">Margem</th>
-                                <th className="py-2.5 px-4 text-center">Ações</th>
+                                <th className="py-2.5 px-4 text-center sticky right-0 bg-bg-deep/90 backdrop-blur-xs shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border-subtle/40 z-10">Ações</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1908,9 +2045,18 @@ export function LicitacaoForm() {
                                 const lEst = Number(k.summary?.lucro_estimado || 0);
                                 const marg = Number(k.summary?.margem_geral || 0);
 
+                                const kitMkpLancado = cUnit > 0 ? (vUnit / cUnit) : (cTotal > 0 ? vTotal / cTotal : 0);
+                                const itemEstUnit = Number(selectedItem.valor_unitario_estimado || (Number(selectedItem.valor_total_estimado || 0) / (Number(selectedItem.quantidade_total ?? selectedItem.quantidade ?? 1))));
+                                const kitMkpSugerido = (cUnit > 0 && itemEstUnit > 0) ? (itemEstUnit / cUnit) : 0;
+
                                 return (
-                                  <tr key={k.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
-                                    <td className="py-3 px-4 font-semibold text-text-primary">{k.nome_kit}</td>
+                                  <tr
+                                    key={k.id}
+                                    onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
+                                    className="border-b border-border-subtle/40 hover:bg-brand-primary/5 cursor-pointer transition-colors group whitespace-nowrap"
+                                    title="Clique para abrir e editar a simulação do kit"
+                                  >
+                                    <td className="py-3 px-4 font-semibold text-text-primary group-hover:text-brand-primary transition-colors">{k.nome_kit}</td>
                                     <td className="py-3 px-4 font-mono uppercase text-text-muted tracking-wider">{k.tipo_contrato}</td>
                                     <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">{qty}</td>
                                     
@@ -1949,32 +2095,52 @@ export function LicitacaoForm() {
                                     )}
                                     
                                     {canSeeCostAndProfit && (
-                                      <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
-                                        {lEst.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                      </td>
+                                      <>
+                                        <td className="py-3 px-4 text-right font-mono font-bold text-brand-primary tabular-nums">
+                                          {kitMkpLancado > 0 ? `${kitMkpLancado.toFixed(2)}x` : '—'}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono tabular-nums">
+                                          {kitMkpSugerido > 0 ? (
+                                            <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                              {kitMkpSugerido.toFixed(4)}x
+                                            </span>
+                                          ) : (
+                                            <span className="text-text-muted">—</span>
+                                          )}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono text-text-muted tabular-nums">
+                                          {lEst.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                      </>
                                     )}
                                     
                                     <td className="py-3 px-4 text-right font-bold text-emerald-600 tabular-nums">
                                       {marg.toFixed(2)}%
                                     </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <div className="flex justify-center items-center gap-1.5">
+                                    <td className="py-3 px-4 text-center sticky right-0 bg-bg-surface group-hover:bg-bg-deep/40 transition-colors shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border-subtle/40 z-10">
+                                      <div className="flex justify-center items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                         <button
                                           type="button"
-                                          onClick={() => navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`)}
-                                          className="p-1 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/cadastros/kits/${k.id}?licitacao_id=${id}`);
+                                          }}
+                                          className="p-1.5 hover:bg-brand-primary/10 text-brand-primary rounded cursor-pointer transition-colors"
                                           title="Editar Simulação do Kit"
                                         >
-                                          <Edit2 className="w-3.5 h-3.5" />
+                                          <Edit2 className="w-4 h-4" />
                                         </button>
                                         {!isLocked && (
                                           <button
                                             type="button"
-                                            onClick={() => handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id)}
-                                            className="p-1 hover:bg-rose-50 text-rose-600 rounded cursor-pointer"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleTriggerDeleteKit(k.id, k.nome_kit, selectedItem.id);
+                                            }}
+                                            className="p-1.5 hover:bg-rose-50 text-rose-600 rounded cursor-pointer transition-colors"
                                             title="Excluir Kit"
                                           >
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <Trash2 className="w-4 h-4" />
                                           </button>
                                         )}
                                       </div>
@@ -2045,20 +2211,32 @@ export function LicitacaoForm() {
                     <tr className="bg-bg-deep/30 border-b border-border-subtle/50 text-text-muted font-bold">
                       <th className="py-2.5 px-4">Número Orçamento</th>
                       <th className="py-2.5 px-4">Fornecedor</th>
+                      <th className="py-2.5 px-4">Tipo</th>
                       <th className="py-2.5 px-4">Data do Orçamento</th>
                       <th className="py-2.5 px-4">Vendedor</th>
+                      <th className="py-2.5 px-4 text-right">Valor Total</th>
                       <th className="py-2.5 px-4 text-center">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {purchaseBudgets.map(pb => (
                       <tr key={pb.id} className="border-b border-border-subtle/40 hover:bg-slate-50/20">
-                        <td className="py-3 px-4 font-semibold text-text-primary">{pb.numero_orcamento}</td>
-                        <td className="py-3 px-4 text-text-muted">{pb.supplier_nome || '—'}</td>
+                        <td className="py-3 px-4 font-semibold text-text-primary">{pb.numero_orcamento || '—'}</td>
+                        <td className="py-3 px-4 font-medium text-text-primary">
+                          {pb.supplier_nome_fantasia || pb.supplier_nome || pb.vendedor_nome || '—'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={pb.tipo_orcamento === 'REVENDA' ? 'success' : 'info'}>
+                            {pb.tipo_orcamento || 'REVENDA'}
+                          </Badge>
+                        </td>
                         <td className="py-3 px-4 text-text-muted font-mono">
                           {pb.data_orcamento ? new Date(pb.data_orcamento).toLocaleDateString('pt-BR') : '—'}
                         </td>
                         <td className="py-3 px-4 text-text-muted">{pb.vendedor_nome || '—'}</td>
+                        <td className="py-3 px-4 text-right font-semibold text-text-primary tabular-nums">
+                          {Number(pb.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
                         <td className="py-3 px-4 text-center">
                           <div className="flex justify-center items-center gap-1.5">
                             <button
@@ -3079,6 +3257,43 @@ export function LicitacaoForm() {
                 </div>
               </div>
 
+              {/* Card de Configuração de Valor Estimado */}
+              <div className="bg-bg-deep/40 p-4 rounded-xl border border-border-subtle/80 space-y-3 shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-text-primary uppercase tracking-wider">Valor Estimado do Item (Referência / Edital)</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-brand-primary/10 text-brand-primary border-brand-primary/20">
+                    Estimativa do Edital
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-text-muted uppercase">Valor Unitário Estimado (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={itemModal?.valor_unitario_estimado !== undefined && itemModal?.valor_unitario_estimado !== null ? itemModal.valor_unitario_estimado : ''}
+                      onChange={e => setItemModal(prev => prev ? { ...prev, valor_unitario_estimado: parseFloat(e.target.value) || 0 } : null)}
+                      className="input-primary w-full font-mono text-sm"
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-text-muted uppercase">Valor Total Estimado</label>
+                    <div className="flex items-center justify-between min-h-[38px] w-full rounded-lg border border-border-subtle bg-bg-surface px-3 py-1.5 shadow-inner">
+                      <span className="text-xs text-text-muted">Total (Qtd x Unit.):</span>
+                      <span className="text-sm font-extrabold text-brand-primary tabular-nums font-mono">
+                        {Number(
+                          ((itemModal?.valor_unitario_estimado || 0) * (Number((itemModal?.quantidade || 0) * (itemModal?.tipo_fornecimento === 'Mensal' ? (itemModal?.total_meses || 0) : 1))))
+                        ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Botões de Ação */}
               <div className="pt-4 flex justify-end gap-3 border-t border-border-subtle">
                 <Button type="button" variant="outline" onClick={() => setItemModal(null)}>Cancelar</Button>
@@ -3509,6 +3724,18 @@ export function LicitacaoForm() {
           onClose={() => setIsPurchaseSearchModalOpen(false)}
           onSelect={(b) => handleLinkBudget(b.id)}
           title="Vincular Orçamento de Compra Existente"
+        />
+      )}
+
+      {importModalLote && (
+        <LicitacaoItemImportModal
+          isOpen={!!importModalLote}
+          onClose={() => setImportModalLote(null)}
+          licitacaoId={id!}
+          lote={importModalLote}
+          onSuccess={() => {
+            loadAll();
+          }}
         />
       )}
     </div>

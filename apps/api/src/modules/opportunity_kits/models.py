@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.own_services.models  # ensure OwnService is in registry for mapper
+import src.modules.licitacoes.models  # ensure Licitacao is in registry for mapper
 from src.modules.companies.models import SalesTeam
 
 

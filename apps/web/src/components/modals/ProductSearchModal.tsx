@@ -11,11 +11,12 @@ interface ProductSearchModalProps {
   onSelect?: (product: Product) => void;
   title?: string;
   salesBudgetId?: string;
+  licitacaoId?: string;
   multiSelect?: boolean;
   onSelectMany?: (products: Product[]) => void;
 }
 
-export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId, multiSelect = false, onSelectMany }: ProductSearchModalProps) {
+export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId, licitacaoId, multiSelect = false, onSelectMany }: ProductSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -52,18 +53,21 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
 
     const delayDebounceFn = setTimeout(() => {
       async function fetchProducts() {
-        if (!salesBudgetId && (!searchTerm || searchTerm.trim().length < 2)) {
+        if (!salesBudgetId && !licitacaoId && (!searchTerm || searchTerm.trim().length < 2)) {
           setResults([]);
           return;
         }
         setIsSearching(true);
         try {
-          const params: { limit: number; q?: string; sales_budget_id?: string } = { limit: 100 };
+          const params: { limit: number; q?: string; sales_budget_id?: string; licitacao_id?: string } = { limit: 100 };
           if (searchTerm && searchTerm.trim().length >= 2) {
             params.q = searchTerm;
           }
           if (salesBudgetId) {
             params.sales_budget_id = salesBudgetId;
+          }
+          if (licitacaoId) {
+            params.licitacao_id = licitacaoId;
           }
           const res = await api.get('/cadastro/produtos', { params });
           setResults(res.data);
@@ -74,10 +78,10 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
         }
       }
       fetchProducts();
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, salesBudgetId, isOpen]);
+  }, [searchTerm, salesBudgetId, licitacaoId, isOpen]);
 
   if (!isOpen) return null;
 

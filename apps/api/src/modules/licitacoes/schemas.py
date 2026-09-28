@@ -13,6 +13,8 @@ class LicitacaoItemBase(BaseModel):
     tipo_fornecimento: str = Field(default="Unitário")
     total_meses: Optional[int] = Field(default=None)
     quantidade_total: Optional[Decimal] = Field(default=None)
+    valor_unitario_estimado: Optional[Decimal] = Field(default=Decimal("0.0"))
+    valor_total_estimado: Optional[Decimal] = Field(default=Decimal("0.0"))
 
     @model_validator(mode="after")
     def validate_fornecimento(self) -> "LicitacaoItemBase":
@@ -42,6 +44,8 @@ class LicitacaoItemResponse(LicitacaoItemBase):
     kits: List[OpportunityKitResponse] = []
     
     # Financial fields
+    valor_unitario_estimado: Optional[Decimal] = None
+    valor_total_estimado: Optional[Decimal] = None
     custo_unitario: Optional[Decimal] = None
     custo_total: Optional[Decimal] = None
     venda_unitario: Optional[Decimal] = None
@@ -67,6 +71,7 @@ class LicitacaoLoteResponse(LicitacaoLoteBase):
     items: List[LicitacaoItemResponse] = []
     
     # Financial fields
+    valor_total_estimado: Optional[Decimal] = None
     custo_total: Optional[Decimal] = None
     venda_total: Optional[Decimal] = None
     lucro_estimado: Optional[Decimal] = None
@@ -416,3 +421,29 @@ class LicitacaoDreResponse(BaseModel):
     saidas: LicitacaoDreSaidas
     lucro_ebitda: Decimal
     margem_liquida: Decimal
+
+
+class LicitacaoItemImportPreviewItem(BaseModel):
+    linha: int
+    codigo: str
+    nome: str
+    quantidade: Decimal
+    valor_unitario_estimado: Decimal
+    is_duplicate: bool = False
+    duplicate_reason: Optional[str] = None
+
+
+class LicitacaoItemImportPreviewResponse(BaseModel):
+    items: List[LicitacaoItemImportPreviewItem]
+    total_itens: int
+    total_quantidade: Decimal
+    total_valor_estimado_unitario: Decimal
+    total_duplicados: int
+
+
+class LicitacaoItemImportConfirmRequest(BaseModel):
+    tipo_fornecimento: str = "Unitário"
+    total_meses: Optional[int] = None
+    estrategia: str = "ADICIONAR"  # "ADICIONAR" | "SUBSTITUIR"
+    items: List[dict]
+

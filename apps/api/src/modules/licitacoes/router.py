@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, File, UploadFile, Response
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
@@ -270,6 +270,9 @@ def add_item(
     else:
         qty_total = data.quantidade
 
+    val_unit_est = data.valor_unitario_estimado or Decimal("0.0")
+    val_tot_est = round(val_unit_est * Decimal(str(qty_total or 1)), 2)
+
     item = LicitacaoItem(
         lote_id=lote_id,
         codigo=data.codigo,
@@ -278,7 +281,9 @@ def add_item(
         quantidade=data.quantidade,
         tipo_fornecimento=data.tipo_fornecimento,
         total_meses=data.total_meses,
-        quantidade_total=qty_total
+        quantidade_total=qty_total,
+        valor_unitario_estimado=val_unit_est,
+        valor_total_estimado=val_tot_est
     )
     db.add(item)
     
@@ -334,6 +339,9 @@ def update_item(
     else:
         qty_total = data.quantidade
 
+    val_unit_est = data.valor_unitario_estimado or Decimal("0.0")
+    val_tot_est = round(val_unit_est * Decimal(str(qty_total or 1)), 2)
+
     # Detailed history logging
     prev_tipo = item.tipo_fornecimento
     prev_meses = "vazio" if item.total_meses is None else str(item.total_meses)
@@ -350,6 +358,8 @@ def update_item(
     item.tipo_fornecimento = data.tipo_fornecimento
     item.total_meses = data.total_meses
     item.quantidade_total = qty_total
+    item.valor_unitario_estimado = val_unit_est
+    item.valor_total_estimado = val_tot_est
     
     # Log to timeline
     LicitacaoService.register_history(
@@ -410,6 +420,101 @@ def delete_item(
     
     LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
     return None
+
+# --- Importação de Itens via Planilha ---
+
+@router.get("/templates/itens-lote-template")
+def download_itens_lote_template(
+    current_user: User = Depends(get_current_user)
+):
+    """Retorna o modelo oficial .xlsx para importação de itens em lotes."""
+    file_bytes = LicitacaoService.generate_items_template_excel()
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=Template_Importacao_Itens_Lote.xlsx"
+        }
+    )
+
+@router.post("/{licitacao_id}/lotes/{lote_id}/preview-import-items", response_model=schemas.LicitacaoItemImportPreviewResponse)
+async def preview_import_items(
+    licitacao_id: UUID,
+    lote_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    tenant_id = str(current_user.tenant_id)
+    licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+    if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+        raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+    lote = db.query(LicitacaoLote).filter(LicitacaoLote.id == lote_id, LicitacaoLote.licitacao_id == licitacao_id).first()
+    if not lote:
+        raise HTTPException(status_code=404, detail="Lote não encontrado")
+
+    # Coleta códigos dos itens já cadastrados neste lote
+    existing_items = db.query(LicitacaoItem).filter(LicitacaoItem.lote_id == lote_id).all()
+    existing_codigos = {str(item.codigo).strip() for item in existing_items}
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Arquivo vazio enviado.")
+
+    try:
+        preview_data = LicitacaoService.parse_items_spreadsheet(
+            file_bytes=file_bytes,
+            filename=file.filename or "planilha.xlsx",
+            existing_item_codigos=existing_codigos
+        )
+        return preview_data
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao processar planilha: {str(e)}")
+
+@router.post("/{licitacao_id}/lotes/{lote_id}/import-items", response_model=List[schemas.LicitacaoItemResponse])
+def confirm_import_items(
+    licitacao_id: UUID,
+    lote_id: UUID,
+    data: schemas.LicitacaoItemImportConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header is required")
+    tenant_id = str(current_user.tenant_id)
+    user_id = str(current_user.id)
+    licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+    if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+        raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+    if not data.items:
+        raise HTTPException(status_code=400, detail="Nenhum item válido para importar.")
+
+    try:
+        created_items = LicitacaoService.import_items_to_lote(
+            db=db,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            licitacao_id=licitacao_id,
+            lote_id=lote_id,
+            items_data=data.items,
+            tipo_fornecimento=data.tipo_fornecimento,
+            total_meses=data.total_meses,
+            estrategia=data.estrategia,
+            current_user=current_user
+        )
+        return [LicitacaoService.populate_item_kits_financials(db, tenant_id, item) for item in created_items]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao importar itens: {str(e)}")
 
 
 # --- Team (PO and Analistas) endpoints ---

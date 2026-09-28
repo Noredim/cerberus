@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2, Users, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Save, Calculator, Plus, Trash2, Info, ChevronUp, ChevronDown, Printer, ChevronLeft, ChevronRight, Building2, Users, ShieldCheck, Zap } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -2683,39 +2683,116 @@ export const OpportunityKitForm = ({
               1. Informações Gerais
             </h2>
 
-            {licitacaoItemDetails && (
-              <div className="mb-6 p-4 bg-brand-primary/5 border border-brand-primary/20 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <span className="text-[10px] text-brand-primary uppercase font-bold tracking-wider block mb-1">Item de Edital Vinculado</span>
-                  <h4 className="text-sm font-bold text-text-primary">
-                    Item {licitacaoItemDetails.codigo} — {licitacaoItemDetails.nome}
-                  </h4>
-                  {licitacaoItemDetails.descricao && (
-                    <p className="text-text-muted text-xs mt-1">{licitacaoItemDetails.descricao}</p>
-                  )}
-                </div>
-                <div className="flex gap-4 shrink-0 text-right">
-                  <div>
-                    <span className="text-[9px] text-text-muted uppercase block font-bold">Fornecimento</span>
-                    <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.tipo_fornecimento || 'Unitário'}</span>
-                  </div>
-                  {licitacaoItemDetails.tipo_fornecimento === 'Mensal' && (
+            {licitacaoItemDetails && (() => {
+              const itemEstUnit = Number(licitacaoItemDetails.valor_unitario_estimado || (Number(licitacaoItemDetails.valor_total_estimado || 0) / (Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade ?? 1))));
+              const itemEstTotal = Number(licitacaoItemDetails.valor_total_estimado || (itemEstUnit * Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade ?? 1)));
+              const custoAqUnit = Number(financials?.summary?.custo_aquisicao_kit || (financials?.summary?.custo_aquisicao_total ? financials.summary.custo_aquisicao_total / (form.quantidade_kits || 1) : 0));
+              const vendaUnit = Number(financials?.summary?.venda_unitario || (financials?.summary?.venda_equipamentos_total ? financials.summary.venda_equipamentos_total / (form.quantidade_kits || 1) : 0) || financials?.summary?.faturamento_total_venda || 0);
+              const mkpAtual = custoAqUnit > 0 ? (vendaUnit / custoAqUnit) : 0;
+              const mkpSugerido = (custoAqUnit > 0 && itemEstUnit > 0) ? (itemEstUnit / custoAqUnit) : 0;
+
+              return (
+                <div className="mb-6 p-4 bg-brand-primary/5 border border-brand-primary/20 rounded-xl space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <span className="text-[9px] text-text-muted uppercase block font-bold">Meses</span>
-                      <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.total_meses}m</span>
+                      <span className="text-[10px] text-brand-primary uppercase font-bold tracking-wider block mb-1">Item de Edital Vinculado</span>
+                      <h4 className="text-sm font-bold text-text-primary">
+                        Item {licitacaoItemDetails.codigo} — {licitacaoItemDetails.nome}
+                      </h4>
+                      {licitacaoItemDetails.descricao && (
+                        <p className="text-text-muted text-xs mt-1">{licitacaoItemDetails.descricao}</p>
+                      )}
                     </div>
-                  )}
-                  <div>
-                    <span className="text-[9px] text-text-muted uppercase block font-bold">Qtd. Base</span>
-                    <span className="text-xs font-semibold text-text-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade)}</span>
+                    <div className="flex flex-wrap gap-4 shrink-0 text-right">
+                      <div>
+                        <span className="text-[9px] text-text-muted uppercase block font-bold">Fornecimento</span>
+                        <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.tipo_fornecimento || 'Unitário'}</span>
+                      </div>
+                      {licitacaoItemDetails.tipo_fornecimento === 'Mensal' && (
+                        <div>
+                          <span className="text-[9px] text-text-muted uppercase block font-bold">Meses</span>
+                          <span className="text-xs font-semibold text-text-primary block mt-0.5">{licitacaoItemDetails.total_meses}m</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-[9px] text-text-muted uppercase block font-bold">Qtd. Base</span>
+                        <span className="text-xs font-semibold text-text-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-brand-primary uppercase block font-bold">Qtd. Total</span>
+                        <span className="text-xs font-bold text-brand-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[9px] text-brand-primary uppercase block font-bold">Qtd. Total</span>
-                    <span className="text-xs font-bold text-brand-primary block mt-0.5">{Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade)}</span>
+
+                  {/* Edital Estimation & MKP Sugerido Banner Grid */}
+                  <div className="pt-3 border-t border-brand-primary/15 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {/* Estimado Edital */}
+                    <div className="bg-bg-surface/80 rounded-lg p-2.5 border border-border-subtle">
+                      <span className="text-[9px] text-text-muted uppercase font-bold block">Valor Estimado Edital</span>
+                      <span className="text-sm font-extrabold text-text-primary block tabular-nums">
+                        {itemEstUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <span className="text-[10px] font-normal text-text-muted ml-1">/un</span>
+                      </span>
+                      {itemEstTotal > 0 && (
+                        <span className="text-[10px] text-text-muted block">
+                          Total: {itemEstTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Custo Unitário Kit */}
+                    <div className="bg-bg-surface/80 rounded-lg p-2.5 border border-border-subtle">
+                      <span className="text-[9px] text-text-muted uppercase font-bold block">Custo Unitário Kit</span>
+                      <span className="text-sm font-extrabold text-text-primary block tabular-nums">
+                        {custoAqUnit > 0 ? custoAqUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                      </span>
+                      <span className="text-[10px] text-text-muted block">Base + Tributos Compra</span>
+                    </div>
+
+                    {/* MKP Lançado */}
+                    <div className="bg-bg-surface/80 rounded-lg p-2.5 border border-border-subtle">
+                      <span className="text-[9px] text-brand-primary uppercase font-bold block">MKP Lançado Atual</span>
+                      <span className="text-sm font-extrabold text-brand-primary block tabular-nums font-mono">
+                        {mkpAtual > 0 ? `${mkpAtual.toFixed(4)}x` : '—'}
+                      </span>
+                      <span className="text-[10px] text-text-muted block">
+                        Venda: {vendaUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+
+                    {/* MKP Sugerido (Meta) + Botão Aplicar */}
+                    <div className="bg-amber-500/10 rounded-lg p-2.5 border border-amber-500/30 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-amber-700 dark:text-amber-400 uppercase font-bold block">MKP Sugerido (Meta)</span>
+                          {mkpSugerido > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const sVal = parseFloat(mkpSugerido.toFixed(4));
+                                handleInputChange('fator_margem_locacao', sVal);
+                                handleFactorBlur('fator_margem_locacao', sVal);
+                              }}
+                              className="text-[9px] font-extrabold bg-amber-500 text-white hover:bg-amber-600 px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5 cursor-pointer transition-colors"
+                              title="Aplicar este fator automaticamente no formulário"
+                            >
+                              <Zap className="w-2.5 h-2.5" /> Aplicar
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-sm font-extrabold text-amber-700 dark:text-amber-400 block tabular-nums font-mono mt-0.5">
+                          {mkpSugerido > 0 ? `${mkpSugerido.toFixed(4)}x` : '—'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 block font-medium">
+                        Estimado / Custo
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
@@ -2852,9 +2929,32 @@ export const OpportunityKitForm = ({
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem Produtos'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium">
+                    {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem Produtos'}
+                  </label>
+                  {licitacaoItemDetails && (() => {
+                    const itemEstUnit = Number(licitacaoItemDetails.valor_unitario_estimado || (Number(licitacaoItemDetails.valor_total_estimado || 0) / (Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade ?? 1))));
+                    const custoAqUnit = Number(financials?.summary?.custo_aquisicao_kit || (financials?.summary?.custo_aquisicao_total ? financials.summary.custo_aquisicao_total / (form.quantidade_kits || 1) : 0));
+                    const mkpSugerido = (custoAqUnit > 0 && itemEstUnit > 0) ? (itemEstUnit / custoAqUnit) : 0;
+                    if (mkpSugerido <= 0) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const sVal = parseFloat(mkpSugerido.toFixed(4));
+                          handleInputChange('fator_margem_locacao', sVal);
+                          handleFactorBlur('fator_margem_locacao', sVal);
+                        }}
+                        className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Clique para preencher o fator com o MKP sugerido do edital"
+                      >
+                        <Zap className="w-3 h-3" />
+                        MKP Edital: {mkpSugerido.toFixed(4)}x (Aplicar)
+                      </button>
+                    );
+                  })()}
+                </div>
                 <Decimal4Input
                   value={form.fator_margem_locacao}
                   onChange={(val: number) => handleInputChange('fator_margem_locacao', val)}
@@ -3572,6 +3672,7 @@ export const OpportunityKitForm = ({
               multiSelect={true}
               onSelectMany={handleAddProducts}
               salesBudgetId={form.sales_budget_id}
+              licitacaoId={form.licitacao_id}
             />
           </section>
 

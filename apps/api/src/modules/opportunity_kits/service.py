@@ -1407,6 +1407,45 @@ class OpportunityKitService:
             kit.item_summaries = fin["item_summaries"]
         return kit
 
+    def _populate_kit_financial_columns(self, kit: OpportunityKit, fin: dict):
+        summary = fin.get("summary", {})
+        prazo_mensalidades = Decimal(str(summary.get("prazo_mensalidades") or 0))
+        valor_mensal_kit = Decimal(str(summary.get("valor_mensal_kit") or 0))
+        vlr_instal_calc = Decimal(str(summary.get("vlr_instal_calc") or 0))
+        lucro_mensal_kit = Decimal(str(summary.get("lucro_mensal_kit") or 0))
+        imposto_instalacao = Decimal(str(summary.get("imposto_instalacao") or 0))
+        perc_comissao = Decimal(str(getattr(kit, "perc_comissao", 0) or 0))
+        quantidade_kits = Decimal(str(getattr(kit, "quantidade_kits", 1) or 1))
+
+        if kit.tipo_contrato in ["VENDA_EQUIPAMENTOS", "INSTALACAO"]:
+            venda_total = valor_mensal_kit * quantidade_kits
+            lucro_estimado = lucro_mensal_kit * quantidade_kits
+        else:
+            venda_total = (valor_mensal_kit * prazo_mensalidades + vlr_instal_calc) * quantidade_kits
+            lucro_estimado = (
+                lucro_mensal_kit * prazo_mensalidades + 
+                (vlr_instal_calc - imposto_instalacao - (vlr_instal_calc * perc_comissao / Decimal(100.0)))
+            ) * quantidade_kits
+            
+        custo_total = venda_total - lucro_estimado
+        margem_geral = (lucro_estimado / venda_total * Decimal(100.0)) if venda_total > 0 else Decimal("0.0")
+        venda_unitario = venda_total / quantidade_kits if quantidade_kits > 0 else Decimal("0.0")
+        custo_unitario = custo_total / quantidade_kits if quantidade_kits > 0 else Decimal("0.0")
+
+        summary["venda_total"] = round(venda_total, 2)
+        summary["custo_total"] = round(custo_total, 2)
+        summary["lucro_estimado"] = round(lucro_estimado, 2)
+        summary["margem_geral"] = round(margem_geral, 2)
+        summary["venda_unitario"] = round(venda_unitario, 2)
+        summary["custo_unitario"] = round(custo_unitario, 2)
+
+        kit.venda_total = round(venda_total, 2)
+        kit.custo_total = round(custo_total, 2)
+        kit.lucro_estimado = round(lucro_estimado, 2)
+        kit.margem_geral = round(margem_geral, 2)
+        kit.venda_unitario = round(venda_unitario, 2)
+        kit.custo_unitario = round(custo_unitario, 2)
+
     def create_kit(self, tenant_id: str, company_id: str, data: OpportunityKitCreate, current_user: Optional[any] = None) -> OpportunityKit:
         if data.prazo_instalacao_meses > data.prazo_contrato_meses:
             raise ValueError("Prazo de instalação não pode ser maior que o prazo do contrato.")
@@ -1454,6 +1493,98 @@ class OpportunityKitService:
         perc_comissao = pick_param("comissionamento", data.perc_comissao)
         perc_frete_venda = pick_param("frete_venda_padrao", data.perc_frete_venda)
 
+        # Resolve Commercial Policy and effective factors
+        from src.modules.professionals.models import Professional
+        from src.modules.companies.models import CommercialPolicy, CommercialPolicyRole
+
+        professional = self.db.query(Professional).filter(
+            Professional.user_id == current_user.id,
+            Professional.tenant_id == tenant_id
+        ).first() if current_user else None
+
+        user_policies = []
+        if professional and professional.role_id:
+            user_policies = self.db.query(CommercialPolicy).join(
+                CommercialPolicyRole,
+                CommercialPolicyRole.policy_id == CommercialPolicy.id
+            ).filter(
+                CommercialPolicy.company_id == company_id,
+                CommercialPolicy.ativo.is_(True),
+                CommercialPolicyRole.role_id == professional.role_id
+            ).all()
+
+        default_policy = None
+        min_allowed = None
+        if user_policies:
+            default_policy = next((p for p in user_policies if p.is_default), user_policies[0])
+            min_allowed = min(p.fator_limite for p in user_policies)
+        else:
+            default_policy = self.db.query(CommercialPolicy).filter(
+                CommercialPolicy.company_id == company_id,
+                CommercialPolicy.ativo.is_(True),
+                CommercialPolicy.is_default.is_(True)
+            ).first()
+            if default_policy:
+                min_allowed = default_policy.fator_limite
+
+        # Determine effective default factor (from company parameters or policy)
+        mkp_padrao_val = getattr(sales_params, f"mkp_padrao_{suffix}", None) or getattr(sales_params, "mkp_padrao", 0.0) or 0.0
+        mkp_padrao = Decimal(str(mkp_padrao_val))
+        if mkp_padrao > 0:
+            effective_default_factor = max(mkp_padrao, min_allowed) if min_allowed is not None else mkp_padrao
+        elif min_allowed is not None:
+            effective_default_factor = min_allowed
+        else:
+            effective_default_factor = Decimal("1.0")
+
+        # Resolve factor: default/blank values are initialized to effective_default_factor, custom values are validated
+        def resolve_factor(passed_val: Optional[Decimal]) -> Decimal:
+            if passed_val is None or Decimal(str(passed_val)) <= Decimal("1.0"):
+                return effective_default_factor
+            val = Decimal(str(passed_val))
+            if min_allowed is not None and val < min_allowed:
+                raise ValueError(f"Fator {val} está abaixo do limite permitido da sua política comercial (Mínimo: {min_allowed}).")
+            return val
+
+        fator_margem_locacao = resolve_factor(data.fator_margem_locacao)
+        fator_margem_servicos_produtos = resolve_factor(data.fator_margem_servicos_produtos)
+        fator_margem_instalacao = resolve_factor(data.fator_margem_instalacao)
+        fator_margem_manutencao = resolve_factor(data.fator_margem_manutencao)
+        fator_monitoramento = resolve_factor(data.fator_monitoramento)
+
+        # Policy defaults for financial commissions and expenses
+        selected_policy_id = data.commercial_policy_id or (default_policy.id if default_policy else None)
+        active_policy = default_policy
+        if data.commercial_policy_id:
+            active_policy = self.db.query(CommercialPolicy).filter(CommercialPolicy.id == data.commercial_policy_id).first() or default_policy
+
+        perc_comissao_val = data.perc_comissao
+        perc_despesa_op_val = data.perc_despesa_operacional
+        tipo_comiss_val = data.tipo_comissionamento
+        perc_dsr_val = data.perc_dsr
+        perc_fgts_val = data.perc_fgts
+        perc_inss_val = data.perc_inss
+        perc_demais_val = data.perc_demais_incidencias
+        taxa_manut_anual_val = data.taxa_manutencao_anual
+
+        if active_policy:
+            if perc_comissao_val == 0.0 or perc_comissao_val is None:
+                perc_comissao_val = active_policy.comissao_percentual
+            if perc_despesa_op_val == 0.0 or perc_despesa_op_val is None:
+                perc_despesa_op_val = active_policy.despesa_operacional_percentual
+            if tipo_comiss_val == "TRADICIONAL" or not tipo_comiss_val:
+                tipo_comiss_val = active_policy.tipo_comissionamento or "TRADICIONAL"
+            if perc_dsr_val == 0.0 or perc_dsr_val is None:
+                perc_dsr_val = active_policy.dsr_percentual
+            if perc_fgts_val == 0.0 or perc_fgts_val is None:
+                perc_fgts_val = active_policy.fgts_percentual
+            if perc_inss_val == 0.0 or perc_inss_val is None:
+                perc_inss_val = active_policy.inss_percentual
+            if perc_demais_val == 0.0 or perc_demais_val is None:
+                perc_demais_val = active_policy.demais_incidencias_percentual
+            if (taxa_manut_anual_val == 0.0 or taxa_manut_anual_val is None) and active_policy.manutencao_ano_percentual:
+                taxa_manut_anual_val = active_policy.manutencao_ano_percentual
+
         kit = OpportunityKit(
             tenant_id=tenant_id,
             company_id=company_id,
@@ -1466,12 +1597,12 @@ class OpportunityKitService:
             tipo_contrato=data.tipo_contrato,
             prazo_contrato_meses=data.prazo_contrato_meses,
             prazo_instalacao_meses=data.prazo_instalacao_meses,
-            fator_margem_locacao=data.fator_margem_locacao,
-            fator_margem_servicos_produtos=data.fator_margem_servicos_produtos,
-            fator_margem_instalacao=data.fator_margem_instalacao,
-            fator_margem_manutencao=data.fator_margem_manutencao,
+            fator_margem_locacao=fator_margem_locacao,
+            fator_margem_servicos_produtos=fator_margem_servicos_produtos,
+            fator_margem_instalacao=fator_margem_instalacao,
+            fator_margem_manutencao=fator_margem_manutencao,
             taxa_juros_mensal=data.taxa_juros_mensal,
-            taxa_manutencao_anual=data.taxa_manutencao_anual,
+            taxa_manutencao_anual=taxa_manut_anual_val,
             instalacao_inclusa=data.instalacao_inclusa,
             percentual_instalacao=data.percentual_instalacao,
             manutencao_inclusa=data.manutencao_inclusa,
@@ -1480,15 +1611,15 @@ class OpportunityKitService:
             qtd_meses_manutencao=data.qtd_meses_manutencao,
             perc_frete_venda=perc_frete_venda,
             perc_despesas_adm=perc_despesas_adm,
-            perc_comissao=perc_comissao,
-            tipo_comissionamento=data.tipo_comissionamento,
-            perc_dsr=data.perc_dsr,
-            perc_fgts=data.perc_fgts,
-            perc_inss=data.perc_inss,
-            perc_demais_incidencias=data.perc_demais_incidencias,
-            perc_despesa_operacional=data.perc_despesa_operacional,
+            perc_comissao=perc_comissao_val,
+            tipo_comissionamento=tipo_comiss_val,
+            perc_dsr=perc_dsr_val,
+            perc_fgts=perc_fgts_val,
+            perc_inss=perc_inss_val,
+            perc_demais_incidencias=perc_demais_val,
+            perc_despesa_operacional=perc_despesa_op_val,
             custo_monitoramento_unitario=data.custo_monitoramento_unitario,
-            fator_monitoramento=data.fator_monitoramento,
+            fator_monitoramento=fator_monitoramento,
             aliq_pis=aliq_pis,
             aliq_cofins=aliq_cofins,
             aliq_csll=aliq_csll,
@@ -1503,7 +1634,7 @@ class OpportunityKitService:
             custo_software_mensal_kit=data.custo_software_mensal_kit,
             custo_itens_acessorios_mensal_kit=data.custo_itens_acessorios_mensal_kit,
             margem_minima_desejada=data.margem_minima_desejada,
-            commercial_policy_id=data.commercial_policy_id
+            commercial_policy_id=selected_policy_id
         )
         self.db.add(kit)
         self.db.flush()
@@ -1597,6 +1728,7 @@ class OpportunityKitService:
         fin = self.calculate_financials(kit, tenant_id)
         current_margin = Decimal(str(fin["margem_kit_raw"]))
         kit.comissionamento_detalhado = fin.get("comissionamento_detalhado")
+        self._populate_kit_financial_columns(kit, fin)
         
         if kit.margem_minima_desejada is not None:
             if Decimal(str(kit.margem_minima_desejada)) > current_margin:
@@ -1613,10 +1745,11 @@ class OpportunityKitService:
         if kit.licitacao_id:
             try:
                 from src.modules.licitacoes.service import LicitacaoService
-                LicitacaoService.invalidate_licitacao_totals(self.db, kit.licitacao_id)
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
             except Exception:
                 pass
         fin = self.calculate_financials(kit, tenant_id)
+        self._populate_kit_financial_columns(kit, fin)
         kit.summary = fin["summary"]
         kit.item_summaries = fin["item_summaries"]
         return kit
@@ -1755,10 +1888,19 @@ class OpportunityKitService:
             ))
 
         self.db.flush()
+        fin = self.calculate_financials(new_kit, tenant_id)
+        self._populate_kit_financial_columns(new_kit, fin)
         self.db.commit()
         self.db.refresh(new_kit)
+        if new_kit.licitacao_id:
+            try:
+                from src.modules.licitacoes.service import LicitacaoService
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, new_kit.licitacao_id)
+            except Exception:
+                pass
 
         fin = self.calculate_financials(new_kit, tenant_id)
+        self._populate_kit_financial_columns(new_kit, fin)
         new_kit.summary = fin["summary"]
         new_kit.item_summaries = fin["item_summaries"]
         return new_kit
@@ -1917,6 +2059,7 @@ class OpportunityKitService:
         fin = self.calculate_financials(kit, tenant_id)
         current_margin = Decimal(str(fin["margem_kit_raw"]))
         kit.comissionamento_detalhado = fin.get("comissionamento_detalhado")
+        self._populate_kit_financial_columns(kit, fin)
         
         if kit.margem_minima_desejada is not None:
             if Decimal(str(kit.margem_minima_desejada)) > current_margin:
@@ -1937,10 +2080,11 @@ class OpportunityKitService:
         if kit.licitacao_id:
             try:
                 from src.modules.licitacoes.service import LicitacaoService
-                LicitacaoService.invalidate_licitacao_totals(self.db, kit.licitacao_id)
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, kit.licitacao_id)
             except Exception:
                 pass
         fin = self.calculate_financials(kit, tenant_id)
+        self._populate_kit_financial_columns(kit, fin)
         kit.summary = fin["summary"]
         kit.item_summaries = fin["item_summaries"]
         return kit
@@ -2004,7 +2148,7 @@ class OpportunityKitService:
                     f"{user_name} excluiu o kit {nome_kit}."
                 )
                 self.db.commit()
-                LicitacaoService.invalidate_licitacao_totals(self.db, licitacao_id)
+                LicitacaoService.recalculate_licitacao(self.db, tenant_id, licitacao_id)
             except Exception:
                 pass
 

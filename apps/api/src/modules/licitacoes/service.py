@@ -3,6 +3,12 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from decimal import Decimal
+import io
+import re
+import csv
+import unicodedata
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi import HTTPException
 
 from .models import (
@@ -100,18 +106,36 @@ class LicitacaoService:
             return licitacao
         kit_service = OpportunityKitService(db)
         
+        licitacao_venda_total = Decimal("0.0")
         licitacao_custo_total = Decimal("0.0")
         licitacao_lucro_estimado = Decimal("0.0")
+        licitacao_valor_total_estimado = Decimal("0.0")
         
+        import re
+        def natural_codigo_key(item):
+            code_str = str(getattr(item, 'codigo', '') or '')
+            return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', code_str)]
+
+        licitacao.lotes.sort(key=lambda l: l.created_at or datetime.min)
+        for lote in licitacao.lotes:
+            lote.items.sort(key=natural_codigo_key)
+
         for lote in licitacao.lotes:
             lote_venda_total = Decimal("0.0")
             lote_custo_total = Decimal("0.0")
             lote_lucro_estimado = Decimal("0.0")
+            lote_valor_total_estimado = Decimal("0.0")
             
             for item in lote.items:
                 item_venda_total = Decimal("0.0")
                 item_custo_total = Decimal("0.0")
                 item_lucro_estimado = Decimal("0.0")
+                
+                # Calculate and ensure valor_total_estimado
+                item_val_unit_est = item.valor_unitario_estimado or Decimal("0.0")
+                item_qty_total = item.quantidade_total if item.quantidade_total is not None else item.quantidade
+                item.valor_total_estimado = round(item_val_unit_est * Decimal(str(item_qty_total or 1)), 2)
+                lote_valor_total_estimado += item.valor_total_estimado
                 
                 for kit in item.kits:
                     v_t, c_t, l_e = LicitacaoService._calculate_kit_financials(kit, tenant_id, kit_service)
@@ -138,14 +162,23 @@ class LicitacaoService:
                 
             lote.venda_total = round(lote_venda_total, 2)
             lote.custo_total = round(lote_custo_total, 2)
+            lote.valor_total_estimado = round(lote_valor_total_estimado, 2)
             lote.lucro_estimado = round(lote_lucro_estimado, 2)
             lote.margem_geral = round((lote_lucro_estimado / lote_venda_total * Decimal("100.0")) if lote_venda_total > 0 else Decimal("0.0"), 2)
             
+            licitacao_venda_total += lote_venda_total
             licitacao_custo_total += lote_custo_total
             licitacao_lucro_estimado += lote_lucro_estimado
+            licitacao_valor_total_estimado += lote_valor_total_estimado
             
+        licitacao.valor_total_venda = round(licitacao_venda_total, 2)
+        licitacao.valor_total_estimado = round(licitacao_valor_total_estimado, 2)
         licitacao.custo_total = round(licitacao_custo_total, 2)
         licitacao.lucro_estimado = round(licitacao_lucro_estimado, 2)
+        if licitacao_venda_total > 0:
+            licitacao.margem_ponderada_global = round((licitacao_lucro_estimado / licitacao_venda_total) * Decimal("100.0"), 2)
+        else:
+            licitacao.margem_ponderada_global = Decimal("0.0")
         
         return licitacao
 
@@ -154,49 +187,30 @@ class LicitacaoService:
         if not item:
             return item
             
-        # In-memory mapping from physical columns for O(1) fetch
+        kit_service = OpportunityKitService(db)
+        item_venda_total = Decimal("0.0")
+        item_custo_total = Decimal("0.0")
+        item_lucro_estimado = Decimal("0.0")
+        
         for kit in item.kits:
-            venda_unit = kit.venda_unitario or Decimal("0.0")
-            prazo = kit.prazo_contrato_meses or 1
-            qty_kits = kit.quantidade_kits or 1
+            v_t, c_t, l_e = LicitacaoService._calculate_kit_financials(kit, tenant_id, kit_service)
+            item_venda_total += v_t
+            item_custo_total += c_t
+            item_lucro_estimado += l_e
             
-            valor_mensal = (
-                (venda_unit / Decimal(str(prazo)))
-                if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
-                else venda_unit
-            )
+        item.venda_total = round(item_venda_total, 2)
+        item.custo_total = round(item_custo_total, 2)
+        item.lucro_estimado = round(item_lucro_estimado, 2)
+        item.margem_geral = round((item_lucro_estimado / item_venda_total * Decimal("100.0")) if item_venda_total > 0 else Decimal("0.0"), 2)
+        
+        item_qty = Decimal(str(item.quantidade or 1))
+        if item.tipo_fornecimento == "Unitário" and item_qty > 0:
+            item.venda_unitario = round(item_venda_total / item_qty, 2)
+            item.custo_unitario = round(item_custo_total / item_qty, 2)
+        else:
+            item.venda_unitario = Decimal("0.0")
+            item.custo_unitario = Decimal("0.0")
             
-            lucro_est = kit.lucro_estimado or Decimal("0.0")
-            lucro_mensal = (
-                (lucro_est / Decimal(str(qty_kits)) / Decimal(str(prazo)))
-                if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
-                else (lucro_est / Decimal(str(qty_kits)))
-            )
-
-            kit.summary = {
-                "venda_total": kit.venda_total or Decimal("0.0"),
-                "custo_total": kit.custo_total or Decimal("0.0"),
-                "lucro_estimado": kit.lucro_estimado or Decimal("0.0"),
-                "margem_geral": kit.margem_geral or Decimal("0.0"),
-                "venda_unitario": venda_unit,
-                "custo_unitario": kit.custo_unitario or Decimal("0.0"),
-                "custo_aquisicao_kit": kit.custo_unitario or Decimal("0.0"),
-                "custo_aquisicao_total": kit.custo_total or Decimal("0.0"),
-                "valor_mensal_kit": valor_mensal,
-                "lucro_mensal_kit": lucro_mensal,
-                "margem_kit": kit.margem_geral or Decimal("0.0"),
-                "vlr_instal_calc": Decimal("0.0"),
-                "valor_impostos": Decimal("0.0"),
-                "total_ipi_kit": Decimal("0.0"),
-                "total_st_kit": Decimal("0.0"),
-                "total_difal_kit": Decimal("0.0"),
-                "vlt_frete_venda": Decimal("0.0"),
-                "vlt_despesas_adm": Decimal("0.0"),
-                "vlt_comissao": Decimal("0.0"),
-                "tipo_contrato": kit.tipo_contrato,
-                "quantidade_kits": kit.quantidade_kits,
-                "prazo_contrato_meses": kit.prazo_contrato_meses
-            }
         return item
 
     @staticmethod
@@ -209,52 +223,7 @@ class LicitacaoService:
         if not licitacao:
             raise HTTPException(status_code=404, detail="Licitação não encontrada")
             
-        # Populate minimal kit summaries in-memory from physical columns for frontend compatibility
-        for lote in licitacao.lotes:
-            for item in lote.items:
-                for kit in item.kits:
-                    venda_unit = kit.venda_unitario or Decimal("0.0")
-                    prazo = kit.prazo_contrato_meses or 1
-                    qty_kits = kit.quantidade_kits or 1
-                    
-                    valor_mensal = (
-                        (venda_unit / Decimal(str(prazo)))
-                        if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
-                        else venda_unit
-                    )
-                    
-                    lucro_est = kit.lucro_estimado or Decimal("0.0")
-                    lucro_mensal = (
-                        (lucro_est / Decimal(str(qty_kits)) / Decimal(str(prazo)))
-                        if (kit.tipo_contrato not in ["VENDA_EQUIPAMENTOS", "INSTALACAO"] and prazo > 0)
-                        else (lucro_est / Decimal(str(qty_kits)))
-                    )
-
-                    kit.summary = {
-                        "venda_total": kit.venda_total or Decimal("0.0"),
-                        "custo_total": kit.custo_total or Decimal("0.0"),
-                        "lucro_estimado": kit.lucro_estimado or Decimal("0.0"),
-                        "margem_geral": kit.margem_geral or Decimal("0.0"),
-                        "venda_unitario": venda_unit,
-                        "custo_unitario": kit.custo_unitario or Decimal("0.0"),
-                        "custo_aquisicao_kit": kit.custo_unitario or Decimal("0.0"),
-                        "custo_aquisicao_total": kit.custo_total or Decimal("0.0"),
-                        "valor_mensal_kit": valor_mensal,
-                        "lucro_mensal_kit": lucro_mensal,
-                        "margem_kit": kit.margem_geral or Decimal("0.0"),
-                        "vlr_instal_calc": Decimal("0.0"),
-                        "valor_impostos": Decimal("0.0"),
-                        "total_ipi_kit": Decimal("0.0"),
-                        "total_st_kit": Decimal("0.0"),
-                        "total_difal_kit": Decimal("0.0"),
-                        "vlt_frete_venda": Decimal("0.0"),
-                        "vlt_despesas_adm": Decimal("0.0"),
-                        "vlt_comissao": Decimal("0.0"),
-                        "tipo_contrato": kit.tipo_contrato,
-                        "quantidade_kits": kit.quantidade_kits,
-                        "prazo_contrato_meses": kit.prazo_contrato_meses
-                    }
-        return licitacao
+        return LicitacaoService.populate_kits_financials(db, tenant_id, licitacao)
 
     @staticmethod
     def create_licitacao(db: Session, tenant_id: str, company_id: str, data: LicitacaoCreate, current_user: User = None) -> Licitacao:
@@ -292,6 +261,9 @@ class LicitacaoService:
                 else:
                     qty_total = item_data.quantidade
 
+                val_unit_est = item_data.valor_unitario_estimado or Decimal("0.0")
+                val_tot_est = round(val_unit_est * Decimal(str(qty_total or 1)), 2)
+
                 item = LicitacaoItem(
                     lote_id=lote.id,
                     codigo=item_data.codigo,
@@ -300,7 +272,9 @@ class LicitacaoService:
                     quantidade=item_data.quantidade,
                     tipo_fornecimento=item_data.tipo_fornecimento,
                     total_meses=item_data.total_meses,
-                    quantidade_total=qty_total
+                    quantidade_total=qty_total,
+                    valor_unitario_estimado=val_unit_est,
+                    valor_total_estimado=val_tot_est
                 )
                 db.add(item)
 
@@ -1890,5 +1864,338 @@ class LicitacaoService:
             "lucro_ebitda": round(lucro_ebitda, 2),
             "margem_liquida": round(margem_liquida, 2)
         }
+
+    @staticmethod
+    def generate_items_template_excel() -> bytes:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Itens_Edital"
+
+        headers = ["Item", "Nome do Item", "Quantidade", "Valor Estimado Unitario"]
+        ws.append(headers)
+
+        # Style header row
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+        thin_border = Border(
+            left=Side(style='thin', color='CBD5E1'),
+            right=Side(style='thin', color='CBD5E1'),
+            top=Side(style='thin', color='CBD5E1'),
+            bottom=Side(style='thin', color='CBD5E1')
+        )
+
+        for col_idx in range(1, 5):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = thin_border
+
+        # Example rows
+        examples = [
+            [1, "CÂMERA BULLET VIP 3430 B IA INTELBRAS OU EQUIVALENTE", 48, 2000.00],
+            [2, "SWITCH 24 PORTAS POE GIGABIT GERENCIÁVEL", 4, 3500.50],
+            [3, "CABO DE REDE CAT5E U/UTP CMX (ROLO 305M)", 10, 0.00],
+        ]
+        for row in examples:
+            ws.append(row)
+
+        # Set column widths
+        ws.column_dimensions["A"].width = 12
+        ws.column_dimensions["B"].width = 55
+        ws.column_dimensions["C"].width = 16
+        ws.column_dimensions["D"].width = 25
+
+        # Format rows 2..4
+        for row_idx in range(2, len(examples) + 2):
+            for col_idx in range(1, 5):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.font = Font(name="Arial", size=10)
+                cell.border = thin_border
+                if col_idx == 1:
+                    cell.alignment = Alignment(horizontal="center")
+                elif col_idx in [3, 4]:
+                    cell.alignment = Alignment(horizontal="right")
+                    if col_idx == 4:
+                        cell.number_format = 'R$ #,##0.00'
+
+        output = io.BytesIO()
+        wb.save(output)
+        return output.getvalue()
+
+    @staticmethod
+    def _clean_header_text(header: str) -> str:
+        if not header:
+            return ""
+        norm = unicodedata.normalize('NFKD', str(header)).encode('ASCII', 'ignore').decode('utf-8')
+        clean = re.sub(r'[^a-zA-Z0-9]', ' ', norm).lower().strip()
+        return re.sub(r'\s+', ' ', clean)
+
+    @staticmethod
+    def _parse_number(val) -> float:
+        if val is None or val == "":
+            return 0.0
+        if isinstance(val, (int, float, Decimal)):
+            return float(val)
+        val_str = str(val).strip()
+        # Remove currency symbols and non-numeric except , and .
+        val_str = re.sub(r'[^\d,\.-]', '', val_str)
+        if not val_str:
+            return 0.0
+        # If contains both '.' and ',' (e.g. 1.234,56)
+        if '.' in val_str and ',' in val_str:
+            val_str = val_str.replace('.', '').replace(',', '.')
+        elif ',' in val_str:
+            val_str = val_str.replace(',', '.')
+        try:
+            return float(val_str)
+        except (ValueError, TypeError):
+            return 0.0
+
+    @staticmethod
+    def _parse_codigo_item(val, fallback_idx: int) -> str:
+        if val is None or val == "":
+            return str(fallback_idx)
+        if isinstance(val, (int, float)):
+            return str(int(val))
+        val_str = str(val).strip()
+        # Extract digits: if "01" -> "1", if "Item 02" -> "2"
+        digits = re.findall(r'\d+', val_str)
+        if digits:
+            return str(int(digits[0]))
+        return val_str or str(fallback_idx)
+
+    @staticmethod
+    def parse_items_spreadsheet(file_bytes: bytes, filename: str, existing_item_codigos: List[str] = None) -> dict:
+        existing_codigos_set = set(str(c).strip() for c in (existing_item_codigos or []))
+        rows_data = []
+        filename_lower = filename.lower()
+
+        if filename_lower.endswith(('.xlsx', '.xls')):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+                ws = wb.active
+                for row in ws.iter_rows(values_only=True):
+                    if any(cell is not None and str(cell).strip() != "" for cell in row):
+                        rows_data.append([cell if cell is not None else "" for cell in row])
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo Excel: {str(e)}")
+        elif filename_lower.endswith('.csv'):
+            try:
+                csv_text = file_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                csv_text = file_bytes.decode('iso-8859-1', errors='ignore')
+            # Detect delimiter
+            first_line = csv_text.split('\n')[0] if csv_text else ''
+            delimiter = ';' if ';' in first_line else ','
+            reader = csv.reader(io.StringIO(csv_text), delimiter=delimiter)
+            for row in reader:
+                if any(cell.strip() for cell in row):
+                    rows_data.append(row)
+        else:
+            raise HTTPException(status_code=400, detail="Formato de arquivo não suportado. Envie um arquivo .xlsx, .xls ou .csv.")
+
+        if not rows_data:
+            raise HTTPException(status_code=400, detail="A planilha está vazia ou não contém dados legíveis.")
+
+        # Find header row
+        header_row_idx = -1
+        col_map = {"codigo": -1, "nome": -1, "quantidade": -1, "valor_unitario_estimado": -1}
+
+        for idx, row in enumerate(rows_data[:10]):
+            cleaned_row = [LicitacaoService._clean_header_text(c) for c in row]
+            for col_i, h in enumerate(cleaned_row):
+                if any(k in h for k in ["item", "codigo", "n item", "numero item", "cod item", "n"]) and col_map["codigo"] == -1:
+                    col_map["codigo"] = col_i
+                elif any(k in h for k in ["nome do item", "descricao", "especificacao", "produto", "objeto", "nome", "item nome"]) and col_map["nome"] == -1:
+                    col_map["nome"] = col_i
+                elif any(k in h for k in ["quantidade", "qtd", "quant", "quantidade total"]) and col_map["quantidade"] == -1:
+                    col_map["quantidade"] = col_i
+                elif any(k in h for k in ["valor estimado unitario", "valor estimado", "vl estimado", "unitario estimado", "vlr unit estimado", "preco estimado", "valor unitario estimado", "valor unitario", "valor unit", "vl unit", "estimado"]) and col_map["valor_unitario_estimado"] == -1:
+                    col_map["valor_unitario_estimado"] = col_i
+
+            # If at least 'nome' or ('codigo' and 'quantidade') matched, consider it header
+            if col_map["nome"] != -1 or (col_map["codigo"] != -1 and col_map["quantidade"] != -1):
+                header_row_idx = idx
+                break
+
+        # If no header was found, use default 0..3 indices
+        if header_row_idx == -1:
+            header_row_idx = 0
+            col_map = {"codigo": 0, "nome": 1, "quantidade": 2, "valor_unitario_estimado": 3}
+        else:
+            # Fallback for unmapped columns based on header length
+            if col_map["codigo"] == -1 and len(rows_data[header_row_idx]) > 0:
+                col_map["codigo"] = 0
+            if col_map["nome"] == -1 and len(rows_data[header_row_idx]) > 1:
+                col_map["nome"] = 1
+            if col_map["quantidade"] == -1 and len(rows_data[header_row_idx]) > 2:
+                col_map["quantidade"] = 2
+            if col_map["valor_unitario_estimado"] == -1 and len(rows_data[header_row_idx]) > 3:
+                col_map["valor_unitario_estimado"] = 3
+
+        parsed_items = []
+        seen_in_file_codigos = set()
+        duplicate_count = 0
+        total_qty = Decimal("0.0")
+        total_val_unit_est = Decimal("0.0")
+
+        auto_item_idx = 1
+        for row_idx, row in enumerate(rows_data[header_row_idx + 1:], start=header_row_idx + 2):
+            if not any(c is not None and str(c).strip() != "" for c in row):
+                continue
+
+            raw_cod = row[col_map["codigo"]] if col_map["codigo"] < len(row) else ""
+            raw_nome = row[col_map["nome"]] if col_map["nome"] < len(row) else ""
+            raw_qtd = row[col_map["quantidade"]] if col_map["quantidade"] < len(row) else ""
+            raw_val_est = row[col_map["valor_unitario_estimado"]] if col_map["valor_unitario_estimado"] < len(row) else ""
+
+            nome_str = str(raw_nome or "").strip()
+            if not nome_str and not raw_cod:
+                continue
+
+            cod_str = LicitacaoService._parse_codigo_item(raw_cod, auto_item_idx)
+            auto_item_idx += 1
+
+            if not nome_str:
+                nome_str = f"Item {cod_str}"
+
+            qtd_num = LicitacaoService._parse_number(raw_qtd)
+            if qtd_num <= 0:
+                qtd_num = 1.0
+            qtd_dec = Decimal(str(round(qtd_num, 2)))
+
+            val_est_num = LicitacaoService._parse_number(raw_val_est)
+            if val_est_num <= 0:
+                val_est_num = 0.0
+            val_est_dec = Decimal(str(round(val_est_num, 2)))
+
+            is_dup_in_lote = cod_str in existing_codigos_set
+            is_dup_in_file = cod_str in seen_in_file_codigos
+            is_duplicate = is_dup_in_lote or is_dup_in_file
+
+            dup_reason = None
+            if is_dup_in_lote:
+                dup_reason = f"Código {cod_str} já existe neste lote"
+            elif is_dup_in_file:
+                dup_reason = f"Código {cod_str} repetido na planilha"
+
+            if is_duplicate:
+                duplicate_count += 1
+
+            seen_in_file_codigos.add(cod_str)
+            total_qty += qtd_dec
+            total_val_unit_est += val_est_dec
+
+            parsed_items.append({
+                "linha": row_idx,
+                "codigo": cod_str,
+                "nome": nome_str,
+                "quantidade": float(qtd_dec),
+                "valor_unitario_estimado": float(val_est_dec),
+                "is_duplicate": is_duplicate,
+                "duplicate_reason": dup_reason
+            })
+
+        if not parsed_items:
+            raise HTTPException(status_code=400, detail="Nenhum item válido foi encontrado na planilha.")
+
+        return {
+            "items": parsed_items,
+            "total_itens": len(parsed_items),
+            "total_quantidade": float(total_qty),
+            "total_valor_estimado_unitario": float(total_val_unit_est),
+            "total_duplicados": duplicate_count
+        }
+
+    @staticmethod
+    def import_items_to_lote(
+        db: Session,
+        tenant_id: str,
+        company_id: str,
+        licitacao_id: UUID,
+        lote_id: UUID,
+        items_data: List[dict],
+        tipo_fornecimento: str,
+        total_meses: Optional[int],
+        estrategia: str,
+        current_user: User
+    ) -> dict:
+        licitacao = LicitacaoService.get_licitacao_by_id(db, tenant_id, licitacao_id, company_id)
+        if licitacao.status in ["Ganha", "Perdida", "Cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta licitação está finalizada/cancelada e não pode ser editada.")
+
+        lote = db.query(LicitacaoLote).filter(LicitacaoLote.id == lote_id, LicitacaoLote.licitacao_id == licitacao_id).first()
+        if not lote:
+            raise HTTPException(status_code=404, detail="Lote não encontrado.")
+
+        if not items_data:
+            raise HTTPException(status_code=400, detail="A lista de itens para importação está vazia.")
+
+        if tipo_fornecimento == "Mensal" and (not total_meses or total_meses <= 0):
+            total_meses = 12
+
+        if estrategia == "SUBSTITUIR":
+            # Check if existing items have kits
+            existing_items = db.query(LicitacaoItem).filter(LicitacaoItem.lote_id == lote_id).all()
+            for existing_item in existing_items:
+                has_kits = db.query(OpportunityKit).filter(OpportunityKit.licitacao_item_id == existing_item.id).first() is not None
+                if has_kits:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Não é possível substituir os itens deste lote pois o Item {existing_item.codigo} ({existing_item.nome}) já possui Kits de Oportunidade vinculados."
+                    )
+            # Delete items in lote
+            for existing_item in existing_items:
+                db.delete(existing_item)
+            db.flush()
+
+        created_items: List[LicitacaoItem] = []
+        for item_dict in items_data:
+            codigo = str(item_dict.get("codigo") or "").strip()
+            nome = str(item_dict.get("nome") or "").strip()
+            if not nome:
+                continue
+
+            qtd_dec = Decimal(str(item_dict.get("quantidade", 1) or 1))
+            val_unit_est_dec = Decimal(str(item_dict.get("valor_unitario_estimado", 0) or 0))
+
+            qty_total = qtd_dec
+            if tipo_fornecimento == "Mensal":
+                qty_total = qtd_dec * Decimal(str(total_meses or 1))
+
+            val_tot_est = round(val_unit_est_dec * qty_total, 2)
+
+            new_item = LicitacaoItem(
+                lote_id=lote_id,
+                codigo=codigo,
+                nome=nome,
+                quantidade=qtd_dec,
+                tipo_fornecimento=tipo_fornecimento,
+                total_meses=total_meses if tipo_fornecimento == "Mensal" else None,
+                quantidade_total=qty_total,
+                valor_unitario_estimado=val_unit_est_dec,
+                valor_total_estimado=val_tot_est
+            )
+            db.add(new_item)
+            created_items.append(new_item)
+
+        # Register history
+        LicitacaoService.register_history(
+            db,
+            licitacao_id,
+            tenant_id,
+            str(current_user.id),
+            f"{current_user.name} importou {len(created_items)} itens via planilha no Lote {lote.numero} ({tipo_fornecimento})."
+        )
+
+        db.commit()
+        for item in created_items:
+            db.refresh(item)
+
+        LicitacaoService.invalidate_licitacao_totals(db, licitacao_id)
+
+        return created_items
+
 
 

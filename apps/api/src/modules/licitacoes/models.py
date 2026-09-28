@@ -50,7 +50,7 @@ class Licitacao(Base):
     company = relationship("Company")
     customer = relationship("Customer")
     po = relationship("User", foreign_keys=[po_id])
-    lotes = relationship("LicitacaoLote", back_populates="licitacao", cascade="all, delete-orphan")
+    lotes = relationship("LicitacaoLote", back_populates="licitacao", cascade="all, delete-orphan", order_by="LicitacaoLote.created_at.asc()")
     purchase_budgets = relationship("PurchaseBudget", back_populates="licitacao", foreign_keys="[PurchaseBudget.licitacao_id]")
     kits = relationship("OpportunityKit", back_populates="licitacao", foreign_keys="[OpportunityKit.licitacao_id]")
     analistas = relationship("LicitacaoAnalista", back_populates="licitacao", cascade="all, delete-orphan")
@@ -80,6 +80,7 @@ class LicitacaoLote(Base):
     
     custo_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
     venda_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    valor_total_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
     lucro_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
     margem_geral: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False, default=0.0)
     
@@ -88,7 +89,7 @@ class LicitacaoLote(Base):
 
     # Relationships
     licitacao = relationship("Licitacao", back_populates="lotes")
-    items = relationship("LicitacaoItem", back_populates="lote", cascade="all, delete-orphan")
+    items = relationship("LicitacaoItem", back_populates="lote", cascade="all, delete-orphan", order_by="LicitacaoItem.codigo.asc()")
 
 
 class LicitacaoItem(Base):
@@ -104,6 +105,9 @@ class LicitacaoItem(Base):
     tipo_fornecimento: Mapped[str] = mapped_column(String(50), nullable=False, default="Unitário")
     total_meses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     quantidade_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=1.0)
+    
+    valor_unitario_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
+    valor_total_estimado: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
     
     custo_unitario: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)
     custo_total: Mapped[Decimal] = mapped_column(Numeric(15, 4), nullable=False, default=0.0)

@@ -27,6 +27,7 @@ export function BudgetReconciliationModal({
   const [isLinking, setIsLinking] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [isBatchCreating, setIsBatchCreating] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,8 +36,6 @@ export function BudgetReconciliationModal({
       setSelectedProduct(null);
     }
   }, [isOpen]);
-
-
 
   if (!isOpen || notFoundItems.length === 0) return null;
 
@@ -116,8 +115,6 @@ export function BudgetReconciliationModal({
       setIsQuickCreateOpen(false);
     }
   };
-
-  const [isBatchCreating, setIsBatchCreating] = useState(false);
 
   const handleBatchCreate = async () => {
     const remainingItems = notFoundItems.slice(currentIndex);
