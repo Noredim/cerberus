@@ -2063,14 +2063,15 @@ def check_is_approver(db: Session, user_id: str, tenant_id: str, company_id: Any
             pass
 
     # 1. Check system roles first (ADMIN, DIRETORIA or ENGENHARIA_PRECO on UserRole)
-    user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
+    user_roles = db.query(UserRole).filter(UserRole.user_id == str(user_id)).all()
     for ur in user_roles:
-        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA, UserRoleEnum.ENGENHARIA_PRECO):
-            return True, ur.role.value
+        r_str = (ur.role.value if hasattr(ur.role, 'value') else str(ur.role)).upper()
+        if r_str in ("ADMIN", "DIRETORIA", "ENGENHARIA_PRECO") or ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA, UserRoleEnum.ENGENHARIA_PRECO):
+            return True, r_str
 
     # 2. Check Professional role in active company (GERENTE or DIRETOR)
     professional = db.query(Professional).filter(
-        Professional.user_id == user_id,
+        Professional.user_id == str(user_id),
         Professional.company_id == company_id,
         Professional.tenant_id == tenant_id
     ).first()
@@ -2093,9 +2094,10 @@ def check_is_manager_or_admin(db: Session, user_id: str, tenant_id: str, company
         except ValueError:
             pass
 
-    user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
+    user_roles = db.query(UserRole).filter(UserRole.user_id == str(user_id)).all()
     for ur in user_roles:
-        if ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA):
+        r_str = (ur.role.value if hasattr(ur.role, 'value') else str(ur.role)).upper()
+        if r_str in ("ADMIN", "DIRETORIA") or ur.role in (UserRoleEnum.ADMIN, UserRoleEnum.DIRETORIA):
             return True
 
     professional = db.query(Professional).filter(

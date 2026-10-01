@@ -3332,13 +3332,20 @@ export function SalesBudgetForm() {
     return list;
   }, [rentalItems, vendaKits, prazoContratoMeses]);
 
-  const handleSaveGroupings = (newGroupings: ProposalKitGroup[]) => {
+  const handleSaveGroupings = async (newGroupings: ProposalKitGroup[]) => {
     setProposalCustomGroupings(newGroupings);
-    setHasUnsavedChanges(true);
     if (id) {
-      api.patch(`/sales-budgets/${id}/header`, {
-        proposal_custom_groupings: newGroupings,
-      }).catch(err => console.error('Erro ao sincronizar agrupamentos:', err));
+      try {
+        await api.patch(`/sales-budgets/${id}/header`, {
+          proposal_custom_groupings: newGroupings,
+        });
+        setHasUnsavedChanges(false);
+      } catch (err: any) {
+        console.error('Erro ao sincronizar agrupamentos:', err);
+        alert('Erro ao sincronizar agrupamentos: ' + (err.response?.data?.detail || err.message));
+      }
+    } else {
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -3350,9 +3357,11 @@ export function SalesBudgetForm() {
       await api.patch(`/sales-budgets/${id}/header`, {
         proposal_custom_groupings: newGroupings,
       });
+      setHasUnsavedChanges(false);
       await handleGenerateCommercialProposal();
     } catch (err: any) {
       console.error('Erro ao salvar agrupamentos e gerar proposta:', err);
+      alert('Erro ao salvar agrupamentos e gerar proposta: ' + (err.response?.data?.detail || err.message));
     } finally {
       setGeneratingProposal(false);
     }

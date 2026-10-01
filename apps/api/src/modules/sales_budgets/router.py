@@ -799,6 +799,7 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "perc_demais_incidencias": float(budget.perc_demais_incidencias or 0),
         "perc_despesa_operacional": float(budget.perc_despesa_operacional or 0),
         "responsavel_ids": [r.user_id for r in budget.responsaveis],
+        "proposal_custom_groupings": budget.proposal_custom_groupings or [],
         "items": items,
         "rental_items": rental_items,
         "versao": budget.versao,

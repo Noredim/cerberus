@@ -54,12 +54,34 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
   const [vendedorEspecificoId, setVendedorEspecificoId] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
+  // Equipes vinculadas ao usuário atual
+  const userTeams = salesTeams.filter(t =>
+    t.members?.some((m: any) => m.user_id === user?.id)
+  );
+
+  const effectiveDistribuicao = isRestrictedToDirectLead ? 'DIRETA_VENDEDOR' : tipoDistribuicao;
+
+  // Quando for Meu Lead Direto (ou restrito), exibir apenas as equipes relacionadas ao profissional/usuário
+  const displayedTeams = effectiveDistribuicao === 'DIRETA_VENDEDOR'
+    ? (userTeams.length > 0 ? userTeams : (isAdmin || isLeadAdmin ? salesTeams : []))
+    : salesTeams;
+
   useEffect(() => {
     if (isOpen && activeCompanyId) {
       loadSalesTeams();
       resetForm();
     }
   }, [isOpen, activeCompanyId]);
+
+  useEffect(() => {
+    if (displayedTeams.length > 0) {
+      if (!displayedTeams.some(t => t.id === salesTeamId)) {
+        setSalesTeamId(displayedTeams[0].id);
+      }
+    } else {
+      setSalesTeamId('');
+    }
+  }, [displayedTeams, salesTeamId]);
 
   useEffect(() => {
     if (salesTeamId) {
@@ -79,9 +101,6 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
       const { data } = await api.get(`/companies/${activeCompanyId}/sales-teams`);
       const teams = data || [];
       setSalesTeams(teams);
-      if (teams.length > 0) {
-        setSalesTeamId(teams[0].id);
-      }
     } catch (err) {
       console.error('Erro ao carregar equipes de vendas:', err);
     }
@@ -286,12 +305,22 @@ export const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, o
             <select
               value={salesTeamId}
               onChange={(e) => setSalesTeamId(e.target.value)}
-              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary"
+              disabled={displayedTeams.length === 0}
+              className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:border-brand-primary disabled:opacity-60"
             >
-              {salesTeams.map(t => (
-                <option key={t.id} value={t.id}>{t.nome}</option>
-              ))}
+              {displayedTeams.length === 0 ? (
+                <option value="">Nenhuma equipe disponível para o seu usuário</option>
+              ) : (
+                displayedTeams.map(t => (
+                  <option key={t.id} value={t.id}>{t.nome}</option>
+                ))
+              )}
             </select>
+            {displayedTeams.length === 0 && (
+              <p className="text-[11px] text-rose-500 mt-1">
+                Você não está vinculado a nenhuma equipe comercial nesta empresa.
+              </p>
+            )}
           </div>
         </div>
 

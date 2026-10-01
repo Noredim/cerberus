@@ -713,7 +713,26 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
 
     kit_service = OpportunityKitService(db)
     kits = db.query(OpportunityKit).filter_by(sales_budget_id=budget.id).all() if budget else []
-    custom_groupings = getattr(budget, 'proposal_custom_groupings', []) or []
+    # Incluir kits referenciados em rental_items e items caso nao estejam na lista direta
+    if budget:
+        for rit in (budget.rental_items or []):
+            if rit.opportunity_kit and rit.opportunity_kit not in kits:
+                kits.append(rit.opportunity_kit)
+        for it in (budget.items or []):
+            if it.opportunity_kit and it.opportunity_kit not in kits:
+                kits.append(it.opportunity_kit)
+
+    raw_groupings = getattr(budget, 'proposal_custom_groupings', []) or []
+    if isinstance(raw_groupings, str):
+        try:
+            import json
+            custom_groupings = json.loads(raw_groupings)
+        except Exception:
+            custom_groupings = []
+    elif isinstance(raw_groupings, list):
+        custom_groupings = [g if isinstance(g, dict) else (g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g)) for g in raw_groupings]
+    else:
+        custom_groupings = []
 
     # 1. Agrupar por modalidade de contrato
     venda_kits = [k for k in kits if k.tipo_contrato == "VENDA_EQUIPAMENTOS"]
@@ -1474,20 +1493,20 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
     </div>
     """
 
-    # ── SEÇÃO DE OBSERVAÇÕES ──
+    # ── SEÇÃO DE CONDIÇÕES COMERCIAIS ──
     obs_custom = budget.observacoes.strip() if (budget.observacoes and budget.observacoes.strip()) else ""
 
     observacoes_html = f"""
-    <div class="proposal-observations-block" style="margin-top: 14px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
-        <div style="background-color: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
-            Observações
+    <div class="proposal-observations-block" style="margin-top: 14px; margin-bottom: 14px; page-break-inside: avoid; break-inside: avoid; border: 1.5px solid #0f172a; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="background-color: #0f172a; color: #ffffff; padding: 7px 12px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+            Condições Comerciais
         </div>
-        <div style="padding: 10px 12px; background-color: #f8fafc; font-size: 11px; color: #334155; line-height: 1.5;">
-            <div style="margin-bottom: 6px;">
-                <strong>1.</strong> Toda a venda de material e comodato de equipamentos será feito o faturamento pelo CNPJ: <strong>00.950.381/0001-00 Stelmat Teleinformática LTDA</strong>.
+        <div style="padding: 10px 14px; background-color: #f8fafc; font-size: 10.5px; color: #0f172a; line-height: 1.55;">
+            <div style="margin-bottom: 8px; text-align: justify;">
+                <strong>1.</strong> Os produtos, equipamentos, materiais, componentes e acessórios integrantes desta proposta serão fornecidos, vendidos, faturados e cobrados pela <strong>STELMAT TELEINFORMÁTICA LTDA.</strong>, que emitirá a respectiva Nota Fiscal de Produtos – NF-e e os correspondentes boletos, PIX ou demais instrumentos de cobrança. O CLIENTE deverá efetuar diretamente à STELMAT os pagamentos referentes a tais produtos. Os serviços eventualmente integrantes da solução e executados pela <strong>STELSEG TECNOLOGIA EM MONITORAMENTO E SEGURANÇA ELETRÔNICA LTDA.</strong> serão faturados separadamente pela STELSEG, conforme sua natureza e condições previstas nesta proposta.
             </div>
-            <div>
-                <strong>2.</strong> Todo o serviço de monitoramento e serviços táticos serão faturados pelo CNPJ: <strong>43.294.119/0001-27 | Stelseg Tecnologia em Monitoramento e Segurança Eletrônica LTDA</strong>.
+            <div style="text-align: justify;">
+                <strong>2.</strong> O CLIENTE declara estar ciente e de acordo que os produtos, equipamentos, materiais e acessórios integrantes desta proposta serão fornecidos, faturados e cobrados pela <strong>STELMAT TELEINFORMÁTICA LTDA.</strong>, devendo os respectivos pagamentos ser efetuados diretamente à referida empresa.
             </div>
         </div>
     </div>
@@ -1891,6 +1910,8 @@ def render_template(db: Session, tenant_id: str, company_id: str, template_id: s
                 "secao_comodato_locacao": prop_data["locacao_html"],
                 "resumo_proposta": prop_data["resumo_html"],
                 "observacoes_proposta": prop_data["observacoes_html"],
+                "condicoes_comerciais": prop_data["observacoes_html"],
+                "secao_condicoes_comerciais": prop_data["observacoes_html"],
                 "bloco_assinaturas": prop_data["assinaturas_html"],
                 "valor_total_venda": format_currency(prop_data["total_venda"]),
                 "valor_total_instalacao": format_currency(prop_data["total_instalacao"]),

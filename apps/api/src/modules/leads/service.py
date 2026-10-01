@@ -287,6 +287,24 @@ def create_lead(db: Session, tenant_id: str, company_id: UUID, current_user: Use
     # Verify if current user is a vendor registering their own lead
     is_direct_vendor = (data.tipo_distribuicao == "DIRETA_VENDEDOR")
 
+    if data.sales_team_id:
+        team = db.query(SalesTeam).filter(
+            SalesTeam.id == data.sales_team_id,
+            SalesTeam.company_id == company_id,
+            SalesTeam.tenant_id == tenant_id,
+            SalesTeam.ativo == True
+        ).first()
+        if not team:
+            raise HTTPException(400, "Equipe de vendas inválida ou inativa nesta empresa.")
+
+        if is_direct_vendor:
+            is_member = db.query(SalesTeamMember).filter(
+                SalesTeamMember.sales_team_id == data.sales_team_id,
+                SalesTeamMember.user_id == current_user.id
+            ).first() is not None
+            if not is_member and not (is_admin or is_lead_adm):
+                raise HTTPException(400, "Você só pode cadastrar leads diretos em equipes de vendas das quais você é membro.")
+
     vendedor_atribuido_id = None
     vendedor_responsavel_id = None
     status = "NOVO"
