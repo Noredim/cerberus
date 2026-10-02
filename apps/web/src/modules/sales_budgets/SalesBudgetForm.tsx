@@ -1713,6 +1713,32 @@ export function SalesBudgetForm() {
     setVendaKits(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const handleMoveVendaKit = (index: number, direction: 'up' | 'down') => {
+    if (isReadonly) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= vendaKits.length) return;
+    setHasUnsavedChanges(true);
+    setVendaKits(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return updated;
+    });
+  };
+
+  const handleMoveRentalItem = (index: number, direction: 'up' | 'down') => {
+    if (isReadonly) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= rentalItems.length) return;
+    setHasUnsavedChanges(true);
+    setRentalItems(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return updated;
+    });
+  };
+
   const handleDeletePurchaseBudget = async (pbId: string) => {
     if (!window.confirm("Deseja realmente excluir este orçamento de compra?")) return;
     try {
@@ -4769,9 +4795,10 @@ export function SalesBudgetForm() {
           ) : (
             <div className="overflow-x-auto overflow-y-visible">
               <table className="w-full text-left border-collapse min-w-[1250px]">
-                <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                <thead className="bg-bg-subtle text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
                   <tr>
-                    <th className="px-1.5 py-3 whitespace-nowrap pl-4">Nome do Kit</th>
+                    <th className="px-1 py-3 whitespace-nowrap text-center w-14 pl-3">Ord.</th>
+                    <th className="px-1.5 py-3 whitespace-nowrap pl-2">Nome do Kit</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-center w-14">Qtd</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo de Aquisição (Equipamentos e Instalação)">Custo Aq. (Equip/Inst)</th>
                     <th className="px-1.5 py-3 whitespace-nowrap text-right" title="Custo Total de Manutenção Projetada">Custo Manut.</th>
@@ -4826,8 +4853,35 @@ export function SalesBudgetForm() {
 
                     return (
                       <tr key={idx} className="group hover:bg-bg-deep/50 transition-colors">
+                        {/* Ordenação */}
+                        <td className="px-1 py-2 whitespace-nowrap text-center pl-3">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span className="text-[10px] font-bold text-text-muted mr-1">{idx + 1}º</span>
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                disabled={isReadonly || idx === 0}
+                                onClick={() => handleMoveVendaKit(idx, 'up')}
+                                className="p-0.5 rounded hover:bg-bg-deep text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                title="Mover para cima"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isReadonly || idx === vendaKits.length - 1}
+                                onClick={() => handleMoveVendaKit(idx, 'down')}
+                                className="p-0.5 rounded hover:bg-bg-deep text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                title="Mover para baixo"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+
                         {/* Nome do Kit */}
-                        <td className="px-1.5 py-3 whitespace-nowrap max-w-[220px] pl-4">
+                        <td className="px-1.5 py-3 whitespace-nowrap max-w-[220px] pl-2">
                           <div className="flex flex-col truncate">
                             <span className="font-semibold text-text-primary truncate">{item.nome_kit}</span>
                             <div className="flex items-center gap-1 mt-0.5">
@@ -5755,7 +5809,8 @@ export function SalesBudgetForm() {
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr className="border-b border-border-subtle">
+                  <tr className="border-b border-border-subtle bg-bg-subtle">
+                    <th className="px-1 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-14 pl-2">Ord.</th>
                     <th className="px-1.5 py-2 text-left font-semibold text-text-muted uppercase tracking-wider">Nome do Kit</th>
                     <th className="px-1.5 py-2 text-center font-semibold text-text-muted uppercase tracking-wider w-28">Qtd</th>
                     <th className="px-1.5 py-2 text-right font-semibold text-text-muted uppercase tracking-wider" title="Investimento Total">Custo Aquisição</th>
@@ -5776,6 +5831,33 @@ export function SalesBudgetForm() {
                   {rentalItems.map((ri, idx) => {
                     return (
                       <tr key={ri.id || idx} className="hover:bg-bg-deep/50 transition-colors">
+                        {/* Ordenação */}
+                        <td className="px-1 py-2 whitespace-nowrap text-center pl-2">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <span className="text-[10px] font-bold text-text-muted mr-1">{idx + 1}º</span>
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                disabled={isReadonly || idx === 0}
+                                onClick={() => handleMoveRentalItem(idx, 'up')}
+                                className="p-0.5 rounded hover:bg-bg-deep text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                title="Mover para cima"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isReadonly || idx === rentalItems.length - 1}
+                                onClick={() => handleMoveRentalItem(idx, 'down')}
+                                className="p-0.5 rounded hover:bg-bg-deep text-text-muted hover:text-text-primary disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                title="Mover para baixo"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+
                         <td className="px-1.5 py-2">
                           <div className="max-w-[180px] font-medium text-text-primary flex items-center gap-2">
                             <span className="truncate" title={ri.product_nome || ''}>{ri.product_nome}</span>

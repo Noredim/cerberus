@@ -133,7 +133,7 @@ export function BudgetItemsGrid({
       </div>
       <div className="border border-border-subtle rounded-lg overflow-x-auto">
         <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
-          <thead className="bg-[#f8f9fa] dark:bg-bg-deep text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
+          <thead className="bg-bg-subtle text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border-subtle">
             <tr>
               <th className="px-4 py-3 w-[100px]">Cód. Sistema</th>
               <th className="px-4 py-3 w-[25%] min-w-[280px]">Produto</th>
