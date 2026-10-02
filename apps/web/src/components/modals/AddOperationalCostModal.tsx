@@ -284,14 +284,14 @@ export function AddOperationalCostModal({
               <div className="flex p-1 bg-border-subtle rounded-lg w-full mb-4">
                 <button
                   onClick={() => { setTipoItem('PRODUTO'); setSearchTerm(''); setResults([]); }}
-                  className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'PRODUTO' ? 'bg-white shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
+                  className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'PRODUTO' ? 'bg-surface dark:bg-bg-deep shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
                 >
                   Pesquisar Produto Existente
                 </button>
                 {!disabledOwnServices && (
                   <button
                     onClick={() => { setTipoItem('SERVICO_PROPRIO'); setSearchTerm(''); setResults([]); }}
-                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'SERVICO_PROPRIO' ? 'bg-white shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${tipoItem === 'SERVICO_PROPRIO' ? 'bg-surface dark:bg-bg-deep shadow-sm text-brand-primary' : 'text-text-muted hover:text-text-primary'}`}
                   >
                     Importar Serviço Próprio
                   </button>
@@ -306,7 +306,7 @@ export function AddOperationalCostModal({
                     ref={inputRef}
                     type="text"
                     placeholder={`Digite o nome do ${tipoItem === 'PRODUTO' ? 'produto' : 'serviço'}...`}
-                    className="w-full pl-10 pr-10 py-3 bg-white border border-border-subtle rounded-lg focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none transition-all text-text-primary text-sm shadow-sm"
+                    className="w-full pl-10 pr-10 py-3 bg-surface border border-border-subtle rounded-lg focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none transition-all text-text-primary text-sm shadow-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -328,7 +328,7 @@ export function AddOperationalCostModal({
                     <select
                       value={tipoCusto}
                       onChange={(e) => setTipoCusto(e.target.value)}
-                      className="w-full px-3 py-3 border border-border-subtle rounded-lg bg-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/20 text-text-primary"
+                      className="w-full px-3 py-3 border border-border-subtle rounded-lg bg-surface text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/20 text-text-primary"
                     >
                       {COST_TYPES.map(type => (
                         <option key={type.value} value={type.value}>{type.label}</option>
@@ -340,7 +340,7 @@ export function AddOperationalCostModal({
             </div>
 
             {/* Results Area */}
-            <div className="overflow-y-auto flex-1 bg-white p-4 min-h-[250px]">
+            <div className="overflow-y-auto flex-1 bg-bg-deep/30 p-4 min-h-[250px]">
               <div className="space-y-2">
                 {!searchTerm && results.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-text-muted">
@@ -430,7 +430,7 @@ export function AddOperationalCostModal({
                 })}
 
                 {searchTerm.length >= 2 && results.length === 0 && !isSearching && (
-                  <div className="flex flex-col items-center justify-center py-10 text-center bg-white border border-dashed border-border-subtle rounded-lg">
+                  <div className="flex flex-col items-center justify-center py-10 text-center bg-surface border border-dashed border-border-subtle rounded-lg">
                     <p className="text-text-primary font-medium mb-1">Nenhum resultado encontrado</p>
                   </div>
                 )}

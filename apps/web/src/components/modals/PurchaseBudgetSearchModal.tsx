@@ -118,7 +118,7 @@ export function PurchaseBudgetSearchModal({
         </div>
 
         {/* Search Input */}
-        <div className="p-4 border-b border-border-subtle bg-white">
+        <div className="p-4 border-b border-border-subtle bg-bg-subtle">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
             <input
@@ -149,7 +149,7 @@ export function PurchaseBudgetSearchModal({
               <p className="text-sm mt-1 opacity-70">Todos os orçamentos compatíveis já foram vinculados ou nenhum foi cadastrado.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border-subtle bg-white shadow-sm">
+            <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface shadow-sm">
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
                   <tr className="bg-bg-subtle text-text-secondary border-b border-border-subtle font-semibold">

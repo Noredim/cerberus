@@ -18,7 +18,7 @@ export function Dashboard() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 flex flex-col items-center max-w-lg text-center"
       >
-        <div className="bg-white p-6 rounded-2xl shadow-xl shadow-brand-primary/10 mb-8 border border-border-subtle">
+        <div className="bg-surface p-6 rounded-2xl shadow-xl shadow-brand-primary/10 mb-8 border border-border-subtle">
           <img 
             src="/cerberus-logo.png" 
             alt="Cerberus Logo" 

@@ -191,7 +191,7 @@ export function BudgetReconciliationModal({
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-bg-deep/30">
           
           {/* Coluna 1: Dados do Fornecedor/Arquivo */}
-          <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm flex flex-col justify-between">
+          <div className="bg-surface p-4 rounded-xl border border-border-subtle shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-2 text-text-muted text-sm font-medium mb-4 uppercase tracking-wider">
                 <Search className="w-4 h-4" />
@@ -222,13 +222,13 @@ export function BudgetReconciliationModal({
               </div>
             </div>
             
-            <p className="text-xs text-text-muted mt-4 bg-blue-50 text-blue-800 p-2 rounded border border-blue-100">
+            <p className="text-xs text-text-muted mt-4 bg-brand-primary/10 text-brand-primary p-2.5 rounded-lg border border-brand-primary/20">
               Estes dados vêm da importação do Excel. Como este código de fornecedor é desconhecido, você deve mapeá-lo ou ignorar a linha.
             </p>
           </div>
 
           {/* Coluna 2: Busca e Vínculo */}
-          <div className="flex flex-col h-[380px] bg-white p-4 rounded-xl border border-border-subtle shadow-sm">
+          <div className="flex flex-col h-[380px] bg-surface p-4 rounded-xl border border-border-subtle shadow-sm">
             <h4 className="text-sm font-semibold text-text-primary mb-4 flex items-center justify-between">
               <span>Mapear para Produto Interno</span>
             </h4>

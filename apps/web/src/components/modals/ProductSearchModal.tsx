@@ -100,7 +100,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
         </div>
 
         {/* Search Input */}
-        <div className="p-4 border-b border-border-subtle bg-white">
+        <div className="p-4 border-b border-border-subtle bg-bg-subtle">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
             <input
@@ -153,7 +153,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                       onClose();
                     }
                   }}
-                  className={`flex items-center justify-between p-4 bg-white border rounded-lg cursor-pointer transition-all group ${
+                  className={`flex items-center justify-between p-4 bg-surface border rounded-lg cursor-pointer transition-all group ${
                     isSelected 
                       ? 'border-brand-primary bg-brand-primary/5 ring-1 ring-brand-primary/20' 
                       : 'border-border-subtle hover:border-brand-primary hover:shadow-sm'
@@ -240,7 +240,7 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
             )}
 
             {searchTerm.length >= 2 && results.length === 0 && !isSearching && (
-              <div className="flex flex-col items-center justify-center py-10 text-center bg-white border border-dashed border-border-subtle rounded-lg">
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-surface border border-dashed border-border-subtle rounded-lg">
                 <p className="text-text-primary font-medium mb-1">Nenhum produto encontrado</p>
                 <p className="text-text-muted text-sm mb-4">Verifique a ortografia ou cadastre um novo produto.</p>
                 <div className="flex gap-3">

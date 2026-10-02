@@ -82,7 +82,7 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
         </div>
 
         {/* Search Input */}
-        <div className="p-4 border-b border-border-subtle bg-white">
+        <div className="p-4 border-b border-border-subtle bg-bg-subtle">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
             <input
@@ -133,7 +133,7 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
                   onSelect(kit);
                   onClose();
                 }}
-                className="flex items-center justify-between p-4 bg-white border border-border-subtle rounded-lg hover:border-brand-primary hover:shadow-sm cursor-pointer transition-all group"
+                className="flex items-center justify-between p-4 bg-surface border border-border-subtle rounded-lg hover:border-brand-primary hover:shadow-sm cursor-pointer transition-all group"
               >
                 <div className="flex flex-col overflow-hidden w-full pr-4">
                   <div className="flex items-center gap-2 mb-1">

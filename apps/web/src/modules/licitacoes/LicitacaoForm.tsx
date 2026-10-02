@@ -1078,7 +1078,7 @@ export function LicitacaoForm() {
       {/* Header Info */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => navigate('/comercial/licitacoes')} className="bg-white">
+          <Button variant="outline" onClick={() => navigate('/comercial/licitacoes')}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
           </Button>
           <div>
@@ -1089,7 +1089,7 @@ export function LicitacaoForm() {
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button variant="outline" className="bg-white" onClick={handleRecalculate}>
+          <Button variant="outline" onClick={handleRecalculate}>
             <RefreshCw className="w-4 h-4 mr-2" /> Recalcular Margem
           </Button>
           {!isLocked && (

@@ -284,7 +284,7 @@ export function BudgetForm() {
            <p className="text-text-muted text-sm ml-10">Lançamento de detalhes, impostos e negociações comerciais.</p>
         </div>
         <div className="flex gap-3 items-center ml-10 md:ml-0">
-            <Button variant="outline" onClick={() => navigate(licitacaoId ? `/comercial/licitacoes/${licitacaoId}?tab=orcamentos` : '/orcamentos-compras?tab=orcamentos')} className="bg-white">
+            <Button variant="outline" onClick={() => navigate(licitacaoId ? `/comercial/licitacoes/${licitacaoId}?tab=orcamentos` : '/orcamentos-compras?tab=orcamentos')}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar
             </Button>
@@ -500,7 +500,7 @@ export function BudgetForm() {
               <p className="text-xs text-text-muted mt-0.5">Adicione os produtos manualmente ou importe via planilha.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => {
+              <Button variant="outline" className="text-sm whitespace-nowrap" onClick={() => {
                 const link = document.createElement('a');
                 link.href = '/modelo_orcamento.xlsx';
                 link.download = 'modelo_orcamento.xlsx';
@@ -511,7 +511,7 @@ export function BudgetForm() {
                 <Download className="w-4 h-4 mr-2 text-brand-primary" />
                 Baixar Modelo Excel
               </Button>
-              <Button variant="outline" className="bg-white hover:bg-slate-50 text-sm whitespace-nowrap" onClick={() => setIsImportModalOpen(true)}>
+              <Button variant="outline" className="text-sm whitespace-nowrap" onClick={() => setIsImportModalOpen(true)}>
                 <Upload className="w-4 h-4 mr-2 text-brand-primary" />
                 Importar Planilha
               </Button>

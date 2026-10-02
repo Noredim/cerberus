@@ -667,10 +667,10 @@ export function PrintReportModal({ isOpen, onClose, analise: analiseFromProps, a
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm px-2 pt-4 pb-6 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full border border-slate-200 flex flex-col" style={{ maxWidth: '330mm' }}>
+      <div className="bg-surface rounded-2xl shadow-2xl w-full border border-border-subtle flex flex-col" style={{ maxWidth: '330mm' }}>
         {/* Modal toolbar */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
-          <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle bg-bg-subtle rounded-t-2xl">
+          <span className="text-sm font-bold text-text-primary flex items-center gap-2">
             <Printer className="w-4 h-4 text-slate-500" />
             Pré-visualização do Relatório
           </span>

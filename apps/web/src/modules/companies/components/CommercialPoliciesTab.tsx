@@ -396,7 +396,7 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                                 <input
                                                     type="number"
                                                     step="0.01"
-                                                    className="input-field w-full bg-white"
+                                                    className="input-field w-full bg-surface"
                                                     value={policy.dsr_percentual || 0}
                                                     onChange={(e) => handlePolicyChange(index, 'dsr_percentual', parseFloat(e.target.value) || 0)}
                                                     disabled={isReadOnly}
@@ -409,7 +409,7 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                                 <input
                                                     type="number"
                                                     step="0.01"
-                                                    className="input-field w-full bg-white"
+                                                    className="input-field w-full bg-surface"
                                                     value={policy.fgts_percentual || 0}
                                                     onChange={(e) => handlePolicyChange(index, 'fgts_percentual', parseFloat(e.target.value) || 0)}
                                                     disabled={isReadOnly}
@@ -422,7 +422,7 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                                 <input
                                                     type="number"
                                                     step="0.01"
-                                                    className="input-field w-full bg-white"
+                                                    className="input-field w-full bg-surface"
                                                     value={policy.inss_percentual || 0}
                                                     onChange={(e) => handlePolicyChange(index, 'inss_percentual', parseFloat(e.target.value) || 0)}
                                                     disabled={isReadOnly}
@@ -435,7 +435,7 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                                 <input
                                                     type="number"
                                                     step="0.01"
-                                                    className="input-field w-full bg-white"
+                                                    className="input-field w-full bg-surface"
                                                     value={policy.demais_incidencias_percentual || 0}
                                                     onChange={(e) => handlePolicyChange(index, 'demais_incidencias_percentual', parseFloat(e.target.value) || 0)}
                                                     disabled={isReadOnly}
@@ -537,7 +537,7 @@ export function CommercialPoliciesTab({ companyId, isReadOnly }: Props) {
                                                     type="number"
                                                     min="1"
                                                     disabled={isReadOnly}
-                                                    className="input-field w-20 bg-white"
+                                                    className="input-field w-20 bg-surface"
                                                     value={sc.commission_installments}
                                                     onChange={(e) => {
                                                         const newVal = parseInt(e.target.value) || 1;

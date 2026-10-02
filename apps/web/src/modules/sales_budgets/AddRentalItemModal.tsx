@@ -177,16 +177,16 @@ export function AddRentalItemModal({ open, onOpenChange, onConfirm, defaultInsta
 
           {/* Dropdown Results */}
           {!selectedProduct && products.length > 0 && (
-            <div className="absolute top-[4.5rem] left-0 right-0 z-50 bg-white border border-border-subtle shadow-md rounded-md max-h-[300px] overflow-hidden">
+            <div className="absolute top-[4.5rem] left-0 right-0 z-50 bg-surface border border-border-subtle shadow-md rounded-md max-h-[300px] overflow-hidden">
               <div className="h-full max-h-[300px] overflow-y-auto custom-scrollbar">
                 {products.map(p => (
                   <div
                     key={p.id}
-                    className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-0"
+                    className="p-3 hover:bg-bg-deep cursor-pointer border-b border-border-subtle last:border-0 transition-colors"
                     onClick={() => handleProductSelect(p)}
                   >
-                    <div className="font-medium text-sm text-gray-900">{p.codigo ?? p.codigo_interno ?? "-"} - {p.nome}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="font-medium text-sm text-text-primary">{p.codigo ?? p.codigo_interno ?? "-"} - {p.nome}</div>
+                    <div className="text-xs text-text-muted">
                       Uso/Consumo: R$ {Number(p.vlr_referencia_uso_consumo || p.vlr_uso_consumo || 0).toFixed(2)}
                     </div>
                   </div>
