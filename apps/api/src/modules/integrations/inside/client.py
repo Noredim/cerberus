@@ -20,6 +20,10 @@ class InsideServiceClient:
         if clean_url and not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             clean_url = f"http://{clean_url}"
         
+        # Remove trailing /api if user added it to prevent /api/api/...
+        if clean_url.endswith("/api"):
+            clean_url = clean_url[:-4].rstrip("/")
+
         self.base_url = clean_url
         self.hash_token = (hash_token or "").strip()
         self.cod_unidade = cod_unidade
@@ -84,25 +88,29 @@ class InsideServiceClient:
             return 500, None, latency_ms, f"Erro inesperado na integração: {str(ex)}"
 
     def test_connection(self) -> Tuple[int, Optional[Dict[str, Any]], int, Optional[str]]:
-        """Consulta as configurações da unidade no Inside ERP para validar conectividade e token."""
-        cod_unidade = self.cod_unidade or 0
-        path = "/api/prospect-mobile/configuracoes"
-        params = {"codUnidade": cod_unidade}
-        return self._execute_request("GET", path, params=params)
+        """
+        Valida conectividade e autenticação via Header 'Hash: <token>'
+        utilizando o endpoint padrão da API IntegracoesTerceiros.
+        """
+        path = "/api/integracoes-terceiros/forma-pagamento/listar-formas-pagamento"
+        return self._execute_request("GET", path)
 
     def consultar_clientes(
         self,
         documento: Optional[str] = None,
         cod_cliente: Optional[int] = None,
         nome: Optional[str] = None,
+        pagina: int = 1,
+        tamanho_pagina: int = 50,
     ) -> Tuple[int, Optional[Dict[str, Any]], int, Optional[str]]:
         """Consulta clientes existentes por documento (CPF/CNPJ), código ou nome."""
         path = "/api/integracoes-terceiros/cliente/consultar-clientes"
         params: Dict[str, Any] = {
-            "codUnidade": self.cod_unidade or 0,
-            "pagina": 1,
-            "tamanhoPagina": 10,
+            "pagina": pagina,
+            "tamanhoPagina": tamanho_pagina,
         }
+        if self.cod_unidade is not None:
+            params["codUnidade"] = self.cod_unidade
         if documento:
             params["documento"] = documento
         if cod_cliente:
@@ -116,6 +124,46 @@ class InsideServiceClient:
         """Lista as formas de pagamento disponíveis no ERP Inside."""
         path = "/api/integracoes-terceiros/forma-pagamento/listar-formas-pagamento"
         return self._execute_request("GET", path)
+
+    def listar_produtos(
+        self,
+        pagina: int = 1,
+        tamanho_pagina: int = 50,
+        descricao: Optional[str] = None,
+        cod_produto: Optional[str] = None,
+    ) -> Tuple[int, Optional[Dict[str, Any]], int, Optional[str]]:
+        """Lista os produtos cadastrados de forma paginada."""
+        path = "/api/integracoes-terceiros/produtos"
+        params: Dict[str, Any] = {
+            "pagina": pagina,
+            "tamanhoPagina": tamanho_pagina,
+        }
+        if descricao:
+            params["descricao"] = descricao
+        if cod_produto:
+            params["codProduto"] = cod_produto
+
+        return self._execute_request("GET", path, params=params)
+
+    def listar_servicos(
+        self,
+        pagina: int = 1,
+        tamanho_pagina: int = 50,
+        descricao: Optional[str] = None,
+        cod_servico: Optional[str] = None,
+    ) -> Tuple[int, Optional[Dict[str, Any]], int, Optional[str]]:
+        """Lista os serviços cadastrados de forma paginada."""
+        path = "/api/integracoes-terceiros/servicos"
+        params: Dict[str, Any] = {
+            "pagina": pagina,
+            "tamanhoPagina": tamanho_pagina,
+        }
+        if descricao:
+            params["descricao"] = descricao
+        if cod_servico:
+            params["codServico"] = cod_servico
+
+        return self._execute_request("GET", path, params=params)
 
     def cadastrar_prospect(self, payload: Dict[str, Any]) -> Tuple[int, Optional[Dict[str, Any]], int, Optional[str]]:
         """POST /api/integracoes-terceiros/prospects/cadastrar-prospect"""

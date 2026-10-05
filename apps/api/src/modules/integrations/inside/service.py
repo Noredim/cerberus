@@ -36,7 +36,12 @@ class InsideIntegrationService:
         return config
 
     @staticmethod
-    def get_client(db: Session, company_id: UUID, target_env: str = "DEFAULT") -> InsideServiceClient:
+    def get_client(
+        db: Session, 
+        company_id: UUID, 
+        target_env: str = "DEFAULT", 
+        allow_inactive: bool = False
+    ) -> InsideServiceClient:
         config = InsideIntegrationService.get_config(db, company_id)
         target_env = (target_env or "DEFAULT").upper()
 
@@ -59,7 +64,7 @@ class InsideIntegrationService:
             is_active = config.is_active or config.servicos_is_active or config.produtos_is_active
             env_name = "Ambiente Geral"
 
-        if not is_active:
+        if not is_active and not allow_inactive:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Integração do {env_name} está inativa nas configurações da empresa."
@@ -124,7 +129,7 @@ class InsideIntegrationService:
         env_label = "Base de Serviços (A)" if target_env == "SERVICOS" else ("Base de Produtos (B)" if target_env == "PRODUTOS" else "Inside ERP")
 
         try:
-            client = InsideIntegrationService.get_client(db, company_id, target_env=target_env)
+            client = InsideIntegrationService.get_client(db, company_id, target_env=target_env, allow_inactive=True)
         except HTTPException as he:
             return InsideTestConnectionResponse(
                 success=False,
@@ -141,7 +146,7 @@ class InsideIntegrationService:
         InsideIntegrationService.log_request(
             db=db,
             company_id=company_id,
-            endpoint=f"[{target_env}] /api/prospect-mobile/configuracoes",
+            endpoint=f"[{target_env}] /api/integracoes-terceiros/forma-pagamento/listar-formas-pagamento",
             http_method="GET",
             status_code=status_code,
             request_payload={"codUnidade": client.cod_unidade, "target_env": target_env, "base_url": client.base_url},
@@ -198,7 +203,7 @@ class InsideIntegrationService:
         if not company:
             raise HTTPException(status_code=404, detail="Empresa não encontrada.")
 
-        client = InsideIntegrationService.get_client(db, company_id, target_env=target_env)
+        client = InsideIntegrationService.get_client(db, company_id, target_env=target_env, allow_inactive=True)
         status_code, res_json, latency_ms, error_msg = client.listar_formas_pagamento()
 
         # Gravar log de auditoria
@@ -253,7 +258,14 @@ class InsideIntegrationService:
         synced_items = []
 
         for item in items_data:
-            codigo = item.get("codigo") or item.get("codFormaPagamento") or item.get("formaPagamento") or item.get("id") or item.get("codForma")
+            codigo = (
+                item.get("codigoFormaPagamento") 
+                or item.get("codFormaPagamento") 
+                or item.get("codigo") 
+                or item.get("formaPagamento") 
+                or item.get("id") 
+                or item.get("codForma")
+            )
             descricao = item.get("descricao") or item.get("nome") or item.get("nomeFormaPagamento") or item.get("descricaoFormaPagamento") or f"Forma {codigo}"
             
             if codigo is not None:
