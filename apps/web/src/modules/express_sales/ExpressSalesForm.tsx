@@ -3,12 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Zap, Plus, Trash2, Save, ArrowLeft, History, AlertTriangle, 
   CheckCircle2, Building2, CreditCard, Package,
-  RefreshCw, Clock, ShoppingCart, Repeat, SlidersHorizontal, X
+  RefreshCw, Clock, ShoppingCart, Repeat, X, Eye
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Tooltip } from '../../components/ui/Tooltip';
 import { OpportunityKitSearchModal } from '../../components/modals/OpportunityKitSearchModal';
 import { OpportunityKitForm } from '../opportunity_kits/OpportunityKitForm';
 import { QuickCustomerCreateModal } from '../../components/modals/QuickCustomerCreateModal';
@@ -52,6 +53,18 @@ interface ExpressItemRow {
   fator_efetivo: number;
   comissao_percentual: number;
   valor_comissao_estimada: number;
+  valor_comissao_bruta?: number;
+  comissao_bruta_percentual?: number;
+  valor_dsr?: number;
+  valor_fgts?: number;
+  valor_inss?: number;
+  valor_demais?: number;
+  comissao_liquida_percentual?: number;
+  valor_comissao_liquida?: number;
+  despesa_operacional_percentual?: number;
+  valor_despesa_operacional?: number;
+  valor_despesas_venda?: number;
+  despesas_venda_percentual?: number;
   lucro_unitario_estimado: number;
   margem_estimada: number;
   commercial_policy_id?: string | null;
@@ -348,6 +361,12 @@ export function ExpressSalesForm() {
             fator_efetivo: Number(item.markup) || 1.0,
             comissao_percentual: Number(item.perc_comissao) || 0,
             valor_comissao_estimada: Number(item.comissao_unit) * (Number(item.quantidade) || 1),
+            comissao_liquida_percentual: Number(item.perc_comissao) || 0,
+            valor_comissao_liquida: Number(item.comissao_unit) * (Number(item.quantidade) || 1),
+            despesa_operacional_percentual: 0,
+            valor_despesa_operacional: (Number(item.despesa_operacional_unit) || 0) * (Number(item.quantidade) || 1),
+            valor_despesas_venda: (Number(item.comissao_unit) + (Number(item.despesa_operacional_unit) || 0)) * (Number(item.quantidade) || 1),
+            despesas_venda_percentual: Number(item.perc_comissao) || 0,
             lucro_unitario_estimado: Number(item.lucro_unit) || 0,
             margem_estimada: Number(item.margem_unit) || 0,
             requer_aprovacao: false
@@ -371,6 +390,12 @@ export function ExpressSalesForm() {
             fator_efetivo: Number(ritem.fator_margem) || 1.0,
             comissao_percentual: Number(ritem.perc_comissao) || 0,
             valor_comissao_estimada: Number(ritem.comissao_mensal) * (Number(ritem.quantidade) || 1),
+            comissao_liquida_percentual: Number(ritem.perc_comissao) || 0,
+            valor_comissao_liquida: Number(ritem.comissao_mensal) * (Number(ritem.quantidade) || 1),
+            despesa_operacional_percentual: 0,
+            valor_despesa_operacional: (Number(ritem.despesa_operacional_mensal) || 0) * (Number(ritem.quantidade) || 1),
+            valor_despesas_venda: (Number(ritem.comissao_mensal) + (Number(ritem.despesa_operacional_mensal) || 0)) * (Number(ritem.quantidade) || 1),
+            despesas_venda_percentual: Number(ritem.perc_comissao) || 0,
             lucro_unitario_estimado: Number(ritem.lucro_mensal) || 0,
             margem_estimada: Number(ritem.margem) || 0,
             requer_aprovacao: false
@@ -411,6 +436,18 @@ export function ExpressSalesForm() {
         fator_efetivo: Number(p.fator_efetivo) || 1,
         comissao_percentual: Number(p.comissao_percentual) || 0,
         valor_comissao_estimada: Number(p.valor_comissao_estimada) || 0,
+        valor_comissao_bruta: Number(p.valor_comissao_bruta) || Number(p.valor_comissao_estimada) || 0,
+        comissao_bruta_percentual: Number(p.comissao_bruta_percentual) || Number(p.comissao_percentual) || 0,
+        valor_dsr: Number(p.valor_dsr) || 0,
+        valor_fgts: Number(p.valor_fgts) || 0,
+        valor_inss: Number(p.valor_inss) || 0,
+        valor_demais: Number(p.valor_demais) || 0,
+        comissao_liquida_percentual: Number(p.comissao_liquida_percentual) || 0,
+        valor_comissao_liquida: Number(p.valor_comissao_liquida) || 0,
+        despesa_operacional_percentual: Number(p.despesa_operacional_percentual) || 0,
+        valor_despesa_operacional: Number(p.valor_despesa_operacional) || 0,
+        valor_despesas_venda: Number(p.valor_despesas_venda) || 0,
+        despesas_venda_percentual: Number(p.despesas_venda_percentual) || 0,
         lucro_unitario_estimado: Number(p.lucro_unitario_estimado) || 0,
         margem_estimada: Number(p.margem_estimada) || 0,
         commercial_policy_id: p.commercial_policy_id,
@@ -486,6 +523,18 @@ export function ExpressSalesForm() {
               fator_efetivo: Number(p.fator_efetivo) || 1,
               comissao_percentual: Number(p.comissao_percentual) || 0,
               valor_comissao_estimada: Number(p.valor_comissao_estimada) || 0,
+              valor_comissao_bruta: Number(p.valor_comissao_bruta) || Number(p.valor_comissao_estimada) || 0,
+              comissao_bruta_percentual: Number(p.comissao_bruta_percentual) || Number(p.comissao_percentual) || 0,
+              valor_dsr: Number(p.valor_dsr) || 0,
+              valor_fgts: Number(p.valor_fgts) || 0,
+              valor_inss: Number(p.valor_inss) || 0,
+              valor_demais: Number(p.valor_demais) || 0,
+              comissao_liquida_percentual: Number(p.comissao_liquida_percentual) || 0,
+              valor_comissao_liquida: Number(p.valor_comissao_liquida) || 0,
+              despesa_operacional_percentual: Number(p.despesa_operacional_percentual) || 0,
+              valor_despesa_operacional: Number(p.valor_despesa_operacional) || 0,
+              valor_despesas_venda: Number(p.valor_despesas_venda) || 0,
+              despesas_venda_percentual: Number(p.despesas_venda_percentual) || 0,
               lucro_unitario_estimado: Number(p.lucro_unitario_estimado) || 0,
               margem_estimada: Number(p.margem_estimada) || 0,
               commercial_policy_id: p.commercial_policy_id,
@@ -618,6 +667,18 @@ export function ExpressSalesForm() {
               fator_efetivo: Number(p.fator_efetivo) || 1,
               comissao_percentual: Number(p.comissao_percentual) || 0,
               valor_comissao_estimada: Number(p.valor_comissao_estimada) || 0,
+              valor_comissao_bruta: Number(p.valor_comissao_bruta) || Number(p.valor_comissao_estimada) || 0,
+              comissao_bruta_percentual: Number(p.comissao_bruta_percentual) || Number(p.comissao_percentual) || 0,
+              valor_dsr: Number(p.valor_dsr) || 0,
+              valor_fgts: Number(p.valor_fgts) || 0,
+              valor_inss: Number(p.valor_inss) || 0,
+              valor_demais: Number(p.valor_demais) || 0,
+              comissao_liquida_percentual: Number(p.comissao_liquida_percentual) || 0,
+              valor_comissao_liquida: Number(p.valor_comissao_liquida) || 0,
+              despesa_operacional_percentual: Number(p.despesa_operacional_percentual) || 0,
+              valor_despesa_operacional: Number(p.valor_despesa_operacional) || 0,
+              valor_despesas_venda: Number(p.valor_despesas_venda) || 0,
+              despesas_venda_percentual: Number(p.despesas_venda_percentual) || 0,
               lucro_unitario_estimado: Number(p.lucro_unitario_estimado) || 0,
               margem_estimada: Number(p.margem_estimada) || 0,
               commercial_policy_id: p.commercial_policy_id,
@@ -668,7 +729,7 @@ export function ExpressSalesForm() {
 
   const totalVenda = vendaItems.reduce((acc, curr) => acc + curr.valor_total_final, 0);
   const totalRecorrencia = recorrenciaItems.reduce((acc, curr) => acc + curr.valor_total_final, 0);
-  const totalComissao = items.reduce((acc, curr) => acc + curr.valor_comissao_estimada, 0);
+  const totalDespesasVenda = items.reduce((acc, curr) => acc + (curr.valor_despesas_venda ?? curr.valor_comissao_estimada), 0);
   const totalQtdVenda = vendaItems.reduce((acc, curr) => acc + curr.quantidade, 0);
   const totalQtdRecorrencia = recorrenciaItems.reduce((acc, curr) => acc + curr.quantidade, 0);
   const hasPendingApproval = items.some(i => i.requer_aprovacao);
@@ -996,15 +1057,6 @@ export function ExpressSalesForm() {
                     <div className="space-y-1.5 max-w-sm">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-bold text-base text-text-primary">{item.nome_kit}</h4>
-                        <button
-                          type="button"
-                          onClick={() => setKitToEdit({ id: item.opportunity_kit_id, nome: item.nome_kit })}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/20 transition-all cursor-pointer shadow-xs"
-                          title="Abrir kit para acrescentar ou retirar produtos e serviços"
-                        >
-                          <SlidersHorizontal className="w-3.5 h-3.5" />
-                          Editar Itens do Kit
-                        </button>
                         <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
                           isRec 
                             ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20' 
@@ -1086,16 +1138,76 @@ export function ExpressSalesForm() {
                       </div>
                     </div>
 
-                    {/* Financial Results & Commission Badge */}
+                    {/* Financial Results & Sales Expenses Breakdown Badge */}
                     <div className="flex items-center justify-between lg:justify-end gap-5 w-full lg:w-auto pt-3 lg:pt-0 border-t lg:border-0 border-border-subtle">
                       <div className="space-y-1 text-right">
                         <div className="flex items-center gap-2 justify-end">
                           <span className="text-xs font-mono bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded font-bold">
                             Fator: {Number(item.fator_efetivo || 1).toFixed(4)}
                           </span>
-                          <span className="text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded">
-                            Comissão: {Number(item.comissao_percentual || 0).toFixed(2)}% ({formatCurrency(item.valor_comissao_estimada)})
-                          </span>
+                          
+                          {(() => {
+                            const vComBruta = Number(item.valor_comissao_bruta ?? item.valor_comissao_estimada ?? 0);
+                            const pComBruta = Number(item.comissao_bruta_percentual ?? item.comissao_percentual ?? 0);
+                            const vDsr = Number(item.valor_dsr ?? 0);
+                            const vFgts = Number(item.valor_fgts ?? 0);
+                            const vInss = Number(item.valor_inss ?? 0);
+                            const vDemais = Number(item.valor_demais ?? 0);
+                            const vComLiq = Number(item.valor_comissao_liquida ?? (vComBruta - vDsr - vFgts - vInss - vDemais));
+                            const vDespOp = Number(item.valor_despesa_operacional ?? 0);
+                            const pDespOp = Number(item.despesa_operacional_percentual ?? 0);
+                            const vDespVenda = Number(item.valor_despesas_venda ?? (vComLiq + vDespOp));
+                            const pDespVenda = Number(item.despesas_venda_percentual ?? 0);
+
+                            return (
+                              <Tooltip
+                                variant="light"
+                                content={
+                                  <div className="p-2 space-y-1 text-xs font-mono min-w-[270px] text-text-secondary">
+                                    {/* Top: Comissão Bruta */}
+                                    <div className="flex justify-between items-center text-text-muted">
+                                      <span>Comissão Bruta <span className="text-[11px] font-normal">({pComBruta.toFixed(2)}%)</span></span>
+                                      <span className="font-semibold text-text-primary">{formatCurrency(vComBruta)}</span>
+                                    </div>
+
+                                    {/* Middle: Inner Box with Deductions and Net Commission */}
+                                    <div className="bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/20 rounded-lg p-2.5 my-1.5 space-y-1 text-[11px]">
+                                      <div className="flex justify-between items-center text-text-muted">
+                                        <span>(-) DSR:</span>
+                                        <span className="text-text-muted font-medium font-mono">{vDsr > 0 ? `-${formatCurrency(vDsr)}` : formatCurrency(0)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-text-muted">
+                                        <span>(-) FGTS:</span>
+                                        <span className="text-text-muted font-medium font-mono">{vFgts > 0 ? `-${formatCurrency(vFgts)}` : formatCurrency(0)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-text-muted">
+                                        <span>(-) INSS:</span>
+                                        <span className="text-text-muted font-medium font-mono">{vInss > 0 ? `-${formatCurrency(vInss)}` : formatCurrency(0)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-text-muted">
+                                        <span>(-) Outros:</span>
+                                        <span className="text-text-muted font-medium font-mono">{vDemais > 0 ? `-${formatCurrency(vDemais)}` : formatCurrency(0)}</span>
+                                      </div>
+                                      <div className="border-t border-amber-500/30 pt-1.5 mt-1 flex justify-between items-center font-bold text-emerald-600 dark:text-emerald-400">
+                                        <span>Comissão Líquida:</span>
+                                        <span className="font-mono">{formatCurrency(vComLiq)}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Bottom: Despesa Operacional */}
+                                    <div className="flex justify-between items-center text-text-muted pt-0.5">
+                                      <span>Desp. Operacional <span className="text-[11px] font-normal">({pDespOp.toFixed(2)}%)</span></span>
+                                      <span className="font-semibold text-text-primary">{formatCurrency(vDespOp)}</span>
+                                    </div>
+                                  </div>
+                                }
+                              >
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-0.5 rounded cursor-help border border-indigo-500/20 transition-colors">
+                                  Desp. de Venda: {formatCurrency(vDespVenda)} ({pDespVenda.toFixed(2)}%)
+                                </span>
+                              </Tooltip>
+                            );
+                          })()}
                         </div>
 
                         <div className="text-xs text-text-muted flex items-center gap-2 justify-end">
@@ -1112,16 +1224,16 @@ export function ExpressSalesForm() {
                         <button
                           type="button"
                           onClick={() => setKitToEdit({ id: item.opportunity_kit_id, nome: item.nome_kit })}
-                          className="p-2 text-text-muted hover:text-brand-primary hover:bg-brand-primary/10 rounded-lg transition-colors"
-                          title="Editar composição do kit (produtos e serviços)"
+                          className="p-2 text-brand-primary hover:bg-brand-primary/10 rounded-lg transition-colors cursor-pointer"
+                          title="Visualizar / Editar composição do kit"
                         >
-                          <SlidersHorizontal className="w-4 h-4" />
+                          <Eye className="w-4 h-4" />
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(origIdx)}
-                          className="p-2 text-brand-danger hover:bg-brand-danger/10 rounded-lg transition-colors"
+                          className="p-2 text-brand-danger hover:bg-brand-danger/10 rounded-lg transition-colors cursor-pointer"
                           title="Remover kit"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1200,8 +1312,8 @@ export function ExpressSalesForm() {
                 <span className="font-semibold text-text-primary">{totalQtdVenda} Venda | {totalQtdRecorrencia} Recorrência</span>
               </div>
               <div className="flex justify-between text-text-muted">
-                <span>Comissão Total Estimada:</span>
-                <span className="font-semibold text-emerald-600">{formatCurrency(totalComissao)}</span>
+                <span>Desp. de Venda Total:</span>
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalDespesasVenda)}</span>
               </div>
               {hasPendingApproval && (
                 <div className="flex justify-between text-amber-600 font-semibold text-xs pt-1">

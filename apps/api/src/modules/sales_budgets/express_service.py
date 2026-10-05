@@ -200,12 +200,46 @@ def calculate_express_pricing(
         requer_aprovacao = True
         motivo_aprovacao = f"Fator de venda ({fator_efetivo:.4f}) está abaixo do limite mínimo da política comercial ({min_policy_factor:.4f}). Requer aprovação de gerência."
 
+    tipo_comissionamento = getattr(matched_policy, "tipo_comissionamento", "TRADICIONAL") if matched_policy else "TRADICIONAL"
+    dsr_pct = _d(getattr(matched_policy, "dsr_percentual", 0) or 0) if matched_policy else Decimal("0.0")
+    fgts_pct = _d(getattr(matched_policy, "fgts_percentual", 0) or 0) if matched_policy else Decimal("0.0")
+    inss_pct = _d(getattr(matched_policy, "inss_percentual", 0) or 0) if matched_policy else Decimal("0.0")
+    demais_pct = _d(getattr(matched_policy, "demais_incidencias_percentual", 0) or 0) if matched_policy else Decimal("0.0")
+    despesa_operacional_percentual = _d(getattr(matched_policy, "despesa_operacional_percentual", 0) or 0) if matched_policy else _d(getattr(kit, "perc_despesa_operacional", 0) or 0)
+
     # 6. Quantities and Totals
     qtd = req.quantidade if req.quantidade >= 1 else 1
     valor_total_final = _round2(valor_unitario_final * Decimal(qtd))
-    valor_comissao_estimada = _round2(valor_total_final * (comissao_percentual / Decimal("100.0")))
+    valor_comissao_bruta = _round2(valor_total_final * (comissao_percentual / Decimal("100.0")))
+    comissao_bruta_percentual = comissao_percentual
+    valor_comissao_estimada = valor_comissao_bruta
     
-    lucro_unitario = valor_unitario_final - custo_unitario - (valor_unitario_final * (comissao_percentual / Decimal("100.0")))
+    valor_dsr = Decimal("0.0")
+    valor_fgts = Decimal("0.0")
+    valor_inss = Decimal("0.0")
+    valor_demais = Decimal("0.0")
+
+    # Net commission & Operational expenses
+    if tipo_comissionamento in ["POR_DENTRO", "COMISSAO_POR_DENTRO"]:
+        fator_total = (Decimal("1.0") + dsr_pct / Decimal("100.0")) * (Decimal("1.0") + (fgts_pct + inss_pct + demais_pct) / Decimal("100.0"))
+        comissao_real = _round4(valor_comissao_bruta / fator_total) if fator_total > 0 else valor_comissao_bruta
+        valor_dsr = _round2(comissao_real * (dsr_pct / Decimal("100.0")))
+        valor_fgts = _round2((comissao_real + valor_dsr) * (fgts_pct / Decimal("100.0")))
+        valor_inss = _round2((comissao_real + valor_dsr) * (inss_pct / Decimal("100.0")))
+        valor_demais = _round2((comissao_real + valor_dsr) * (demais_pct / Decimal("100.0")))
+        soma = comissao_real + valor_dsr + valor_fgts + valor_inss + valor_demais
+        diff = valor_comissao_bruta - soma
+        valor_comissao_liquida = _round2(comissao_real + diff)
+        comissao_liquida_percentual = _round2((valor_comissao_liquida / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
+    else:
+        comissao_liquida_percentual = comissao_percentual
+        valor_comissao_liquida = valor_comissao_bruta
+
+    valor_despesa_operacional = _round2(valor_total_final * (despesa_operacional_percentual / Decimal("100.0")))
+    valor_despesas_venda = _round2(valor_comissao_liquida + valor_despesa_operacional)
+    despesas_venda_percentual = _round2(comissao_liquida_percentual + despesa_operacional_percentual)
+
+    lucro_unitario = valor_unitario_final - custo_unitario - (valor_unitario_final * (despesas_venda_percentual / Decimal("100.0")))
     lucro_unitario_estimado = _round2(lucro_unitario)
     margem_estimada = _round2((lucro_unitario / valor_unitario_final) * Decimal("100.0")) if valor_unitario_final > 0 else Decimal("0.0")
 
@@ -224,6 +258,18 @@ def calculate_express_pricing(
         fator_efetivo=fator_efetivo,
         comissao_percentual=_round2(comissao_percentual),
         valor_comissao_estimada=valor_comissao_estimada,
+        valor_comissao_bruta=valor_comissao_bruta,
+        comissao_bruta_percentual=_round2(comissao_bruta_percentual),
+        valor_dsr=valor_dsr,
+        valor_fgts=valor_fgts,
+        valor_inss=valor_inss,
+        valor_demais=valor_demais,
+        comissao_liquida_percentual=_round2(comissao_liquida_percentual),
+        valor_comissao_liquida=valor_comissao_liquida,
+        despesa_operacional_percentual=_round2(despesa_operacional_percentual),
+        valor_despesa_operacional=valor_despesa_operacional,
+        valor_despesas_venda=valor_despesas_venda,
+        despesas_venda_percentual=despesas_venda_percentual,
         lucro_unitario_estimado=lucro_unitario_estimado,
         margem_estimada=margem_estimada,
         commercial_policy_id=commercial_policy_id,

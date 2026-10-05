@@ -414,6 +414,18 @@ class ExpressKitPricingResponse(BaseModel):
     fator_efetivo: Decimal
     comissao_percentual: Decimal
     valor_comissao_estimada: Decimal
+    valor_comissao_bruta: Decimal = Decimal("0.0")
+    comissao_bruta_percentual: Decimal = Decimal("0.0")
+    valor_dsr: Decimal = Decimal("0.0")
+    valor_fgts: Decimal = Decimal("0.0")
+    valor_inss: Decimal = Decimal("0.0")
+    valor_demais: Decimal = Decimal("0.0")
+    comissao_liquida_percentual: Decimal = Decimal("0.0")
+    valor_comissao_liquida: Decimal = Decimal("0.0")
+    despesa_operacional_percentual: Decimal = Decimal("0.0")
+    valor_despesa_operacional: Decimal = Decimal("0.0")
+    valor_despesas_venda: Decimal = Decimal("0.0")
+    despesas_venda_percentual: Decimal = Decimal("0.0")
     lucro_unitario_estimado: Decimal
     margem_estimada: Decimal
     commercial_policy_id: Optional[UUID] = None
