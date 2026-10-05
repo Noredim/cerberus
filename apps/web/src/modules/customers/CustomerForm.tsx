@@ -6,13 +6,16 @@ import {
     Save,
     Search,
     Loader2,
-    XCircle
+    XCircle,
+    CheckCircle2,
+    AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useCompanies } from '../companies/hooks/useCompanies';
 import { customerApi } from './api/customerApi';
+import { isValidCpf, isValidCnpj } from '../../components/modals/QuickCustomerCreateModal';
 
 interface State {
     id: string;
@@ -41,6 +44,7 @@ const CustomerForm: React.FC = () => {
 
     const [formData, setFormData] = useState<any>({
         cnpj: '',
+        codigo_cliente_service: null,
         razao_social: '',
         nome_fantasia: '',
         email: '',
@@ -191,15 +195,66 @@ const CustomerForm: React.FC = () => {
         }
     };
 
+    const handleDocumentChange = (val: string) => {
+        const raw = val.replace(/\D/g, '').slice(0, 14);
+        let formatted = raw;
+        if (raw.length <= 11) {
+            // CPF: 000.000.000-00
+            formatted = raw
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        } else {
+            // CNPJ: 00.000.000/0000-00
+            formatted = raw
+                .replace(/(\d{2})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})(\d)/, '$1/$2')
+                .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+        }
+        setFormData((prev: any) => ({ ...prev, cnpj: formatted }));
+    };
+
+    const cleanDoc = formData.cnpj ? String(formData.cnpj).replace(/\D/g, '') : '';
+    const isCpf = cleanDoc.length <= 11;
+    const isCompleteDoc = cleanDoc.length === 11 || cleanDoc.length === 14;
+    const isDocValid = isCompleteDoc ? (isCpf ? isValidCpf(cleanDoc) : isValidCnpj(cleanDoc)) : false;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitError('');
 
+        if (!cleanDoc || !formData.razao_social) {
+            setSubmitError('Preencha o CPF/CNPJ e o Nome / Razão Social.');
+            return;
+        }
+
+        if (cleanDoc.length === 11) {
+            if (!isValidCpf(cleanDoc)) {
+                setSubmitError('CPF inválido. Verifique o número digitado.');
+                return;
+            }
+        } else if (cleanDoc.length === 14) {
+            if (!isValidCnpj(cleanDoc)) {
+                setSubmitError('CNPJ inválido. Verifique o número digitado.');
+                return;
+            }
+        } else {
+            setSubmitError('O documento deve ser um CPF (11 dígitos) ou CNPJ (14 dígitos).');
+            return;
+        }
+
         try {
+            const payload = {
+                ...formData,
+                cnpj: cleanDoc,
+                tipo_pessoa: cleanDoc.length > 11 ? 'J' : 'F'
+            };
+
             if (id) {
-                await customerApi.update(id, formData);
+                await customerApi.update(id, payload);
             } else {
-                await customerApi.create(formData);
+                await customerApi.create(payload);
             }
             navigate('/cadastros/clientes');
         } catch (err: any) {
@@ -281,34 +336,52 @@ const CustomerForm: React.FC = () => {
                                 >
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">CNPJ</label>
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
+                                                    {isCpf ? 'CPF (Pessoa Física) *' : 'CNPJ (Pessoa Jurídica) *'}
+                                                </label>
+                                                {isCompleteDoc && (
+                                                    <span className={`text-[10px] font-bold flex items-center gap-1 ${isDocValid ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {isDocValid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                                        {isDocValid ? (isCpf ? 'CPF Válido' : 'CNPJ Válido') : (isCpf ? 'CPF Inválido' : 'CNPJ Inválido')}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex gap-2">
                                                 <input
                                                     type="text"
                                                     maxLength={18}
                                                     value={formData.cnpj}
-                                                    onChange={e => setFormData({ ...formData, cnpj: e.target.value })}
-                                                    className="flex-1 bg-bg-deep border border-border-subtle rounded-md py-2 px-4 outline-none focus:border-brand-primary transition-colors text-sm"
+                                                    onChange={e => handleDocumentChange(e.target.value)}
+                                                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                                                    className={`flex-1 bg-bg-deep border rounded-md py-2 px-4 outline-none transition-colors text-sm ${
+                                                        isCompleteDoc ? (isDocValid ? 'border-emerald-500/50 focus:border-emerald-500' : 'border-red-500/50 focus:border-red-500') : 'border-border-subtle focus:border-brand-primary'
+                                                    }`}
                                                     required
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCnpjLookup}
-                                                    disabled={lookupLoading || (formData.cnpj?.replace(/\D/g, '') || '').length < 14}
-                                                    className="flex items-center gap-2 bg-brand-primary/10 text-brand-primary px-4 py-2 rounded-md hover:bg-brand-primary/20 transition-all text-sm font-semibold disabled:opacity-50 cursor-pointer border border-brand-primary/20"
-                                                >
-                                                    {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                                    Consultar
-                                                </button>
+                                                {!isCpf && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCnpjLookup}
+                                                        disabled={lookupLoading || cleanDoc.length < 14}
+                                                        className="flex items-center gap-2 bg-brand-primary/10 text-brand-primary px-4 py-2 rounded-md hover:bg-brand-primary/20 transition-all text-sm font-semibold disabled:opacity-50 cursor-pointer border border-brand-primary/20"
+                                                    >
+                                                        {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                                        Consultar
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Razão Social</label>
+                                            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
+                                                {isCpf ? 'Nome Completo *' : 'Razão Social *'}
+                                            </label>
                                             <input
                                                 type="text"
                                                 value={formData.razao_social}
                                                 onChange={e => setFormData({ ...formData, razao_social: e.target.value })}
+                                                placeholder={isCpf ? 'Ex: João da Silva' : 'Ex: Razão Social Ltda'}
                                                 className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-4 outline-none focus:border-brand-primary transition-colors text-sm"
                                                 required
                                             />
@@ -378,6 +451,17 @@ const CustomerForm: React.FC = () => {
                                                 type="text"
                                                 value={formData.telefone}
                                                 onChange={e => setFormData({ ...formData, telefone: e.target.value })}
+                                                className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-4 outline-none focus:border-brand-primary transition-colors text-sm"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Cód. Cliente Inside ERP</label>
+                                            <input
+                                                type="number"
+                                                value={formData.codigo_cliente_service !== undefined && formData.codigo_cliente_service !== null ? formData.codigo_cliente_service : ''}
+                                                onChange={e => setFormData({ ...formData, codigo_cliente_service: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                                placeholder="Ex: 8520"
                                                 className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-4 outline-none focus:border-brand-primary transition-colors text-sm"
                                             />
                                         </div>

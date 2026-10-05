@@ -9,7 +9,9 @@ from src.modules.sales_budgets import service
 from src.modules.sales_budgets.schemas import (
     SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetOut,
     SalesBudgetStatusUpdate, SalesBudgetHeaderUpdate,
-    WorkflowTransitionSchema
+    WorkflowTransitionSchema,
+    ExpressKitPricingRequest, ExpressKitPricingResponse,
+    ExpressSaleSaveRequest
 )
 
 
@@ -26,13 +28,16 @@ def list_budgets(
     status: Optional[str] = Query(None),
     vendedor_id: Optional[str] = Query(None),
     responsavel_id: Optional[str] = Query(None),
+    sales_team_id: Optional[str] = Query(None),
+    express_only: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     company_id: str = Depends(get_active_company)
 ):
     budgets, total = service.list_budgets(
         db, current_user.tenant_id, company_id, skip, limit, q, status, 
-        user_id=current_user.id, vendedor_id=vendedor_id, responsavel_id=responsavel_id
+        user_id=current_user.id, vendedor_id=vendedor_id, responsavel_id=responsavel_id,
+        sales_team_id=sales_team_id, express_only=express_only
     )
     result = []
     for b in budgets:
@@ -365,6 +370,96 @@ def get_product_cost_composition(
     if not res:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return res
+
+
+# ─── Express Sales (Vendas Express / Varejo) Endpoints ───
+
+@router.post("/express/calculate-pricing", response_model=ExpressKitPricingResponse)
+def calculate_express_kit_pricing(
+    req: ExpressKitPricingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    """
+    Calculates dynamic reverse-engineered pricing for a kit in Express Sales,
+    enforcing mutual exclusivity between Discount and Markup, and resolving
+    the resulting commission % from the team/company Commercial Policy.
+    """
+    from src.modules.sales_budgets import express_service
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header obrigatório")
+    return express_service.calculate_express_pricing(
+        db, current_user.tenant_id, company_id, req, current_user=current_user
+    )
+
+
+@router.post("/express/save")
+def save_express_sale_endpoint(
+    req: ExpressSaleSaveRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    """
+    Saves or updates an Express Sale, automatically generating team-based proposal numbering,
+    binding cloned kits, and recording granular audit diff history.
+    """
+    from src.modules.sales_budgets import express_service
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header obrigatório")
+    
+    is_update = req.budget_id is not None
+    budget = express_service.save_express_sale(
+        db, current_user.tenant_id, company_id, req, current_user
+    )
+
+    action_key = "opportunity.updated" if is_update else "opportunity.created"
+    _emit_opportunity_event(
+        db=db,
+        budget_id=str(budget.id),
+        action_key=action_key,
+        user=current_user,
+        background_tasks=background_tasks,
+    )
+
+    return _budget_to_dict(budget, db)
+
+
+@router.get("/{budget_id}/history-diffs")
+def get_budget_history_diffs(
+    budget_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    """
+    Returns audit timeline history with structured diffs per kit/header change.
+    """
+    from src.modules.sales_budgets.models import SalesBudgetHistory
+    history_entries = db.query(SalesBudgetHistory).filter(
+        SalesBudgetHistory.sales_budget_id == budget_id,
+        SalesBudgetHistory.tenant_id == current_user.tenant_id
+    ).order_by(SalesBudgetHistory.data_movimentacao.desc()).all()
+
+    result = []
+    for h in history_entries:
+        user_name = h.usuario.name if h.usuario else "Sistema"
+        result.append({
+            "id": h.id,
+            "sales_budget_id": h.sales_budget_id,
+            "versao": h.versao,
+            "status_anterior": h.status_anterior,
+            "status_novo": h.status_novo,
+            "usuario_id": h.usuario_id,
+            "usuario_nome": user_name,
+            "cargo_usuario": h.cargo_usuario,
+            "descricao": h.descricao,
+            "diff_changes": h.diff_changes,
+            "data_movimentacao": h.data_movimentacao
+        })
+    return result
 
 
 @router.post("")

@@ -347,6 +347,7 @@ class SalesBudgetHistoryOut(BaseModel):
     usuario_id: str
     cargo_usuario: Optional[str] = None
     descricao: str
+    diff_changes: Optional[Any] = None
     data_movimentacao: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -385,3 +386,62 @@ class SalesBudgetOut(SalesBudgetBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Express Sales (Vendas Express / Varejo) Schemas ───
+
+class ExpressKitPricingRequest(BaseModel):
+    opportunity_kit_id: UUID
+    sales_team_id: Optional[UUID] = None
+    valor_final: Optional[Decimal] = None
+    desconto_percentual: Optional[Decimal] = None
+    acrescimo_percentual: Optional[Decimal] = None
+    quantidade: int = Field(default=1, ge=1)
+
+
+class ExpressKitPricingResponse(BaseModel):
+    opportunity_kit_id: UUID
+    nome_kit: str
+    tipo_contrato: str
+    tipo_precificacao: str
+    custo_unitario: Decimal
+    valor_unitario_base: Decimal
+    desconto_percentual: Decimal
+    acrescimo_percentual: Decimal
+    valor_unitario_final: Decimal
+    quantidade: int
+    valor_total_final: Decimal
+    fator_efetivo: Decimal
+    comissao_percentual: Decimal
+    valor_comissao_estimada: Decimal
+    lucro_unitario_estimado: Decimal
+    margem_estimada: Decimal
+    commercial_policy_id: Optional[UUID] = None
+    nome_politica: Optional[str] = None
+    fator_limite_politica: Optional[Decimal] = None
+    requer_aprovacao: bool = False
+    motivo_aprovacao: Optional[str] = None
+
+
+class ExpressSaleItemInput(BaseModel):
+    opportunity_kit_id: UUID
+    quantidade: int = Field(default=1, ge=1)
+    valor_final: Decimal
+    desconto_percentual: Decimal = Decimal("0.0")
+    acrescimo_percentual: Decimal = Decimal("0.0")
+    fator_efetivo: Optional[Decimal] = None
+    commercial_policy_id: Optional[UUID] = None
+    observacoes: Optional[str] = None
+
+
+class ExpressSaleSaveRequest(BaseModel):
+    budget_id: Optional[UUID] = None
+    customer_id: str
+    sales_team_id: Optional[UUID] = None
+    vendedor_id: Optional[str] = None
+    forma_pagamento_id: Optional[UUID] = None
+    titulo: str = "Venda Express"
+    observacoes: Optional[str] = None
+    data_orcamento: Optional[datetime] = None
+    items: List[ExpressSaleItemInput] = []
+

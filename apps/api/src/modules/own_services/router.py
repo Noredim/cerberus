@@ -193,6 +193,7 @@ def _to_list_item(svc: OwnService, valores_faixa: Optional[OwnServiceValoresFaix
     return OwnServiceListItem(
         id=svc.id,
         nome_servico=svc.nome_servico,
+        codigo_service=svc.codigo_service,
         unidade=svc.unidade,
         vigencia=svc.vigencia,
         tempo_total_minutos=svc.tempo_total_minutos,
@@ -286,6 +287,7 @@ def create_own_service(
         tenant_id=current_user.tenant_id,
         company_id=company_id,
         nome_servico=payload.nome_servico,
+        codigo_service=payload.codigo_service,
         unidade=payload.unidade,
         vigencia=payload.vigencia,
         descricao=payload.descricao,

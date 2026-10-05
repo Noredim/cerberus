@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off, AlertTriangle, FileText, Layers } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Receipt, Plus, Trash2, Calculator, Info, Package, Eye, X, HelpCircle, TrendingUp, ChevronDown, ChevronUp, Upload, Download, Search, RefreshCw, Clock, History, Printer, Activity, Link2Off, AlertTriangle, FileText, Layers, Server } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { api, resolveHtmlMediaUrls } from '../../services/api';
@@ -20,6 +20,7 @@ import { SupplierCombobox } from '../../components/ui/SupplierCombobox';
 import { OpportunityCreateModal } from '../../components/modals/OpportunityCreateModal';
 import { RentalROIAnalysis } from './components/RentalROIAnalysis';
 import { ProposalGroupingModal, type ProposalKitInfo, type ProposalKitGroup } from './components/ProposalGroupingModal';
+import { InsideDryRunModal } from '../../components/modals/InsideDryRunModal';
 
 interface CostComposition {
   base_unitario: number;
@@ -626,6 +627,7 @@ export function SalesBudgetForm() {
   const [isPurchaseSearchModalOpen, setIsPurchaseSearchModalOpen] = useState(false);
   const [showPurchaseBudgetModal, setShowPurchaseBudgetModal] = useState(false);
   const [savingPurchaseBudget, setSavingPurchaseBudget] = useState(false);
+  const [showInsideDryRunModal, setShowInsideDryRunModal] = useState(false);
 
   const handlePurchaseDolarOrcamentoToggle = (checked: boolean) => {
     setPurchaseDolarOrcamento(checked);
@@ -3657,6 +3659,18 @@ export function SalesBudgetForm() {
             </div>
           )}
 
+
+          {isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowInsideDryRunModal(true)}
+              className="flex items-center gap-1.5 border-border-subtle bg-bg-deep hover:bg-surface-hover text-text-primary text-xs font-bold"
+            >
+              <Server className="w-3.5 h-3.5 text-brand-primary" />
+              Simular Inside ERP
+            </Button>
+          )}
 
           {!isReadonly && (
             <Button type="button" onClick={() => handleSave()} disabled={saving}>
@@ -8204,6 +8218,17 @@ export function SalesBudgetForm() {
         onSave={handleSaveGroupings}
         onSaveAndGenerate={handleSaveAndGenerateGroupings}
       />
+
+      {/* Modal de Simulação de Integração Inside ERP (Dry-Run) */}
+      {isEditing && id && activeCompanyId && (
+        <InsideDryRunModal
+          isOpen={showInsideDryRunModal}
+          onClose={() => setShowInsideDryRunModal(false)}
+          companyId={activeCompanyId}
+          budgetId={id}
+          budgetTitle={titulo}
+        />
+      )}
 
     </div>
   );

@@ -55,6 +55,8 @@ const BudgetsList = lazy(() => import('./modules/purchase_budgets/BudgetsList').
 const BudgetForm = lazy(() => import('./modules/purchase_budgets/BudgetForm').then(m => ({ default: m.BudgetForm })));
 const SalesBudgetList = lazy(() => import('./modules/sales_budgets/SalesBudgetList').then(m => ({ default: m.SalesBudgetList })));
 const SalesBudgetForm = lazy(() => import('./modules/sales_budgets/SalesBudgetForm').then(m => ({ default: m.SalesBudgetForm })));
+const ExpressSalesList = lazy(() => import('./modules/express_sales/ExpressSalesList'));
+const ExpressSalesForm = lazy(() => import('./modules/express_sales/ExpressSalesForm'));
 const OpportunityKitList = lazy(() => import('./modules/opportunity_kits/OpportunityKitList').then(m => ({ default: m.OpportunityKitList })));
 const OpportunityKitForm = lazy(() => import('./modules/opportunity_kits/OpportunityKitForm').then(m => ({ default: m.OpportunityKitForm })));
 const SolutionAnalysisList = lazy(() => import('./modules/solution_analysis/SolutionAnalysisList').then(m => ({ default: m.SolutionAnalysisList })));
@@ -137,6 +139,7 @@ const ProtectedRoute = () => {
           '/cadastros/kits',       // Kits (oportunidades)
           '/orcamentos-compras',   // Orçamento de compra
           '/orcamentos-vendas',    // Oportunidades
+          '/comercial/vendas-express', // Vendas Express
           '/comercial/leads',      // Leads
           '/comercial/comparativos',// Comparativos de soluções
           '/comercial/licitacoes', // Licitações
@@ -326,6 +329,11 @@ function App() {
               <Route path="/orcamentos-vendas" element={<SalesBudgetList />} />
               <Route path="/orcamentos-vendas/novo" element={<SalesBudgetForm />} />
               <Route path="/orcamentos-vendas/:id" element={<SalesBudgetForm />} />
+
+              {/* Vendas Express / Varejo */}
+              <Route path="/comercial/vendas-express" element={<ExpressSalesList />} />
+              <Route path="/comercial/vendas-express/novo" element={<ExpressSalesForm />} />
+              <Route path="/comercial/vendas-express/:id" element={<ExpressSalesForm />} />
 
               {/* Opportunity Kits */}
               <Route path="/cadastros/kits" element={<OpportunityKitList />} />

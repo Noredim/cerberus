@@ -12,6 +12,7 @@ class FormaPagamento(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     descricao = Column(String(100), nullable=False)
+    codigo_service = Column(Integer, nullable=True) # Inside ERP Service Code
     tipo_uso = Column(String(20), nullable=False)  # 'COMPRA', 'VENDA', 'AMBOS'
     tipo_distribuicao = Column(String(20), nullable=False)  # 'PERCENTUAL', 'RATEIO_IGUAL', 'VALOR_FIXO'
     taxa_juros_mensal = Column(Numeric(10, 6), nullable=False, default=0.000000)

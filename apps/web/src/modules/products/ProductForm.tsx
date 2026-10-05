@@ -63,6 +63,7 @@ const ProductForm: React.FC = () => {
 
     const [formData, setFormData] = useState<ProductFormData>({
         company_id: '',
+        codigo_service: null,
         nome: '',
         descricao: '',
         tipo: 'EQUIPAMENTO',
@@ -111,6 +112,7 @@ const ProductForm: React.FC = () => {
                     const product = await productApi.get(id);
                     setFormData({
                         company_id: product.company_id,
+                        codigo_service: product.codigo_service ?? null,
                         nome: product.nome,
                         descricao: product.descricao || '',
                         tipo: product.tipo,
@@ -520,6 +522,17 @@ const ProductForm: React.FC = () => {
                                             className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 h-11 text-sm focus:border-brand-primary outline-none transition-colors"
                                             placeholder="Ex: R740-1234-A/B"
                                             maxLength={100}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5 lg:col-span-2">
+                                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Cód. Inside ERP (Service)</label>
+                                        <input
+                                            type="number"
+                                            readOnly={isReadOnly}
+                                            value={formData.codigo_service ?? ''}
+                                            onChange={e => setFormData({ ...formData, codigo_service: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-4 h-11 text-sm focus:border-brand-primary outline-none transition-colors"
+                                            placeholder="Ex: 1045"
                                         />
                                     </div>
                                 </div>

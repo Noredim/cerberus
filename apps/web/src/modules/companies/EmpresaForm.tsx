@@ -16,7 +16,8 @@ import {
     Edit2,
     Shield,
     Users,
-    FileText
+    FileText,
+    Server
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
@@ -27,6 +28,7 @@ import { CnaeAutocomplete } from './components/CnaeAutocomplete';
 import { CommercialPoliciesTab } from './components/CommercialPoliciesTab';
 import { SalesTeamsTab } from './components/SalesTeamsTab';
 import { CompanyDocumentsTab } from './components/CompanyDocumentsTab';
+import { InsideIntegrationTab } from './components/InsideIntegrationTab';
 
 interface State {
     id: string;
@@ -125,6 +127,7 @@ const EmpresaForm: React.FC = () => {
         { id: 'policies', label: 'Políticas Comerciais', icon: Shield },
         { id: 'sales_teams', label: 'Equipes de Venda', icon: Users },
         { id: 'documents', label: 'Documentos', icon: FileText },
+        { id: 'inside_integration', label: 'Integração Inside ERP', icon: Server },
         { id: 'qsa', label: 'Quadro de Sócios', icon: Building2 },
     ];
 
@@ -1407,6 +1410,18 @@ const EmpresaForm: React.FC = () => {
                                                 </table>
                                             </div>
                                         )}
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'inside_integration' && (
+                                    <motion.div
+                                        key="inside_integration"
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        className="space-y-6"
+                                    >
+                                        <InsideIntegrationTab companyId={id!} isReadOnly={isReadOnly} />
                                     </motion.div>
                                 )}
                             </AnimatePresence>

@@ -19,6 +19,7 @@ export interface OwnServiceItemCreate {
 
 export interface OwnServiceCreate {
   nome_servico: string;
+  codigo_service?: number | null;
   unidade?: string | null;
   vigencia: number;
   descricao?: string;
@@ -40,6 +41,7 @@ export interface OwnServiceResponse {
   tenant_id: string;
   company_id: string;
   nome_servico: string;
+  codigo_service?: number | null;
   unidade: string | null;
   vigencia: number;
   descricao: string | null;
@@ -54,6 +56,7 @@ export interface OwnServiceResponse {
 export interface OwnServiceListItem {
   id: string;
   nome_servico: string;
+  codigo_service?: number | null;
   unidade: string | null;
   vigencia: number;
   tempo_total_minutos: number;

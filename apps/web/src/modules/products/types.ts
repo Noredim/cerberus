@@ -3,6 +3,7 @@ export type ProductFinalidade = 'REVENDA' | 'ATIVO';
 
 export interface ProductFormData {
     company_id: string;
+    codigo_service?: number | null;
     nome: string;
     descricao?: string;
     tipo: ProductType;
@@ -37,6 +38,7 @@ export interface Product {
     tenant_id: string;
     company_id: string;
     codigo: string;
+    codigo_service?: number | null;
     nome: string;
     descricao?: string;
     tipo: ProductType;
@@ -62,6 +64,7 @@ export interface Product {
 
 export interface ProductCreate {
     company_id: string;
+    codigo_service?: number | null;
     nome: string;
     descricao?: string;
     tipo: ProductType;

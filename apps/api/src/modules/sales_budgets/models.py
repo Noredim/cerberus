@@ -307,6 +307,7 @@ class SalesBudgetHistory(Base):
     usuario_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     cargo_usuario = Column(String, nullable=True)
     descricao = Column(Text, nullable=False)
+    diff_changes = Column(JSONB, nullable=True)
     data_movimentacao = Column(DateTime(timezone=True), default=func.now(), nullable=False)
 
     budget = relationship("SalesBudget", back_populates="history")

@@ -347,7 +347,10 @@ class SalesTeamPolicyOut(BaseModel):
 class SalesTeamCreateUpdate(BaseModel):
     nome: str = Field(..., min_length=2, max_length=100)
     papel_timbrado_id: Optional[UUID] = None
+    nomenclatura_orcamento: Optional[str] = Field(None, max_length=20)
+    numero_proposta: Optional[int] = 1
     ativo: bool = True
+    permite_venda_express: bool = False
     members: List[SalesTeamMemberCreate] = []
     policies: List[SalesTeamPolicyCreate] = []
 
@@ -358,7 +361,10 @@ class SalesTeamOut(BaseModel):
     nome: str
     papel_timbrado_id: Optional[UUID] = None
     nome_papel_timbrado: Optional[str] = None
+    nomenclatura_orcamento: Optional[str] = None
+    numero_proposta: int = 1
     ativo: bool
+    permite_venda_express: bool = False
     members: List[SalesTeamMemberOut] = []
     policies: List[SalesTeamPolicyOut] = []
 
@@ -381,6 +387,38 @@ class CompanyDocumentRuleOut(BaseModel):
     document_template_nome: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# DTO: COMPANY INSIDE ERP CONFIG (DUAL ENVIRONMENT: SERVICOS & PRODUTOS)
+class CompanyInsideConfigBase(BaseModel):
+    base_url: Optional[str] = None
+    hash_token: Optional[str] = None
+    cod_unidade: Optional[int] = None
+    is_active: bool = False
+
+    # Ambiente A (Serviços)
+    servicos_base_url: Optional[str] = None
+    servicos_hash_token: Optional[str] = None
+    servicos_cod_unidade: Optional[int] = None
+    servicos_is_active: bool = False
+
+    # Ambiente B (Produtos / Locação / Comodato)
+    produtos_base_url: Optional[str] = None
+    produtos_hash_token: Optional[str] = None
+    produtos_cod_unidade: Optional[int] = None
+    produtos_is_active: bool = False
+
+
+class CompanyInsideConfigSave(CompanyInsideConfigBase):
+    pass
+
+
+class CompanyInsideConfigOut(CompanyInsideConfigBase):
+    id: UUID
+    company_id: UUID
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 

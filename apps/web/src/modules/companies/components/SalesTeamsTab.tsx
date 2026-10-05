@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck, FileText, Zap } from 'lucide-react';
 import { api } from '../../../services/api';
 
 interface EligibleUser {
@@ -41,7 +41,10 @@ interface SalesTeam {
     nome: string;
     papel_timbrado_id?: string | null;
     nome_papel_timbrado?: string | null;
+    nomenclatura_orcamento?: string | null;
+    numero_proposta?: number;
     ativo: boolean;
+    permite_venda_express?: boolean;
     members: TeamMember[];
     policies: TeamPolicy[];
 }
@@ -95,7 +98,10 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
         setEditingTeam({
             nome: '',
             papel_timbrado_id: null,
+            nomenclatura_orcamento: '',
+            numero_proposta: 1,
             ativo: true,
+            permite_venda_express: false,
             members: [],
             policies: []
         });
@@ -105,6 +111,9 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
         setEditingTeam({
             ...team,
             papel_timbrado_id: team.papel_timbrado_id || null,
+            nomenclatura_orcamento: team.nomenclatura_orcamento || '',
+            numero_proposta: team.numero_proposta ?? 1,
+            permite_venda_express: team.permite_venda_express ?? false,
             members: [...team.members],
             policies: [...team.policies]
         });
@@ -136,7 +145,10 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
         const payload = {
             nome: editingTeam.nome,
             papel_timbrado_id: editingTeam.papel_timbrado_id || null,
+            nomenclatura_orcamento: editingTeam.nomenclatura_orcamento?.trim() || null,
+            numero_proposta: Number(editingTeam.numero_proposta) || 1,
             ativo: editingTeam.ativo,
+            permite_venda_express: Boolean(editingTeam.permite_venda_express),
             members: editingTeam.members.map(m => ({
                 user_id: m.user_id,
                 cargo: m.cargo
@@ -263,7 +275,15 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                     <div key={t.id} className="bg-bg-card border border-border-subtle rounded-xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
                                         <div className="space-y-3">
                                             <div className="flex justify-between items-start">
-                                                <h4 className="font-bold text-text-primary text-base">{t.nome}</h4>
+                                                <div className="space-y-1">
+                                                    <h4 className="font-bold text-text-primary text-base">{t.nome}</h4>
+                                                    {t.permite_venda_express && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                                            <Zap className="w-3 h-3 text-amber-500" />
+                                                            Venda Express
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                                                     t.ativo ? 'bg-emerald-500/10 text-emerald-600' : 'bg-text-muted/10 text-text-muted'
                                                 }`}>
@@ -278,14 +298,22 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                             </div>
 
                                             <div className="space-y-1.5 pt-2">
-                                                <p className="text-xs font-bold uppercase text-text-muted tracking-wider">Papel Timbrado</p>
+                                                <p className="text-xs font-bold uppercase text-text-muted tracking-wider">Papel Timbrado & Numeração</p>
                                                 <div className="flex items-center gap-1.5 text-xs">
                                                     <FileText className="w-3.5 h-3.5 text-brand-primary shrink-0" />
                                                     {t.nome_papel_timbrado ? (
                                                         <span className="font-semibold text-text-primary">{t.nome_papel_timbrado}</span>
                                                     ) : (
-                                                        <span className="text-text-muted italic">Nenhum (impressão sem cabeçalho/rodapé)</span>
+                                                        <span className="text-text-muted italic">Nenhum</span>
                                                     )}
+                                                </div>
+                                                <div className="flex items-center gap-2 pt-1">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-bg-surface border border-border-subtle text-xs font-mono font-medium text-text-primary">
+                                                        Prefixo: {t.nomenclatura_orcamento || 'Padrão Empresa'}
+                                                    </span>
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-bg-surface border border-border-subtle text-xs font-mono text-text-muted">
+                                                        Próx. Nº: {t.numero_proposta || 1}
+                                                    </span>
                                                 </div>
                                             </div>
 
@@ -337,7 +365,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                             <h3 className="text-lg font-bold text-text-primary">
                                 {editingTeam.id ? `Editar Equipe: ${editingTeam.nome}` : 'Nova Equipe de Venda'}
                             </h3>
-                            <p className="text-sm text-text-muted">Configure o nome, membros, papel timbrado e políticas comerciais da equipe.</p>
+                            <p className="text-sm text-text-muted">Configure o nome, numeração de proposta, membros, papel timbrado e políticas comerciais da equipe.</p>
                         </div>
                         <span className="flex items-center gap-2">
                             <label className="text-sm font-medium text-text-primary">Ativa</label>
@@ -351,6 +379,30 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                         </span>
                     </div>
 
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-500/15 rounded-lg text-amber-600">
+                                <Zap className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <label htmlFor="permite_venda_express" className="text-sm font-bold text-text-primary cursor-pointer">
+                                    Habilitar para Venda Express
+                                </label>
+                                <p className="text-xs text-text-muted">
+                                    Permite que os membros desta equipe acessem e emitam propostas no módulo de <strong>Venda Express</strong>.
+                                </p>
+                            </div>
+                        </div>
+                        <input
+                            type="checkbox"
+                            id="permite_venda_express"
+                            checked={editingTeam.permite_venda_express ?? false}
+                            disabled={isReadOnly}
+                            onChange={(e) => setEditingTeam({ ...editingTeam, permite_venda_express: e.target.checked })}
+                            className="w-5 h-5 rounded border-border text-amber-500 focus:ring-amber-500 cursor-pointer"
+                        />
+                    </div>
+
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -361,7 +413,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                     disabled={isReadOnly}
                                     onChange={(e) => setEditingTeam({ ...editingTeam, nome: e.target.value })}
                                     className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all"
-                                    placeholder="Ex: Time Comercial Sul"
+                                    placeholder="Ex: Stelseg Varejo"
                                 />
                             </div>
 
@@ -383,6 +435,40 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-bg-subtle/30 border border-border-subtle rounded-xl">
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-1">
+                                    Nomenclatura / Prefixo da Proposta
+                                </label>
+                                <input
+                                    type="text"
+                                    maxLength={20}
+                                    value={editingTeam.nomenclatura_orcamento || ''}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setEditingTeam({ ...editingTeam, nomenclatura_orcamento: e.target.value.toUpperCase() })}
+                                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all font-mono"
+                                    placeholder="Ex: STL, ENG, PROP (Opcional - se vazio usa da Empresa)"
+                                />
+                                <p className="text-xs text-text-muted mt-1">Prefixo usado para gerar os números de proposta desta equipe.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-text-primary mb-1">
+                                    Próximo Número da Proposta
+                                </label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    value={editingTeam.numero_proposta ?? 1}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setEditingTeam({ ...editingTeam, numero_proposta: parseInt(e.target.value) || 1 })}
+                                    className="w-full px-3.5 py-2 border border-border rounded-lg bg-bg-card text-text-primary focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none text-sm transition-all font-mono"
+                                    placeholder="Ex: 1"
+                                />
+                                <p className="text-xs text-text-muted mt-1">Exemplo de formato: {editingTeam.nomenclatura_orcamento || 'OV'}-{String(editingTeam.numero_proposta || 1).padStart(3, '0')}/{new Date().getFullYear()}</p>
                             </div>
                         </div>
 

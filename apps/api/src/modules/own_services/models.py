@@ -29,6 +29,7 @@ class OwnService(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
     nome_servico = Column(String(200), nullable=False)
+    codigo_service = Column(Integer, nullable=True)
     unidade = Column(String(10), nullable=True)
     vigencia = Column(Integer, nullable=False)
     descricao = Column(Text, nullable=True)

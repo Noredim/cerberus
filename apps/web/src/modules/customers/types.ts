@@ -4,6 +4,7 @@ export type CustomerEsfera = 'MUNICIPAL' | 'ESTADUAL' | 'FEDERAL' | 'AUTARQUIA';
 export interface Customer {
     id: string;
     tenant_id: string;
+    codigo_cliente_service?: number | null;
     cnpj: string;
     razao_social: string;
     nome_fantasia?: string;
@@ -24,6 +25,7 @@ export interface Customer {
 }
 
 export interface CustomerCreate {
+    codigo_cliente_service?: number | null;
     cnpj: string;
     razao_social: string;
     nome_fantasia?: string;
@@ -41,6 +43,7 @@ export interface CustomerCreate {
 }
 
 export interface CustomerUpdate {
+    codigo_cliente_service?: number | null;
     razao_social?: string;
     nome_fantasia?: string;
     email?: string;

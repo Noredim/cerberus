@@ -22,6 +22,7 @@ const FormasPagamentoForm: React.FC = () => {
     
     const [formData, setFormData] = useState<Partial<FormaPagamento>>({
         descricao: '',
+        codigo_service: null,
         tipo_uso: 'VENDA',
         tipo_distribuicao: 'PERCENTUAL',
         taxa_juros_mensal: 0,
@@ -49,6 +50,7 @@ const FormasPagamentoForm: React.FC = () => {
                 }));
                 setFormData({
                     ...data,
+                    codigo_service: data.codigo_service !== undefined && data.codigo_service !== null ? data.codigo_service : null,
                     taxa_juros_mensal: data.taxa_juros_mensal !== undefined && data.taxa_juros_mensal !== null ? parseFloat(data.taxa_juros_mensal) : 0,
                     parcelas: parcelasParsed
                 });
@@ -225,6 +227,7 @@ const FormasPagamentoForm: React.FC = () => {
         try {
             const payload = {
                 descricao: formData.descricao,
+                codigo_service: formData.codigo_service ? Number(formData.codigo_service) : null,
                 tipo_uso: formData.tipo_uso,
                 tipo_distribuicao: formData.tipo_distribuicao,
                 taxa_juros_mensal: formData.taxa_juros_mensal ? Number(formData.taxa_juros_mensal) : 0,
@@ -344,6 +347,20 @@ const FormasPagamentoForm: React.FC = () => {
                                         <option value="RATEIO_IGUAL">Rateio Igualitário</option>
                                         <option value="VALOR_FIXO">Valores Fixos / Saldo Restante</option>
                                     </select>
+                                </div>
+
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider flex items-center justify-between">
+                                        <span>Cód. Inside ERP (formaPagamento)</span>
+                                        <span className="text-[10px] text-text-muted font-normal lowercase">código numérico no erp inside</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={formData.codigo_service !== undefined && formData.codigo_service !== null ? formData.codigo_service : ''}
+                                        onChange={e => handleHeaderChange('codigo_service', e.target.value ? parseInt(e.target.value, 10) : null)}
+                                        placeholder="Ex: 1"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-4 outline-none focus:border-brand-primary transition-colors text-sm"
+                                    />
                                 </div>
 
                                 <div className="space-y-1.5 md:col-span-2">

@@ -6,7 +6,7 @@ from typing import Optional, List
 from enum import Enum
 
 # Fields that should NOT be uppercased (numeric codes, emails, etc.)
-_SKIP_UPPER = {'ncm_codigo', 'cest_codigo', 'cmt_codigo', 'email'}
+_SKIP_UPPER = {'ncm_codigo', 'cest_codigo', 'cmt_codigo', 'email', 'codigo_service'}
 
 def _uppercase_strings(data: dict, skip: set = _SKIP_UPPER) -> dict:
     """Uppercase all string values in a dict, skipping specified keys."""
@@ -29,6 +29,7 @@ class ProductFinalidade(str, Enum):
 class ProductBase(BaseModel):
     company_id: UUID
     nome: str
+    codigo_service: Optional[int] = None
     descricao: Optional[str] = None
     tipo: ProductType
     finalidade: ProductFinalidade
@@ -76,6 +77,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     company_id: Optional[UUID] = None
+    codigo_service: Optional[int] = None
     nome: Optional[str] = None
     descricao: Optional[str] = None
     tipo: Optional[ProductType] = None

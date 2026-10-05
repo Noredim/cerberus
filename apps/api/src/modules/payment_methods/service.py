@@ -36,6 +36,7 @@ class PaymentMethodsService:
         db_forma = FormaPagamento(
             tenant_id=tenant_id,
             descricao=data.descricao,
+            codigo_service=data.codigo_service,
             tipo_uso=data.tipo_uso.value,
             tipo_distribuicao=data.tipo_distribuicao.value,
             taxa_juros_mensal=data.taxa_juros_mensal,
@@ -79,6 +80,7 @@ class PaymentMethodsService:
             PaymentMethodsService._clear_other_defaults(db, tenant_id, forma_id)
 
         db_forma.descricao = data.descricao
+        db_forma.codigo_service = data.codigo_service
         db_forma.tipo_uso = data.tipo_uso.value
         db_forma.tipo_distribuicao = data.tipo_distribuicao.value
         db_forma.taxa_juros_mensal = data.taxa_juros_mensal

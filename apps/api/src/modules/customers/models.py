@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Integer
 from sqlalchemy.orm import relationship
 from src.core.base import Base
 from datetime import datetime
@@ -21,6 +21,7 @@ class Customer(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Identificação
+    codigo_cliente_service = Column(Integer, nullable=True) # Inside ERP Client Code
     cnpj = Column(String, index=True, nullable=False)
     razao_social = Column(String, nullable=False)
     nome_fantasia = Column(String)

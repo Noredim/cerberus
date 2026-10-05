@@ -1,12 +1,10 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text, Integer, UniqueConstraint, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.suppliers.models
-from sqlalchemy import UniqueConstraint, Numeric
-from sqlalchemy import UniqueConstraint
 
 class Product(Base):
     __tablename__ = "products"
@@ -16,6 +14,7 @@ class Product(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     
     codigo = Column(String(50), nullable=False, index=True)
+    codigo_service = Column(Integer, nullable=True) # Inside ERP Service Code
     nome = Column(String(300), nullable=False)  # Aumentei de 255 para 300 caracteres
     descricao = Column(Text)
     

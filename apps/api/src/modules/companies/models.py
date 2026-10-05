@@ -68,6 +68,7 @@ class Company(Base):
     commercial_policies = relationship("CommercialPolicy", back_populates="company", cascade="all, delete-orphan")
     sales_teams = relationship("SalesTeam", back_populates="company", cascade="all, delete-orphan")
     document_rules = relationship("CompanyDocumentRule", back_populates="company", cascade="all, delete-orphan")
+    inside_config = relationship("CompanyInsideConfig", back_populates="company", uselist=False, cascade="all, delete-orphan")
     city = relationship("City")
     state = relationship("State")
 
@@ -292,7 +293,10 @@ class SalesTeam(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     nome = Column(String(100), nullable=False)
     papel_timbrado_id = Column(UUID(as_uuid=True), ForeignKey("papel_timbrado.id", ondelete="SET NULL"), nullable=True, index=True)
+    nomenclatura_orcamento = Column(String(20), nullable=True)
+    numero_proposta = Column(Integer, default=1, nullable=False)
     ativo = Column(Boolean, default=True, nullable=False)
+    permite_venda_express = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
@@ -346,6 +350,37 @@ class CompanyDocumentRule(Base):
     __table_args__ = (
         UniqueConstraint("company_id", "tipo_documento", "sales_team_id", name="uq_company_doc_rule_team"),
     )
+
+
+class CompanyInsideConfig(Base):
+    """Configuração de Integração com Inside ERP (Service OnPremises) por Empresa (Ambiente Duplo: Serviços vs Produtos)."""
+    __tablename__ = "company_inside_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True)
+    
+    # Configuração Geral / Legada
+    base_url = Column(String(255), nullable=True)
+    hash_token = Column(String(255), nullable=True)
+    cod_unidade = Column(Integer, nullable=True)
+    is_active = Column(Boolean, default=False, nullable=False)
+
+    # Ambiente A (Base de Serviços)
+    servicos_base_url = Column(String(255), nullable=True)
+    servicos_hash_token = Column(String(255), nullable=True)
+    servicos_cod_unidade = Column(Integer, nullable=True)
+    servicos_is_active = Column(Boolean, default=False, nullable=False)
+
+    # Ambiente B (Base de Produtos, Locação e Comodato)
+    produtos_base_url = Column(String(255), nullable=True)
+    produtos_hash_token = Column(String(255), nullable=True)
+    produtos_cod_unidade = Column(Integer, nullable=True)
+    produtos_is_active = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    company = relationship("Company", back_populates="inside_config")
 
 
 from src.modules.own_services.models import OwnService  # noqa: F401

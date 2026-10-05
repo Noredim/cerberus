@@ -77,6 +77,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
 
   // Form state
   const [nomeServico, setNomeServico] = useState('');
+  const [codigoService, setCodigoService] = useState('');
   const [unidade, setUnidade] = useState('');
   const [vigencia, setVigencia] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -104,6 +105,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
         .get(serviceId)
         .then((svc: OwnServiceResponse) => {
           setNomeServico(svc.nome_servico);
+          setCodigoService(svc.codigo_service != null ? String(svc.codigo_service) : '');
           setUnidade(svc.unidade || '');
           setVigencia(String(svc.vigencia));
           setDescricao(svc.descricao ?? '');
@@ -231,6 +233,7 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
 
     const payload = {
       nome_servico: nomeServico.trim(),
+      codigo_service: codigoService.trim() ? parseInt(codigoService.trim(), 10) : undefined,
       unidade: unidade.trim() || undefined,
       vigencia: parseInt(vigencia, 10),
       descricao: descricao.trim() || undefined,
@@ -296,9 +299,9 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
               )}
 
               {/* ── Seção 1: Cabeçalho ─────────────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Nome */}
-                <div className="md:col-span-2 space-y-1">
+                <div className="md:col-span-3 space-y-1">
                   <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
                     Nome do Serviço <span className="text-brand-danger">*</span>
                   </label>
@@ -312,6 +315,22 @@ const OwnServicesModal: React.FC<OwnServicesModalProps> = ({ mode, serviceId, on
                     className={errors.nome_servico ? inpErr : isReadOnly ? inpDis : inp}
                   />
                   {errors.nome_servico && <p className="text-xs text-brand-danger">{errors.nome_servico}</p>}
+                </div>
+
+                {/* Cód. Inside ERP (Service) */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                    Cód. Inside ERP <span className="text-xs text-text-muted font-normal normal-case">(opcional)</span>
+                  </label>
+                  <input
+                    id="own-service-codigo-service"
+                    type="number"
+                    placeholder="Ex: 501"
+                    value={codigoService}
+                    onChange={(e) => setCodigoService(e.target.value)}
+                    disabled={isReadOnly}
+                    className={isReadOnly ? inpDis : inp}
+                  />
                 </div>
 
                 {/* Unidade */}

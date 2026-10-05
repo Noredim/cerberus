@@ -3,6 +3,7 @@ import { api } from './api';
 export interface Professional {
   id: string;
   tenant_id: string;
+  codigo_service?: number | null;
   name: string;
   cpf: string;
   role_id: string;
@@ -13,6 +14,7 @@ export interface Professional {
 
 export interface CreateProfessionalDTO {
   name: string;
+  codigo_service?: number | null;
   cpf: string;
   role_id: string;
   user_id?: string | null;
@@ -20,6 +22,7 @@ export interface CreateProfessionalDTO {
 
 export interface UpdateProfessionalDTO {
   name?: string;
+  codigo_service?: number | null;
   cpf?: string;
   role_id?: string;
   user_id?: string | null;

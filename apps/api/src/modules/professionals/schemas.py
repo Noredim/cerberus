@@ -11,6 +11,7 @@ def clean_digits(v: Optional[str]) -> Optional[str]:
 class ProfessionalBase(BaseModel):
     name: str = Field(..., description="Name of the professional")
     company_id: Optional[UUID] = Field(None, description="ID of the company")
+    codigo_service: Optional[int] = Field(None, description="ERP Inside Service Code")
     cpf: str = Field(..., description="CPF of the professional")
     role_id: str = Field(..., description="ID of the associated role")
     user_id: Optional[str] = Field(None, description="ID of the associated user account")
@@ -30,6 +31,7 @@ class ProfessionalCreate(ProfessionalBase):
 class ProfessionalUpdate(BaseModel):
     name: Optional[str] = None
     company_id: Optional[UUID] = None
+    codigo_service: Optional[int] = None
     cpf: Optional[str] = None
     role_id: Optional[str] = None
     user_id: Optional[str] = None

@@ -26,11 +26,24 @@ def _round(val: Decimal, places: int = 4) -> Decimal:
     return val.quantize(Decimal(10) ** -places, rounding=ROUND_HALF_UP)
 
 
-def get_next_numero(db: Session, tenant_id: str, company_id: str) -> str:
-    """Generate next sequential budget number [NOMENCLATURA]-[NUM]/[ANO]."""
+def get_next_numero(db: Session, tenant_id: str, company_id: str, sales_team_id: Optional[str] = None) -> str:
+    """Generate next sequential budget number [NOMENCLATURA]-[NUM]/[ANO].
+    Prioritizes sales team prefix and sequence if sales_team_id is provided,
+    falling back to company prefix and sequence.
+    """
     from datetime import datetime
     ano_vigente = datetime.now().year
     
+    if sales_team_id:
+        from src.modules.companies.models import SalesTeam
+        team = db.query(SalesTeam).filter(SalesTeam.id == sales_team_id).first()
+        if team and team.nomenclatura_orcamento:
+            nom = team.nomenclatura_orcamento
+            num = team.numero_proposta or 1
+            team.numero_proposta = num + 1
+            db.add(team)
+            return f"{nom}-{num:03d}/{ano_vigente}"
+
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         return f"OV-001/{ano_vigente}"
@@ -884,7 +897,7 @@ def create_budget(db: Session, tenant_id: str, company_id: str, data: SalesBudge
         data_vencimento_inicial=data.data_vencimento_inicial,
         forma_pagamento_snapshot=data.forma_pagamento_snapshot,
         commercial_policy_id=data.commercial_policy_id,
-        numero_orcamento=get_next_numero(db, tenant_id, company_id),
+        numero_orcamento=get_next_numero(db, tenant_id, company_id, str(data.sales_team_id) if data.sales_team_id else None),
         titulo=data.titulo,
         observacoes=data.observacoes,
         data_orcamento=data.data_orcamento,
@@ -1477,10 +1490,11 @@ def duplicate_budget(db: Session, tenant_id: str, budget_id: str, user_id: Optio
         company_id=original.company_id,
         customer_id=original.customer_id,
         vendedor_id=original.vendedor_id,
+        sales_team_id=original.sales_team_id,
         forma_pagamento_id=original.forma_pagamento_id,
         data_vencimento_inicial=original.data_vencimento_inicial,
         forma_pagamento_snapshot=original.forma_pagamento_snapshot,
-        numero_orcamento=get_next_numero(db, tenant_id, str(original.company_id)),
+        numero_orcamento=get_next_numero(db, tenant_id, str(original.company_id), str(original.sales_team_id) if original.sales_team_id else None),
         titulo=f"{original.titulo} (Cópia)",
         observacoes=original.observacoes,
         data_orcamento=original.data_orcamento,
@@ -1760,7 +1774,9 @@ def list_budgets(
     status: Optional[str] = None,
     user_id: Optional[str] = None,
     vendedor_id: Optional[str] = None,
-    responsavel_id: Optional[str] = None
+    responsavel_id: Optional[str] = None,
+    sales_team_id: Optional[str] = None,
+    express_only: Optional[bool] = None
 ) -> Tuple[List[SalesBudget], int]:
     from sqlalchemy import or_
     from src.modules.sales_budgets.models import SalesBudgetResponsavel
@@ -1794,6 +1810,18 @@ def list_budgets(
         
     if responsavel_id:
         query = query.filter(SalesBudget.responsaveis.any(SalesBudgetResponsavel.user_id == responsavel_id))
+
+    if sales_team_id:
+        query = query.filter(SalesBudget.sales_team_id == sales_team_id)
+
+    if express_only:
+        from src.modules.companies.models import SalesTeam
+        express_team_ids = [t[0] for t in db.query(SalesTeam.id).filter(
+            SalesTeam.company_id == company_id,
+            SalesTeam.permite_venda_express == True
+        ).all()]
+        if express_team_ids:
+            query = query.filter(SalesBudget.sales_team_id.in_(express_team_ids))
         
     if q:
         search_term = f"%{q}%"

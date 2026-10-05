@@ -45,6 +45,7 @@ class OwnServiceItemResponse(BaseModel):
 
 class OwnServiceCreate(BaseModel):
     nome_servico: str = Field(..., min_length=1, max_length=200)
+    codigo_service: Optional[int] = None
     unidade: Optional[str] = Field(None, max_length=10)
     vigencia: int = Field(..., ge=2000, le=2099)
     descricao: Optional[str] = None
@@ -69,6 +70,7 @@ class OwnServiceCreate(BaseModel):
 
 class OwnServiceUpdate(BaseModel):
     nome_servico: Optional[str] = Field(default=None, max_length=200)
+    codigo_service: Optional[int] = None
     unidade: Optional[str] = Field(default=None, max_length=10)
     vigencia: Optional[int] = Field(default=None, ge=2000, le=2099)
     descricao: Optional[str] = None
@@ -108,6 +110,7 @@ class OwnServiceResponse(BaseModel):
     tenant_id: str
     company_id: UUID
     nome_servico: str
+    codigo_service: Optional[int] = None
     unidade: Optional[str] = None
     vigencia: int
     descricao: Optional[str] = None
@@ -125,6 +128,7 @@ class OwnServiceListItem(BaseModel):
     """Lightweight response for the main grid."""
     id: UUID
     nome_servico: str
+    codigo_service: Optional[int] = None
     unidade: Optional[str] = None
     vigencia: int
     tempo_total_minutos: int

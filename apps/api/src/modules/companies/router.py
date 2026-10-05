@@ -11,8 +11,8 @@ import shutil
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
-from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa, CompanyDocumentRule, SalesTeam, SalesTeamMember
-from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut, EligibleUserOut, SalesTeamCreateUpdate, SalesTeamOut, SalesTeamMemberOut, SalesTeamPolicyOut, CompanyDocumentRuleSave, CompanyDocumentRuleOut
+from .models import Company, CompanyCnae, CompanyTaxProfile, CompanyBenefit, CompanyQsa, CompanyDocumentRule, SalesTeam, SalesTeamMember, CompanyInsideConfig
+from .schemas import CompanyCreate, CompanyOut, CnpjIntegrationResult, CompanyTaxProfileBase, CompanyUpdate, CompanySalesParameterBase, CommercialPolicyCreate, CommercialPolicyUpdate, CommercialPolicyOut, EligibleUserOut, SalesTeamCreateUpdate, SalesTeamOut, SalesTeamMemberOut, SalesTeamPolicyOut, CompanyDocumentRuleSave, CompanyDocumentRuleOut, CompanyInsideConfigSave, CompanyInsideConfigOut
 
 from .providers.cnpj_provider import ReceitaWsProvider
 from .services.cnpj_consultar_service import ConsultarEmpresaPorCNPJService
@@ -827,7 +827,10 @@ def list_sales_teams(
             nome=t.nome,
             papel_timbrado_id=t.papel_timbrado_id,
             nome_papel_timbrado=t.papel_timbrado.nome if t.papel_timbrado else None,
+            nomenclatura_orcamento=t.nomenclatura_orcamento,
+            numero_proposta=t.numero_proposta if t.numero_proposta is not None else 1,
             ativo=t.ativo,
+            permite_venda_express=bool(getattr(t, 'permite_venda_express', False)),
             members=members_out,
             policies=policies_out
         ))
@@ -903,7 +906,10 @@ def create_sales_team(
         company_id=company_id,
         nome=payload.nome,
         papel_timbrado_id=payload.papel_timbrado_id,
-        ativo=payload.ativo
+        nomenclatura_orcamento=payload.nomenclatura_orcamento,
+        numero_proposta=payload.numero_proposta if payload.numero_proposta is not None else 1,
+        ativo=payload.ativo,
+        permite_venda_express=payload.permite_venda_express
     )
     db.add(team)
     db.flush() # Populate team.id
@@ -961,7 +967,10 @@ def create_sales_team(
         nome=db_team.nome,
         papel_timbrado_id=db_team.papel_timbrado_id,
         nome_papel_timbrado=db_team.papel_timbrado.nome if db_team.papel_timbrado else None,
+        nomenclatura_orcamento=db_team.nomenclatura_orcamento,
+        numero_proposta=db_team.numero_proposta if db_team.numero_proposta is not None else 1,
         ativo=db_team.ativo,
+        permite_venda_express=bool(getattr(db_team, 'permite_venda_express', False)),
         members=members_out,
         policies=policies_out
     )
@@ -1037,7 +1046,11 @@ def update_sales_team(
     # 5. Update core attributes
     team.nome = payload.nome
     team.papel_timbrado_id = payload.papel_timbrado_id
+    team.nomenclatura_orcamento = payload.nomenclatura_orcamento
+    if payload.numero_proposta is not None:
+        team.numero_proposta = payload.numero_proposta
     team.ativo = payload.ativo
+    team.permite_venda_express = payload.permite_venda_express
 
     # 6. Update members
     db.query(SalesTeamMember).filter(SalesTeamMember.sales_team_id == team_id).delete()
@@ -1094,7 +1107,10 @@ def update_sales_team(
         nome=db_team.nome,
         papel_timbrado_id=db_team.papel_timbrado_id,
         nome_papel_timbrado=db_team.papel_timbrado.nome if db_team.papel_timbrado else None,
+        nomenclatura_orcamento=db_team.nomenclatura_orcamento,
+        numero_proposta=db_team.numero_proposta if db_team.numero_proposta is not None else 1,
         ativo=db_team.ativo,
+        permite_venda_express=bool(getattr(db_team, 'permite_venda_express', False)),
         members=members_out,
         policies=policies_out
     )
@@ -1309,5 +1325,66 @@ def resolve_document_template_for_user(
         "sales_team_id": None,
         "resolved_by": "NONE"
     }
+
+
+@router.get("/{company_id}/inside-config", response_model=CompanyInsideConfigOut)
+def get_company_inside_config(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    config = db.query(CompanyInsideConfig).filter(CompanyInsideConfig.company_id == company_id).first()
+    if not config:
+        config = CompanyInsideConfig(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            base_url="",
+            hash_token="",
+            cod_unidade=None,
+            is_active=False
+        )
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+
+    return config
+
+
+@router.put("/{company_id}/inside-config", response_model=CompanyInsideConfigOut)
+def update_company_inside_config(
+    company_id: UUID,
+    payload: CompanyInsideConfigSave,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    company = db.query(Company).filter(Company.id == company_id, Company.tenant_id == current_user.tenant_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+
+    config = db.query(CompanyInsideConfig).filter(CompanyInsideConfig.company_id == company_id).first()
+    if not config:
+        config = CompanyInsideConfig(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            base_url=payload.base_url,
+            hash_token=payload.hash_token,
+            cod_unidade=payload.cod_unidade,
+            is_active=payload.is_active
+        )
+        db.add(config)
+    else:
+        config.base_url = payload.base_url
+        config.hash_token = payload.hash_token
+        config.cod_unidade = payload.cod_unidade
+        config.is_active = payload.is_active
+
+    db.commit()
+    db.refresh(config)
+    return config
+
 
 

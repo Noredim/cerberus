@@ -16,6 +16,7 @@ const ProfessionalsForm: React.FC<ProfessionalsFormProps> = ({ professional, onS
     const [cpf, setCpf] = useState('');
     const [roleId, setRoleId] = useState('');
     const [userId, setUserId] = useState('');
+    const [codigoService, setCodigoService] = useState('');
 
     const [roles, setRoles] = useState<Role[]>([]);
     const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
@@ -46,11 +47,13 @@ const ProfessionalsForm: React.FC<ProfessionalsFormProps> = ({ professional, onS
                     setCpf(formatCpfDisplay(professional.cpf));
                     setRoleId(professional.role_id);
                     setUserId(professional.user_id || '');
+                    setCodigoService(professional.codigo_service != null ? String(professional.codigo_service) : '');
                 } else {
                     setName('');
                     setCpf('');
                     setRoleId(rolesData[0]?.id || '');
                     setUserId('');
+                    setCodigoService('');
                 }
             } catch (err) {
                 console.error("Error fetching form dependencies", err);
@@ -103,7 +106,8 @@ const ProfessionalsForm: React.FC<ProfessionalsFormProps> = ({ professional, onS
                 name,
                 cpf: pureCpf,
                 role_id: roleId,
-                user_id: userId === '' ? null : userId
+                user_id: userId === '' ? null : userId,
+                codigo_service: codigoService.trim() ? parseInt(codigoService.trim(), 10) : null
             };
 
             if (professional) {
@@ -240,6 +244,23 @@ const ProfessionalsForm: React.FC<ProfessionalsFormProps> = ({ professional, onS
                                         </select>
                                         <p className="text-xs text-text-muted mt-1 leading-relaxed">
                                             Profissionais que usarão ativamente o sistema precisam estar vinculados a uma conta de Usuário válida. O sistema apenas lista os usuários que não foram vinculados a outra pessoa.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-text-primary flex items-center justify-between">
+                                            <span>Cód. Inside ERP (Vendedor / Técnico)</span>
+                                            <span className="text-xs bg-bg-surface px-2 border border-border-subtle rounded-full text-brand-primary">Opcional</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={codigoService}
+                                            onChange={(e) => setCodigoService(e.target.value)}
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-2.5 px-3 text-text-primary placeholder:text-text-muted focus:border-brand-primary outline-none transition-colors"
+                                            placeholder="Ex: 12"
+                                        />
+                                        <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                                            Código do profissional ou vendedor cadastrado na base do Inside ERP para amarração de orçamentos gerados.
                                         </p>
                                     </div>
                                 </div>

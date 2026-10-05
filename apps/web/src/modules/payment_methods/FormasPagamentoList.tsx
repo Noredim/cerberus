@@ -8,11 +8,16 @@ import {
     XCircle,
     Loader2,
     Edit2,
-    Trash2
+    Trash2,
+    RefreshCw,
+    Server,
+    Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { insideIntegrationApi } from '../../services/insideIntegrationApi';
 
 export interface FormaPagamentoParcela {
     id?: string;
@@ -26,6 +31,7 @@ export interface FormaPagamentoParcela {
 export interface FormaPagamento {
     id: string;
     descricao: string;
+    codigo_service?: number | null;
     tipo_uso: 'COMPRA' | 'VENDA' | 'AMBOS';
     tipo_distribuicao: 'PERCENTUAL' | 'RATEIO_IGUAL' | 'VALOR_FIXO';
     taxa_juros_mensal?: number;
@@ -38,8 +44,11 @@ export interface FormaPagamento {
 
 const FormasPagamentoList: React.FC = () => {
     const navigate = useNavigate();
+    const { activeCompanyId } = useAuth();
     const [formas, setFormas] = useState<FormaPagamento[]>([]);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
+    const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
     const [search, setSearch] = useState('');
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
@@ -59,6 +68,31 @@ const FormasPagamentoList: React.FC = () => {
         loadFormas();
     }, []);
 
+    const handleSyncInside = async () => {
+        if (!activeCompanyId) {
+            alert('Selecione uma empresa ativa antes de sincronizar.');
+            return;
+        }
+        setSyncing(true);
+        setSyncResult(null);
+        try {
+            const res = await insideIntegrationApi.syncFormasPagamento(activeCompanyId, 'SERVICOS');
+            setSyncResult({
+                success: true,
+                message: res.mensagem || `Sincronização concluída: ${res.total_processados || 0} formas processadas.`
+            });
+            await loadFormas();
+        } catch (err: any) {
+            const detail = err.response?.data?.detail || 'Falha ao sincronizar formas de pagamento com o Inside ERP.';
+            setSyncResult({
+                success: false,
+                message: detail
+            });
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     const handleDelete = async (id: string, name: string) => {
         if (!window.confirm(`Deseja realmente excluir a forma de pagamento "${name}"?`)) return;
         try {
@@ -74,12 +108,13 @@ const FormasPagamentoList: React.FC = () => {
     const filteredFormas = formas.filter(f => 
         f.descricao.toLowerCase().includes(search.toLowerCase()) ||
         f.tipo_uso.toLowerCase().includes(search.toLowerCase()) ||
-        f.tipo_distribuicao.toLowerCase().includes(search.toLowerCase())
+        f.tipo_distribuicao.toLowerCase().includes(search.toLowerCase()) ||
+        (f.codigo_service && String(f.codigo_service).includes(search))
     );
 
     return (
         <div className="space-y-6 w-full">
-            <header className="flex items-center justify-between">
+            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-display font-bold text-text-primary tracking-tight">
                         Formas de <span className="text-brand-primary">Pagamento</span>
@@ -87,14 +122,49 @@ const FormasPagamentoList: React.FC = () => {
                     <p className="text-text-muted mt-1">Gerencie as condições comerciais de parcelamento para Vendas e Compras.</p>
                 </div>
 
-                <button
-                    onClick={() => navigate('/cadastros/formas-pagamento/novo')}
-                    className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm"
-                >
-                    <Plus className="w-5 h-5" />
-                    Nova Forma
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={handleSyncInside}
+                        disabled={syncing || !activeCompanyId}
+                        className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 px-4 py-2 rounded-md font-medium transition-all min-h-[40px] cursor-pointer shadow-sm disabled:opacity-50 text-sm"
+                        title="Importar e correlacionar formas de pagamento cadastradas no Inside ERP"
+                    >
+                        {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        Sincronizar Inside ERP
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/cadastros/formas-pagamento/novo')}
+                        className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm text-sm"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Nova Forma
+                    </button>
+                </div>
             </header>
+
+            {syncResult && (
+                <div
+                    className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-sm ${
+                        syncResult.success
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                    }`}
+                >
+                    <div className="flex items-center gap-2">
+                        {syncResult.success ? <Check className="w-5 h-5 shrink-0" /> : <Server className="w-5 h-5 shrink-0" />}
+                        <span>{syncResult.message}</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setSyncResult(null)}
+                        className="text-xs font-bold underline cursor-pointer"
+                    >
+                        Fechar
+                    </button>
+                </div>
+            )}
 
             <div className="bg-surface rounded-lg border border-border-subtle shadow-sm flex flex-col">
                 <div className="p-5 border-b border-border-subtle flex items-center justify-between bg-surface gap-4">
@@ -155,6 +225,11 @@ const FormasPagamentoList: React.FC = () => {
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-semibold text-text-primary">{forma.descricao}</span>
+                                                        {forma.codigo_service && (
+                                                            <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded">
+                                                                Inside #{forma.codigo_service}
+                                                            </span>
+                                                        )}
                                                         {forma.is_default && (
                                                             <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded uppercase tracking-wider">
                                                                 Padrão

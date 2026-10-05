@@ -317,6 +317,9 @@ interface KitFormValues {
   perc_frete_venda: number;
   perc_despesas_adm: number;
   perc_comissao: number;
+  tipo_precificacao?: 'DINAMICO_CUSTO' | 'PRECO_FIXO';
+  valor_venda_fixo?: number | '';
+  valor_locacao_mensal_fixo?: number | '';
   tipo_comissionamento?: 'TRADICIONAL' | 'COMISSAO_POR_DENTRO';
   perc_dsr?: number;
   perc_fgts?: number;
@@ -412,6 +415,8 @@ export const OpportunityKitForm = ({
   const [isCalculating, setIsCalculating] = useState(false);
   const [isCalcExpanded, setIsCalcExpanded] = useState(true);
   const [isPolicyExpanded, setIsPolicyExpanded] = useState(false);
+  const [isBlock2Expanded, setIsBlock2Expanded] = useState(false);
+  const [isBlock3Expanded, setIsBlock3Expanded] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showItemServiceSearch, setShowItemServiceSearch] = useState(false);
   const [costSearchType, setCostSearchType] = useState<'op' | 'inst' | null>(null);
@@ -523,6 +528,9 @@ export const OpportunityKitForm = ({
     descricao_kit: '',
     quantidade_kits: 1,
     tipo_contrato: initialTipoContrato,
+    tipo_precificacao: 'DINAMICO_CUSTO',
+    valor_venda_fixo: '',
+    valor_locacao_mensal_fixo: '',
     considerar_st_ou_difal: 'DIFAL',
     prazo_contrato_meses: initialPrazoContrato ?? 36,
     prazo_instalacao_meses: initialPrazoInstalacao ?? 0,
@@ -728,6 +736,10 @@ export const OpportunityKitForm = ({
       if ((data.taxa_manutencao_anual === undefined || data.taxa_manutencao_anual === null) && initialTaxaManutencao !== undefined && (sourceBudgetId || initialSalesBudgetId)) {
         data.taxa_manutencao_anual = initialTaxaManutencao;
       }
+
+      data.tipo_precificacao = data.tipo_precificacao || 'DINAMICO_CUSTO';
+      data.valor_venda_fixo = data.valor_venda_fixo != null ? Number(data.valor_venda_fixo) : '';
+      data.valor_locacao_mensal_fixo = data.valor_locacao_mensal_fixo != null ? Number(data.valor_locacao_mensal_fixo) : '';
 
       setForm(data);
       isInitialLoad.current = false;
@@ -976,6 +988,9 @@ export const OpportunityKitForm = ({
       qtd_meses_manutencao: data.qtd_meses_manutencao === '' ? null : data.qtd_meses_manutencao,
       margem_minima_desejada: data.margem_minima_desejada === '' || data.margem_minima_desejada === undefined ? null : data.margem_minima_desejada,
       faturamento_servico_separado: data.faturamento_servico_separado || false,
+      tipo_precificacao: data.tipo_precificacao || 'DINAMICO_CUSTO',
+      valor_venda_fixo: data.tipo_precificacao === 'PRECO_FIXO' && data.valor_venda_fixo !== '' && data.valor_venda_fixo !== undefined ? Number(data.valor_venda_fixo) : null,
+      valor_locacao_mensal_fixo: data.tipo_precificacao === 'PRECO_FIXO' && data.valor_locacao_mensal_fixo !== '' && data.valor_locacao_mensal_fixo !== undefined ? Number(data.valor_locacao_mensal_fixo) : null,
       sales_teams: (sourceBudgetId || data.sales_budget_id) ? [] : data.sales_teams || [],
       costs: sanitizedCosts,
       monthly_costs: data.monthly_costs,
@@ -2906,385 +2921,539 @@ export const OpportunityKitForm = ({
                 </div>
               )}
             </div>
-          </section>
 
-          <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-            <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle">
-              2. Prazos e Parâmetros Financeiros
-            </h2>
-            {/* GRUPO 1: Parâmetros Base */}
-            <div className={`grid grid-cols-1 ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'md:grid-cols-4' : 'md:grid-cols-4'} gap-6 mb-8`}>
-              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Prazo Contrato (Meses)</label>
-                    <Input type="number" value={form.prazo_contrato_meses} onChange={(e) => handleInputChange('prazo_contrato_meses', parseFloat(e.target.value) || 0)} className="w-full text-lg font-medium" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Carência/Instalação (Meses)</label>
-                    <Input type="number" value={form.prazo_instalacao_meses} onChange={(e) => handleInputChange('prazo_instalacao_meses', parseFloat(e.target.value) || 0)} className="w-full" />
-                    <p className="text-xs text-text-muted mt-1">Meses sem locação.</p>
-                  </div>
-                </>
-              )}
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium">
-                    {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem Produtos'}
-                  </label>
-                  {licitacaoItemDetails && (() => {
-                    const itemEstUnit = Number(licitacaoItemDetails.valor_unitario_estimado || (Number(licitacaoItemDetails.valor_total_estimado || 0) / (Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade ?? 1))));
-                    const custoAqUnit = Number(financials?.summary?.custo_aquisicao_kit || (financials?.summary?.custo_aquisicao_total ? financials.summary.custo_aquisicao_total / (form.quantidade_kits || 1) : 0));
-                    const mkpSugerido = (custoAqUnit > 0 && itemEstUnit > 0) ? (itemEstUnit / custoAqUnit) : 0;
-                    if (mkpSugerido <= 0) return null;
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const sVal = parseFloat(mkpSugerido.toFixed(4));
-                          handleInputChange('fator_margem_locacao', sVal);
-                          handleFactorBlur('fator_margem_locacao', sVal);
-                        }}
-                        className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Clique para preencher o fator com o MKP sugerido do edital"
-                      >
-                        <Zap className="w-3 h-3" />
-                        MKP Edital: {mkpSugerido.toFixed(4)}x (Aplicar)
-                      </button>
-                    );
-                  })()}
-                </div>
-                <Decimal4Input
-                  value={form.fator_margem_locacao}
-                  onChange={(val: number) => handleInputChange('fator_margem_locacao', val)}
-                  onBlur={(val: number) => handleFactorBlur('fator_margem_locacao', val)}
-                />
-              </div>
-
-              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+            {/* Pricing Mode Selection (Dynamic by Cost vs Fixed Selling Price) */}
+            <div className="mt-6 pt-6 border-t border-border-subtle">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 <div>
-                  <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">
-                    Fator Margem Serviços
+                  <label className="block text-sm font-semibold mb-1 text-text-primary flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Regra de Formação de Preço do Kit
                   </label>
-                  <Decimal4Input
-                    value={form.fator_margem_servicos_produtos}
-                    onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
-                    onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
-                  />
+                  <p className="text-xs text-text-muted mb-3">
+                    Defina se o preço deste kit acompanha automaticamente o custo dos equipamentos ou se possui um valor tabelado fixo.
+                  </p>
+                  <select
+                    value={form.tipo_precificacao || 'DINAMICO_CUSTO'}
+                    onChange={(e) => handleInputChange('tipo_precificacao', e.target.value)}
+                    className="w-full rounded-lg border border-border-strong bg-bg-surface px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/50"
+                  >
+                    <option value="DINAMICO_CUSTO">⚙️ Dinâmica por Custo (Calculado via Fator de Margem)</option>
+                    <option value="PRECO_FIXO">🔒 Preço Fixo / Imutável (Preço tabelado fixo)</option>
+                  </select>
                 </div>
-              )}
 
-              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
-                  <Decimal4Input
-                    value={form.fator_manutencao}
-                    onChange={(val: number) => {
-                      handleInputChange('fator_manutencao', val);
-                      handleInputChange('fator_margem_manutencao', val);
-                    }}
-                    onBlur={(val: number) => {
-                      handleFactorBlur('fator_manutencao', val);
-                      handleFactorBlur('fator_margem_manutencao', val);
-                    }}
-                    placeholder="Ex: 1.7000"
-                  />
-                </div>
-              )}
-
-              {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      value={form.perc_despesas_adm} 
-                      onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} 
-                      className="w-full" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda (Custo × Fator).">Comissão (%)</label>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      value={form.perc_comissao} 
+                {form.tipo_precificacao === 'PRECO_FIXO' ? (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3 animate-fadeIn">
+                    <label className="block text-sm font-bold text-amber-700 dark:text-amber-400">
+                      {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' 
+                        ? 'Valor Fixo de Venda do Kit (R$)'
+                        : 'Valor Fixo da Mensalidade/Locação (R$)'}
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? form.valor_venda_fixo : form.valor_locacao_mensal_fixo}
                       onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        if (activePolicy && val > Number(activePolicy.comissao_percentual || 0)) {
-                          setAlertMessage(`O percentual de comissão excede o limite da política comercial ativa (${activePolicy.comissao_percentual}%).`);
-                          handleInputChange('perc_comissao', Number(activePolicy.comissao_percentual || 0));
+                        const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                        if (form.tipo_contrato === 'VENDA_EQUIPAMENTOS') {
+                          handleInputChange('valor_venda_fixo', val);
                         } else {
-                          handleInputChange('perc_comissao', val);
+                          handleInputChange('valor_locacao_mensal_fixo', val);
                         }
-                      }} 
-                      className="w-full"
-                      disabled={true}
+                      }}
+                      placeholder="Ex: 2500.00"
+                      className="w-full text-base font-bold text-text-primary"
                     />
+                    <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
+                      ℹ️ O preço praticado na venda será exatamente este valor fixo. Flutuações de custo dos equipamentos impactarão diretamente na margem de lucro.
+                    </p>
                   </div>
-                </>
-              )}
-
-              {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
-                    <Decimal4Input
-                      value={form.fator_margem_servicos_produtos}
-                      onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
-                      onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Fator Margem Instalação</label>
-                    <Decimal4Input
-                      value={form.fator_margem_instalacao}
-                      onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)}
-                      onBlur={(val: number) => handleFactorBlur('fator_margem_instalacao', val)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
-                    <Decimal4Input
-                      value={form.fator_margem_manutencao}
-                      onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)}
-                      onBlur={(val: number) => handleFactorBlur('fator_margem_manutencao', val)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>
-                    <Input type="number" step="0.01" value={form.perc_frete_venda} onChange={(e) => handleInputChange('perc_frete_venda', parseFloat(e.target.value) || 0)} className="w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
-                    <Input type="number" step="0.01" value={form.perc_despesas_adm} onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} className="w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Comissão (%)</label>
-                    <Input type="number" step="0.01" value={form.perc_comissao} onChange={(e) => handleInputChange('perc_comissao', parseFloat(e.target.value) || 0)} className="w-full" disabled={true} />
-                  </div>
-                </>
-              )}
-
-              {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
-                  <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
-                </div>
-              )}
-
-              {form.licitacao_id && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Margem Mínima Desejada (%)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={form.margem_minima_desejada ?? ''}
-                    onChange={(e) => {
-                      const valStr = e.target.value;
-                      const val = valStr === '' ? '' : parseFloat(valStr);
-                      handleInputChange('margem_minima_desejada', val);
-                    }}
-                    onBlur={() => {
-                      if (form.margem_minima_desejada !== '' && form.margem_minima_desejada !== undefined && form.margem_minima_desejada !== null) {
-                        const targetMargin = Number(form.margem_minima_desejada);
-                        const currentMargin = financials?.summary?.margem_kit ?? 0;
-                        if (targetMargin > currentMargin) {
-                          setAlertMessage("A margem mínima desejada não pode ser maior que a margem atual do Kit.");
-                          handleInputChange('margem_minima_desejada', '');
-                        }
-                      }
-                    }}
-                    placeholder="Ex: 30.00"
-                    className="w-full"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium mb-1">Modelo de Comissão</label>
-                <select
-                  value={form.tipo_comissionamento || 'TRADICIONAL'}
-                  onChange={e => handleInputChange('tipo_comissionamento', e.target.value)}
-                  disabled={true}
-                  className="w-full px-3 py-2 border border-border-strong rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-60"
-                >
-                  <option value="TRADICIONAL">Tradicional</option>
-                  <option value="COMISSAO_POR_DENTRO">Comissão por Dentro (Custo Fechado)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Despesa Operacional (%)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.perc_despesa_operacional || 0}
-                  onChange={e => handleInputChange('perc_despesa_operacional', parseFloat(e.target.value) || 0)}
-                  disabled={true}
-                  className="w-full"
-                />
-              </div>
-              {form.tipo_comissionamento === 'COMISSAO_POR_DENTRO' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">DSR (%)</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.perc_dsr || 0}
-                      onChange={e => handleInputChange('perc_dsr', parseFloat(e.target.value) || 0)}
-                      disabled={true}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">FGTS (%)</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.perc_fgts || 0}
-                      onChange={e => handleInputChange('perc_fgts', parseFloat(e.target.value) || 0)}
-                      disabled={true}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">INSS (%)</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.perc_inss || 0}
-                      onChange={e => handleInputChange('perc_inss', parseFloat(e.target.value) || 0)}
-                      disabled={true}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Outras Incid. (%)</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.perc_demais_incidencias || 0}
-                      onChange={e => handleInputChange('perc_demais_incidencias', parseFloat(e.target.value) || 0)}
-                      disabled={true}
-                      className="w-full"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* GRUPO 2: Inclusões (Checkboxes Options) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6 border-t border-border-subtle">
-              <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
-                <div className="flex items-center space-x-3 mb-4">
-                  <input
-                    type="checkbox"
-                    id="chk-instalacao"
-                    checked={Boolean(form.instalacao_inclusa)}
-                    onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
-                    className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
-                  />
-                  <label htmlFor="chk-instalacao" className="text-sm font-bold text-text-primary cursor-pointer">Embutir Custo de Instalação</label>
-                </div>
-                {form.instalacao_inclusa && (
-                  <div className="pl-8 pt-4 border-t border-border-subtle/50">
-                    <label className="block text-sm font-medium mb-1">% de Instalação</label>
-                    <Input type="number" step="0.01" value={form.percentual_instalacao ?? ''} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
-                    <p className="text-[10px] text-text-muted mt-1">Calculado sobre o custo de aquisição final do kit.</p>
+                ) : (
+                  <div className="p-4 rounded-xl bg-bg-subtle/50 border border-border-subtle text-xs text-text-muted">
+                    <p className="font-semibold text-text-primary mb-1">Modo Dinâmico por Custo Ativo</p>
+                    <p>O preço de venda é calculado dinamicamente aplicando o fator de margem sobre a soma dos custos de aquisição e impostos.</p>
                   </div>
                 )}
               </div>
+            </div>
+          </section>
 
-              <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
-                {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
-                  <>
-                    <div className="flex items-center space-x-3 mb-4">
-                      <input
-                        type="checkbox"
-                        id="chk-havera-manutencao"
-                        checked={Boolean(form.havera_manutencao)}
-                        onChange={(e) => handleInputChange('havera_manutencao', e.target.checked)}
-                        className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
-                      />
-                      <label htmlFor="chk-havera-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Haverá Manutenção Mensal</label>
-                    </div>
-                    {form.havera_manutencao && (
-                      <div className="pl-8 pt-4 border-t border-border-subtle/50">
-                        <label className="block text-sm font-medium mb-1">Qtd. Meses de Manutenção</label>
-                        <Input type="number" step="1" maxLength={3} value={form.qtd_meses_manutencao ?? ''} onChange={(e) => handleInputChange('qtd_meses_manutencao', e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full" placeholder="Ex: 12" />
-                      </div>
+          <section className="bg-bg-surface border border-border-subtle rounded-2xl p-6 lg:p-8 shadow-sm transition-all">
+            <div
+              onClick={() => setIsBlock2Expanded(!isBlock2Expanded)}
+              className="flex items-center justify-between cursor-pointer select-none group"
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-xl font-semibold text-text-primary group-hover:text-brand-primary transition-colors flex items-center gap-2">
+                  <span>2. Prazos e Parâmetros Financeiros</span>
+                </h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-bg-subtle text-text-muted border border-border-subtle">
+                  {isBlock2Expanded ? 'Expandido' : 'Retraído (Padrão)'}
+                </span>
+                {!isBlock2Expanded && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted mt-1 sm:mt-0">
+                    <span className="bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded border border-brand-primary/20">
+                      Fator: {form.fator_margem_locacao || 1}
+                    </span>
+                    {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
+                      <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                        Prazo: {form.prazo_contrato_meses || 0}m
+                      </span>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center space-x-3 mb-4">
-                      <input
-                        type="checkbox"
-                        id="chk-manutencao"
-                        checked={Boolean(form.manutencao_inclusa)}
+                    <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                      Comissão: {form.perc_comissao || 0}%
+                    </span>
+                    {form.instalacao_inclusa && (
+                      <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Instalação inclusa ({form.percentual_instalacao || 0}%)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-text-muted group-hover:text-brand-primary transition-colors shrink-0 ml-2">
+                <span className="text-xs hidden md:inline font-medium">
+                  {isBlock2Expanded ? 'Recolher' : 'Expandir e Editar'}
+                </span>
+                <div className="p-1 rounded-lg bg-bg-subtle border border-border-subtle group-hover:border-brand-primary/40 transition-colors">
+                  {isBlock2Expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </div>
+            </div>
+
+            {isBlock2Expanded && (
+              <div className="mt-6 pt-6 border-t border-border-subtle">
+                {/* GRUPO 1: Parâmetros Base */}
+                <div className={`grid grid-cols-1 ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'md:grid-cols-4' : 'md:grid-cols-4'} gap-6 mb-8`}>
+                  {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Prazo Contrato (Meses)</label>
+                        <Input type="number" value={form.prazo_contrato_meses} onChange={(e) => handleInputChange('prazo_contrato_meses', parseFloat(e.target.value) || 0)} className="w-full text-lg font-medium" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Carência/Instalação (Meses)</label>
+                        <Input type="number" value={form.prazo_instalacao_meses} onChange={(e) => handleInputChange('prazo_instalacao_meses', parseFloat(e.target.value) || 0)} className="w-full" />
+                        <p className="text-xs text-text-muted mt-1">Meses sem locação.</p>
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium">
+                        {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') ? 'Fator Margem (Produtos)' : 'Fator Margem Produtos'}
+                      </label>
+                      {licitacaoItemDetails && (() => {
+                        const itemEstUnit = Number(licitacaoItemDetails.valor_unitario_estimado || (Number(licitacaoItemDetails.valor_total_estimado || 0) / (Number(licitacaoItemDetails.quantidade_total ?? licitacaoItemDetails.quantidade ?? 1))));
+                        const custoAqUnit = Number(financials?.summary?.custo_aquisicao_kit || (financials?.summary?.custo_aquisicao_total ? financials.summary.custo_aquisicao_total / (form.quantidade_kits || 1) : 0));
+                        const mkpSugerido = (custoAqUnit > 0 && itemEstUnit > 0) ? (itemEstUnit / custoAqUnit) : 0;
+                        if (mkpSugerido <= 0) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const sVal = parseFloat(mkpSugerido.toFixed(4));
+                              handleInputChange('fator_margem_locacao', sVal);
+                              handleFactorBlur('fator_margem_locacao', sVal);
+                            }}
+                            className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Clique para preencher o fator com o MKP sugerido do edital"
+                          >
+                            <Zap className="w-3 h-3" />
+                            MKP Edital: {mkpSugerido.toFixed(4)}x (Aplicar)
+                          </button>
+                        );
+                      })()}
+                    </div>
+                    <Decimal4Input
+                      value={form.fator_margem_locacao}
+                      onChange={(val: number) => handleInputChange('fator_margem_locacao', val)}
+                      onBlur={(val: number) => handleFactorBlur('fator_margem_locacao', val)}
+                    />
+                  </div>
+
+                  {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">
+                        Fator Margem Serviços
+                      </label>
+                      <Decimal4Input
+                        value={form.fator_margem_servicos_produtos}
+                        onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
+                        onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
+                      />
+                    </div>
+                  )}
+
+                  {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && !form.manutencao_inclusa && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
+                      <Decimal4Input
+                        value={form.fator_manutencao}
+                        onChange={(val: number) => {
+                          handleInputChange('fator_manutencao', val);
+                          handleInputChange('fator_margem_manutencao', val);
+                        }}
+                        onBlur={(val: number) => {
+                          handleFactorBlur('fator_manutencao', val);
+                          handleFactorBlur('fator_margem_manutencao', val);
+                        }}
+                        placeholder="Ex: 1.7000"
+                      />
+                    </div>
+                  )}
+
+                  {(form.tipo_contrato === 'LOCACAO' || form.tipo_contrato === 'COMODATO') && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          value={form.perc_despesas_adm} 
+                          onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} 
+                          className="w-full" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1" title="Em % sobre a venda (Custo × Fator).">Comissão (%)</label>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          value={form.perc_comissao} 
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            if (activePolicy && val > Number(activePolicy.comissao_percentual || 0)) {
+                              setAlertMessage(`O percentual de comissão excede o limite da política comercial ativa (${activePolicy.comissao_percentual}%).`);
+                              handleInputChange('perc_comissao', Number(activePolicy.comissao_percentual || 0));
+                            } else {
+                              handleInputChange('perc_comissao', val);
+                            }
+                          }} 
+                          className="w-full" 
+                          disabled={true}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {(form.tipo_contrato === 'VENDA_EQUIPAMENTOS' || form.tipo_contrato === 'INSTALACAO') && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1 truncate" title="Fator Margem p/ Serviços e Licenças inseridos no Bloco 4.">Fator Margem Serviços (Produtos)</label>
+                        <Decimal4Input
+                          value={form.fator_margem_servicos_produtos}
+                          onChange={(val: number) => handleInputChange('fator_margem_servicos_produtos', val)}
+                          onBlur={(val: number) => handleFactorBlur('fator_margem_servicos_produtos', val)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Fator Margem Instalação</label>
+                        <Decimal4Input
+                          value={form.fator_margem_instalacao}
+                          onChange={(val: number) => handleInputChange('fator_margem_instalacao', val)}
+                          onBlur={(val: number) => handleFactorBlur('fator_margem_instalacao', val)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Fator Margem Manutenção</label>
+                        <Decimal4Input
+                          value={form.fator_margem_manutencao}
+                          onChange={(val: number) => handleInputChange('fator_margem_manutencao', val)}
+                          onBlur={(val: number) => handleFactorBlur('fator_margem_manutencao', val)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Frete Venda (%)</label>
+                        <Input type="number" step="0.01" value={form.perc_frete_venda} onChange={(e) => handleInputChange('perc_frete_venda', parseFloat(e.target.value) || 0)} className="w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Despesas Adm. (%)</label>
+                        <Input type="number" step="0.01" value={form.perc_despesas_adm} onChange={(e) => handleInputChange('perc_despesas_adm', parseFloat(e.target.value) || 0)} className="w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1" title="Em % sobre a venda.">Comissão (%)</label>
+                        <Input type="number" step="0.01" value={form.perc_comissao} onChange={(e) => handleInputChange('perc_comissao', parseFloat(e.target.value) || 0)} className="w-full" disabled={true} />
+                      </div>
+                    </>
+                  )}
+
+                  {form.tipo_contrato !== 'VENDA_EQUIPAMENTOS' && form.tipo_contrato !== 'INSTALACAO' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Taxa Juros a.m (%)</label>
+                      <Input type="number" step="0.01" value={form.taxa_juros_mensal} onChange={(e) => handleInputChange('taxa_juros_mensal', parseFloat(e.target.value) || 0)} className="w-full" />
+                    </div>
+                  )}
+
+                  {form.licitacao_id && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Margem Mínima Desejada (%)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={form.margem_minima_desejada ?? ''}
                         onChange={(e) => {
-                          const checked = e.target.checked;
-                          handleInputChange('manutencao_inclusa', checked);
-                          if (checked && (!form.taxa_manutencao_anual || form.taxa_manutencao_anual === 0)) {
-                            handleInputChange('taxa_manutencao_anual', 30);
+                          const valStr = e.target.value;
+                          const val = valStr === '' ? '' : parseFloat(valStr);
+                          handleInputChange('margem_minima_desejada', val);
+                        }}
+                        onBlur={() => {
+                          if (form.margem_minima_desejada !== '' && form.margem_minima_desejada !== undefined && form.margem_minima_desejada !== null) {
+                            const targetMargin = Number(form.margem_minima_desejada);
+                            const currentMargin = financials?.summary?.margem_kit ?? 0;
+                            if (targetMargin > currentMargin) {
+                              setAlertMessage("A margem mínima desejada não pode ser maior que a margem atual do Kit.");
+                              handleInputChange('margem_minima_desejada', '');
+                            }
                           }
                         }}
+                        placeholder="Ex: 30.00"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Modelo de Comissão</label>
+                    <select
+                      value={form.tipo_comissionamento || 'TRADICIONAL'}
+                      onChange={e => handleInputChange('tipo_comissionamento', e.target.value)}
+                      disabled={true}
+                      className="w-full px-3 py-2 border border-border-strong rounded-lg bg-bg-surface text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary disabled:opacity-60"
+                    >
+                      <option value="TRADICIONAL">Tradicional</option>
+                      <option value="COMISSAO_POR_DENTRO">Comissão por Dentro (Custo Fechado)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Despesa Operacional (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.perc_despesa_operacional || 0}
+                      onChange={e => handleInputChange('perc_despesa_operacional', parseFloat(e.target.value) || 0)}
+                      disabled={true}
+                      className="w-full"
+                    />
+                  </div>
+                  {form.tipo_comissionamento === 'COMISSAO_POR_DENTRO' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">DSR (%)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.perc_dsr || 0}
+                          onChange={e => handleInputChange('perc_dsr', parseFloat(e.target.value) || 0)}
+                          disabled={true}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">FGTS (%)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.perc_fgts || 0}
+                          onChange={e => handleInputChange('perc_fgts', parseFloat(e.target.value) || 0)}
+                          disabled={true}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">INSS (%)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.perc_inss || 0}
+                          onChange={e => handleInputChange('perc_inss', parseFloat(e.target.value) || 0)}
+                          disabled={true}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Outras Incid. (%)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.perc_demais_incidencias || 0}
+                          onChange={e => handleInputChange('perc_demais_incidencias', parseFloat(e.target.value) || 0)}
+                          disabled={true}
+                          className="w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* GRUPO 2: Inclusões (Checkboxes Options) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-6 border-t border-border-subtle">
+                  <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <input
+                        type="checkbox"
+                        id="chk-instalacao"
+                        checked={Boolean(form.instalacao_inclusa)}
+                        onChange={(e) => handleInputChange('instalacao_inclusa', e.target.checked)}
                         className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
                       />
-                      <label htmlFor="chk-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Manutenção Inclusa na Mensalidade</label>
+                      <label htmlFor="chk-instalacao" className="text-sm font-bold text-text-primary cursor-pointer">Embutir Custo de Instalação</label>
                     </div>
-                    {form.manutencao_inclusa && (
-                      <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
-                          <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 30.00" />
-                          <p className="text-[10px] text-text-muted mt-1">% s/ custo total anual.</p>
-                        </div>
+                    {form.instalacao_inclusa && (
+                      <div className="pl-8 pt-4 border-t border-border-subtle/50">
+                        <label className="block text-sm font-medium mb-1">% de Instalação</label>
+                        <Input type="number" step="0.01" value={form.percentual_instalacao ?? ''} onChange={(e) => handleInputChange('percentual_instalacao', e.target.value === '' ? '' : parseFloat(e.target.value))} className="w-full" placeholder="Ex: 15.00" />
+                        <p className="text-[10px] text-text-muted mt-1">Calculado sobre o custo de aquisição final do kit.</p>
                       </div>
                     )}
-                  </>
-                )}
+                  </div>
+
+                  <div className="bg-bg-subtle p-5 rounded-xl border border-border-subtle flex flex-col justify-start">
+                    {form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? (
+                      <>
+                        <div className="flex items-center space-x-3 mb-4">
+                          <input
+                            type="checkbox"
+                            id="chk-havera-manutencao"
+                            checked={Boolean(form.havera_manutencao)}
+                            onChange={(e) => handleInputChange('havera_manutencao', e.target.checked)}
+                            className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                          />
+                          <label htmlFor="chk-havera-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Haverá Manutenção Mensal</label>
+                        </div>
+                        {form.havera_manutencao && (
+                          <div className="pl-8 pt-4 border-t border-border-subtle/50">
+                            <label className="block text-sm font-medium mb-1">Qtd. Meses de Manutenção</label>
+                            <Input type="number" step="1" maxLength={3} value={form.qtd_meses_manutencao ?? ''} onChange={(e) => handleInputChange('qtd_meses_manutencao', e.target.value === '' ? '' : parseInt(e.target.value))} className="w-full" placeholder="Ex: 12" />
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center space-x-3 mb-4">
+                          <input
+                            type="checkbox"
+                            id="chk-manutencao"
+                            checked={Boolean(form.manutencao_inclusa)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              handleInputChange('manutencao_inclusa', checked);
+                              if (checked && (!form.taxa_manutencao_anual || form.taxa_manutencao_anual === 0)) {
+                                handleInputChange('taxa_manutencao_anual', 30);
+                              }
+                            }}
+                            className="w-5 h-5 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                          />
+                          <label htmlFor="chk-manutencao" className="text-sm font-bold text-text-primary cursor-pointer">Manutenção Inclusa na Mensalidade</label>
+                        </div>
+                        {form.manutencao_inclusa && (
+                          <div className="pl-8 pt-4 border-t border-border-subtle/50 grid grid-cols-1 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Taxa Manutenção a.a (%)</label>
+                              <Input type="number" step="0.01" value={form.taxa_manutencao_anual} onChange={(e) => handleInputChange('taxa_manutencao_anual', parseFloat(e.target.value) || 0)} className="w-full" placeholder="Ex: 30.00" />
+                              <p className="text-[10px] text-text-muted mt-1">% s/ custo total anual.</p>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </section>
 
-          <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">
-            <h2 className="text-xl font-semibold mb-6 pb-4 border-b border-border-subtle flex justify-between items-center">
-              <span>3. Impostos sobre Faturamento (%)</span>
-              {['LOCACAO', 'COMODATO'].includes(form.tipo_contrato) && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="chk-faturamento-separado"
-                    checked={Boolean(form.faturamento_servico_separado)}
-                    onChange={(e) => handleInputChange('faturamento_servico_separado', e.target.checked)}
-                    className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
-                  />
-                  <label htmlFor="chk-faturamento-separado" className="text-sm font-semibold text-text-primary cursor-pointer">
-                    Faturamento Serviço Separado
-                  </label>
+          <section className="bg-bg-surface border border-border-subtle rounded-2xl p-6 lg:p-8 shadow-sm transition-all">
+            <div
+              onClick={() => setIsBlock3Expanded(!isBlock3Expanded)}
+              className="flex items-center justify-between cursor-pointer select-none group"
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-xl font-semibold text-text-primary group-hover:text-brand-primary transition-colors flex items-center gap-2">
+                  <span>3. Impostos sobre Faturamento (%)</span>
+                </h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-bg-subtle text-text-muted border border-border-subtle">
+                  {isBlock3Expanded ? 'Expandido' : 'Retraído (Padrão)'}
+                </span>
+                {!isBlock3Expanded && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted mt-1 sm:mt-0">
+                    <span className="bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded border border-brand-primary/20 font-semibold">
+                      Total: {(
+                        Number(form.aliq_pis || 0) +
+                        Number(form.aliq_cofins || 0) +
+                        Number(form.aliq_csll || 0) +
+                        Number(form.aliq_irpj || 0) +
+                        Number(form.aliq_iss || 0) +
+                        Number(form.aliq_icms || 0)
+                      ).toFixed(2)}%
+                    </span>
+                    <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                      PIS: {Number(form.aliq_pis || 0).toFixed(2)}%
+                    </span>
+                    <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                      COFINS: {Number(form.aliq_cofins || 0).toFixed(2)}%
+                    </span>
+                    <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                      ISS: {Number(form.aliq_iss || 0).toFixed(2)}%
+                    </span>
+                    <span className="bg-bg-subtle px-2 py-0.5 rounded border border-border-subtle">
+                      ICMS: {Number(form.aliq_icms || 0).toFixed(2)}%
+                    </span>
+                    {form.faturamento_servico_separado && (
+                      <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Fat. Serviço Separado
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-text-muted group-hover:text-brand-primary transition-colors shrink-0 ml-2">
+                <span className="text-xs hidden md:inline font-medium">
+                  {isBlock3Expanded ? 'Recolher' : 'Expandir e Editar'}
+                </span>
+                <div className="p-1 rounded-lg bg-bg-subtle border border-border-subtle group-hover:border-brand-primary/40 transition-colors">
+                  {isBlock3Expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </div>
-              )}
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
-              {['aliq_pis', 'aliq_cofins', 'aliq_csll', 'aliq_irpj', 'aliq_iss', 'aliq_icms'].map(f => (
-                <div key={f}>
-                  <label className="block text-xs font-medium text-text-secondary mb-1 uppercase">{f.split('_')[1]}</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={(form as any)[f] ?? 0}
-                    onChange={(e) => handleInputChange(f as keyof KitFormValues, parseFloat(e.target.value) || 0)}
-                    readOnly={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}
-                    disabled={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}
-                    className={`w-full ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'bg-bg-deep/50 text-text-muted cursor-not-allowed' : ''}`}
-                    title={form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Imposto carregado automaticamente dos Parâmetros de Venda' : ''}
-                  />
-                </div>
-              ))}
+              </div>
             </div>
+
+            {isBlock3Expanded && (
+              <div className="mt-6 pt-6 border-t border-border-subtle">
+                {['LOCACAO', 'COMODATO'].includes(form.tipo_contrato) && (
+                  <div className="flex items-center gap-2 mb-6 pb-4 border-b border-border-subtle/60">
+                    <input
+                      type="checkbox"
+                      id="chk-faturamento-separado"
+                      checked={Boolean(form.faturamento_servico_separado)}
+                      onChange={(e) => handleInputChange('faturamento_servico_separado', e.target.checked)}
+                      className="w-4 h-4 rounded border-border-strong text-brand-primary focus:ring-brand-primary"
+                    />
+                    <label htmlFor="chk-faturamento-separado" className="text-sm font-semibold text-text-primary cursor-pointer">
+                      Faturamento Serviço Separado
+                    </label>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
+                  {['aliq_pis', 'aliq_cofins', 'aliq_csll', 'aliq_irpj', 'aliq_iss', 'aliq_icms'].map(f => (
+                    <div key={f}>
+                      <label className="block text-xs font-medium text-text-secondary mb-1 uppercase">{f.split('_')[1]}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={(form as any)[f] ?? 0}
+                        onChange={(e) => handleInputChange(f as keyof KitFormValues, parseFloat(e.target.value) || 0)}
+                        readOnly={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}
+                        disabled={form.tipo_contrato === 'VENDA_EQUIPAMENTOS'}
+                        className={`w-full ${form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'bg-bg-deep/50 text-text-muted cursor-not-allowed' : ''}`}
+                        title={form.tipo_contrato === 'VENDA_EQUIPAMENTOS' ? 'Imposto carregado automaticamente dos Parâmetros de Venda' : ''}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="bg-bg-surface border border-border-subtle rounded-2xl p-8 shadow-sm">

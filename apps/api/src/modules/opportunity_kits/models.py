@@ -27,6 +27,9 @@ class OpportunityKit(Base):
     descricao_kit = Column(Text, nullable=True)
     quantidade_kits = Column(Integer, nullable=False, default=1)
     tipo_contrato = Column(String(50), nullable=False)  # COMODATO, LOCACAO, VENDA_EQUIPAMENTOS, INSTALACAO
+    tipo_precificacao = Column(String(50), nullable=False, server_default="DINAMICO_CUSTO", default="DINAMICO_CUSTO")  # DINAMICO_CUSTO, PRECO_FIXO
+    valor_venda_fixo = Column(Numeric(15, 4), nullable=True)
+    valor_locacao_mensal_fixo = Column(Numeric(15, 4), nullable=True)
     considerar_st_ou_difal = Column(String(50), nullable=False, server_default="DIFAL", default="DIFAL")
     forma_execucao = Column(String(50), nullable=True)  # Global execution form for VENDA_EQUIPAMENTOS    
     # Prazos do Contrato

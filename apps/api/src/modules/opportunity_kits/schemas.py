@@ -99,6 +99,9 @@ class OpportunityKitBase(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: int = Field(default=1)
     tipo_contrato: str
+    tipo_precificacao: Optional[str] = Field(default="DINAMICO_CUSTO")
+    valor_venda_fixo: Optional[Decimal] = Field(default=None)
+    valor_locacao_mensal_fixo: Optional[Decimal] = Field(default=None)
     considerar_st_ou_difal: Optional[str] = Field(default="DIFAL")
     forma_execucao: Optional[str] = None
     
@@ -175,6 +178,9 @@ class OpportunityKitUpdate(BaseModel):
     descricao_kit: Optional[str] = None
     quantidade_kits: Optional[int] = None
     tipo_contrato: Optional[str] = None
+    tipo_precificacao: Optional[str] = None
+    valor_venda_fixo: Optional[Decimal] = None
+    valor_locacao_mensal_fixo: Optional[Decimal] = None
     considerar_st_ou_difal: Optional[str] = None
     forma_execucao: Optional[str] = None
     

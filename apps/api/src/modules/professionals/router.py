@@ -57,6 +57,7 @@ def create_professional(prof_in: ProfessionalCreate, db: Session = Depends(get_d
         id=str(uuid.uuid4()),
         tenant_id=current_user.tenant_id,
         company_id=target_company,
+        codigo_service=prof_in.codigo_service,
         name=prof_in.name,
         cpf=prof_in.cpf,
         role_id=prof_in.role_id,
