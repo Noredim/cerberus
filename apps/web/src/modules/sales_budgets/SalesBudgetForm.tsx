@@ -713,6 +713,18 @@ export function SalesBudgetForm() {
   const [vendedorId, setVendedorId] = useState('');
   const [salesTeamId, setSalesTeamId] = useState('');
   const [salesTeams, setSalesTeams] = useState<any[]>([]);
+
+  const filteredProfessionals = useMemo(() => {
+    if (!salesTeamId || !salesTeams.length) return professionals;
+    const currentTeam = salesTeams.find((t: any) => t.id === salesTeamId);
+    if (!currentTeam || !currentTeam.members || currentTeam.members.length === 0) {
+      return professionals;
+    }
+    const memberUserIds = new Set(currentTeam.members.map((m: any) => String(m.user_id)));
+    const list = professionals.filter((p: any) => memberUserIds.has(String(p.user_id || p.id)));
+    return list.length > 0 ? list : professionals;
+  }, [salesTeamId, salesTeams, professionals]);
+
   const [generatingProposal, setGeneratingProposal] = useState(false);
   const [noDocumentRuleModalOpen, setNoDocumentRuleModalOpen] = useState(false);
   const [proposalCustomGroupings, setProposalCustomGroupings] = useState<ProposalKitGroup[]>([]);
@@ -3855,9 +3867,14 @@ export function SalesBudgetForm() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1">Vendedor</label>
-                <select value={vendedorId} disabled className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none disabled:opacity-60">
+                <select 
+                  value={vendedorId} 
+                  onChange={e => { setVendedorId(e.target.value); setHasUnsavedChanges(true); }}
+                  disabled={isReadonly} 
+                  className="w-full px-3 py-2 border border-border-subtle rounded-lg bg-bg-deep text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 disabled:opacity-60"
+                >
                   <option value="">Nenhum associado</option>
-                  {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {filteredProfessionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
               <div>
@@ -7821,6 +7838,7 @@ export function SalesBudgetForm() {
         <OpportunityKitSearchModal
           isOpen={showKitSearchModal}
           salesBudgetId={id}
+          salesTeamId={salesTeamId}
           onClose={() => setShowKitSearchModal(false)}
           onSelect={handleAddKit}
           title="Buscar Kit para Comodato / Locação"
@@ -7833,6 +7851,7 @@ export function SalesBudgetForm() {
         <OpportunityKitSearchModal
           isOpen={showKitSearchVenda}
           salesBudgetId={id}
+          salesTeamId={salesTeamId}
           onClose={() => setShowKitSearchVenda(false)}
           onSelect={handleAddKitVenda}
           title="Buscar Kit para Venda"

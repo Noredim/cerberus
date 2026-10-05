@@ -10,11 +10,21 @@ interface OpportunityKitSearchModalProps {
   onSelect: (kit: any) => void;
   title?: string;
   salesBudgetId?: string;
+  salesTeamId?: string | null;
   tipoContrato?: string;
   allowedTypes?: string[];
 }
 
-export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Kit de Oportunidade', salesBudgetId, tipoContrato, allowedTypes }: OpportunityKitSearchModalProps) {
+export function OpportunityKitSearchModal({ 
+  isOpen, 
+  onClose, 
+  onSelect, 
+  title = 'Buscar Kit de Oportunidade', 
+  salesBudgetId, 
+  salesTeamId,
+  tipoContrato, 
+  allowedTypes 
+}: OpportunityKitSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -28,16 +38,35 @@ export function OpportunityKitSearchModal({ isOpen, onClose, onSelect, title = '
       setTimeout(() => inputRef.current?.focus(), 100);
       fetchAllKits();
     }
-  }, [isOpen]);
+  }, [isOpen, salesTeamId]);
 
   const fetchAllKits = async () => {
     if (!activeCompanyId) return;
     setIsSearching(true);
     try {
       const res = await api.get(`/opportunity-kits/company/${activeCompanyId}`, {
-        params: { sales_budget_id: salesBudgetId }
+        params: { 
+          sales_budget_id: salesBudgetId || undefined,
+          sales_team_id: salesTeamId || undefined
+        }
       });
       let kits = res.data || [];
+
+      // Filter by salesTeamId if present
+      if (salesTeamId) {
+        kits = kits.filter((kit: any) => {
+          // If kit has no specific sales_teams attached, it's global / available to all teams
+          if (!kit.sales_teams || kit.sales_teams.length === 0) {
+            return true;
+          }
+          // If it has sales_teams, it must match the selected salesTeamId
+          return kit.sales_teams.some((st: any) => {
+            const tid = typeof st === 'string' ? st : (st.sales_team_id || st.id);
+            return tid === salesTeamId;
+          });
+        });
+      }
+
       if (allowedTypes && allowedTypes.length > 0) {
         const allowedUpper = allowedTypes.map(t => t.toUpperCase());
         kits = kits.filter((kit: any) => {

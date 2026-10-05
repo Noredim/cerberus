@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Zap, Plus, Trash2, Save, ArrowLeft, History, AlertTriangle, 
@@ -208,7 +208,7 @@ export function ExpressSalesForm() {
   const [salesTeamId, setSalesTeamId] = useState<string>('');
   const [salesTeams, setSalesTeams] = useState<SalesTeamItem[]>([]);
   const [vendedorId, setVendedorId] = useState<string>('');
-  const [vendedores, setVendedores] = useState<{ id: string; name: string }[]>([]);
+  const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]);
   const [formaPagamentoId, setFormaPagamentoId] = useState<string>('');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodItem[]>([]);
   const [titulo, setTitulo] = useState('Venda Express / Varejo');
@@ -296,7 +296,8 @@ export function ExpressSalesForm() {
       }
 
       if (usersRes.status === 'fulfilled') {
-        setVendedores(usersRes.value.data || []);
+        const usersList = usersRes.value.data || [];
+        setAllUsers(usersList);
         if (user && !vendedorId) {
           setVendedorId(user.id);
         }
@@ -736,6 +737,27 @@ export function ExpressSalesForm() {
 
   const selectedTeam = salesTeams.find(t => t.id === salesTeamId);
 
+  const filteredVendedores: { id: string; name: string }[] = useMemo(() => {
+    if (!salesTeamId || !salesTeams.length) return allUsers;
+    const currentTeam = salesTeams.find(t => t.id === salesTeamId);
+    if (!currentTeam || !currentTeam.members || currentTeam.members.length === 0) {
+      return allUsers;
+    }
+    const memberIds = new Set(currentTeam.members.map((m: any) => String(m.user_id)));
+    const list = allUsers.filter(u => memberIds.has(String(u.id)));
+    return list.length > 0 ? list : allUsers;
+  }, [salesTeamId, salesTeams, allUsers]);
+
+  useEffect(() => {
+    if (filteredVendedores.length > 0) {
+      const isCurrentValid = filteredVendedores.some((v: { id: string; name: string }) => String(v.id) === String(vendedorId));
+      if (!isCurrentValid) {
+        const userInFiltered = filteredVendedores.find((v: { id: string; name: string }) => String(v.id) === String(user?.id));
+        setVendedorId(userInFiltered ? userInFiltered.id : filteredVendedores[0].id);
+      }
+    }
+  }, [filteredVendedores, vendedorId, user?.id]);
+
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
   };
@@ -917,7 +939,7 @@ export function ExpressSalesForm() {
               onChange={(e) => setVendedorId(e.target.value)}
               className="w-full px-3.5 py-2.5 border border-border rounded-lg bg-bg-surface text-text-primary text-sm focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none"
             >
-              {vendedores.map(v => (
+              {filteredVendedores.map(v => (
                 <option key={v.id} value={v.id}>
                   {v.name}
                 </option>
@@ -1364,6 +1386,7 @@ export function ExpressSalesForm() {
         onSelect={handleAddKitFromModal}
         title={kitModalConfig.title}
         allowedTypes={kitModalConfig.allowedTypes}
+        salesTeamId={salesTeamId}
       />
 
       {/* Edit Kit Composition Modal (Full Screen Wide identical to Opportunity) */}

@@ -18,6 +18,7 @@ router = APIRouter(prefix="/opportunity-kits", tags=["Opportunity Kits"])
 def list_kits_by_company(
     company_id: UUID,
     sales_budget_id: Optional[UUID] = None,
+    sales_team_id: Optional[UUID] = None,
     tipo_contrato: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -31,7 +32,8 @@ def list_kits_by_company(
         str(company_id), 
         str(sales_budget_id) if sales_budget_id else None,
         tipo_contrato,
-        current_user=current_user
+        current_user=current_user,
+        sales_team_id=str(sales_team_id) if sales_team_id else None
     )
 @router.get("/{kit_id}", response_model=OpportunityKitResponse)
 def get_kit(

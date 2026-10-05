@@ -1328,7 +1328,7 @@ class OpportunityKitService:
             "cost_summaries": cost_summaries
         }
 
-    def list_kits(self, tenant_id: str, company_id: Any, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None, current_user: Optional[any] = None):
+    def list_kits(self, tenant_id: str, company_id: Any, sales_budget_id: Optional[str] = None, tipo_contrato: Optional[str] = None, current_user: Optional[any] = None, sales_team_id: Optional[Any] = None):
         from sqlalchemy.orm import joinedload
         from src.modules.opportunity_kits.models import OpportunityKitSalesTeam
         from uuid import UUID
@@ -1350,6 +1350,27 @@ class OpportunityKitService:
         )
         if tipo_contrato:
             query = query.filter(OpportunityKit.tipo_contrato == tipo_contrato)
+
+        if sales_team_id:
+            from sqlalchemy import exists, and_
+            st_uuid = None
+            if isinstance(sales_team_id, str):
+                try:
+                    st_uuid = UUID(sales_team_id)
+                except ValueError:
+                    st_uuid = None
+            elif isinstance(sales_team_id, UUID):
+                st_uuid = sales_team_id
+            
+            if st_uuid:
+                public_cond = ~exists().where(OpportunityKitSalesTeam.opportunity_kit_id == OpportunityKit.id)
+                match_team_cond = exists().where(
+                    and_(
+                        OpportunityKitSalesTeam.opportunity_kit_id == OpportunityKit.id,
+                        OpportunityKitSalesTeam.sales_team_id == st_uuid
+                    )
+                )
+                query = query.filter(public_cond | match_team_cond)
 
         if current_user:
             from src.modules.users.models import UserRoleEnum
