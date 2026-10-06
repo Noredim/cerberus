@@ -375,11 +375,12 @@ export function ExpressSalesForm() {
       setObservacoes(b.observacoes || '');
       setNumeroOrcamento(b.numero_orcamento || '');
       setBudgetVersion(b.versao || 1);
-      setBudgetStatus(b.status || 'EM_LANCAMENTO');
-      const hasApproval = b.status === 'APROVADO' || b.status === 'GANHO' || (b.approvals && b.approvals.length > 0);
-      setIsApproved(Boolean(hasApproval));
-      if (b.approvals && b.approvals.length > 0) {
+      const isStatusApproved = b.status === 'APROVADO' || b.status === 'GANHO';
+      setIsApproved(Boolean(isStatusApproved));
+      if (isStatusApproved && b.approvals && b.approvals.length > 0) {
         setApproverName(b.approvals[b.approvals.length - 1]?.usuario_aprovador?.name || 'Gerência');
+      } else {
+        setApproverName('');
       }
       setProposalCustomGroupings(
         (b.proposal_custom_groupings || []).filter((g: any) => typeof g === 'object' && !g.is_express && g.nome_grupo)
@@ -533,6 +534,12 @@ export function ExpressSalesForm() {
         motivo_aprovacao: p.motivo_aprovacao
       };
 
+      if (Boolean(p.requer_aprovacao)) {
+        setIsApproved(false);
+        setApproverName('');
+        setBudgetStatus('EM_LANCAMENTO');
+      }
+
       setItems(prev => [...prev, newRow]);
     } catch (err: any) {
       console.error('Erro ao calcular precificação do kit:', err);
@@ -620,6 +627,11 @@ export function ExpressSalesForm() {
               motivo_aprovacao: p.motivo_aprovacao,
               isCalculating: false
             };
+          }
+          if (Boolean(p.requer_aprovacao)) {
+            setIsApproved(false);
+            setApproverName('');
+            setBudgetStatus('EM_LANCAMENTO');
           }
           return arr;
         });
@@ -773,6 +785,11 @@ export function ExpressSalesForm() {
               motivo_aprovacao: p.motivo_aprovacao,
               isCalculating: false
             };
+          }
+          if (Boolean(p.requer_aprovacao)) {
+            setIsApproved(false);
+            setApproverName('');
+            setBudgetStatus('EM_LANCAMENTO');
           }
           return arr;
         });

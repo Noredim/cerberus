@@ -557,8 +557,8 @@ def save_express_sale(
     primary_policy_id = None
 
     kit_svc = OpportunityKitService(db)
-
     kit_id_map = {}
+    has_any_requiring_approval = False
 
     for item_input in req.items:
         pricing_req = ExpressKitPricingRequest(
@@ -570,6 +570,8 @@ def save_express_sale(
             quantidade=item_input.quantidade
         )
         pricing = calculate_express_pricing(db, tenant_id, company_id, pricing_req, current_user=current_user)
+        if pricing.requer_aprovacao:
+            has_any_requiring_approval = True
         
         if not primary_policy_id and pricing.commercial_policy_id:
             primary_policy_id = pricing.commercial_policy_id
@@ -696,6 +698,9 @@ def save_express_sale(
     if not any(isinstance(g, dict) and g.get("is_express") for g in groupings):
         groupings.append({"is_express": True, "tipo": "EXPRESS_SALE"})
     budget.proposal_custom_groupings = groupings
+
+    if has_any_requiring_approval:
+        budget.status = "EM_LANCAMENTO"
 
     if is_update:
         budget.versao = (budget.versao or 1) + 1
@@ -849,6 +854,31 @@ def finalize_express_sale(
         raise HTTPException(status_code=400, detail="Status de finalização inválido. Escolha GANHO ou PERDIDO.")
 
     status_anterior = budget.status
+
+    if target_status == "GANHO" and status_anterior not in ["APROVADO", "GANHO"]:
+        for it in list(budget.items) + list(budget.rental_items):
+            if it.opportunity_kit_id:
+                try:
+                    p_res = calculate_express_pricing(
+                        db, tenant_id, company_id,
+                        ExpressKitPricingRequest(
+                            opportunity_kit_id=it.opportunity_kit_id,
+                            sales_team_id=budget.sales_team_id,
+                            valor_final=Decimal(str(getattr(it, 'venda_unit', None) or getattr(it, 'valor_mensal', None) or 0)),
+                            quantidade=int(it.quantidade or 1)
+                        ),
+                        current_user=current_user
+                    )
+                    if p_res.requer_aprovacao:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Esta venda express possui itens com margem abaixo da alçada comercial e necessita de autorização da gerência por senha antes de ser finalizada como Ganha."
+                        )
+                except HTTPException:
+                    raise
+                except Exception:
+                    pass
+
     budget.status = target_status
 
     if target_status == "GANHO":
