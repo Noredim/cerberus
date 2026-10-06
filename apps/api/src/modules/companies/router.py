@@ -1345,7 +1345,15 @@ def get_company_inside_config(
             base_url="",
             hash_token="",
             cod_unidade=None,
-            is_active=False
+            is_active=False,
+            servicos_base_url="",
+            servicos_hash_token="",
+            servicos_cod_unidade=None,
+            servicos_is_active=False,
+            produtos_base_url="",
+            produtos_hash_token="",
+            produtos_cod_unidade=None,
+            produtos_is_active=False
         )
         db.add(config)
         db.commit()
@@ -1373,7 +1381,15 @@ def update_company_inside_config(
             base_url=payload.base_url,
             hash_token=payload.hash_token,
             cod_unidade=payload.cod_unidade,
-            is_active=payload.is_active
+            is_active=payload.is_active,
+            servicos_base_url=payload.servicos_base_url,
+            servicos_hash_token=payload.servicos_hash_token,
+            servicos_cod_unidade=payload.servicos_cod_unidade,
+            servicos_is_active=payload.servicos_is_active,
+            produtos_base_url=payload.produtos_base_url,
+            produtos_hash_token=payload.produtos_hash_token,
+            produtos_cod_unidade=payload.produtos_cod_unidade,
+            produtos_is_active=payload.produtos_is_active
         )
         db.add(config)
     else:
@@ -1381,6 +1397,14 @@ def update_company_inside_config(
         config.hash_token = payload.hash_token
         config.cod_unidade = payload.cod_unidade
         config.is_active = payload.is_active
+        config.servicos_base_url = payload.servicos_base_url
+        config.servicos_hash_token = payload.servicos_hash_token
+        config.servicos_cod_unidade = payload.servicos_cod_unidade
+        config.servicos_is_active = payload.servicos_is_active
+        config.produtos_base_url = payload.produtos_base_url
+        config.produtos_hash_token = payload.produtos_hash_token
+        config.produtos_cod_unidade = payload.produtos_cod_unidade
+        config.produtos_is_active = payload.produtos_is_active
 
     db.commit()
     db.refresh(config)
