@@ -15,7 +15,8 @@ from src.modules.users.models import User
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, RentalBudgetItem, SalesBudgetHistory
 from src.modules.sales_budgets.schemas import (
     ExpressKitPricingRequest, ExpressKitPricingResponse,
-    ExpressSaleSaveRequest, ExpressSaleItemInput, SalesBudgetOut
+    ExpressSaleSaveRequest, ExpressSaleItemInput, SalesBudgetOut,
+    ExpressAuthorizeManagerRequest, ExpressFinalizeRequest
 )
 from src.modules.sales_budgets.service import get_next_numero
 
@@ -154,10 +155,32 @@ def calculate_express_pricing(
         acrescimo_pct = Decimal("0.0")
 
     # 4. Reverse Factor Calculation
-    if custo_unitario > 0:
-        fator_efetivo = _round4(valor_unitario_final / custo_unitario)
+    if is_venda:
+        if custo_unitario > 0:
+            fator_efetivo = _round4(valor_unitario_final / custo_unitario)
+        else:
+            fator_efetivo = _d(kit.fator_margem_locacao or 1.0)
     else:
-        fator_efetivo = _d(kit.fator_margem_locacao or 1.0)
+        # Locação / Comodato / Instalação: o valor unitário final é a mensalidade recorrente.
+        # Coletamos os fatores ativos do kit (produtos, serviços, instalação, manutenção)
+        factors = []
+        custo_prod = _d(summary.get("custo_aquisicao_produtos") or 0)
+        custo_serv = _d(summary.get("custo_aquisicao_servicos") or 0)
+        if custo_prod > 0 or (custo_prod == 0 and custo_serv == 0):
+            factors.append(_d(kit.fator_margem_locacao or 1.0))
+        if custo_serv > 0:
+            factors.append(_d(kit.fator_margem_servicos_produtos or 1.0))
+        if not kit.instalacao_inclusa and _d(summary.get("valor_venda_instalacao") or 0) > 0:
+            factors.append(_d(kit.fator_margem_instalacao or 1.0))
+        if not kit.manutencao_inclusa and _d(summary.get("vlt_manut") or 0) > 0 and kit.fator_manutencao is not None:
+            factors.append(_d(kit.fator_manutencao))
+
+        fator_base = (sum(factors) / Decimal(len(factors))) if factors else _d(kit.fator_margem_locacao or 1.0)
+
+        if valor_unitario_base > 0:
+            fator_efetivo = _round4(fator_base * (valor_unitario_final / valor_unitario_base))
+        else:
+            fator_efetivo = _round4(fator_base)
 
     # 5. Dynamic Commercial Policy Bracket Resolution
     user_id = current_user.id if current_user else None
@@ -192,13 +215,19 @@ def calculate_express_pricing(
     else:
         comissao_percentual = _d(kit.perc_comissao or 0.0)
 
+    # Re-calculate standard financials with the resolved commercial policy for exact service commission evaluation
+    if matched_policy and not is_venda:
+        fin = kit_svc.calculate_financials(kit, tenant_id, override_policy_id=str(matched_policy.id))
+        summary = fin.get("summary", {})
+
     # Approval check
     requer_aprovacao = False
     motivo_aprovacao = None
 
     if min_policy_factor is not None and fator_efetivo < min_policy_factor:
         requer_aprovacao = True
-        motivo_aprovacao = f"Fator de venda ({fator_efetivo:.4f}) está abaixo do limite mínimo da política comercial ({min_policy_factor:.4f}). Requer aprovação de gerência."
+        termo_fator = "Fator de venda" if is_venda else "Fator"
+        motivo_aprovacao = f"{termo_fator} ({fator_efetivo:.4f}) está abaixo do limite mínimo da política comercial ({min_policy_factor:.4f}). Requer aprovação de gerência."
 
     tipo_comissionamento = getattr(matched_policy, "tipo_comissionamento", "TRADICIONAL") if matched_policy else "TRADICIONAL"
     dsr_pct = _d(getattr(matched_policy, "dsr_percentual", 0) or 0) if matched_policy else Decimal("0.0")
@@ -210,38 +239,86 @@ def calculate_express_pricing(
     # 6. Quantities and Totals
     qtd = req.quantidade if req.quantidade >= 1 else 1
     valor_total_final = _round2(valor_unitario_final * Decimal(qtd))
-    valor_comissao_bruta = _round2(valor_total_final * (comissao_percentual / Decimal("100.0")))
-    comissao_bruta_percentual = comissao_percentual
-    valor_comissao_estimada = valor_comissao_bruta
-    
+
     valor_dsr = Decimal("0.0")
     valor_fgts = Decimal("0.0")
     valor_inss = Decimal("0.0")
     valor_demais = Decimal("0.0")
 
-    # Net commission & Operational expenses
-    if tipo_comissionamento in ["POR_DENTRO", "COMISSAO_POR_DENTRO"]:
-        fator_total = (Decimal("1.0") + dsr_pct / Decimal("100.0")) * (Decimal("1.0") + (fgts_pct + inss_pct + demais_pct) / Decimal("100.0"))
-        comissao_real = _round4(valor_comissao_bruta / fator_total) if fator_total > 0 else valor_comissao_bruta
-        valor_dsr = _round2(comissao_real * (dsr_pct / Decimal("100.0")))
-        valor_fgts = _round2((comissao_real + valor_dsr) * (fgts_pct / Decimal("100.0")))
-        valor_inss = _round2((comissao_real + valor_dsr) * (inss_pct / Decimal("100.0")))
-        valor_demais = _round2((comissao_real + valor_dsr) * (demais_pct / Decimal("100.0")))
-        soma = comissao_real + valor_dsr + valor_fgts + valor_inss + valor_demais
-        diff = valor_comissao_bruta - soma
-        valor_comissao_liquida = _round2(comissao_real + diff)
-        comissao_liquida_percentual = _round2((valor_comissao_liquida / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
+    if is_venda:
+        valor_comissao_bruta = _round2(valor_total_final * (comissao_percentual / Decimal("100.0")))
+        comissao_bruta_percentual = comissao_percentual
+        if tipo_comissionamento in ["POR_DENTRO", "COMISSAO_POR_DENTRO"]:
+            fator_total = (Decimal("1.0") + dsr_pct / Decimal("100.0")) * (Decimal("1.0") + (fgts_pct + inss_pct + demais_pct) / Decimal("100.0"))
+            comissao_real = _round4(valor_comissao_bruta / fator_total) if fator_total > 0 else valor_comissao_bruta
+            valor_dsr = _round2(comissao_real * (dsr_pct / Decimal("100.0")))
+            valor_fgts = _round2((comissao_real + valor_dsr) * (fgts_pct / Decimal("100.0")))
+            valor_inss = _round2((comissao_real + valor_dsr) * (inss_pct / Decimal("100.0")))
+            valor_demais = _round2((comissao_real + valor_dsr) * (demais_pct / Decimal("100.0")))
+            soma = comissao_real + valor_dsr + valor_fgts + valor_inss + valor_demais
+            diff = valor_comissao_bruta - soma
+            valor_comissao_liquida = _round2(comissao_real + diff)
+            comissao_liquida_percentual = _round2((valor_comissao_liquida / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
+        else:
+            comissao_liquida_percentual = comissao_bruta_percentual
+            valor_comissao_liquida = valor_comissao_bruta
+        valor_despesa_operacional = _round2(valor_total_final * (despesa_operacional_percentual / Decimal("100.0")))
     else:
-        comissao_liquida_percentual = comissao_percentual
-        valor_comissao_liquida = valor_comissao_bruta
+        # Locação / Comodato: com_destinado_loc calculates equipment commission + service commissions (number of monthly installments)
+        base_destinado = _d(summary.get("com_destinado_loc") or summary.get("valor_comissao_locacao") or 0.0)
+        if base_destinado <= 0 and comissao_percentual > 0:
+            base_destinado = _round2(valor_unitario_base * (comissao_percentual / Decimal("100.0")))
+        
+        ratio = (valor_unitario_final / valor_unitario_base) if valor_unitario_base > 0 else Decimal("1.0")
+        valor_comissao_bruta_un = _round2(base_destinado * ratio)
+        valor_comissao_bruta = _round2(valor_comissao_bruta_un * Decimal(qtd))
+        comissao_bruta_percentual = _round2((valor_comissao_bruta / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
 
-    valor_despesa_operacional = _round2(valor_total_final * (despesa_operacional_percentual / Decimal("100.0")))
+        base_liq = _d(summary.get("valor_comissao_locacao") or 0.0)
+        base_dsr = _d(summary.get("vlt_comissao_dsr_loc") or 0.0)
+        base_fgts = _d(summary.get("vlt_comissao_fgts_loc") or 0.0)
+        base_inss = _d(summary.get("vlt_comissao_inss_loc") or 0.0)
+        base_demais = _d(summary.get("vlt_comissao_demais_loc") or 0.0)
+
+        if tipo_comissionamento in ["POR_DENTRO", "COMISSAO_POR_DENTRO"]:
+            if base_liq > 0 or base_dsr > 0 or base_fgts > 0:
+                valor_comissao_liquida = _round2(base_liq * ratio * Decimal(qtd))
+                valor_dsr = _round2(base_dsr * ratio * Decimal(qtd))
+                valor_fgts = _round2(base_fgts * ratio * Decimal(qtd))
+                valor_inss = _round2(base_inss * ratio * Decimal(qtd))
+                valor_demais = _round2(base_demais * ratio * Decimal(qtd))
+            else:
+                fator_total = (Decimal("1.0") + dsr_pct / Decimal("100.0")) * (Decimal("1.0") + (fgts_pct + inss_pct + demais_pct) / Decimal("100.0"))
+                comissao_real = _round4(valor_comissao_bruta / fator_total) if fator_total > 0 else valor_comissao_bruta
+                valor_dsr = _round2(comissao_real * (dsr_pct / Decimal("100.0")))
+                valor_fgts = _round2((comissao_real + valor_dsr) * (fgts_pct / Decimal("100.0")))
+                valor_inss = _round2((comissao_real + valor_dsr) * (inss_pct / Decimal("100.0")))
+                valor_demais = _round2((comissao_real + valor_dsr) * (demais_pct / Decimal("100.0")))
+                soma = comissao_real + valor_dsr + valor_fgts + valor_inss + valor_demais
+                diff = valor_comissao_bruta - soma
+                valor_comissao_liquida = _round2(comissao_real + diff)
+            comissao_liquida_percentual = _round2((valor_comissao_liquida / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
+        else:
+            comissao_liquida_percentual = comissao_bruta_percentual
+            valor_comissao_liquida = valor_comissao_bruta
+
+        base_desp_op = _d(summary.get("valor_despesa_operacional_loc") or 0.0)
+        valor_despesa_operacional = _round2(base_desp_op * ratio * Decimal(qtd))
+
+    despesa_operacional_percentual = _round2((valor_despesa_operacional / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
     valor_despesas_venda = _round2(valor_comissao_liquida + valor_despesa_operacional)
-    despesas_venda_percentual = _round2(comissao_liquida_percentual + despesa_operacional_percentual)
+    despesas_venda_percentual = _round2((valor_despesas_venda / valor_total_final) * Decimal("100.0")) if valor_total_final > 0 else Decimal("0.0")
 
-    lucro_unitario = valor_unitario_final - custo_unitario - (valor_unitario_final * (despesas_venda_percentual / Decimal("100.0")))
+    if is_venda:
+        lucro_unitario = valor_unitario_final - custo_unitario - (valor_unitario_final * (despesas_venda_percentual / Decimal("100.0")))
+    else:
+        base_lucro = _d(summary.get("lucro_mensal_kit") or 0.0)
+        delta_revenue = valor_unitario_final - valor_unitario_base
+        lucro_unitario = base_lucro + delta_revenue - (delta_revenue * (despesas_venda_percentual / Decimal("100.0")))
+
     lucro_unitario_estimado = _round2(lucro_unitario)
     margem_estimada = _round2((lucro_unitario / valor_unitario_final) * Decimal("100.0")) if valor_unitario_final > 0 else Decimal("0.0")
+    valor_comissao_estimada = valor_comissao_bruta
 
     return ExpressKitPricingResponse(
         opportunity_kit_id=kit.id,
@@ -416,6 +493,12 @@ def save_express_sale(
         if not budget:
             raise HTTPException(status_code=404, detail="Oportunidade/Orçamento não encontrado.")
 
+        if budget.status in ["GANHO", "PERDIDO"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Esta venda express já foi finalizada como {budget.status} e não pode ser alterada (somente leitura para emissão de proposta e visualização)."
+            )
+
         old_state = {
             "valor_total": float(budget.valor_total or 0),
             "forma_pagamento_id": str(budget.forma_pagamento_id) if budget.forma_pagamento_id else None,
@@ -460,8 +543,12 @@ def save_express_sale(
 
     # Clear old items if updating
     if is_update:
-        db.query(SalesBudgetItem).filter(SalesBudgetItem.budget_id == budget.id).delete()
-        db.query(RentalBudgetItem).filter(RentalBudgetItem.budget_id == budget.id).delete()
+        for it in list(budget.items):
+            db.delete(it)
+        for rit in list(budget.rental_items):
+            db.delete(rit)
+        budget.items.clear()
+        budget.rental_items.clear()
         db.flush()
 
     # Calculate and insert new items
@@ -470,6 +557,8 @@ def save_express_sale(
     primary_policy_id = None
 
     kit_svc = OpportunityKitService(db)
+
+    kit_id_map = {}
 
     for item_input in req.items:
         pricing_req = ExpressKitPricingRequest(
@@ -485,21 +574,34 @@ def save_express_sale(
         if not primary_policy_id and pricing.commercial_policy_id:
             primary_policy_id = pricing.commercial_policy_id
 
-        # Clone global kit to associate directly with this sales budget
-        cloned_kit = kit_svc.clone_kit(
-            source_kit_id=str(item_input.opportunity_kit_id),
-            tenant_id=tenant_id,
-            company_id=company_id,
-            sales_budget_id=str(budget.id)
-        )
-        # Update cloned kit factors and commission
-        cloned_kit.fator_margem_locacao = pricing.fator_efetivo
+        # Check if the kit is already a cloned kit bound to this sales budget
+        existing_kit = db.query(OpportunityKit).filter(
+            OpportunityKit.id == item_input.opportunity_kit_id,
+            OpportunityKit.sales_budget_id == budget.id
+        ).first()
+
+        if existing_kit:
+            cloned_kit = existing_kit
+        else:
+            # Clone global kit to associate directly with this sales budget
+            cloned_kit = kit_svc.clone_kit(
+                source_kit_id=str(item_input.opportunity_kit_id),
+                tenant_id=tenant_id,
+                company_id=company_id,
+                sales_budget_id=str(budget.id)
+            )
+
+        kit_id_map[str(item_input.opportunity_kit_id)] = str(cloned_kit.id)
+
+        # Update cloned kit commission and commercial policy without mutating its catalog base pricing factor
         cloned_kit.perc_comissao = pricing.comissao_percentual
+        cloned_kit.perc_despesa_operacional = pricing.despesa_operacional_percentual
         cloned_kit.commercial_policy_id = pricing.commercial_policy_id
         db.add(cloned_kit)
         db.flush()
 
         total_budget_value += pricing.valor_total_final
+        qtd_dec = Decimal(pricing.quantidade) if pricing.quantidade >= 1 else Decimal(1)
 
         if pricing.tipo_contrato == "VENDA_EQUIPAMENTOS":
             db_item = SalesBudgetItem(
@@ -511,10 +613,15 @@ def save_express_sale(
                 markup=pricing.fator_efetivo,
                 venda_unit=pricing.valor_unitario_final,
                 perc_comissao=pricing.comissao_percentual,
-                comissao_unit=_round2(pricing.valor_unitario_final * (pricing.comissao_percentual / Decimal("100.0"))),
+                comissao_unit=_round2(pricing.valor_comissao_liquida / qtd_dec),
+                dsr_unit=_round2(pricing.valor_dsr / qtd_dec),
+                fgts_unit=_round2(pricing.valor_fgts / qtd_dec),
+                inss_unit=_round2(pricing.valor_inss / qtd_dec),
+                demais_incidencias_unit=_round2(pricing.valor_demais / qtd_dec),
+                despesa_operacional_unit=_round2(pricing.valor_despesa_operacional / qtd_dec),
                 lucro_unit=pricing.lucro_unitario_estimado,
                 margem_unit=pricing.margem_estimada,
-                quantidade=Decimal(pricing.quantidade),
+                quantidade=qtd_dec,
                 total_venda=pricing.valor_total_final
             )
             db.add(db_item)
@@ -529,15 +636,20 @@ def save_express_sale(
                 valor_venda_equipamento=pricing.valor_unitario_final,
                 valor_mensal=pricing.valor_unitario_final,
                 perc_comissao=pricing.comissao_percentual,
-                comissao_mensal=_round2(pricing.valor_unitario_final * (pricing.comissao_percentual / Decimal("100.0"))),
+                comissao_mensal=_round2(pricing.valor_comissao_liquida / qtd_dec),
+                dsr_mensal=_round2(pricing.valor_dsr / qtd_dec),
+                fgts_mensal=_round2(pricing.valor_fgts / qtd_dec),
+                inss_mensal=_round2(pricing.valor_inss / qtd_dec),
+                demais_incidencias_mensal=_round2(pricing.valor_demais / qtd_dec),
+                despesa_operacional_mensal=_round2(pricing.valor_despesa_operacional / qtd_dec),
                 lucro_mensal=pricing.lucro_unitario_estimado,
                 margem=pricing.margem_estimada,
-                quantidade=Decimal(pricing.quantidade)
+                quantidade=qtd_dec
             )
             db.add(db_item)
 
         calculated_items_state.append({
-            "opportunity_kit_id": str(item_input.opportunity_kit_id),
+            "opportunity_kit_id": str(cloned_kit.id),
             "nome_kit": pricing.nome_kit,
             "tipo_precificacao": pricing.tipo_precificacao,
             "quantidade": pricing.quantidade,
@@ -559,6 +671,31 @@ def save_express_sale(
     budget.observacoes = req.observacoes
     if primary_policy_id:
         budget.commercial_policy_id = primary_policy_id
+
+    raw_groupings = list(req.proposal_custom_groupings if req.proposal_custom_groupings is not None else (budget.proposal_custom_groupings or []))
+    groupings = []
+    for g in raw_groupings:
+        if isinstance(g, dict):
+            g_dict = dict(g)
+            if "kit_ids" in g_dict and isinstance(g_dict["kit_ids"], list):
+                g_dict["kit_ids"] = [kit_id_map.get(str(k_id), str(k_id)) for k_id in g_dict["kit_ids"]]
+            groupings.append(g_dict)
+        elif hasattr(g, 'model_dump'):
+            g_dict = g.model_dump()
+            if "kit_ids" in g_dict and isinstance(g_dict["kit_ids"], list):
+                g_dict["kit_ids"] = [kit_id_map.get(str(k_id), str(k_id)) for k_id in g_dict["kit_ids"]]
+            groupings.append(g_dict)
+        elif hasattr(g, 'dict'):
+            g_dict = g.dict()
+            if "kit_ids" in g_dict and isinstance(g_dict["kit_ids"], list):
+                g_dict["kit_ids"] = [kit_id_map.get(str(k_id), str(k_id)) for k_id in g_dict["kit_ids"]]
+            groupings.append(g_dict)
+        else:
+            groupings.append(g)
+
+    if not any(isinstance(g, dict) and g.get("is_express") for g in groupings):
+        groupings.append({"is_express": True, "tipo": "EXPRESS_SALE"})
+    budget.proposal_custom_groupings = groupings
 
     if is_update:
         budget.versao = (budget.versao or 1) + 1
@@ -595,7 +732,7 @@ def save_express_sale(
         versao=budget.versao,
         status_anterior=old_state.get("status", "EM_LANCAMENTO") if old_state else "EM_LANCAMENTO",
         status_novo=budget.status,
-        usuario_id=current_user.id,
+        usuario_id=str(current_user.id) if current_user else "sistema",
         cargo_usuario=None,
         descricao=desc_history,
         diff_changes=diff_payload,
@@ -606,3 +743,136 @@ def save_express_sale(
     db.refresh(budget)
 
     return budget
+
+
+def authorize_express_sale_by_manager(
+    db: Session,
+    tenant_id: str,
+    company_id: str,
+    budget_id: UUID,
+    req: ExpressAuthorizeManagerRequest,
+    current_user: Optional[User] = None
+) -> Dict[str, Any]:
+    from src.core.security import verify_password
+    from src.modules.users.models import User
+    from src.modules.sales_budgets.models import SalesBudget, SalesBudgetApproval, SalesBudgetHistory
+    from src.modules.sales_budgets.service import check_is_approver
+
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orçamento de Venda Express não encontrado.")
+
+    # Find manager/admin by email in this tenant
+    manager_user = db.query(User).filter(
+        User.tenant_id == tenant_id,
+        User.email.ilike(req.email.strip())
+    ).first()
+
+    if not manager_user:
+        raise HTTPException(status_code=401, detail="Usuário ou senha de gerência incorretos.")
+
+    if not verify_password(req.password, manager_user.password_hash):
+        raise HTTPException(status_code=401, detail="Usuário ou senha de gerência incorretos.")
+
+    # Check if user is approver
+    is_approver, cargo_aprovador = check_is_approver(db, str(manager_user.id), tenant_id, budget.company_id)
+    if not is_approver:
+        raise HTTPException(
+            status_code=403, 
+            detail="O usuário autenticado não possui perfil de Gerente ou Administrador para autorizar vendas."
+        )
+
+    # Register approval
+    approval = SalesBudgetApproval(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        usuario_aprovador_id=str(manager_user.id),
+        cargo_aprovador=cargo_aprovador or "Gerência/Admin",
+        observacao=req.motivo or "Autorização por credenciais de gerência na Venda Express.",
+        data_aprovacao=datetime.now(timezone.utc)
+    )
+    db.add(approval)
+
+    budget.status = "APROVADO"
+
+    desc_hist = f"Venda Express autorizada por {manager_user.name} ({cargo_aprovador or 'Gerência'})."
+    hist = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao or 1,
+        status_anterior="EM_LANCAMENTO",
+        status_novo="APROVADO",
+        usuario_id=str(manager_user.id),
+        cargo_usuario=cargo_aprovador,
+        descricao=desc_hist,
+        data_movimentacao=datetime.now(timezone.utc)
+    )
+    db.add(hist)
+    db.commit()
+    db.refresh(budget)
+
+    return {
+        "success": True,
+        "message": f"Venda Express autorizada com sucesso por {manager_user.name}.",
+        "budget_id": str(budget.id),
+        "status": budget.status,
+        "approver_name": manager_user.name,
+        "cargo": cargo_aprovador
+    }
+
+
+def finalize_express_sale(
+    db: Session,
+    tenant_id: str,
+    company_id: str,
+    budget_id: UUID,
+    req: ExpressFinalizeRequest,
+    current_user: Optional[User] = None
+) -> Dict[str, Any]:
+    from src.modules.sales_budgets.models import SalesBudget, SalesBudgetHistory
+    from src.modules.sales_budgets.schemas import BudgetStatusEnum
+
+    budget = db.query(SalesBudget).filter(
+        SalesBudget.id == budget_id,
+        SalesBudget.tenant_id == tenant_id
+    ).first()
+
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orçamento de Venda Express não encontrado.")
+
+    target_status = req.status.value if hasattr(req.status, 'value') else str(req.status)
+    if target_status not in ["GANHO", "PERDIDO"]:
+        raise HTTPException(status_code=400, detail="Status de finalização inválido. Escolha GANHO ou PERDIDO.")
+
+    status_anterior = budget.status
+    budget.status = target_status
+
+    if target_status == "GANHO":
+        desc = "Venda Express finalizada com status GANHA."
+    else:
+        desc = f"Venda Express finalizada com status PERDIDA. Motivo: {req.motivo_perda or 'Não informado'}."
+
+    hist = SalesBudgetHistory(
+        sales_budget_id=budget.id,
+        tenant_id=tenant_id,
+        versao=budget.versao or 1,
+        status_anterior=status_anterior,
+        status_novo=target_status,
+        usuario_id=str(current_user.id) if current_user else "sistema",
+        descricao=desc,
+        data_movimentacao=datetime.now(timezone.utc)
+    )
+    db.add(hist)
+    db.commit()
+    db.refresh(budget)
+
+    return {
+        "success": True,
+        "message": desc,
+        "budget_id": str(budget.id),
+        "status": budget.status
+    }

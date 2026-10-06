@@ -11,7 +11,6 @@ from src.modules.opportunity_kits.schemas import (
     OpportunityKitItemFinancialSummary
 )
 from src.modules.products.models import Product
-from src.modules.sales_budgets.router import get_product_cost_composition
 
 
 class OpportunityKitService:
@@ -119,7 +118,8 @@ class OpportunityKitService:
         tenant_id: str, 
         override_factor: Optional[Decimal] = None,
         sales_budget_id: Optional[str] = None,
-        sales_proposal_id: Optional[str] = None
+        sales_proposal_id: Optional[str] = None,
+        override_policy_id: Optional[str] = None
     ) -> dict:
         comissao_venda_origens = []
         from src.modules.sales_budgets.models import SalesBudget
@@ -144,7 +144,7 @@ class OpportunityKitService:
             company_id = str(licitacao.company_id) if licitacao else None
 
         # Resolve active policy early
-        policy_id = kit.commercial_policy_id or (sales_budget.commercial_policy_id if sales_budget else None)
+        policy_id = override_policy_id or kit.commercial_policy_id or (sales_budget.commercial_policy_id if sales_budget else None)
         policy = None
         if policy_id:
             from src.modules.companies.models import CommercialPolicy
@@ -794,27 +794,38 @@ class OpportunityKitService:
                 }
             ]
             
-            # Active policy is already resolved at the beginning of the function
-                
+            has_products = any(
+                getattr(item, "tipo_item", "PRODUTO") == "PRODUTO" and item.product_id
+                for item in (getattr(kit, 'items', []) or [])
+            )
+
             if policy and policy.service_commissions:
                 # Group active service commission rules
                 rules_by_service = {
-                    sc.own_service_id: sc 
+                    str(sc.own_service_id): sc 
                     for sc in policy.service_commissions 
                     if sc.ativo and sc.commission_installments > 0
                 }
                 
-                # Check for items that are SERVICO_PROPRIO in the kit
-                for item in kit.items:
-                    if getattr(item, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" and getattr(item, "own_service_id", None):
-                        rule = rules_by_service.get(item.own_service_id)
+                # Check for items that are SERVICO_PROPRIO in the kit (Block 4)
+                for item in (getattr(kit, 'items', []) or []):
+                    item_os_id = str(item.own_service_id) if getattr(item, "own_service_id", None) else None
+                    if item_os_id and (getattr(item, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" or item_os_id in rules_by_service):
+                        rule = rules_by_service.get(item_os_id)
                         if rule:
                             # Preço mensal do serviço (venda_unitario_item) was calculated in the items loop.
                             venda_mensal_unit = Decimal("0.0")
                             for summary in item_summaries:
-                                if (summary.get("id") == str(item.id)) or (summary.get("own_service_id") == str(item.own_service_id)):
+                                if (summary.get("id") == str(item.id)) or (str(summary.get("own_service_id")) == item_os_id):
                                     venda_mensal_unit = Decimal(str(summary.get("venda_unitario_item", 0.0)))
                                     break
+                            
+                            # Fallback if venda_mensal_unit is 0 (e.g. fixed monthly fee kit or 0 equipment cost)
+                            if venda_mensal_unit <= 0:
+                                if getattr(kit, 'valor_locacao_mensal_fixo', None) and Decimal(str(kit.valor_locacao_mensal_fixo)) > 0:
+                                    venda_mensal_unit = Decimal(str(kit.valor_locacao_mensal_fixo))
+                                elif valor_base_final > 0:
+                                    venda_mensal_unit = valor_base_final
                             
                             qty = Decimal(str(item.quantidade_no_kit or 1.0))
                             valor_mensal_total_servico = venda_mensal_unit * qty
@@ -822,7 +833,7 @@ class OpportunityKitService:
                             
                             valor_destinado_comissao_servicos += valor_destinado_comissao_servico
                             
-                            service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio")
+                            service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio") if getattr(rule, "own_service", None) else "Serviço Próprio"
                             comissao_venda_origens.append({
                                 "origem": f"Serviço {service_name}",
                                 "base": float(round(valor_mensal_total_servico, 2)),
@@ -830,15 +841,26 @@ class OpportunityKitService:
                                 "valor_destinado": float(round(valor_destinado_comissao_servico, 2))
                             })
                 
-                # Check for items that are SERVICO_PROPRIO in Block 6 (kit.costs)
+                # Check for items in Block 6 (kit.costs) that match service commission rules in policy
                 if hasattr(kit, 'costs') and kit.costs:
                     for cost in kit.costs:
-                        if getattr(cost, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" and getattr(cost, "own_service_id", None):
-                            rule = rules_by_service.get(cost.own_service_id)
+                        cost_os_id = str(cost.own_service_id) if getattr(cost, "own_service_id", None) else None
+                        if cost_os_id and (getattr(cost, "tipo_item", "PRODUTO") == "SERVICO_PROPRIO" or cost_os_id in rules_by_service):
+                            rule = rules_by_service.get(cost_os_id)
                             if rule:
-                                # For LOCACAO/COMODATO, the service selling price in Block 6 is: cost.valor_unitario * kit.fator_manutencao
+                                cost_unit = Decimal(str(cost.valor_unitario or 0))
+                                for c_sum in cost_summaries:
+                                    if (c_sum.get("id") == str(cost.id)) or (str(c_sum.get("own_service_id")) == cost_os_id):
+                                        cost_unit = Decimal(str(c_sum.get("custo_base_unitario_item", cost_unit)))
+                                        break
+                                
                                 fator_manut_val = Decimal(str(kit.fator_manutencao if kit.fator_manutencao is not None else 1))
-                                venda_mensal_unit = Decimal(str(cost.valor_unitario or 0)) * fator_manut_val
+                                venda_mensal_unit = cost_unit * fator_manut_val
+                                if venda_mensal_unit <= 0:
+                                    if getattr(kit, 'valor_locacao_mensal_fixo', None) and Decimal(str(kit.valor_locacao_mensal_fixo)) > 0:
+                                        venda_mensal_unit = Decimal(str(kit.valor_locacao_mensal_fixo))
+                                    elif valor_base_final > 0:
+                                        venda_mensal_unit = valor_base_final
                                 
                                 qty = Decimal(str(cost.quantidade or 1.0))
                                 valor_mensal_total_servico = venda_mensal_unit * qty
@@ -846,42 +868,13 @@ class OpportunityKitService:
                                 
                                 valor_destinado_comissao_servicos += valor_destinado_comissao_servico
                                 
-                                service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio")
+                                service_name = getattr(rule.own_service, "nome_servico", "Serviço Próprio") if getattr(rule, "own_service", None) else "Serviço Próprio"
                                 comissao_venda_origens.append({
-                                    "origem": f"Serviço {service_name} (B6)",
+                                    "origem": f"Serviço {service_name}",
                                     "base": float(round(valor_mensal_total_servico, 2)),
                                     "regra": f"{rule.commission_installments} mensalidade" if rule.commission_installments == 1 else f"{rule.commission_installments} mensalidades",
                                     "valor_destinado": float(round(valor_destinado_comissao_servico, 2))
                                 })
-            
-            # Add service commissions to total com_destinado_loc
-            com_destinado_loc += valor_destinado_comissao_servicos
-            # --- END SERVICE COMMISSION CALCULATION ---
-            
-            vlt_comissao_dsr_loc = Decimal("0.0")
-            vlt_comissao_fgts_loc = Decimal("0.0")
-            vlt_comissao_inss_loc = Decimal("0.0")
-            vlt_comissao_demais_loc = Decimal("0.0")
-            
-            if tipo_com == "COMISSAO_POR_DENTRO" and com_destinado_loc > 0:
-                fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
-                comissao_real_loc = com_destinado_loc / fator_total
-                vlt_comissao_dsr_loc = comissao_real_loc * perc_dsr / Decimal("100")
-                vlt_comissao_fgts_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_fgts / Decimal("100")
-                vlt_comissao_inss_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_inss / Decimal("100")
-                vlt_comissao_demais_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_demais / Decimal("100")
-                
-                soma = comissao_real_loc + vlt_comissao_dsr_loc + vlt_comissao_fgts_loc + vlt_comissao_inss_loc + vlt_comissao_demais_loc
-                diff = com_destinado_loc - soma
-                comissao_real_loc += diff
-                
-                valor_comissao_locacao = comissao_real_loc
-            else:
-                valor_comissao_locacao = com_destinado_loc
-                
-            valor_despesa_operacional_loc = valor_base_venda * perc_desp_op / Decimal("100")
-
-            perc_despesas_adm_locacao = Decimal(getattr(kit, 'perc_despesas_adm', 0) or 0) / Decimal(100.0)
             
             # Monitoramento
             custo_monitoramento_unitario = Decimal(getattr(kit, 'custo_monitoramento_unitario', 0) or 0)
@@ -906,10 +899,39 @@ class OpportunityKitService:
 
             # Removing duplicate INSTALACAO check here as it is handled by the unified sales block
             valor_base_final = valor_parcela_locacao + manutencao_mensal + venda_unit_monitoramento
+            perc_despesas_adm_locacao = Decimal(getattr(kit, 'perc_despesas_adm', 0) or 0) / Decimal(100.0)
             valor_despesas_adm_locacao = valor_base_final * perc_despesas_adm_locacao
-            # custo_operacional_mensal_kit = raw Block 6 cost (DO NOT MUTATE)
-            # custo_total_mensal_kit = all operational costs for profitability calc
             custo_total_mensal_kit = custo_operacional_mensal_kit + Decimal(str(vlt_manut)) + custo_monitoramento_unitario
+
+            # --- SERVICE COMMISSION & DSR / FGTS RESOLUTION ---
+            if valor_destinado_comissao_servicos > 0:
+                com_destinado_loc = valor_base_final if valor_base_final > 0 else valor_destinado_comissao_servicos
+            
+            vlt_comissao_dsr_loc = Decimal("0.0")
+            vlt_comissao_fgts_loc = Decimal("0.0")
+            vlt_comissao_inss_loc = Decimal("0.0")
+            vlt_comissao_demais_loc = Decimal("0.0")
+            
+            if tipo_com == "COMISSAO_POR_DENTRO" and com_destinado_loc > 0:
+                fator_total = (Decimal("1") + perc_dsr / Decimal("100")) * (Decimal("1") + (perc_fgts + perc_inss + perc_demais) / Decimal("100"))
+                comissao_real_loc = com_destinado_loc / fator_total
+                vlt_comissao_dsr_loc = comissao_real_loc * perc_dsr / Decimal("100")
+                vlt_comissao_fgts_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_fgts / Decimal("100")
+                vlt_comissao_inss_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_inss / Decimal("100")
+                vlt_comissao_demais_loc = (comissao_real_loc + vlt_comissao_dsr_loc) * perc_demais / Decimal("100")
+                
+                soma = comissao_real_loc + vlt_comissao_dsr_loc + vlt_comissao_fgts_loc + vlt_comissao_inss_loc + vlt_comissao_demais_loc
+                diff = com_destinado_loc - soma
+                comissao_real_loc += diff
+                
+                valor_comissao_locacao = comissao_real_loc
+            else:
+                valor_comissao_locacao = com_destinado_loc
+                
+            if valor_destinado_comissao_servicos > 0:
+                valor_despesa_operacional_loc = Decimal("0.0")
+            else:
+                valor_despesa_operacional_loc = valor_base_venda * perc_desp_op / Decimal("100")
 
         # 14. Calculo de Impostos
         # aliq_total_impostos was calculated at the top
@@ -1269,6 +1291,7 @@ class OpportunityKitService:
                 "vlt_manut": round(vlt_manut, 2),  # type: ignore
                 "valor_base_venda": round(valor_base_venda, 2),  # type: ignore
                 "imposto_instalacao": round(locals().get("imposto_instalacao_upfront", Decimal("0.0")), 2),  # type: ignore
+                "com_destinado_loc": round(locals().get("com_destinado_loc", Decimal("0.0")), 2),  # type: ignore
                 "valor_comissao_locacao": round(locals().get("valor_comissao_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_despesas_adm_locacao": round(locals().get("valor_despesas_adm_locacao", Decimal("0.0")), 2),  # type: ignore
                 "valor_despesa_operacional_loc": round(locals().get("valor_despesa_operacional_loc", Decimal("0.0")), 2),  # type: ignore

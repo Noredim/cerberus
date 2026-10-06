@@ -1,6 +1,6 @@
 export const versionInfo = {
-  version: "1.0.6",
-  buildDate: "2026.06.02",
+  version: "1.0.11",
+  buildDate: "2026.10.06",
   environment: "production"
 };
 

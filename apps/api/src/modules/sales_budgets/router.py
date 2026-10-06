@@ -5,13 +5,14 @@ from typing import Optional
 from src.core.database import get_db
 from src.modules.auth.dependencies import get_current_user, get_active_company
 from src.modules.users.models import User
-from src.modules.sales_budgets import service
+from src.modules.sales_budgets import service, schemas, express_service
 from src.modules.sales_budgets.schemas import (
     SalesBudgetCreate, SalesBudgetUpdate, SalesBudgetOut,
     SalesBudgetStatusUpdate, SalesBudgetHeaderUpdate,
     WorkflowTransitionSchema,
     ExpressKitPricingRequest, ExpressKitPricingResponse,
-    ExpressSaleSaveRequest
+    ExpressSaleSaveRequest,
+    ExpressAuthorizeManagerRequest, ExpressFinalizeRequest
 )
 
 
@@ -425,6 +426,60 @@ def save_express_sale_endpoint(
     )
 
     return _budget_to_dict(budget, db)
+
+
+@router.post("/express/{budget_id}/authorize-manager")
+def authorize_express_sale_endpoint(
+    budget_id: UUID,
+    req: schemas.ExpressAuthorizeManagerRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header obrigatório")
+    
+    return express_service.authorize_express_sale_by_manager(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        company_id=company_id,
+        budget_id=budget_id,
+        req=req,
+        current_user=current_user
+    )
+
+
+@router.post("/express/{budget_id}/finalize")
+def finalize_express_sale_endpoint(
+    budget_id: UUID,
+    req: schemas.ExpressFinalizeRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    company_id: str = Depends(get_active_company)
+):
+    if not company_id:
+        raise HTTPException(status_code=400, detail="X-Company-Id header obrigatório")
+    
+    res = express_service.finalize_express_sale(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        company_id=company_id,
+        budget_id=budget_id,
+        req=req,
+        current_user=current_user
+    )
+
+    action_key = "opportunity.won" if req.status == schemas.BudgetStatusEnum.GANHO else "opportunity.lost"
+    _emit_opportunity_event(
+        db=db,
+        budget_id=str(budget_id),
+        action_key=action_key,
+        user=current_user,
+        background_tasks=background_tasks,
+    )
+
+    return res
 
 
 @router.get("/{budget_id}/history-diffs")
@@ -842,6 +897,12 @@ def _budget_to_dict(budget, db: Session = None) -> dict:
         "customer_nome": budget.customer.nome_fantasia or budget.customer.razao_social if budget.customer else None,
         "customer_state_sigla": budget.customer.state.sigla if budget.customer and budget.customer.state else None,
         "company_state_sigla": budget.company.state.sigla if budget.company and budget.company.state else None,
+        "customer": {
+            "id": str(budget.customer.id),
+            "razao_social": budget.customer.razao_social,
+            "nome_fantasia": budget.customer.nome_fantasia,
+            "cnpj_cpf": getattr(budget.customer, "cnpj_cpf", None) or getattr(budget.customer, "cnpj", None)
+        } if budget.customer else None,
         "vendedor_id": str(budget.vendedor_id) if budget.vendedor_id else None,
         "sales_team_id": str(budget.sales_team_id) if budget.sales_team_id else None,
         "sales_team_nome": budget.sales_team.nome if budget.sales_team else None,

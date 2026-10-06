@@ -152,6 +152,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
                                     'Kits (oportunidades)', 
                                     'Orçamento de compra', 
                                     'Oportunidades', 
+                                    'Vendas Express',
+                                    'Propostas de Venda',
                                     'Comparativos de soluções',
                                     'Licitações'
                                 ].includes(sub.label)

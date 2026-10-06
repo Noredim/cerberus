@@ -712,15 +712,22 @@ def build_commercial_proposal_full(budget: SalesBudget, db: Session) -> dict:
     from src.modules.opportunity_kits.service import OpportunityKitService
 
     kit_service = OpportunityKitService(db)
-    kits = db.query(OpportunityKit).filter_by(sales_budget_id=budget.id).all() if budget else []
-    # Incluir kits referenciados em rental_items e items caso nao estejam na lista direta
+    kits = []
     if budget:
-        for rit in (budget.rental_items or []):
-            if rit.opportunity_kit and rit.opportunity_kit not in kits:
-                kits.append(rit.opportunity_kit)
+        active_kit_ids = set()
         for it in (budget.items or []):
-            if it.opportunity_kit and it.opportunity_kit not in kits:
-                kits.append(it.opportunity_kit)
+            if getattr(it, "opportunity_kit_id", None):
+                active_kit_ids.add(str(it.opportunity_kit_id))
+        for rit in (budget.rental_items or []):
+            if getattr(rit, "opportunity_kit_id", None):
+                active_kit_ids.add(str(rit.opportunity_kit_id))
+
+        if active_kit_ids:
+            kits = db.query(OpportunityKit).filter(
+                OpportunityKit.id.in_([UUID(kid) for kid in active_kit_ids])
+            ).all()
+        else:
+            kits = []
 
     raw_groupings = getattr(budget, 'proposal_custom_groupings', []) or []
     if isinstance(raw_groupings, str):

@@ -1164,54 +1164,36 @@ def update_budget(db: Session, tenant_id: str, budget_id: str, data: SalesBudget
         from src.modules.sales_budgets.models import SalesBudgetApproval
         db.query(SalesBudgetApproval).filter(SalesBudgetApproval.sales_budget_id == budget.id).delete()
 
-    # Update header + sale defaults
-    budget.customer_id = data.customer_id
-    budget.commercial_policy_id = data.commercial_policy_id
-    budget.sales_team_id = data.sales_team_id
-    budget.vendedor_id = data.vendedor_id
-    if getattr(data, 'proposal_custom_groupings', None) is not None:
-        budget.proposal_custom_groupings = [g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g) for g in data.proposal_custom_groupings]
-    budget.usar_produtos_gerais = getattr(data, 'usar_produtos_gerais', True) if getattr(data, 'usar_produtos_gerais', None) is not None else getattr(budget, 'usar_produtos_gerais', True)
-    budget.titulo = data.titulo
-    budget.observacoes = data.observacoes
-    budget.data_orcamento = data.data_orcamento
-    budget.forma_pagamento_id = data.forma_pagamento_id
-    budget.data_vencimento_inicial = data.data_vencimento_inicial
-    budget.forma_pagamento_snapshot = data.forma_pagamento_snapshot
-    budget.markup_padrao = data.markup_padrao
-    budget.perc_despesa_adm = data.perc_despesa_adm
-    budget.perc_comissao = data.perc_comissao
-    budget.perc_frete_venda = data.perc_frete_venda
-    budget.perc_pis = data.perc_pis
-    budget.perc_cofins = data.perc_cofins
-    budget.perc_csll = data.perc_csll
-    budget.perc_irpj = data.perc_irpj
-    budget.perc_iss = data.perc_iss
-    budget.perc_icms_interno = data.perc_icms_interno
-    budget.perc_icms_externo = data.perc_icms_externo
-    budget.venda_markup_produtos = data.venda_markup_produtos
-    budget.venda_markup_servicos = data.venda_markup_servicos
-    budget.venda_markup_instalacao = data.venda_markup_instalacao
-    budget.venda_markup_manutencao = data.venda_markup_manutencao
-    budget.venda_havera_manutencao = data.venda_havera_manutencao
-    budget.venda_qtd_meses_manutencao = data.venda_qtd_meses_manutencao
+    # Update header + sale defaults safely
+    fields_to_check = [
+        "customer_id", "commercial_policy_id", "sales_team_id", "vendedor_id",
+        "usar_produtos_gerais", "titulo", "observacoes", "data_orcamento",
+        "forma_pagamento_id", "data_vencimento_inicial", "forma_pagamento_snapshot",
+        "markup_padrao", "perc_despesa_adm", "perc_comissao", "perc_frete_venda",
+        "perc_pis", "perc_cofins", "perc_csll", "perc_irpj", "perc_iss",
+        "perc_icms_interno", "perc_icms_externo", "venda_markup_produtos",
+        "venda_markup_servicos", "venda_markup_instalacao", "venda_markup_manutencao",
+        "venda_havera_manutencao", "venda_qtd_meses_manutencao", "prazo_contrato_meses",
+        "prazo_instalacao_meses", "taxa_juros_mensal", "taxa_manutencao_anual",
+        "tipo_receita_rental", "fator_margem_padrao", "fator_manutencao_padrao",
+        "perc_instalacao_padrao", "perc_comissao_rental", "perc_pis_rental",
+        "perc_cofins_rental", "perc_csll_rental", "perc_irpj_rental", "perc_iss_rental",
+        "perc_comissao_diretoria"
+    ]
+    for field in fields_to_check:
+        if hasattr(data, field):
+            val = getattr(data, field)
+            if val is not None:
+                setattr(budget, field, val)
 
-    # Update rental defaults
-    budget.prazo_contrato_meses = data.prazo_contrato_meses
-    budget.prazo_instalacao_meses = data.prazo_instalacao_meses
-    budget.taxa_juros_mensal = data.taxa_juros_mensal
-    budget.taxa_manutencao_anual = data.taxa_manutencao_anual
-    budget.tipo_receita_rental = data.tipo_receita_rental
-    budget.fator_margem_padrao = data.fator_margem_padrao
-    budget.fator_manutencao_padrao = data.fator_manutencao_padrao
-    budget.perc_instalacao_padrao = data.perc_instalacao_padrao
-    budget.perc_comissao_rental = data.perc_comissao_rental
-    budget.perc_pis_rental = data.perc_pis_rental
-    budget.perc_cofins_rental = data.perc_cofins_rental
-    budget.perc_csll_rental = data.perc_csll_rental
-    budget.perc_irpj_rental = data.perc_irpj_rental
-    budget.perc_iss_rental = data.perc_iss_rental
-    budget.perc_comissao_diretoria = data.perc_comissao_diretoria
+    if getattr(data, 'proposal_custom_groupings', None) is not None:
+        raw_g = getattr(data, 'proposal_custom_groupings')
+        groupings = [g.model_dump() if hasattr(g, 'model_dump') else (g.dict() if hasattr(g, 'dict') else g) for g in raw_g]
+        # Preserve is_express flag if present in existing budget groupings
+        is_express_present = any(isinstance(g, dict) and g.get("is_express") for g in (budget.proposal_custom_groupings or []))
+        if is_express_present and not any(isinstance(g, dict) and g.get("is_express") for g in groupings):
+            groupings.append({"is_express": True, "tipo": "EXPRESS_SALE"})
+        budget.proposal_custom_groupings = groupings
     policy = None
     if data.commercial_policy_id:
         from src.modules.companies.models import CommercialPolicy
@@ -1815,13 +1797,23 @@ def list_budgets(
         query = query.filter(SalesBudget.sales_team_id == sales_team_id)
 
     if express_only:
+        from sqlalchemy import cast, String
         from src.modules.companies.models import SalesTeam
-        express_team_ids = [t[0] for t in db.query(SalesTeam.id).filter(
+        express_teams = db.query(SalesTeam).filter(
             SalesTeam.company_id == company_id,
             SalesTeam.permite_venda_express == True
-        ).all()]
-        if express_team_ids:
-            query = query.filter(SalesBudget.sales_team_id.in_(express_team_ids))
+        ).all()
+        express_team_prefixes = [f"{t.nomenclatura_orcamento}-%" for t in express_teams if t.nomenclatura_orcamento]
+
+        express_filter_conditions = [
+            cast(SalesBudget.proposal_custom_groupings, String).ilike('%"is_express": true%'),
+            cast(SalesBudget.proposal_custom_groupings, String).ilike('%"is_express":true%'),
+            cast(SalesBudget.proposal_custom_groupings, String).ilike('%"tipo": "EXPRESS_SALE"%'),
+        ]
+        for prefix in express_team_prefixes:
+            express_filter_conditions.append(SalesBudget.numero_orcamento.ilike(prefix))
+
+        query = query.filter(or_(*express_filter_conditions))
         
     if q:
         search_term = f"%{q}%"

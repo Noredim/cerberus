@@ -8,6 +8,7 @@ interface OpportunityKitSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (kit: any) => void;
+  onCreateNew?: () => void;
   title?: string;
   salesBudgetId?: string;
   salesTeamId?: string | null;
@@ -19,6 +20,7 @@ export function OpportunityKitSearchModal({
   isOpen, 
   onClose, 
   onSelect, 
+  onCreateNew,
   title = 'Buscar Kit de Oportunidade', 
   salesBudgetId, 
   salesTeamId,
@@ -105,9 +107,25 @@ export function OpportunityKitSearchModal({
             <Search className="w-5 h-5 text-brand-primary" />
             {title}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-md transition-colors text-text-muted hover:text-text-primary">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onCreateNew && (
+              <Button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onCreateNew();
+                }}
+                variant="primary"
+                className="text-xs py-1.5 px-3 flex items-center gap-1.5 font-semibold"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Criar Kit Específico
+              </Button>
+            )}
+            <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-md transition-colors text-text-muted hover:text-text-primary">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Search Input */}
@@ -143,15 +161,29 @@ export function OpportunityKitSearchModal({
               <div className="flex flex-col items-center justify-center py-12 text-center text-text-muted">
                 <PackageOpen className="w-12 h-12 mb-3 opacity-20" />
                 <p>Nenhum kit encontrado.</p>
-                <p className="text-sm mt-1 opacity-70">Verifique a ortografia ou cadastre um novo kit.</p>
-                <Button 
-                  onClick={() => window.open('/cadastros/kits/novo', '_blank')}
-                  variant="primary" 
-                  className="mt-4"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Cadastrar Kit
-                </Button>
+                <p className="text-sm mt-1 opacity-70">Verifique a ortografia ou crie um kit específico para esta venda.</p>
+                {onCreateNew ? (
+                  <Button 
+                    onClick={() => {
+                      onClose();
+                      onCreateNew();
+                    }}
+                    variant="primary" 
+                    className="mt-4"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Kit Específico
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => window.open('/cadastros/kits/novo', '_blank')}
+                    variant="primary" 
+                    className="mt-4"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Cadastrar Kit
+                  </Button>
+                )}
               </div>
             )}
 

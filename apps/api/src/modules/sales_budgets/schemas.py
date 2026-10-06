@@ -456,4 +456,16 @@ class ExpressSaleSaveRequest(BaseModel):
     observacoes: Optional[str] = None
     data_orcamento: Optional[datetime] = None
     items: List[ExpressSaleItemInput] = []
+    proposal_custom_groupings: Optional[List[Any]] = None
+
+
+class ExpressAuthorizeManagerRequest(BaseModel):
+    email: str
+    password: str
+    motivo: Optional[str] = None
+
+
+class ExpressFinalizeRequest(BaseModel):
+    status: BudgetStatusEnum
+    motivo_perda: Optional[str] = None
 
