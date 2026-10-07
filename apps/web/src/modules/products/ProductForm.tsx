@@ -16,7 +16,8 @@ import {
     Plus,
     Trash2,
     Calculator,
-    Key
+    Key,
+    Boxes
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -25,6 +26,7 @@ import { api } from '../../services/api';
 import type { MvaLookupResult, ProductSupplier, ProductFormData } from './types';
 
 import { ProductPriceFormation } from './components/ProductPriceFormation';
+import { ProductInsideTab } from './components/ProductInsideTab';
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '-';
@@ -94,6 +96,10 @@ const ProductForm: React.FC = () => {
         { id: 'suppliers', label: 'Fornecedores', icon: Truck },
     ];
 
+    if (id) {
+        tabs.push({ id: 'inside', label: 'Inside ERP', icon: Boxes });
+    }
+
     if (budgets.length > 0) {
         tabs.push({ id: 'budgets', label: 'Orçamentos', icon: FileText });
     }
@@ -128,10 +134,14 @@ const ProductForm: React.FC = () => {
                         ativo: product.ativo,
                         suppliers: product.suppliers || [],
                         vlr_referencia_revenda: product.vlr_referencia_revenda,
-                        vlr_referencia_uso_consumo: product.vlr_referencia_uso_consumo,
                         data_atualizacao_revenda: product.data_atualizacao_revenda,
                         data_atualizacao_uso_consumo: product.data_atualizacao_uso_consumo,
                         origem_valor_uso_consumo: product.origem_valor_uso_consumo,
+                        inside_last_sync_at: product.inside_last_sync_at,
+                        inside_cached_custo: product.inside_cached_custo,
+                        inside_cached_saldo: product.inside_cached_saldo,
+                        inside_cached_preco: product.inside_cached_preco,
+                        inside_cached_raw: product.inside_cached_raw,
                     });
                     setSku(product.codigo);
 
@@ -908,6 +918,31 @@ const ProductForm: React.FC = () => {
                                     </table>
                                 </div>
                             </div>
+                        )}
+
+                        {activeTab === 'inside' && (
+                            <ProductInsideTab
+                                productId={id}
+                                companyId={formData.company_id}
+                                productName={formData.nome}
+                                codigoService={formData.codigo_service}
+                                insideData={formData.inside_cached_raw}
+                                insideLastSyncAt={formData.inside_last_sync_at}
+                                isReadOnly={isReadOnly}
+                                onSyncSuccess={(res) => {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        codigo_service: res.codigo_service ?? prev.codigo_service,
+                                        inside_cached_raw: res.raw ?? prev.inside_cached_raw,
+                                        inside_last_sync_at: res.inside_last_sync_at ?? prev.inside_last_sync_at,
+                                        inside_cached_custo: res.custo ?? prev.inside_cached_custo,
+                                        inside_cached_saldo: res.saldo ?? prev.inside_cached_saldo,
+                                    }));
+                                }}
+                                onUpdateCodigoService={(newCode) => {
+                                    setFormData(prev => ({ ...prev, codigo_service: newCode }));
+                                }}
+                            />
                         )}
 
                     </motion.div>

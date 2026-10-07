@@ -1,7 +1,9 @@
 import uuid
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
+import unicodedata
+import re
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -13,7 +15,7 @@ from src.modules.customers.models import Customer
 from src.modules.professionals.models import Professional
 from src.modules.payment_methods.models import FormaPagamento, FormaPagamentoParcela
 from .models import IntegrationLog
-from .client import InsideServiceClient
+from .client import InsideServiceClient, InsideEstoqueClient
 from .schemas import (
     InsideTestConnectionResponse,
     InsideDryRunResponse,
@@ -79,6 +81,30 @@ class InsideIntegrationService:
             base_url=base_url,
             hash_token=hash_token,
             cod_unidade=cod_unidade,
+        )
+
+    @staticmethod
+    def get_estoque_client(
+        db: Session,
+        company_id: UUID,
+        allow_inactive: bool = False
+    ) -> InsideEstoqueClient:
+        config = InsideIntegrationService.get_config(db, company_id)
+        if not config.estoque_is_active and not allow_inactive:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Integração de Consulta de Estoque em Tempo Real está inativa nas configurações da empresa."
+            )
+        if not config.estoque_base_url or not config.estoque_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="URL Base e Chave X-API-KEY da API de Estoque são obrigatórias."
+            )
+        return InsideEstoqueClient(
+            base_url=config.estoque_base_url,
+            api_key=config.estoque_api_key,
+            empresa_id=config.estoque_cod_empresa,
+            tipo_padrao=config.estoque_tipo_padrao or "NOVOS",
         )
 
     @staticmethod
@@ -165,6 +191,71 @@ class InsideIntegrationService:
             data=res_json,
             error=error_msg,
         )
+
+    @staticmethod
+    def test_estoque_connection(
+        db: Session,
+        company_id: UUID,
+        user_id: Optional[UUID] = None,
+    ) -> InsideTestConnectionResponse:
+        try:
+            client = InsideIntegrationService.get_estoque_client(db, company_id, allow_inactive=True)
+        except HTTPException as he:
+            return InsideTestConnectionResponse(
+                success=False,
+                status_code=he.status_code,
+                message=he.detail,
+                latency_ms=0,
+                error=he.detail,
+            )
+
+        status_code, res_json, latency_ms, error_msg = client.test_connection()
+        success = (status_code == 200)
+
+        InsideIntegrationService.log_request(
+            db=db,
+            company_id=company_id,
+            endpoint="[ESTOQUE_REALTIME] /api/consulta-produto",
+            http_method="GET",
+            status_code=status_code,
+            request_payload={"base_url": client.base_url, "empresa_id": client.empresa_id},
+            response_payload=res_json,
+            latency_ms=latency_ms,
+            error_message=error_msg,
+            user_id=user_id,
+        )
+
+        msg = "Conexão com API de Estoque & Custos (Tempo Real) estabelecida com sucesso!" if success else f"Falha na conexão com API de Estoque: {error_msg or 'Erro desconhecido'}"
+        return InsideTestConnectionResponse(
+            success=success,
+            status_code=status_code,
+            message=msg,
+            latency_ms=latency_ms,
+            data=res_json,
+            error=error_msg,
+        )
+
+    @staticmethod
+    def consultar_estoque_realtime(
+        db: Session,
+        company_id: UUID,
+        nome: Optional[str] = None,
+        cod_produto: Optional[str] = None,
+        tipo_estoque: Optional[str] = None,
+        user_id: Optional[UUID] = None,
+    ) -> List[Dict[str, Any]]:
+        client = InsideIntegrationService.get_estoque_client(db, company_id, allow_inactive=False)
+        status_code, data, latency_ms, error_msg = client.consultar(
+            nome=nome,
+            cod_produto=cod_produto,
+            tipo_estoque=tipo_estoque,
+        )
+        if status_code != 200 or data is None:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY if status_code == 0 else status_code,
+                detail=f"Erro ao consultar API de estoque: {error_msg or 'Resposta inválida do servidor'}"
+            )
+        return data if isinstance(data, list) else [data]
 
     @staticmethod
     def list_logs(
@@ -591,3 +682,295 @@ class InsideIntegrationService:
                 "antecipacao": antecipacao_payload,
             },
         )
+
+    @staticmethod
+    def sync_product_stock(
+        db: Session,
+        company_id: UUID,
+        product_id: UUID,
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        product = db.query(Product).filter(
+            Product.id == product_id,
+            Product.company_id == company_id,
+        ).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Produto não encontrado nesta empresa.")
+
+        data = None
+        if product.codigo_service:
+            results = InsideIntegrationService.consultar_estoque_realtime(
+                db=db,
+                company_id=company_id,
+                cod_produto=str(product.codigo_service),
+                user_id=user_id,
+            )
+            if results:
+                data = results[0]
+
+        if not data and product.nome:
+            results = InsideIntegrationService.consultar_estoque_realtime(
+                db=db,
+                company_id=company_id,
+                nome=product.nome,
+                user_id=user_id,
+            )
+            if results:
+                for item in results:
+                    if item.get("descricao", "").strip().upper() == product.nome.strip().upper():
+                        data = item
+                        break
+                if not data and len(results) == 1:
+                    data = results[0]
+
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Nenhum registro correspondente encontrado no Inside ERP para o produto '{product.nome}' (Cód. Service: {product.codigo_service or 'Não informado'})."
+            )
+
+        now = datetime.now(timezone.utc)
+        if not product.codigo_service and data.get("codProduto"):
+            try:
+                product.codigo_service = int(data["codProduto"])
+            except Exception:
+                pass
+
+        product.inside_cached_custo = data.get("custo")
+        product.inside_cached_saldo = data.get("saldo")
+        product.inside_cached_preco = data.get("preco")
+        product.inside_cached_raw = data
+        product.inside_last_sync_at = now
+        db.commit()
+        db.refresh(product)
+
+        return {
+            "success": True,
+            "product_id": str(product.id),
+            "codigo_service": product.codigo_service,
+            "custo": float(product.inside_cached_custo or 0),
+            "saldo": float(product.inside_cached_saldo or 0),
+            "preco": float(product.inside_cached_preco or 0),
+            "inside_last_sync_at": product.inside_last_sync_at.isoformat() if product.inside_last_sync_at else None,
+            "raw": data,
+        }
+
+    @staticmethod
+    def get_correlation_analysis(
+        db: Session,
+        company_id: UUID,
+        filter_stock_only: bool = False,
+    ) -> Dict[str, Any]:
+        from difflib import SequenceMatcher
+
+        def _norm(text: str) -> str:
+            if not text:
+                return ""
+            t = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+            t = re.sub(r'[^a-zA-Z0-9]', ' ', t.upper())
+            return ' '.join(t.split())
+
+        inside_items = InsideIntegrationService.consultar_estoque_realtime(
+            db=db,
+            company_id=company_id,
+            tipo_estoque="NOVOS",
+        )
+
+        if filter_stock_only:
+            inside_items = [i for i in inside_items if (i.get("saldo") or 0) > 0]
+
+        products = db.query(Product).filter(Product.company_id == company_id).all()
+        products_by_cod_service = {p.codigo_service: p for p in products if p.codigo_service}
+        products_by_exact_name = {p.nome.strip().upper(): p for p in products if p.nome}
+        products_by_norm = {_norm(p.nome): p for p in products if p.nome}
+
+        correlated_items = []
+        summary = {
+            "total_inside": len(inside_items),
+            "linked_count": 0,
+            "exact_match_count": 0,
+            "high_similarity_count": 0,
+            "medium_similarity_count": 0,
+            "low_similarity_count": 0,
+            "unmatched_count": 0,
+        }
+
+        for item in inside_items:
+            cod_str = str(item.get("codProduto", "")).strip()
+            cod_int = int(cod_str) if cod_str.isdigit() else None
+            desc = item.get("descricao", "").strip()
+            desc_upper = desc.upper()
+            desc_norm = _norm(desc)
+
+            matched_product = None
+            tier = "UNMATCHED"
+            ratio = 0.0
+
+            if cod_int and cod_int in products_by_cod_service:
+                matched_product = products_by_cod_service[cod_int]
+                tier = "LINKED"
+                ratio = 1.0
+                summary["linked_count"] += 1
+            elif desc_upper in products_by_exact_name:
+                matched_product = products_by_exact_name[desc_upper]
+                tier = "EXACT_MATCH"
+                ratio = 1.0
+                summary["exact_match_count"] += 1
+            elif desc_norm in products_by_norm:
+                matched_product = products_by_norm[desc_norm]
+                tier = "EXACT_MATCH"
+                ratio = 0.99
+                summary["exact_match_count"] += 1
+            else:
+                best_ratio = 0.0
+                best_p = None
+                for p in products:
+                    p_norm = _norm(p.nome)
+                    r = SequenceMatcher(None, desc_norm, p_norm).ratio()
+                    if r > best_ratio:
+                        best_ratio = r
+                        best_p = p
+
+                ratio = round(best_ratio, 4)
+                matched_product = best_p
+                if ratio >= 0.80:
+                    tier = "HIGH_SIMILARITY"
+                    summary["high_similarity_count"] += 1
+                elif ratio >= 0.50:
+                    tier = "MEDIUM_SIMILARITY"
+                    summary["medium_similarity_count"] += 1
+                elif ratio >= 0.25:
+                    tier = "LOW_SIMILARITY"
+                    summary["low_similarity_count"] += 1
+                else:
+                    tier = "UNMATCHED"
+                    summary["unmatched_count"] += 1
+                    matched_product = None
+
+            correlated_items.append({
+                "inside": item,
+                "tier": tier,
+                "similarity_ratio": ratio,
+                "is_linked": tier == "LINKED",
+                "suggested_product": {
+                    "id": str(matched_product.id),
+                    "codigo": matched_product.codigo,
+                    "nome": matched_product.nome,
+                    "codigo_service": matched_product.codigo_service,
+                    "categoria": matched_product.categoria,
+                    "part_number": matched_product.part_number,
+                    "ultimo_preco_compra": float(matched_product.ultimo_preco_compra) if matched_product.ultimo_preco_compra else None,
+                } if matched_product else None,
+            })
+
+        return {
+            "summary": summary,
+            "items": correlated_items,
+        }
+
+    @staticmethod
+    def link_product_manually(
+        db: Session,
+        company_id: UUID,
+        product_id: UUID,
+        cod_produto: int,
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        product = db.query(Product).filter(
+            Product.id == product_id,
+            Product.company_id == company_id,
+        ).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.")
+
+        product.codigo_service = cod_produto
+        db.commit()
+        return InsideIntegrationService.sync_product_stock(db, company_id, product_id, user_id=user_id)
+
+    @staticmethod
+    def auto_link_exact(
+        db: Session,
+        company_id: UUID,
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        analysis = InsideIntegrationService.get_correlation_analysis(db, company_id)
+        linked_count = 0
+        errors = []
+
+        for item_data in analysis.get("items", []):
+            if item_data.get("tier") == "EXACT_MATCH" and item_data.get("suggested_product"):
+                prod_id = UUID(item_data["suggested_product"]["id"])
+                cod_prod_str = str(item_data["inside"].get("codProduto", ""))
+                if cod_prod_str.isdigit():
+                    try:
+                        InsideIntegrationService.link_product_manually(
+                            db=db,
+                            company_id=company_id,
+                            product_id=prod_id,
+                            cod_produto=int(cod_prod_str),
+                            user_id=user_id,
+                        )
+                        linked_count += 1
+                    except Exception as e:
+                        errors.append(f"Erro ao vincular {prod_id}: {str(e)}")
+
+        return {
+            "success": True,
+            "linked_count": linked_count,
+            "errors": errors,
+            "message": f"{linked_count} produtos foram vinculados e sincronizados com o Inside ERP com sucesso."
+        }
+
+    @staticmethod
+    def import_product_from_inside(
+        db: Session,
+        company_id: UUID,
+        cod_produto: int,
+        tenant_id: str,
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        results = InsideIntegrationService.consultar_estoque_realtime(
+            db=db,
+            company_id=company_id,
+            cod_produto=str(cod_produto),
+            user_id=user_id,
+        )
+        if not results:
+            raise HTTPException(status_code=404, detail="Produto não encontrado na API do Inside.")
+        data = results[0]
+
+        from src.modules.products.service import ProductService
+        prod_service = ProductService(db)
+        sku = prod_service._generate_sku(tenant_id)
+
+        now = datetime.now(timezone.utc)
+        new_product = Product(
+            tenant_id=tenant_id,
+            company_id=company_id,
+            codigo=sku,
+            codigo_service=cod_produto,
+            nome=data.get("descricao", f"PRODUTO INSIDE {cod_produto}").strip().upper()[:300],
+            descricao=data.get("descricao"),
+            tipo="EQUIPAMENTO",
+            finalidade="REVENDA",
+            unidade="UN",
+            ativo=True,
+            inside_cached_custo=data.get("custo"),
+            inside_cached_saldo=data.get("saldo"),
+            inside_cached_preco=data.get("preco"),
+            inside_cached_raw=data,
+            inside_last_sync_at=now,
+        )
+        db.add(new_product)
+        db.commit()
+        db.refresh(new_product)
+
+        return {
+            "success": True,
+            "product_id": str(new_product.id),
+            "codigo": new_product.codigo,
+            "nome": new_product.nome,
+            "codigo_service": new_product.codigo_service,
+            "custo": float(new_product.inside_cached_custo or 0),
+            "saldo": float(new_product.inside_cached_saldo or 0),
+        }

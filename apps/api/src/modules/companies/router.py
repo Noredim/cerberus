@@ -1353,7 +1353,12 @@ def get_company_inside_config(
             produtos_base_url="",
             produtos_hash_token="",
             produtos_cod_unidade=None,
-            produtos_is_active=False
+            produtos_is_active=False,
+            estoque_base_url="",
+            estoque_api_key="",
+            estoque_cod_empresa=None,
+            estoque_tipo_padrao="NOVOS",
+            estoque_is_active=False
         )
         db.add(config)
         db.commit()
@@ -1389,7 +1394,12 @@ def update_company_inside_config(
             produtos_base_url=payload.produtos_base_url,
             produtos_hash_token=payload.produtos_hash_token,
             produtos_cod_unidade=payload.produtos_cod_unidade,
-            produtos_is_active=payload.produtos_is_active
+            produtos_is_active=payload.produtos_is_active,
+            estoque_base_url=payload.estoque_base_url,
+            estoque_api_key=payload.estoque_api_key,
+            estoque_cod_empresa=payload.estoque_cod_empresa,
+            estoque_tipo_padrao=payload.estoque_tipo_padrao or "NOVOS",
+            estoque_is_active=payload.estoque_is_active
         )
         db.add(config)
     else:
@@ -1405,6 +1415,11 @@ def update_company_inside_config(
         config.produtos_hash_token = payload.produtos_hash_token
         config.produtos_cod_unidade = payload.produtos_cod_unidade
         config.produtos_is_active = payload.produtos_is_active
+        config.estoque_base_url = payload.estoque_base_url
+        config.estoque_api_key = payload.estoque_api_key
+        config.estoque_cod_empresa = payload.estoque_cod_empresa
+        config.estoque_tipo_padrao = payload.estoque_tipo_padrao or "NOVOS"
+        config.estoque_is_active = payload.estoque_is_active
 
     db.commit()
     db.refresh(config)

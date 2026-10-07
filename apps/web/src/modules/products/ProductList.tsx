@@ -15,7 +15,8 @@ import {
     ArrowRight,
     Key,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Boxes
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +24,7 @@ import { productApi } from './api/productApi';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Product } from './types';
 import { Tooltip } from '../../components/ui/Tooltip';
+import { ProductInsideCorrelationModal } from './components/ProductInsideCorrelationModal';
 
 const formatCurrency = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '-';
@@ -31,7 +33,7 @@ const formatCurrency = (value: number | undefined | null) => {
 
 const ProductList: React.FC = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, activeCompanyId } = useAuth();
     const isAdmin = user?.roles?.includes('Administrador');
 
     const [products, setProducts] = useState<Product[]>([]);
@@ -39,6 +41,7 @@ const ProductList: React.FC = () => {
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('');
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+    const [showCorrelationModal, setShowCorrelationModal] = useState(false);
 
     const ITEMS_PER_PAGE = 20;
     const [currentPage, setCurrentPage] = useState(1);
@@ -91,7 +94,15 @@ const ProductList: React.FC = () => {
                     <p className="text-text-muted mt-1">Cadastre e gerencie equipamentos, serviços e suas regras fiscais.</p>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setShowCorrelationModal(true)}
+                        className="flex items-center gap-2 bg-cyan-600/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-600/20 px-4 py-2 rounded-md font-semibold transition-colors min-h-[40px] cursor-pointer shadow-xs text-sm"
+                    >
+                        <Boxes className="w-4 h-4" />
+                        Conciliação Inside ERP
+                    </button>
                     <button
                         onClick={() => navigate('/cadastro/produtos/novo')}
                         className="flex items-center gap-2 bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-primary/90 transition-colors min-h-[40px] cursor-pointer shadow-sm shadow-brand-primary/20"
@@ -370,10 +381,18 @@ const ProductList: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Modal de Conciliação com o Inside ERP */}
+            {activeCompanyId && (
+                <ProductInsideCorrelationModal
+                    isOpen={showCorrelationModal}
+                    onClose={() => setShowCorrelationModal(false)}
+                    companyId={activeCompanyId}
+                    onSuccess={() => fetchProducts()}
+                />
+            )}
         </div>
     );
 };
-
-
 
 export default ProductList;

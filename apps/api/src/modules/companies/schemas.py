@@ -408,6 +408,13 @@ class CompanyInsideConfigBase(BaseModel):
     produtos_cod_unidade: Optional[int] = None
     produtos_is_active: bool = False
 
+    # Ambiente C (Consulta de Estoque & Custos em Tempo Real)
+    estoque_base_url: Optional[str] = None
+    estoque_api_key: Optional[str] = None
+    estoque_cod_empresa: Optional[str] = None
+    estoque_tipo_padrao: Optional[str] = "NOVOS"
+    estoque_is_active: bool = False
+
 
 class CompanyInsideConfigSave(CompanyInsideConfigBase):
     pass

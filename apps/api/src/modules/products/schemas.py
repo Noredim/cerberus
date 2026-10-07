@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 import re
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import Enum
 
 # Fields that should NOT be uppercased (numeric codes, emails, etc.)
@@ -121,7 +121,12 @@ class ProductOut(ProductBase):
     orcamento_referencia_uso_consumo_id: Optional[UUID] = None
     data_atualizacao_revenda: Optional[datetime] = None
     data_atualizacao_uso_consumo: Optional[datetime] = None
-    origem_valor_uso_consumo: Optional[str] = None
+    # Inside ERP Integration Data
+    inside_last_sync_at: Optional[datetime] = None
+    inside_cached_custo: Optional[float] = None
+    inside_cached_saldo: Optional[float] = None
+    inside_cached_preco: Optional[float] = None
+    inside_cached_raw: Optional[Dict[str, Any]] = None
     
     tax_benefits: List[TaxBenefitOut] = []
     suppliers: List[ProductSupplierOut] = []

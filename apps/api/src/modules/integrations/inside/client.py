@@ -189,3 +189,101 @@ class InsideServiceClient:
         """POST /api/integracoes-terceiros/orcamento/gerar-antecipacao"""
         path = "/api/integracoes-terceiros/orcamento/gerar-antecipacao"
         return self._execute_request("POST", path, json_data=payload)
+
+
+class InsideEstoqueClient:
+    """
+    Cliente HTTP para consulta de Estoque, Preços e Custos em Tempo Real (porta 44923).
+    Utiliza autenticação via Header HTTP 'X-API-KEY: <api_key>'.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        empresa_id: Optional[str] = None,
+        tipo_padrao: Optional[str] = "NOVOS",
+        timeout: float = 12.0,
+    ):
+        clean_url = (base_url or "").strip().rstrip("/")
+        if clean_url and not clean_url.startswith("http://") and not clean_url.startswith("https://"):
+            clean_url = f"http://{clean_url}"
+        
+        self.base_url = clean_url
+        self.api_key = (api_key or "").strip()
+        self.empresa_id = str(empresa_id).strip() if empresa_id is not None and str(empresa_id).strip() else None
+        self.tipo_padrao = tipo_padrao or "NOVOS"
+        self.timeout = timeout
+
+    def _headers(self) -> Dict[str, str]:
+        return {
+            "accept": "application/json",
+            "X-API-KEY": self.api_key,
+            "User-Agent": "Cerberus-Estoque-Engine/1.0",
+        }
+
+    def _get_target_url(self) -> str:
+        url = self.base_url
+        if not url.endswith("/consulta-produto") and "/api/" not in url:
+            url = f"{url}/api/consulta-produto"
+        elif not url.endswith("/consulta-produto") and url.endswith("/api"):
+            url = f"{url}/consulta-produto"
+        return url
+
+    def test_connection(self) -> Tuple[int, Optional[Any], int, Optional[str]]:
+        """Testa a conectividade com a API de estoque e a validade da X-API-KEY."""
+        target_url = self._get_target_url()
+        start_time = time.perf_counter()
+        try:
+            with httpx.Client(timeout=self.timeout, verify=False) as client:
+                response = client.get(target_url, headers=self._headers(), params={"nome": "teste"})
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                if response.is_success:
+                    try:
+                        data = response.json()
+                        return response.status_code, {"total_retornado": len(data) if isinstance(data, list) else 1}, latency_ms, None
+                    except Exception:
+                        return response.status_code, {"raw_text": response.text[:200]}, latency_ms, None
+                else:
+                    return response.status_code, None, latency_ms, f"HTTP {response.status_code}: {response.text[:200]}"
+        except Exception as exc:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            return 0, None, latency_ms, str(exc)
+
+    def consultar(
+        self,
+        nome: Optional[str] = None,
+        cod_produto: Optional[str] = None,
+        tipo_estoque: Optional[str] = None,
+    ) -> Tuple[int, Optional[Any], int, Optional[str]]:
+        """Consulta produtos, estoques, custos e preços na API de tempo real."""
+        target_url = self._get_target_url()
+        params: Dict[str, Any] = {}
+        if nome:
+            params["nome"] = nome.strip()
+
+        start_time = time.perf_counter()
+        try:
+            with httpx.Client(timeout=self.timeout, verify=False) as client:
+                response = client.get(target_url, headers=self._headers(), params=params)
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                if response.is_success:
+                    data = response.json()
+                    if isinstance(data, list):
+                        # Filtrar por empresa se configurada
+                        if self.empresa_id:
+                            data = [d for d in data if str(d.get("empresa")) == str(self.empresa_id)]
+                        # Filtrar por tipo de estoque se solicitado
+                        target_tipo = (tipo_estoque or self.tipo_padrao or "").upper()
+                        if target_tipo and target_tipo != "TODOS":
+                            data = [d for d in data if str(d.get("tipoEstoque", "")).upper() == target_tipo]
+                        # Filtrar por codProduto se fornecido
+                        if cod_produto:
+                            data = [d for d in data if str(d.get("codProduto")) == str(cod_produto)]
+                    return response.status_code, data, latency_ms, None
+                else:
+                    return response.status_code, None, latency_ms, f"HTTP {response.status_code}: {response.text[:200]}"
+        except Exception as exc:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            return 0, None, latency_ms, str(exc)
+

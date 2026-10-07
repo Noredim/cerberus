@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Server, Key, Globe, Shield, CheckCircle2, AlertCircle, 
     Loader2, Save, Activity, RefreshCw, Eye, X, Terminal, 
-    Wrench, Package, CreditCard, Check
+    Wrench, Package, CreditCard, Check, Boxes, Coins
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { 
@@ -37,6 +37,13 @@ interface DualInsideConfig {
     produtos_hash_token: string;
     produtos_cod_unidade: number | null;
     produtos_is_active: boolean;
+
+    // Ambiente C - Estoque & Custos em Tempo Real
+    estoque_base_url: string;
+    estoque_api_key: string;
+    estoque_cod_empresa: string;
+    estoque_tipo_padrao: string;
+    estoque_is_active: boolean;
 }
 
 export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ companyId, isReadOnly = false }) => {
@@ -50,6 +57,12 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
         produtos_hash_token: '',
         produtos_cod_unidade: null,
         produtos_is_active: false,
+
+        estoque_base_url: '',
+        estoque_api_key: '',
+        estoque_cod_empresa: '',
+        estoque_tipo_padrao: 'NOVOS',
+        estoque_is_active: false,
     });
 
     const [loading, setLoading] = useState(false);
@@ -60,12 +73,15 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
     const [syncingFormas, setSyncingFormas] = useState(false);
     const [syncFormasResult, setSyncFormasResult] = useState<{ success: boolean; message: string } | null>(null);
 
-    // Test Connection states for both environments
+    // Test Connection states for all environments
     const [testingServicos, setTestingServicos] = useState(false);
     const [testServicosResult, setTestServicosResult] = useState<InsideTestConnectionResponse | null>(null);
 
     const [testingProdutos, setTestingProdutos] = useState(false);
     const [testProdutosResult, setTestProdutosResult] = useState<InsideTestConnectionResponse | null>(null);
+
+    const [testingEstoque, setTestingEstoque] = useState(false);
+    const [testEstoqueResult, setTestEstoqueResult] = useState<InsideTestConnectionResponse | null>(null);
 
     // Logs states
     const [logs, setLogs] = useState<IntegrationLogItem[]>([]);
@@ -98,6 +114,12 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
                         produtos_hash_token: d.produtos_hash_token || '',
                         produtos_cod_unidade: d.produtos_cod_unidade ?? null,
                         produtos_is_active: !!d.produtos_is_active,
+
+                        estoque_base_url: d.estoque_base_url || '',
+                        estoque_api_key: d.estoque_api_key || '',
+                        estoque_cod_empresa: d.estoque_cod_empresa || '',
+                        estoque_tipo_padrao: d.estoque_tipo_padrao || 'NOVOS',
+                        estoque_is_active: !!d.estoque_is_active,
                     });
                 }
             } catch (err: any) {
@@ -150,6 +172,13 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
                 produtos_hash_token: config.produtos_hash_token.trim() || null,
                 produtos_cod_unidade: config.produtos_cod_unidade !== null && config.produtos_cod_unidade !== undefined ? Number(config.produtos_cod_unidade) : null,
                 produtos_is_active: config.produtos_is_active,
+
+                // Ambiente C - Estoque & Custos em Tempo Real
+                estoque_base_url: config.estoque_base_url.trim() || null,
+                estoque_api_key: config.estoque_api_key.trim() || null,
+                estoque_cod_empresa: config.estoque_cod_empresa.trim() || null,
+                estoque_tipo_padrao: config.estoque_tipo_padrao.trim() || 'NOVOS',
+                estoque_is_active: config.estoque_is_active,
             };
 
             await api.put(`/companies/${companyId}/inside-config`, payload);
@@ -232,6 +261,40 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
         }
     };
 
+    const handleTestEstoque = async () => {
+        if (!companyId) return;
+        setTestingEstoque(true);
+        setTestEstoqueResult(null);
+        try {
+            const saved = await handleSave();
+            if (!saved) {
+                setTestEstoqueResult({
+                    success: false,
+                    status_code: 400,
+                    message: 'Não foi possível salvar as configurações antes de testar a conexão.',
+                    latency_ms: 0,
+                    error: 'Erro ao salvar'
+                });
+                return;
+            }
+            const result = await insideIntegrationApi.testEstoqueConnection(companyId);
+            setTestEstoqueResult(result);
+            fetchLogs();
+        } catch (err: any) {
+            const detail = err.response?.data?.detail || 'Falha ao testar conexão com API de Estoque & Custos.';
+            setTestEstoqueResult({
+                success: false,
+                status_code: err.response?.status || 500,
+                message: detail,
+                latency_ms: 0,
+                error: detail
+            });
+            fetchLogs();
+        } finally {
+            setTestingEstoque(false);
+        }
+    };
+
     const handleSyncFormas = async () => {
         if (!companyId) return;
         setSyncingFormas(true);
@@ -278,17 +341,16 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
     }
 
     return (
-        <div className="space-y-8">
-            <div className="space-y-8">
-                {/* Header Superior */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
-                    <div>
+        <div className="space-y-6">
+            {/* Header Superior */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+                <div>
                         <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
                             <Server className="w-5 h-5 text-brand-primary" />
-                            Integração Inside ERP (Ambientes A &amp; B)
+                            Integração Inside ERP (Ambientes A, B &amp; C)
                         </h3>
                         <p className="text-xs text-text-muted mt-0.5">
-                            Configure os endpoints locais e tokens de segurança para a Base de Serviços e Base de Produtos/Locação.
+                            Configure os endpoints locais e tokens de segurança para a Base de Serviços, Base de Produtos e Consulta de Estoque/Custos em Tempo Real.
                         </p>
                     </div>
 
@@ -322,247 +384,388 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
                     </div>
                 )}
 
-                {/* Grid dos 2 Ambientes */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Grid dos 3 Ambientes */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     
                     {/* AMBIENTE A: BASE DE SERVIÇOS */}
-                    <div className="bg-surface rounded-2xl border border-border-subtle p-6 space-y-5 shadow-sm">
-                        <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                                    <Wrench className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                                        Ambiente A: Base de Serviços
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                                            BASE A
-                                        </span>
-                                    </h4>
-                                    <p className="text-[11px] text-text-muted">Destino para serviços, mão de obra e instalações.</p>
-                                </div>
-                            </div>
-
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={config.servicos_is_active}
-                                    onChange={(e) => setConfig({ ...config, servicos_is_active: e.target.checked })}
-                                    disabled={isReadOnly}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-9 h-5 bg-bg-deep peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 border border-border-subtle"></div>
-                                <span className="ml-2 text-xs font-bold text-text-primary">
-                                    {config.servicos_is_active ? <span className="text-emerald-500">Ativa</span> : <span className="text-text-muted">Inativa</span>}
-                                </span>
-                            </label>
-                        </div>
-
+                    <div className="bg-surface rounded-2xl border border-border-subtle p-5 space-y-4 shadow-sm flex flex-col justify-between">
                         <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
-                                    URL Base do Service (Base A - Serviços)
+                            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                                        <Wrench className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                                            Base A: Serviços
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                                                BASE A
+                                            </span>
+                                        </h4>
+                                        <p className="text-[10px] text-text-muted">Serviços, mão de obra e ordens.</p>
+                                    </div>
+                                </div>
+
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={config.servicos_is_active}
+                                        onChange={(e) => setConfig({ ...config, servicos_is_active: e.target.checked })}
+                                        disabled={isReadOnly}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-8 h-4.5 bg-bg-deep peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 border border-border-subtle"></div>
+                                    <span className="ml-1.5 text-[11px] font-bold text-text-primary">
+                                        {config.servicos_is_active ? <span className="text-emerald-500">Ativa</span> : <span className="text-text-muted">Inativa</span>}
+                                    </span>
                                 </label>
-                                <input
-                                    type="text"
-                                    value={config.servicos_base_url}
-                                    onChange={(e) => setConfig({ ...config, servicos_base_url: e.target.value })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: http://192.168.1.100:65191"
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
-                                />
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Key className="w-3.5 h-3.5 text-indigo-500" />
-                                    Hash Token de Autenticação (Base A)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={config.servicos_hash_token}
-                                    onChange={(e) => setConfig({ ...config, servicos_hash_token: e.target.value })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: 8f3c71a9-3990-4c2f-b441-..."
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
-                                />
-                            </div>
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Globe className="w-3 h-3 text-indigo-500" />
+                                        URL Base do Service (Base A)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.servicos_base_url}
+                                        onChange={(e) => setConfig({ ...config, servicos_base_url: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: https://servidor:9394/api"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                                    Código da Unidade (codUnidade - Base A)
-                                </label>
-                                <input
-                                    type="number"
-                                    value={config.servicos_cod_unidade !== null && config.servicos_cod_unidade !== undefined ? config.servicos_cod_unidade : ''}
-                                    onChange={(e) => setConfig({ ...config, servicos_cod_unidade: e.target.value ? parseInt(e.target.value, 10) : null })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: 1"
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono"
-                                />
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Key className="w-3 h-3 text-indigo-500" />
+                                        Hash Token (Base A)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.servicos_hash_token}
+                                        onChange={(e) => setConfig({ ...config, servicos_hash_token: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: 8f3c71a9-3990-..."
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Shield className="w-3 h-3 text-indigo-500" />
+                                        Código da Unidade (codUnidade)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={config.servicos_cod_unidade !== null && config.servicos_cod_unidade !== undefined ? config.servicos_cod_unidade : ''}
+                                        onChange={(e) => setConfig({ ...config, servicos_cod_unidade: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: 1"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-indigo-500 transition-colors text-xs text-text-primary font-mono"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="pt-2">
+                        <div className="pt-3 space-y-2">
                             <button
                                 type="button"
                                 onClick={handleTestServicos}
                                 disabled={testingServicos || !config.servicos_base_url || !config.servicos_hash_token}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-border-subtle bg-bg-deep text-text-primary hover:bg-surface-hover hover:border-indigo-500/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-border-subtle bg-bg-deep text-text-primary hover:bg-surface-hover hover:border-indigo-500/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                             >
                                 {testingServicos ? (
                                     <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
                                 ) : (
                                     <Activity className="w-3.5 h-3.5 text-indigo-500" />
                                 )}
-                                Testar Conexão: Base A (Serviços)
+                                Testar Base A (Serviços)
                             </button>
-                        </div>
 
-                        {testServicosResult && (
-                            <div
-                                className={`p-3 rounded-xl border text-xs ${
-                                    testServicosResult.success
-                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                                        : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
-                                }`}
-                            >
-                                <div className="font-bold flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5">
-                                        {testServicosResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <AlertCircle className="w-4 h-4 text-brand-danger" />}
-                                        {testServicosResult.success ? 'Conexão OK (Base A)' : 'Falha na Conexão (Base A)'}
-                                    </span>
-                                    {testServicosResult.latency_ms > 0 && (
-                                        <span className="font-mono">{testServicosResult.latency_ms}ms</span>
-                                    )}
+                            {testServicosResult && (
+                                <div
+                                    className={`p-2.5 rounded-lg border text-[11px] ${
+                                        testServicosResult.success
+                                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                                    }`}
+                                >
+                                    <div className="font-bold flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                            {testServicosResult.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <AlertCircle className="w-3.5 h-3.5 text-brand-danger" />}
+                                            {testServicosResult.success ? 'Conexão OK' : 'Falha na Conexão'}
+                                        </span>
+                                        {testServicosResult.latency_ms > 0 && (
+                                            <span className="font-mono text-[10px]">{testServicosResult.latency_ms}ms</span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] opacity-90 mt-0.5">{testServicosResult.message}</p>
                                 </div>
-                                <p className="text-[11px] opacity-90 mt-1">{testServicosResult.message}</p>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
 
                     {/* AMBIENTE B: BASE DE PRODUTOS / LOCAÇÃO */}
-                    <div className="bg-surface rounded-2xl border border-border-subtle p-6 space-y-5 shadow-sm">
-                        <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                    <Package className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                                        Ambiente B: Base de Produtos
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                            BASE B
-                                        </span>
-                                    </h4>
-                                    <p className="text-[11px] text-text-muted">Destino para produtos, mercadorias, locação e comodato.</p>
-                                </div>
-                            </div>
-
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={config.produtos_is_active}
-                                    onChange={(e) => setConfig({ ...config, produtos_is_active: e.target.checked })}
-                                    disabled={isReadOnly}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-9 h-5 bg-bg-deep peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 border border-border-subtle"></div>
-                                <span className="ml-2 text-xs font-bold text-text-primary">
-                                    {config.produtos_is_active ? <span className="text-emerald-500">Ativa</span> : <span className="text-text-muted">Inativa</span>}
-                                </span>
-                            </label>
-                        </div>
-
+                    <div className="bg-surface rounded-2xl border border-border-subtle p-5 space-y-4 shadow-sm flex flex-col justify-between">
                         <div className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Globe className="w-3.5 h-3.5 text-emerald-500" />
-                                    URL Base do Service (Base B - Produtos)
+                            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                        <Package className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                                            Base B: Produtos
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                BASE B
+                                            </span>
+                                        </h4>
+                                        <p className="text-[10px] text-text-muted">Orçamentos, locação e comodato.</p>
+                                    </div>
+                                </div>
+
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={config.produtos_is_active}
+                                        onChange={(e) => setConfig({ ...config, produtos_is_active: e.target.checked })}
+                                        disabled={isReadOnly}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-8 h-4.5 bg-bg-deep peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 border border-border-subtle"></div>
+                                    <span className="ml-1.5 text-[11px] font-bold text-text-primary">
+                                        {config.produtos_is_active ? <span className="text-emerald-500">Ativa</span> : <span className="text-text-muted">Inativa</span>}
+                                    </span>
                                 </label>
-                                <input
-                                    type="text"
-                                    value={config.produtos_base_url}
-                                    onChange={(e) => setConfig({ ...config, produtos_base_url: e.target.value })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: http://192.168.1.101:65191"
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
-                                />
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Key className="w-3.5 h-3.5 text-emerald-500" />
-                                    Hash Token de Autenticação (Base B)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={config.produtos_hash_token}
-                                    onChange={(e) => setConfig({ ...config, produtos_hash_token: e.target.value })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: 2a98a2004d2efccc40cb0867..."
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
-                                />
-                            </div>
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Globe className="w-3 h-3 text-emerald-500" />
+                                        URL Base do Service (Base B)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.produtos_base_url}
+                                        onChange={(e) => setConfig({ ...config, produtos_base_url: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: https://servidor:9394/api"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                                    <Shield className="w-3.5 h-3.5 text-emerald-500" />
-                                    Código da Unidade (codUnidade - Base B)
-                                </label>
-                                <input
-                                    type="number"
-                                    value={config.produtos_cod_unidade !== null && config.produtos_cod_unidade !== undefined ? config.produtos_cod_unidade : ''}
-                                    onChange={(e) => setConfig({ ...config, produtos_cod_unidade: e.target.value ? parseInt(e.target.value, 10) : null })}
-                                    disabled={isReadOnly}
-                                    placeholder="Ex: 2"
-                                    className="w-full bg-bg-deep border border-border-subtle rounded-md py-2 px-3 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono"
-                                />
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Key className="w-3 h-3 text-emerald-500" />
+                                        Hash Token (Base B)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.produtos_hash_token}
+                                        onChange={(e) => setConfig({ ...config, produtos_hash_token: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: 2a98a2004d2efccc..."
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Shield className="w-3 h-3 text-emerald-500" />
+                                        Código da Unidade (codUnidade)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={config.produtos_cod_unidade !== null && config.produtos_cod_unidade !== undefined ? config.produtos_cod_unidade : ''}
+                                        onChange={(e) => setConfig({ ...config, produtos_cod_unidade: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: 2"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-emerald-500 transition-colors text-xs text-text-primary font-mono"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="pt-2">
+                        <div className="pt-3 space-y-2">
                             <button
                                 type="button"
                                 onClick={handleTestProdutos}
                                 disabled={testingProdutos || !config.produtos_base_url || !config.produtos_hash_token}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg border border-border-subtle bg-bg-deep text-text-primary hover:bg-surface-hover hover:border-emerald-500/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-border-subtle bg-bg-deep text-text-primary hover:bg-surface-hover hover:border-emerald-500/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                             >
                                 {testingProdutos ? (
                                     <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
                                 ) : (
                                     <Activity className="w-3.5 h-3.5 text-emerald-500" />
                                 )}
-                                Testar Conexão: Base B (Produtos)
+                                Testar Base B (Produtos)
                             </button>
+
+                            {testProdutosResult && (
+                                <div
+                                    className={`p-2.5 rounded-lg border text-[11px] ${
+                                        testProdutosResult.success
+                                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                                    }`}
+                                >
+                                    <div className="font-bold flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                            {testProdutosResult.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <AlertCircle className="w-3.5 h-3.5 text-brand-danger" />}
+                                            {testProdutosResult.success ? 'Conexão OK' : 'Falha na Conexão'}
+                                        </span>
+                                        {testProdutosResult.latency_ms > 0 && (
+                                            <span className="font-mono text-[10px]">{testProdutosResult.latency_ms}ms</span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] opacity-90 mt-0.5">{testProdutosResult.message}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+
+                    {/* AMBIENTE C: ESTOQUE & CUSTOS EM TEMPO REAL */}
+                    <div className="bg-surface rounded-2xl border border-border-subtle p-5 space-y-4 shadow-sm flex flex-col justify-between">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                                        <Boxes className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                                            Base C: Estoque &amp; Preços
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                                                TEMPO REAL
+                                            </span>
+                                        </h4>
+                                        <p className="text-[10px] text-text-muted">Saldo de estoque, custos e tabela.</p>
+                                    </div>
+                                </div>
+
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={config.estoque_is_active}
+                                        onChange={(e) => setConfig({ ...config, estoque_is_active: e.target.checked })}
+                                        disabled={isReadOnly}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-8 h-4.5 bg-bg-deep peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 border border-border-subtle"></div>
+                                    <span className="ml-1.5 text-[11px] font-bold text-text-primary">
+                                        {config.estoque_is_active ? <span className="text-emerald-500">Ativa</span> : <span className="text-text-muted">Inativa</span>}
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Globe className="w-3 h-3 text-cyan-500" />
+                                        URL da API de Consulta de Estoque
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.estoque_base_url}
+                                        onChange={(e) => setConfig({ ...config, estoque_base_url: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: http://186.231.9.44:44923/api/consulta-produto"
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-cyan-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                        <Key className="w-3 h-3 text-cyan-500" />
+                                        Chave de API (Header X-API-KEY)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={config.estoque_api_key}
+                                        onChange={(e) => setConfig({ ...config, estoque_api_key: e.target.value })}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: 777793578b64a8b3212e..."
+                                        className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-cyan-500 transition-colors text-xs text-text-primary font-mono placeholder:font-sans"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                            <Shield className="w-3 h-3 text-cyan-500" />
+                                            Cód. Empresa
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={config.estoque_cod_empresa}
+                                            onChange={(e) => setConfig({ ...config, estoque_cod_empresa: e.target.value })}
+                                            disabled={isReadOnly}
+                                            placeholder="Ex: 1"
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-cyan-500 transition-colors text-xs text-text-primary font-mono"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                            <Coins className="w-3 h-3 text-cyan-500" />
+                                            Tipo Estoque
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={config.estoque_tipo_padrao}
+                                            onChange={(e) => setConfig({ ...config, estoque_tipo_padrao: e.target.value })}
+                                            disabled={isReadOnly}
+                                            placeholder="Ex: NOVOS"
+                                            className="w-full bg-bg-deep border border-border-subtle rounded-md py-1.5 px-2.5 outline-none focus:border-cyan-500 transition-colors text-xs text-text-primary font-mono uppercase"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        {testProdutosResult && (
-                            <div
-                                className={`p-3 rounded-xl border text-xs ${
-                                    testProdutosResult.success
-                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                                        : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
-                                }`}
+                        <div className="pt-3 space-y-2">
+                            <button
+                                type="button"
+                                onClick={handleTestEstoque}
+                                disabled={testingEstoque || !config.estoque_base_url || !config.estoque_api_key}
+                                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-border-subtle bg-bg-deep text-text-primary hover:bg-surface-hover hover:border-cyan-500/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                             >
-                                <div className="font-bold flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5">
-                                        {testProdutosResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <AlertCircle className="w-4 h-4 text-brand-danger" />}
-                                        {testProdutosResult.success ? 'Conexão OK (Base B)' : 'Falha na Conexão (Base B)'}
-                                    </span>
-                                    {testProdutosResult.latency_ms > 0 && (
-                                        <span className="font-mono">{testProdutosResult.latency_ms}ms</span>
-                                    )}
+                                {testingEstoque ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />
+                                ) : (
+                                    <Activity className="w-3.5 h-3.5 text-cyan-500" />
+                                )}
+                                Testar Base C (Estoque)
+                            </button>
+
+                            {testEstoqueResult && (
+                                <div
+                                    className={`p-2.5 rounded-lg border text-[11px] ${
+                                        testEstoqueResult.success
+                                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                                    }`}
+                                >
+                                    <div className="font-bold flex items-center justify-between">
+                                        <span className="flex items-center gap-1">
+                                            {testEstoqueResult.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <AlertCircle className="w-3.5 h-3.5 text-brand-danger" />}
+                                            {testEstoqueResult.success ? 'Conexão OK' : 'Falha na Conexão'}
+                                        </span>
+                                        {testEstoqueResult.latency_ms > 0 && (
+                                            <span className="font-mono text-[10px]">{testEstoqueResult.latency_ms}ms</span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] opacity-90 mt-0.5">{testEstoqueResult.message}</p>
                                 </div>
-                                <p className="text-[11px] opacity-90 mt-1">{testProdutosResult.message}</p>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
 
             {/* Ações de Carga & Sincronização */}
             <div className="bg-surface rounded-2xl border border-border-subtle p-6 space-y-4 shadow-sm">

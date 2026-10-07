@@ -377,6 +377,13 @@ class CompanyInsideConfig(Base):
     produtos_cod_unidade = Column(Integer, nullable=True)
     produtos_is_active = Column(Boolean, default=False, nullable=False)
 
+    # Ambiente C (Consulta de Estoque & Custos em Tempo Real)
+    estoque_base_url = Column(String(255), nullable=True)
+    estoque_api_key = Column(String(255), nullable=True)
+    estoque_cod_empresa = Column(String(50), nullable=True)
+    estoque_tipo_padrao = Column(String(50), default="NOVOS", nullable=True)
+    estoque_is_active = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

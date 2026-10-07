@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text, Integer, UniqueConstraint, Numeric
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.suppliers.models
@@ -46,8 +46,13 @@ class Product(Base):
     orcamento_referencia_uso_consumo_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="SET NULL"), nullable=True)
     data_atualizacao_revenda = Column(DateTime(timezone=True), nullable=True)
     data_atualizacao_uso_consumo = Column(DateTime(timezone=True), nullable=True)
-    origem_valor_uso_consumo = Column(String(50), nullable=True) # DERIVADO_REVENDA, ORCAMENTO_USO_CONSUMO
-    
+    # Inside ERP Real-time Integration & Cache
+    inside_last_sync_at = Column(DateTime(timezone=True), nullable=True)
+    inside_cached_custo = Column(Numeric(15, 4), nullable=True)
+    inside_cached_saldo = Column(Numeric(15, 4), nullable=True)
+    inside_cached_preco = Column(Numeric(15, 4), nullable=True)
+    inside_cached_raw = Column(JSONB, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

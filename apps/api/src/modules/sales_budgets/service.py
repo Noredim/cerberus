@@ -1870,6 +1870,31 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
     if not product:
         return None
 
+    # Inside ERP Priority Cost: If product is integrated and has Inside cost, use it as default
+    # and bypass entry ST/DIFAL calculations (already considered final acquisition cost).
+    if product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
+        custo_inside = float(product.inside_cached_custo)
+        uso_consumo = tipo.upper() == "USO_CONSUMO"
+        return {
+            "base_unitario": custo_inside,
+            "ipi_percent": 0.0,
+            "ipi_unitario": 0.0,
+            "frete_cif_unitario": 0.0,
+            "has_st": False,
+            "icms_st_normal": 0.0,
+            "cred_outorgado_percent": 0.0,
+            "cred_outorgado_valor": 0.0,
+            "icms_st_final": 0.0,
+            "is_bit": False,
+            "is_intrastate": True,
+            "uf_origem": "",
+            "uf_destino": "",
+            "difal_unitario": 0.0,
+            "tipo": "USO_CONSUMO" if uso_consumo else "REVENDA",
+            "custo_unit_final": custo_inside,
+            "is_inside_erp": True,
+        }
+
     # Select reference price + budget based on tipo
     uso_consumo = tipo.upper() == "USO_CONSUMO"
     

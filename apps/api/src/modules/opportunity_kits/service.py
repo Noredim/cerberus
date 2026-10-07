@@ -49,9 +49,12 @@ class OpportunityKitService:
                     "uf_destino": "",
                     "custo_unit_final": Decimal("0.0"),
                 }
-            custo_base = getattr(product, "vlr_referencia_revenda", 0) if considerar_st_ou_difal == "ST" else getattr(product, "vlr_referencia_uso_consumo", 0)
+            if product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
+                custo_base = product.inside_cached_custo
+            else:
+                custo_base = getattr(product, "vlr_referencia_revenda", 0) if considerar_st_ou_difal == "ST" else getattr(product, "vlr_referencia_uso_consumo", 0)
             tipo = product.tipo or "MERCADORIA"
-            difal_val = Decimal("0.0") if (tipo in ["SERVICO", "LICENCA"] or considerar_st_ou_difal != "DIFAL") else Decimal(getattr(product, "vlr_referencia_difal", 0) or 0)
+            difal_val = Decimal("0.0") if (tipo in ["SERVICO", "LICENCA"] or considerar_st_ou_difal != "DIFAL" or (product.codigo_service and product.inside_cached_custo)) else Decimal(getattr(product, "vlr_referencia_difal", 0) or 0)
             return {
                 "cost": Decimal(custo_base or 0),
                 "tipo": tipo,

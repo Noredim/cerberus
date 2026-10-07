@@ -23,6 +23,11 @@ export interface ProductFormData {
     data_atualizacao_revenda?: string | null;
     data_atualizacao_uso_consumo?: string | null;
     origem_valor_uso_consumo?: string | null;
+    inside_last_sync_at?: string | null;
+    inside_cached_custo?: number | null;
+    inside_cached_saldo?: number | null;
+    inside_cached_preco?: number | null;
+    inside_cached_raw?: any | null;
 }
 
 export interface ProductSupplier {
@@ -60,6 +65,11 @@ export interface Product {
     data_atualizacao_revenda?: string | null;
     data_atualizacao_uso_consumo?: string | null;
     origem_valor_uso_consumo?: string | null;
+    inside_last_sync_at?: string | null;
+    inside_cached_custo?: number | null;
+    inside_cached_saldo?: number | null;
+    inside_cached_preco?: number | null;
+    inside_cached_raw?: any | null;
 }
 
 export interface ProductCreate {

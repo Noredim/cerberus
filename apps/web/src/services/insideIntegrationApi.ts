@@ -81,4 +81,93 @@ export const insideIntegrationApi = {
         });
         return response.data;
     },
+
+    testEstoqueConnection: async (companyId: string): Promise<InsideTestConnectionResponse> => {
+        const response = await api.post<InsideTestConnectionResponse>(`/companies/${companyId}/inside/test-estoque-connection`);
+        return response.data;
+    },
+
+    consultarEstoque: async (
+        companyId: string,
+        params?: { nome?: string; cod_produto?: string; tipo_estoque?: string }
+    ): Promise<any[]> => {
+        const response = await api.get<any[]>(`/companies/${companyId}/inside/estoque/consulta`, {
+            params
+        });
+        return response.data;
+    },
+
+    syncProductStock: async (companyId: string, productId: string): Promise<any> => {
+        const response = await api.post(`/companies/${companyId}/inside/products/${productId}/sync`);
+        return response.data;
+    },
+
+    getCorrelationAnalysis: async (companyId: string, filterStockOnly: boolean = false): Promise<{
+        summary: {
+            total_inside: number;
+            linked_count: number;
+            exact_match_count: number;
+            high_similarity_count: number;
+            medium_similarity_count: number;
+            low_similarity_count: number;
+            unmatched_count: number;
+        };
+        items: Array<{
+            inside: {
+                empresa?: string;
+                fantasia?: string;
+                codEstoque?: string;
+                tipoEstoque?: string;
+                codProduto?: string;
+                descricao?: string;
+                preco?: number;
+                custo?: number;
+                entrada?: number;
+                saida?: number;
+                saldo?: number;
+            };
+            tier: 'LINKED' | 'EXACT_MATCH' | 'HIGH_SIMILARITY' | 'MEDIUM_SIMILARITY' | 'LOW_SIMILARITY' | 'UNMATCHED';
+            similarity_ratio: number;
+            is_linked: boolean;
+            suggested_product?: {
+                id: string;
+                codigo: string;
+                nome: string;
+                codigo_service?: number;
+                categoria?: string;
+                part_number?: string;
+                ultimo_preco_compra?: number;
+            } | null;
+        }>;
+    }> => {
+        const response = await api.get(`/companies/${companyId}/inside/correlation/analysis`, {
+            params: { filter_stock_only: filterStockOnly }
+        });
+        return response.data;
+    },
+
+    linkProductManually: async (companyId: string, productId: string, codProduto: number): Promise<any> => {
+        const response = await api.post(`/companies/${companyId}/inside/correlation/link`, null, {
+            params: { product_id: productId, cod_produto: codProduto }
+        });
+        return response.data;
+    },
+
+    autoLinkExact: async (companyId: string): Promise<{
+        success: boolean;
+        linked_count: number;
+        errors: string[];
+        message: string;
+    }> => {
+        const response = await api.post(`/companies/${companyId}/inside/correlation/auto-link-exact`);
+        return response.data;
+    },
+
+    importProductFromInside: async (companyId: string, codProduto: number): Promise<any> => {
+        const response = await api.post(`/companies/${companyId}/inside/correlation/import-product`, null, {
+            params: { cod_produto: codProduto }
+        });
+        return response.data;
+    },
 };
+
