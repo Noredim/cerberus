@@ -11,6 +11,8 @@ from .schemas import (
     InsideTestConnectionResponse,
     InsideDryRunResponse,
     IntegrationLogsPaginated,
+    BatchLinkRequest,
+    BatchLinkResponse,
 )
 
 router = APIRouter(prefix="/companies/{company_id}/inside", tags=["Inside ERP Integration"])
@@ -186,7 +188,7 @@ def link_product_manually(
     )
 
 
-@router.post("/correlation/auto-link-exact")
+@router.post("/correlation/auto-link-exact", response_model=BatchLinkResponse)
 def auto_link_exact(
     company_id: UUID,
     db: Session = Depends(get_db),
@@ -200,6 +202,25 @@ def auto_link_exact(
         company_id=company_id,
         user_id=current_user.id,
     )
+
+
+@router.post("/correlation/batch-link", response_model=BatchLinkResponse)
+def batch_link_products(
+    company_id: UUID,
+    payload: BatchLinkRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Vincula em lote uma lista de produtos selecionados no frontend com seus códigos do Inside ERP.
+    """
+    return InsideIntegrationService.batch_link_products(
+        db=db,
+        company_id=company_id,
+        items=payload.items,
+        user_id=current_user.id,
+    )
+
 
 
 @router.post("/correlation/import-product")

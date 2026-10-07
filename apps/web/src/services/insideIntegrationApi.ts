@@ -163,6 +163,18 @@ export const insideIntegrationApi = {
         return response.data;
     },
 
+    batchLinkProducts: async (companyId: string, items: Array<{ product_id: string; cod_produto: number }>): Promise<{
+        success: boolean;
+        linked_count: number;
+        errors: string[];
+        message: string;
+    }> => {
+        const response = await api.post(`/companies/${companyId}/inside/correlation/batch-link`, {
+            items
+        });
+        return response.data;
+    },
+
     importProductFromInside: async (companyId: string, codProduto: number): Promise<any> => {
         const response = await api.post(`/companies/${companyId}/inside/correlation/import-product`, null, {
             params: { cod_produto: codProduto }
@@ -170,4 +182,5 @@ export const insideIntegrationApi = {
         return response.data;
     },
 };
+
 

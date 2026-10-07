@@ -922,6 +922,54 @@ class InsideIntegrationService:
         }
 
     @staticmethod
+    def batch_link_products(
+        db: Session,
+        company_id: UUID,
+        items: List[Any],
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        linked_count = 0
+        errors = []
+
+        prod_map: Dict[UUID, int] = {}
+        for it in items:
+            p_id = getattr(it, "product_id", None) or (it.get("product_id") if isinstance(it, dict) else None)
+            cod_prod = getattr(it, "cod_produto", None) or (it.get("cod_produto") if isinstance(it, dict) else None)
+            if not p_id or cod_prod is None:
+                continue
+            try:
+                p_uuid = UUID(str(p_id))
+                prod_map[p_uuid] = int(cod_prod)
+            except Exception as ex:
+                errors.append(f"Item inválido ({p_id}): {str(ex)}")
+
+        if prod_map:
+            products = db.query(Product).filter(
+                Product.id.in_(list(prod_map.keys())),
+                Product.company_id == company_id,
+            ).all()
+
+            for p in products:
+                p.codigo_service = prod_map[p.id]
+                linked_count += 1
+
+            db.commit()
+
+            # Sincroniza o estoque individualmente
+            for p in products:
+                try:
+                    InsideIntegrationService.sync_product_stock(db, company_id, p.id, user_id=user_id)
+                except Exception:
+                    pass
+
+        return {
+            "success": True,
+            "linked_count": linked_count,
+            "errors": errors,
+            "message": f"{linked_count} produtos foram vinculados e sincronizados com sucesso."
+        }
+
+    @staticmethod
     def import_product_from_inside(
         db: Session,
         company_id: UUID,

@@ -11,7 +11,9 @@ import {
     Loader2,
     Sparkles,
     Check,
-    PackagePlus
+    PackagePlus,
+    CheckSquare,
+    Square
 } from 'lucide-react';
 import { insideIntegrationApi } from '../../../services/insideIntegrationApi';
 
@@ -45,6 +47,8 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [linkingId, setLinkingId] = useState<string | null>(null);
     const [autoLinking, setAutoLinking] = useState(false);
+    const [batchLinking, setBatchLinking] = useState(false);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
     const [importingCod, setImportingCod] = useState<number | null>(null);
     const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -55,6 +59,7 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
         try {
             const res = await insideIntegrationApi.getCorrelationAnalysis(companyId, filterStockOnly);
             setData(res);
+            setSelectedKeys(new Set());
         } catch (err: any) {
             console.error('Erro ao carregar análise de correlação:', err);
             setFeedbackMsg({
@@ -74,6 +79,10 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
 
     if (!isOpen) return null;
 
+    const getItemKey = (item: any): string => {
+        return `${item.inside?.codProduto}_${item.suggested_product?.id || 'none'}`;
+    };
+
     const handleAutoLinkExact = async () => {
         setAutoLinking(true);
         setFeedbackMsg(null);
@@ -89,6 +98,38 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
             });
         } finally {
             setAutoLinking(false);
+        }
+    };
+
+    const handleBatchLinkSelected = async () => {
+        const toLink: Array<{ product_id: string; cod_produto: number }> = [];
+        items.forEach((item: any) => {
+            const key = getItemKey(item);
+            if (selectedKeys.has(key) && item.suggested_product?.id) {
+                const codProd = parseInt(String(item.inside?.codProduto), 10);
+                if (!isNaN(codProd)) {
+                    toLink.push({ product_id: item.suggested_product.id, cod_produto: codProd });
+                }
+            }
+        });
+
+        if (toLink.length === 0) return;
+
+        setBatchLinking(true);
+        setFeedbackMsg(null);
+        try {
+            const res = await insideIntegrationApi.batchLinkProducts(companyId, toLink);
+            setFeedbackMsg({ type: 'success', text: res.message });
+            setSelectedKeys(new Set());
+            fetchData();
+            if (onSuccess) onSuccess();
+        } catch (err: any) {
+            setFeedbackMsg({
+                type: 'error',
+                text: err.response?.data?.detail || 'Erro ao vincular produtos em lote.'
+            });
+        } finally {
+            setBatchLinking(false);
         }
     };
 
@@ -166,41 +207,72 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
             const codInside = String(item.inside?.codProduto || '');
             const nomeCerberus = (item.suggested_product?.nome || '').toLowerCase();
             const skuCerberus = (item.suggested_product?.codigo || '').toLowerCase();
-            return descInside.includes(q) || codInside.includes(q) || nomeCerberus.includes(q) || skuCerberus.includes(q);
+            const pnCerberus = (item.suggested_product?.part_number || '').toLowerCase();
+            return descInside.includes(q) || codInside.includes(q) || nomeCerberus.includes(q) || skuCerberus.includes(q) || pnCerberus.includes(q);
         }
 
         return true;
     });
 
+    const eligibleFilteredItems = filteredItems.filter(
+        (item: any) => item.tier !== 'LINKED' && !item.is_linked && item.suggested_product?.id
+    );
+
+    const isAllEligibleSelected =
+        eligibleFilteredItems.length > 0 &&
+        eligibleFilteredItems.every((item: any) => selectedKeys.has(getItemKey(item)));
+
+    const toggleSelectAllEligible = () => {
+        const next = new Set(selectedKeys);
+        if (isAllEligibleSelected) {
+            eligibleFilteredItems.forEach((item: any) => next.delete(getItemKey(item)));
+        } else {
+            eligibleFilteredItems.forEach((item: any) => next.add(getItemKey(item)));
+        }
+        setSelectedKeys(next);
+    };
+
+    const toggleSelectItem = (item: any) => {
+        if (item.tier === 'LINKED' || item.is_linked || !item.suggested_product?.id) return;
+        const key = getItemKey(item);
+        const next = new Set(selectedKeys);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        setSelectedKeys(next);
+    };
+
     return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 animate-in fade-in duration-200">
-            <div className="bg-surface border border-border-subtle rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-2 sm:p-4 lg:p-6 animate-in fade-in duration-200">
+            <div className="bg-surface border border-border-subtle rounded-3xl max-w-7xl w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden">
                 {/* Header Superior */}
-                <div className="flex items-center justify-between p-6 border-b border-border-subtle bg-bg-deep/40">
+                <div className="flex items-center justify-between p-5 sm:p-6 border-b border-border-subtle bg-bg-deep/40">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
                             <Boxes className="w-6 h-6" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h3 className="text-base font-bold text-text-primary">
+                                <h3 className="text-base sm:text-lg font-bold text-text-primary">
                                     Conciliação &amp; Vínculo de Produtos (Inside ERP)
                                 </h3>
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
                                     Estoque Novos
                                 </span>
                             </div>
                             <p className="text-xs text-text-muted mt-0.5">
-                                Correlacione os itens físicos do almoxarifado do ERP com a base de produtos do Cerberus para sincronizar estoques e preços médios em tempo real.
+                                Correlacione os itens físicos do almoxarifado do ERP com a base de produtos do Cerberus para sincronizar estoques e custos em tempo real.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={fetchData}
-                            disabled={loading}
+                            disabled={loading || batchLinking || autoLinking}
                             className="p-2 rounded-xl text-text-muted hover:text-text-primary hover:bg-surface border border-border-subtle transition-colors cursor-pointer"
                             title="Recarregar Análise"
                         >
@@ -219,20 +291,20 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                 {/* Feedback Toast */}
                 {feedbackMsg && (
                     <div
-                        className={`mx-6 mt-4 p-3 rounded-xl flex items-center justify-between text-xs border ${
+                        className={`mx-6 mt-4 p-3.5 rounded-2xl flex items-center justify-between text-xs border ${
                             feedbackMsg.type === 'success'
                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                                 : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
                         }`}
                     >
-                        <span className="flex items-center gap-2 font-medium">
-                            {feedbackMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                        <span className="flex items-center gap-2 font-semibold">
+                            {feedbackMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
                             {feedbackMsg.text}
                         </span>
                         <button
                             type="button"
                             onClick={() => setFeedbackMsg(null)}
-                            className="font-bold underline cursor-pointer"
+                            className="font-bold underline cursor-pointer ml-4"
                         >
                             Fechar
                         </button>
@@ -240,7 +312,7 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                 )}
 
                 {/* Cards de Resumo Estatístico */}
-                <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 bg-bg-deep/20 border-b border-border-subtle">
+                <div className="px-5 sm:px-6 py-3.5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 bg-bg-deep/20 border-b border-border-subtle">
                     <button
                         type="button"
                         onClick={() => setSelectedTier('ALL')}
@@ -334,15 +406,15 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                 </div>
 
                 {/* Barra de Filtros e Ação em Lote */}
-                <div className="p-4 px-6 flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-border-subtle">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="p-3.5 px-5 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-border-subtle bg-surface/50">
+                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                         <div className="relative flex-1 sm:w-72">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Filtrar por nome ou código..."
+                                placeholder="Filtrar por nome, SKU, PN ou código..."
                                 className="w-full pl-9 pr-4 py-2 bg-bg-deep border border-border-subtle rounded-xl text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-cyan-500"
                             />
                         </div>
@@ -356,6 +428,27 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                             />
                             Apenas com Saldo &gt; 0
                         </label>
+
+                        {eligibleFilteredItems.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={toggleSelectAllEligible}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface border border-border-subtle hover:bg-bg-deep text-text-primary transition-all cursor-pointer"
+                                title="Marcar ou desmarcar todos os itens elegíveis na listagem atual"
+                            >
+                                {isAllEligibleSelected ? (
+                                    <>
+                                        <CheckSquare className="w-4 h-4 text-brand-primary" />
+                                        <span>Desmarcar Todos ({eligibleFilteredItems.length})</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Square className="w-4 h-4 text-text-muted" />
+                                        <span>Selecionar Todos ({eligibleFilteredItems.length})</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
@@ -363,18 +456,46 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                             <button
                                 type="button"
                                 onClick={handleAutoLinkExact}
-                                disabled={autoLinking || loading}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                                disabled={autoLinking || batchLinking || loading}
+                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
                             >
                                 {autoLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                Vincular Automático ({summary.exact_match_count} itens exatos)
+                                Vincular Match 100% ({summary.exact_match_count})
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* Tabela de Itens */}
-                <div className="overflow-y-auto flex-1 p-6">
+                {/* Banner de Ação em Lote Flutuante / Fixo */}
+                {selectedKeys.size > 0 && (
+                    <div className="bg-brand-primary/10 border-b border-brand-primary/20 px-6 py-2.5 flex items-center justify-between animate-in slide-in-from-top-2 duration-150">
+                        <div className="flex items-center gap-2 text-xs font-bold text-brand-primary">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>{selectedKeys.size} item(ns) selecionado(s) para vinculação</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedKeys(new Set())}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                            >
+                                Cancelar Seleção
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleBatchLinkSelected}
+                                disabled={batchLinking || loading}
+                                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold bg-brand-primary text-white hover:bg-brand-primary/90 shadow-md shadow-brand-primary/20 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                {batchLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                                Vincular Selecionados ({selectedKeys.size})
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Tabela de Itens com Visualização Ampla e Sem Cortes */}
+                <div className="overflow-y-auto flex-1 p-4 sm:p-6 bg-bg-deep/10">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                             <Loader2 className="w-8 h-8 animate-spin text-cyan-500 mb-2" />
@@ -389,55 +510,92 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                     ) : (
                         <div className="space-y-3">
                             {filteredItems.map((item: any, idx: number) => {
-                                const isLinked = item.tier === 'LINKED';
+                                const isLinked = item.tier === 'LINKED' || item.is_linked;
                                 const isExact = item.tier === 'EXACT_MATCH';
                                 const isHigh = item.tier === 'HIGH_SIMILARITY';
                                 const isMedium = item.tier === 'MEDIUM_SIMILARITY';
                                 const isLow = item.tier === 'LOW_SIMILARITY';
 
                                 const ratioPct = (item.similarity_ratio * 100).toFixed(1);
+                                const itemKey = getItemKey(item);
+                                const isSelected = selectedKeys.has(itemKey);
+                                const canSelect = !isLinked && item.suggested_product?.id;
 
                                 return (
                                     <div
                                         key={`${item.inside?.codProduto}-${idx}`}
+                                        onClick={() => canSelect && toggleSelectItem(item)}
                                         className={`p-4 rounded-2xl border transition-all ${
-                                            isLinked
-                                                ? 'bg-emerald-500/5 border-emerald-500/20'
+                                            isSelected
+                                                ? 'bg-brand-primary/10 border-brand-primary/60 ring-2 ring-brand-primary/20 shadow-sm'
+                                                : isLinked
+                                                ? 'bg-emerald-500/5 border-emerald-500/25'
                                                 : isExact
-                                                ? 'bg-indigo-500/5 border-indigo-500/20'
+                                                ? 'bg-indigo-500/5 border-indigo-500/25 hover:border-indigo-500/50'
                                                 : isHigh
-                                                ? 'bg-blue-500/5 border-blue-500/20'
+                                                ? 'bg-blue-500/5 border-blue-500/25 hover:border-blue-500/50'
                                                 : isMedium
-                                                ? 'bg-amber-500/5 border-amber-500/20'
+                                                ? 'bg-amber-500/5 border-amber-500/25 hover:border-amber-500/50'
                                                 : 'bg-surface border-border-subtle hover:border-border-strong'
-                                        }`}
+                                        } ${canSelect ? 'cursor-pointer' : ''}`}
                                     >
                                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                            {/* Lado Esquerdo: Produto Inside ERP */}
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-bg-deep text-text-muted border border-border-subtle">
-                                                        ERP #{item.inside?.codProduto}
-                                                    </span>
-                                                    <span className="text-xs font-bold text-text-primary">
-                                                        {item.inside?.descricao}
-                                                    </span>
+                                            {/* Coluna 1: Checkbox + Item Inside ERP */}
+                                            <div className="flex-1 flex items-start gap-3 min-w-0">
+                                                {/* Checkbox de seleção */}
+                                                <div className="pt-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                    {canSelect ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleSelectItem(item)}
+                                                            className="p-0.5 rounded text-text-muted hover:text-brand-primary transition-colors cursor-pointer"
+                                                            title={isSelected ? "Desmarcar para vincular" : "Marcar para vincular em lote"}
+                                                        >
+                                                            {isSelected ? (
+                                                                <CheckSquare className="w-5 h-5 text-brand-primary" />
+                                                            ) : (
+                                                                <Square className="w-5 h-5 text-border-strong hover:text-text-primary" />
+                                                            )}
+                                                        </button>
+                                                    ) : isLinked ? (
+                                                        <div className="w-5 h-5 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                                                            <Check className="w-4 h-4" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-5 h-5" />
+                                                    )}
                                                 </div>
-                                                <div className="flex items-center gap-4 text-[11px] text-text-muted pt-1">
-                                                    <span>
-                                                        Saldo: <b className="font-mono text-emerald-600 dark:text-emerald-400">{formatNumber(item.inside?.saldo)}</b>
-                                                    </span>
-                                                    <span>
-                                                        Custo Médio: <b className="font-mono text-amber-600 dark:text-amber-400">{formatCurrency(item.inside?.custo)}</b>
-                                                    </span>
-                                                    <span>
-                                                        Tabela: <b className="font-mono text-text-primary">{formatCurrency(item.inside?.preco)}</b>
-                                                    </span>
+
+                                                {/* Informações Inside ERP com Nome Inteiro */}
+                                                <div className="flex-1 space-y-1.5 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-bg-deep text-text-muted border border-border-subtle shrink-0">
+                                                            ERP #{item.inside?.codProduto}
+                                                        </span>
+                                                        <span
+                                                            className="text-xs font-bold text-text-primary leading-relaxed break-words"
+                                                            title={item.inside?.descricao}
+                                                        >
+                                                            {item.inside?.descricao}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3 text-[11px] text-text-muted pt-0.5 flex-wrap">
+                                                        <span className="bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                                                            Saldo: <b className="font-mono text-emerald-600 dark:text-emerald-400">{formatNumber(item.inside?.saldo)}</b>
+                                                        </span>
+                                                        <span className="bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                                                            Custo Médio: <b className="font-mono text-amber-600 dark:text-amber-400">{formatCurrency(item.inside?.custo)}</b>
+                                                        </span>
+                                                        <span className="bg-surface px-2 py-0.5 rounded border border-border-subtle">
+                                                            Tabela: <b className="font-mono text-text-primary">{formatCurrency(item.inside?.preco)}</b>
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            {/* Indicador Central: Similaridade / Status */}
-                                            <div className="flex items-center gap-2 shrink-0 justify-center">
+                                            {/* Coluna 2: Indicador Central de Similaridade / Vínculo */}
+                                            <div className="flex items-center gap-2 shrink-0 justify-center px-2">
                                                 {isLinked ? (
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                                                         <Check className="w-3.5 h-3.5" /> Vinculado
@@ -447,53 +605,66 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                                                         <Sparkles className="w-3.5 h-3.5" /> Match Exato (100%)
                                                     </span>
                                                 ) : isHigh ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
                                                         {ratioPct}% Similar
                                                     </span>
                                                 ) : isMedium ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                                                         {ratioPct}% Similar
                                                     </span>
                                                 ) : isLow ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30">
                                                         {ratioPct}% Similar
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-500/15 text-text-muted border border-border-subtle">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-500/15 text-text-muted border border-border-subtle">
                                                         Sem Vínculo
                                                     </span>
                                                 )}
                                                 <ArrowRight className="w-4 h-4 text-text-muted hidden lg:block" />
                                             </div>
 
-                                            {/* Lado Direito: Produto Sugerido no Cerberus & Ações */}
-                                            <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            {/* Coluna 3: Produto Cerberus com Nome Completo + Botões de Ação */}
+                                            <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0" onClick={(e) => e.stopPropagation()}>
                                                 {item.suggested_product ? (
-                                                    <div className="space-y-0.5">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-mono text-[10px] font-bold text-brand-primary">
+                                                    <div className="space-y-1 min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary border border-brand-primary/20 shrink-0">
                                                                 {item.suggested_product.codigo}
                                                             </span>
-                                                            <span className="text-xs font-semibold text-text-primary line-clamp-1">
+                                                            <span
+                                                                className="text-xs font-bold text-text-primary leading-relaxed break-words"
+                                                                title={item.suggested_product.nome}
+                                                            >
                                                                 {item.suggested_product.nome}
                                                             </span>
                                                         </div>
-                                                        <p className="text-[10px] text-text-muted">
-                                                            {item.suggested_product.categoria || 'Sem categoria'} 
-                                                            {item.suggested_product.part_number ? ` • PN: ${item.suggested_product.part_number}` : ''}
-                                                        </p>
+                                                        <div className="flex items-center gap-2 text-[10px] text-text-muted flex-wrap">
+                                                            <span className="bg-bg-deep px-1.5 py-0.5 rounded border border-border-subtle">
+                                                                {item.suggested_product.categoria || 'Sem categoria'}
+                                                            </span>
+                                                            {item.suggested_product.part_number && (
+                                                                <span className="bg-bg-deep px-1.5 py-0.5 rounded border border-border-subtle font-mono">
+                                                                    PN: {item.suggested_product.part_number}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-xs text-text-muted italic">Nenhum produto correspondente cadastrado no Cerberus</span>
+                                                    <div className="text-xs text-text-muted italic flex-1 py-1">
+                                                        Nenhum produto correspondente cadastrado no Cerberus
+                                                    </div>
                                                 )}
 
-                                                <div className="flex items-center gap-2 shrink-0">
+                                                {/* Ações individuais */}
+                                                <div className="flex items-center gap-2 shrink-0 justify-end">
                                                     {!isLinked && item.suggested_product && (
                                                         <button
                                                             type="button"
                                                             onClick={() => handleLinkSingle(item)}
-                                                            disabled={linkingId === item.suggested_product.id}
+                                                            disabled={linkingId === item.suggested_product.id || batchLinking}
                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-primary text-white hover:bg-brand-primary/90 shadow-xs cursor-pointer transition-all disabled:opacity-50"
+                                                            title={`Vincular #${item.inside?.codProduto} a ${item.suggested_product?.nome}`}
                                                         >
                                                             {linkingId === item.suggested_product.id ? (
                                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -508,8 +679,9 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => handleImportSingle(parseInt(item.inside.codProduto, 10))}
-                                                            disabled={importingCod === parseInt(item.inside.codProduto, 10)}
+                                                            disabled={importingCod === parseInt(item.inside.codProduto, 10) || batchLinking}
                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 shadow-xs cursor-pointer transition-all disabled:opacity-50"
+                                                            title={`Criar novo produto no Cerberus a partir de #${item.inside?.codProduto}`}
                                                         >
                                                             {importingCod === parseInt(item.inside.codProduto, 10) ? (
                                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -54,3 +54,20 @@ class InsideDryRunResponse(BaseModel):
     itens_pendentes: int
     checklist: List[InsideMappingCheckItem]
     payloads: Dict[str, Any]
+
+
+class BatchLinkItem(BaseModel):
+    product_id: UUID
+    cod_produto: int
+
+
+class BatchLinkRequest(BaseModel):
+    items: List[BatchLinkItem]
+
+
+class BatchLinkResponse(BaseModel):
+    success: bool
+    linked_count: int
+    errors: List[str]
+    message: str
+
