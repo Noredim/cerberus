@@ -128,8 +128,25 @@ class ProductOut(ProductBase):
     inside_cached_preco: Optional[float] = None
     inside_cached_raw: Optional[Dict[str, Any]] = None
     
+    inside_stocks: List["ProductInsideStockOut"] = []
     tax_benefits: List[TaxBenefitOut] = []
     suppliers: List[ProductSupplierOut] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductInsideStockOut(BaseModel):
+    id: UUID
+    product_id: UUID
+    empresa_erp: str
+    tipo_estoque: str
+    cod_estoque: Optional[str] = None
+    cod_produto_erp: int
+    saldo: float = 0.0
+    custo: float = 0.0
+    preco: float = 0.0
+    last_sync_at: datetime
+    raw_data: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -138,3 +155,5 @@ class MvaLookupResult(BaseModel):
     ncm_base: Optional[str] = None
     description: Optional[str] = None
     found: bool = False
+
+ProductOut.model_rebuild()

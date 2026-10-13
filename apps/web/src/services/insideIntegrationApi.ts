@@ -181,6 +181,50 @@ export const insideIntegrationApi = {
         });
         return response.data;
     },
+
+    syncMultiStock: async (companyId: string): Promise<{
+        success: boolean;
+        message: string;
+        execution_time_seconds: number;
+        stelseg_secundario: {
+            total_erp: number;
+            vinculados: number;
+            criados: number;
+            saldo_total: number;
+        };
+        stelmat_novos: {
+            total_erp: number;
+            vinculados: number;
+            criados: number;
+            saldo_total: number;
+        };
+        servicos_erp: {
+            total_erp: number;
+            vinculados: number;
+            criados: number;
+        };
+    }> => {
+        const response = await api.post(`/companies/${companyId}/inside/sync-multi-stock`);
+        return response.data;
+    },
+
+    getMultiStockSummary: async (companyId: string): Promise<{
+        stocks: Record<string, {
+            empresa_erp: string;
+            tipo_estoque: string;
+            total_itens: number;
+            saldo_total: number;
+            com_saldo_positivo: number;
+        }>;
+        total_produtos_catalogo: number;
+        total_servicos_catalogo: number;
+        produtos_com_vinculo_erp: number;
+        servicos_com_vinculo_erp: number;
+        last_sync_at: string | null;
+    }> => {
+        const response = await api.get(`/companies/${companyId}/inside/multi-stock-summary`);
+        return response.data;
+    },
 };
 
 

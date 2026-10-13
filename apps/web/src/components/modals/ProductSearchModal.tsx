@@ -12,11 +12,12 @@ interface ProductSearchModalProps {
   title?: string;
   salesBudgetId?: string;
   licitacaoId?: string;
+  salesTeamId?: string;
   multiSelect?: boolean;
   onSelectMany?: (products: Product[]) => void;
 }
 
-export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId, licitacaoId, multiSelect = false, onSelectMany }: ProductSearchModalProps) {
+export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar Produto', salesBudgetId, licitacaoId, salesTeamId, multiSelect = false, onSelectMany }: ProductSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -53,13 +54,13 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
 
     const delayDebounceFn = setTimeout(() => {
       async function fetchProducts() {
-        if (!salesBudgetId && !licitacaoId && (!searchTerm || searchTerm.trim().length < 2)) {
+        if (!salesBudgetId && !licitacaoId && !salesTeamId && (!searchTerm || searchTerm.trim().length < 2)) {
           setResults([]);
           return;
         }
         setIsSearching(true);
         try {
-          const params: { limit: number; q?: string; sales_budget_id?: string; licitacao_id?: string } = { limit: 100 };
+          const params: { limit: number; q?: string; sales_budget_id?: string; licitacao_id?: string; sales_team_id?: string } = { limit: 100 };
           if (searchTerm && searchTerm.trim().length >= 2) {
             params.q = searchTerm;
           }
@@ -68,6 +69,9 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
           }
           if (licitacaoId) {
             params.licitacao_id = licitacaoId;
+          }
+          if (salesTeamId) {
+            params.sales_team_id = salesTeamId;
           }
           const res = await api.get('/cadastro/produtos', { params });
           setResults(res.data);
@@ -190,16 +194,37 @@ export function ProductSearchModal({ isOpen, onClose, onSelect, title = 'Buscar 
                             <span className="font-medium">Categoria:</span> {product.categoria}
                           </span>
                         )}
+                        {product.inside_stocks && product.inside_stocks.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1 border-t pt-1.5 border-border-subtle w-full">
+                            {product.inside_stocks.map(stk => (
+                              <span 
+                                key={stk.id} 
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+                                  stk.empresa_erp === '2' 
+                                    ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' 
+                                    : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                }`}
+                              >
+                                {stk.empresa_erp === '2' ? 'Stelseg (Sec)' : 'Stelmat (Novos)'}: {stk.saldo} un • {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stk.custo)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     {(() => {
-                      const cost = product.vlr_referencia_revenda || product.vlr_referencia_uso_consumo || 0;
+                      const erpStockCost = product.inside_stocks?.find(s => s.custo > 0)?.custo;
+                      const cost = (erpStockCost && erpStockCost > 0)
+                        ? erpStockCost
+                        : (product.inside_cached_custo && product.inside_cached_custo > 0)
+                          ? product.inside_cached_custo
+                          : (product.vlr_referencia_revenda || product.vlr_referencia_uso_consumo || 0);
                       const sale = cost * markup;
                       return (
                         <div className="flex items-center gap-6 shrink-0 text-sm">
                           <div className="text-right">
-                            <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">P. Revenda</div>
+                            <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">P. Custo/Revenda</div>
                             <div className="font-medium text-text-primary tabular-nums">
                               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cost)}
                             </div>

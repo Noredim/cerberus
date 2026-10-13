@@ -241,3 +241,38 @@ def import_product_from_inside(
         user_id=current_user.id,
     )
 
+
+@router.post("/sync-multi-stock")
+def sync_multi_stock(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Executa a rotina completa de sincronização e correlação multi-empresa:
+    1. Empresa 02 (Stelseg) - Estoque Secundário (prioritário)
+    2. Empresa 01 (Stelmat) - Estoque Novos
+    3. Serviços do ERP -> Cadastrados em produtos com categoria 'SERVIÇOS ERP'
+    """
+    return InsideIntegrationService.sync_multi_stock_complete(
+        db=db,
+        company_id=company_id,
+        user_id=current_user.id,
+    )
+
+
+@router.get("/multi-stock-summary")
+def get_multi_stock_summary(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retorna o panorama e indicadores agregados de estoques correlacionados
+    para a interface do usuário.
+    """
+    return InsideIntegrationService.get_multi_stock_summary(
+        db=db,
+        company_id=company_id,
+    )
+

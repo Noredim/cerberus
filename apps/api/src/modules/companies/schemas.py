@@ -351,6 +351,7 @@ class SalesTeamCreateUpdate(BaseModel):
     numero_proposta: Optional[int] = 1
     ativo: bool = True
     permite_venda_express: bool = False
+    utiliza_apenas_itens_erp: bool = False
     members: List[SalesTeamMemberCreate] = []
     policies: List[SalesTeamPolicyCreate] = []
 
@@ -365,6 +366,7 @@ class SalesTeamOut(BaseModel):
     numero_proposta: int = 1
     ativo: bool
     permite_venda_express: bool = False
+    utiliza_apenas_itens_erp: bool = False
     members: List[SalesTeamMemberOut] = []
     policies: List[SalesTeamPolicyOut] = []
 

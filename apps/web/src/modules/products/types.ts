@@ -70,6 +70,21 @@ export interface Product {
     inside_cached_saldo?: number | null;
     inside_cached_preco?: number | null;
     inside_cached_raw?: any | null;
+    inside_stocks?: ProductInsideStock[];
+}
+
+export interface ProductInsideStock {
+    id: string;
+    product_id: string;
+    empresa_erp: string;
+    tipo_estoque: string;
+    cod_estoque?: string | null;
+    cod_produto_erp: number;
+    saldo: number;
+    custo: number;
+    preco: number;
+    last_sync_at: string;
+    raw_data?: any;
 }
 
 export interface ProductCreate {

@@ -5,7 +5,7 @@ from .models import Product, ProductSupplier
 from .schemas import ProductCreate, ProductUpdate
 from src.modules.companies.models import Company
 from src.modules.ncm_st.models import NcmStHeader, NcmStItem
-from typing import List, Optional
+from typing import List, Optional, Any
 import re
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
@@ -92,12 +92,13 @@ class ProductService:
             self._attach_benefits(product)
         return product
 
-    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, licitacao_id: Optional[str] = None) -> List[Product]:
+    def list_products(self, tenant_id: str, q: Optional[str] = None, tipo: Optional[str] = None, skip: int = 0, limit: int = 100, company_id: Optional[str] = None, sales_budget_id: Optional[str] = None, licitacao_id: Optional[str] = None, sales_team_id: Optional[Any] = None) -> List[Product]:
         query = self.db.query(Product).filter(Product.tenant_id == tenant_id)
         
         if company_id:
             query = query.filter(Product.company_id == company_id)
         
+        budget = None
         if sales_budget_id:
             from src.modules.sales_budgets.models import SalesBudget
             budget = self.db.query(SalesBudget).filter(SalesBudget.id == sales_budget_id).first()
@@ -122,6 +123,44 @@ class ProductService:
                         .filter(PurchaseBudget.licitacao_id == licitacao_id)
                     )
                 )
+
+        # Regra de Equipe Comercial com utiliza_apenas_itens_erp
+        effective_team_id = sales_team_id or (getattr(budget, "sales_team_id", None) if budget else None)
+        has_stelseg_priority = None
+        if effective_team_id:
+            from src.modules.companies.models import SalesTeam
+            from src.modules.products.models import ProductInsideStock
+            from sqlalchemy import exists, and_, or_
+
+            team = self.db.query(SalesTeam).filter(SalesTeam.id == effective_team_id).first()
+            if team and getattr(team, "utiliza_apenas_itens_erp", False):
+                team_name_upper = (team.nome or "").upper()
+                if "STELMAT" in team_name_upper:
+                    # Equipe STELMAT: Apenas produtos com estoque na Empresa 01 tipo 'NOVOS'
+                    has_stelmat_novos = exists().where(
+                        and_(
+                            ProductInsideStock.product_id == Product.id,
+                            ProductInsideStock.empresa_erp == "1",
+                            ProductInsideStock.tipo_estoque == "NOVOS"
+                        )
+                    )
+                    query = query.filter(has_stelmat_novos)
+                elif "STELSEG" in team_name_upper:
+                    # Equipe STELSEG: Deve obrigatoriamente ter correlacionamento (Empresa 01 ou Empresa 02)
+                    has_any_erp = exists().where(ProductInsideStock.product_id == Product.id) | (Product.codigo_service != None)
+                    query = query.filter(has_any_erp)
+                    # Prioridade visual/ordenação para Estoque Secundário da Empresa 02
+                    has_stelseg_priority = exists().where(
+                        and_(
+                            ProductInsideStock.product_id == Product.id,
+                            ProductInsideStock.empresa_erp == "2",
+                            ProductInsideStock.tipo_estoque == "ESTOQUE SECUNDARIO"
+                        )
+                    )
+                else:
+                    # Qualquer outra equipe com a flag ativada: obrigatoriamente correlacionado com ERP
+                    has_any_erp = exists().where(ProductInsideStock.product_id == Product.id) | (Product.codigo_service != None)
+                    query = query.filter(has_any_erp)
         
         if q:
             q_clean = re.sub(r'\D', '', q)
@@ -135,8 +174,13 @@ class ProductService:
         
         if tipo:
             query = query.filter(Product.tipo == tipo)
+
+        if has_stelseg_priority is not None:
+            query = query.order_by(has_stelseg_priority.desc(), desc(Product.created_at))
+        else:
+            query = query.order_by(desc(Product.created_at))
             
-        products = query.order_by(desc(Product.created_at)).offset(skip).limit(limit).all()
+        products = query.offset(skip).limit(limit).all()
         for p in products:
             self._attach_benefits(p)
         return products

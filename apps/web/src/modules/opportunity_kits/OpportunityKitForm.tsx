@@ -3842,6 +3842,7 @@ export const OpportunityKitForm = ({
               onSelectMany={handleAddProducts}
               salesBudgetId={form.sales_budget_id}
               licitacaoId={form.licitacao_id}
+              salesTeamId={initialSalesTeamId || opportunitySalesTeamId || form.sales_team_id || (form.sales_teams && form.sales_teams[0])}
             />
           </section>
 

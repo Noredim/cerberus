@@ -230,6 +230,14 @@ export const ProductInsideTab: React.FC<ProductInsideTabProps> = ({
                                 {insideData?.codProduto || codigoService ? `#${insideData?.codProduto || codigoService}` : 'Não vinculado'}
                             </p>
                         </div>
+                        {(insideData?.marca || insideData?.fabricante) && (
+                            <div>
+                                <span className="text-[10px] font-bold uppercase text-text-muted">Marca / Fabricante:</span>
+                                <p className="font-semibold text-blue-600 dark:text-blue-400">
+                                    {insideData.marca || insideData.fabricante}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 

@@ -770,7 +770,11 @@ def list_sales_teams_tenant(
             nome=t.nome,
             papel_timbrado_id=t.papel_timbrado_id,
             nome_papel_timbrado=t.papel_timbrado.nome if t.papel_timbrado else None,
+            nomenclatura_orcamento=t.nomenclatura_orcamento,
+            numero_proposta=t.numero_proposta if t.numero_proposta is not None else 1,
             ativo=t.ativo,
+            permite_venda_express=bool(getattr(t, 'permite_venda_express', False)),
+            utiliza_apenas_itens_erp=bool(getattr(t, 'utiliza_apenas_itens_erp', False)),
             members=members_out,
             policies=policies_out
         ))
@@ -831,6 +835,7 @@ def list_sales_teams(
             numero_proposta=t.numero_proposta if t.numero_proposta is not None else 1,
             ativo=t.ativo,
             permite_venda_express=bool(getattr(t, 'permite_venda_express', False)),
+            utiliza_apenas_itens_erp=bool(getattr(t, 'utiliza_apenas_itens_erp', False)),
             members=members_out,
             policies=policies_out
         ))
@@ -909,7 +914,8 @@ def create_sales_team(
         nomenclatura_orcamento=payload.nomenclatura_orcamento,
         numero_proposta=payload.numero_proposta if payload.numero_proposta is not None else 1,
         ativo=payload.ativo,
-        permite_venda_express=payload.permite_venda_express
+        permite_venda_express=payload.permite_venda_express,
+        utiliza_apenas_itens_erp=payload.utiliza_apenas_itens_erp
     )
     db.add(team)
     db.flush() # Populate team.id
@@ -971,6 +977,7 @@ def create_sales_team(
         numero_proposta=db_team.numero_proposta if db_team.numero_proposta is not None else 1,
         ativo=db_team.ativo,
         permite_venda_express=bool(getattr(db_team, 'permite_venda_express', False)),
+        utiliza_apenas_itens_erp=bool(getattr(db_team, 'utiliza_apenas_itens_erp', False)),
         members=members_out,
         policies=policies_out
     )
@@ -1051,6 +1058,7 @@ def update_sales_team(
         team.numero_proposta = payload.numero_proposta
     team.ativo = payload.ativo
     team.permite_venda_express = payload.permite_venda_express
+    team.utiliza_apenas_itens_erp = payload.utiliza_apenas_itens_erp
 
     # 6. Update members
     db.query(SalesTeamMember).filter(SalesTeamMember.sales_team_id == team_id).delete()
@@ -1111,6 +1119,7 @@ def update_sales_team(
         numero_proposta=db_team.numero_proposta if db_team.numero_proposta is not None else 1,
         ativo=db_team.ativo,
         permite_venda_express=bool(getattr(db_team, 'permite_venda_express', False)),
+        utiliza_apenas_itens_erp=bool(getattr(db_team, 'utiliza_apenas_itens_erp', False)),
         members=members_out,
         policies=policies_out
     )

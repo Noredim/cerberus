@@ -61,6 +61,30 @@ class Product(Base):
     tenant = relationship("Tenant")
     suppliers = relationship("ProductSupplier", back_populates="product", cascade="all, delete-orphan")
     fornecedor_ultimo_preco = relationship("Supplier", foreign_keys=[fornecedor_ultimo_preco_id])
+    inside_stocks = relationship("ProductInsideStock", back_populates="product", cascade="all, delete-orphan")
+
+
+class ProductInsideStock(Base):
+    __tablename__ = "product_inside_stocks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    empresa_erp = Column(String(50), nullable=False, index=True)
+    tipo_estoque = Column(String(50), nullable=False, index=True)
+    cod_estoque = Column(String(50), nullable=True)
+    cod_produto_erp = Column(Integer, nullable=False, index=True)
+    
+    saldo = Column(Numeric(15, 4), default=0.0, nullable=False)
+    custo = Column(Numeric(15, 4), default=0.0, nullable=False)
+    preco = Column(Numeric(15, 4), default=0.0, nullable=False)
+    last_sync_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    raw_data = Column(JSONB, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint('product_id', 'empresa_erp', 'tipo_estoque', name='uq_product_inside_stock_emp_tipo'),
+    )
+
+    product = relationship("Product", back_populates="inside_stocks")
 
 
 class ProductSupplier(Base):

@@ -572,6 +572,11 @@ export const ProductInsideCorrelationModal: React.FC<CorrelationModalProps> = ({
                                                         <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-bg-deep text-text-muted border border-border-subtle shrink-0">
                                                             ERP #{item.inside?.codProduto}
                                                         </span>
+                                                        {item.inside?.marca && (
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+                                                                {item.inside.marca}
+                                                            </span>
+                                                        )}
                                                         <span
                                                             className="text-xs font-bold text-text-primary leading-relaxed break-words"
                                                             title={item.inside?.descricao}

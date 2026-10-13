@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Server, Key, Globe, Shield, CheckCircle2, AlertCircle, 
     Loader2, Save, Activity, RefreshCw, Eye, X, Terminal, 
-    Wrench, Package, CreditCard, Check, Boxes, Coins
+    Wrench, Package, CreditCard, Check, Boxes, Coins, Clock
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { 
@@ -73,6 +73,12 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
     const [syncingFormas, setSyncingFormas] = useState(false);
     const [syncFormasResult, setSyncFormasResult] = useState<{ success: boolean; message: string } | null>(null);
 
+    // Multi-stock sync state
+    const [syncingMultiStock, setSyncingMultiStock] = useState(false);
+    const [syncMultiStockResult, setSyncMultiStockResult] = useState<any | null>(null);
+    const [multiStockSummary, setMultiStockSummary] = useState<any | null>(null);
+    const [, setLoadingSummary] = useState(false);
+
     // Test Connection states for all environments
     const [testingServicos, setTestingServicos] = useState(false);
     const [testServicosResult, setTestServicosResult] = useState<InsideTestConnectionResponse | null>(null);
@@ -88,8 +94,22 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
     const [loadingLogs, setLoadingLogs] = useState(false);
     const [selectedLog, setSelectedLog] = useState<IntegrationLogItem | null>(null);
 
+    const loadMultiStockSummary = async () => {
+        if (!companyId) return;
+        setLoadingSummary(true);
+        try {
+            const res = await insideIntegrationApi.getMultiStockSummary(companyId);
+            setMultiStockSummary(res);
+        } catch (err) {
+            console.error('Erro ao carregar resumo de estoques:', err);
+        } finally {
+            setLoadingSummary(false);
+        }
+    };
+
     useEffect(() => {
         if (!companyId) return;
+        loadMultiStockSummary();
 
         const loadConfig = async () => {
             setLoading(true);
@@ -316,6 +336,27 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
             fetchLogs();
         } finally {
             setSyncingFormas(false);
+        }
+    };
+
+    const handleSyncMultiStock = async () => {
+        if (!companyId) return;
+        setSyncingMultiStock(true);
+        setSyncMultiStockResult(null);
+        try {
+            const res = await insideIntegrationApi.syncMultiStock(companyId);
+            setSyncMultiStockResult(res);
+            loadMultiStockSummary();
+            fetchLogs();
+        } catch (err: any) {
+            const detail = err.response?.data?.detail || 'Falha ao sincronizar estoques multi-empresa com o Inside ERP.';
+            setSyncMultiStockResult({
+                success: false,
+                message: detail
+            });
+            fetchLogs();
+        } finally {
+            setSyncingMultiStock(false);
         }
     };
 
@@ -780,18 +821,161 @@ export const InsideIntegrationTab: React.FC<InsideIntegrationTabProps> = ({ comp
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
                             type="button"
                             onClick={handleSyncFormas}
                             disabled={syncingFormas || isReadOnly || (!config.servicos_base_url && !config.produtos_base_url)}
-                            className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                            className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 px-3.5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                         >
                             {syncingFormas ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                             Sincronizar Formas de Pagamento
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={handleSyncMultiStock}
+                            disabled={syncingMultiStock || isReadOnly || !config.estoque_base_url || !config.estoque_api_key}
+                            className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                        >
+                            {syncingMultiStock ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            Sincronizar Estoques Multi-Empresa &amp; Serviços
+                        </button>
                     </div>
                 </div>
+
+                {/* Resumo de Estoques Multi-Empresa em Tempo Real */}
+                <div className="pt-2 border-t border-border-subtle">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold text-text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                            <Boxes className="w-3.5 h-3.5 text-cyan-500" />
+                            Posição de Estoques Correlacionados
+                        </span>
+                        {multiStockSummary?.last_sync_at && (
+                            <span className="text-[11px] text-text-muted flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Última sincronia: {new Date(multiStockSummary.last_sync_at).toLocaleString('pt-BR')}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Stelseg Secundário */}
+                        <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                                    Stelseg (Empresa 02)
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20 font-bold">
+                                    SECUNDÁRIO
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Itens Vinculados</span>
+                                    <strong className="text-base text-text-primary font-mono">
+                                        {multiStockSummary?.stocks?.empresa_2_estoque_secundario?.total_itens ?? 0}
+                                    </strong>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Saldo Total</span>
+                                    <strong className="text-base text-blue-600 font-mono">
+                                        {multiStockSummary?.stocks?.empresa_2_estoque_secundario?.saldo_total ?? 0} un
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Stelmat Novos */}
+                        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    Stelmat (Empresa 01)
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-bold">
+                                    NOVOS
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Itens Vinculados</span>
+                                    <strong className="text-base text-text-primary font-mono">
+                                        {multiStockSummary?.stocks?.empresa_1_novos?.total_itens ?? 0}
+                                    </strong>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Saldo Total</span>
+                                    <strong className="text-base text-emerald-600 font-mono">
+                                        {multiStockSummary?.stocks?.empresa_1_novos?.saldo_total ?? 0} un
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Serviços ERP */}
+                        <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                    Serviços ERP
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 font-bold">
+                                    CATÁLOGO
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Cadastrados</span>
+                                    <strong className="text-base text-text-primary font-mono">
+                                        {multiStockSummary?.servicos_com_vinculo_erp ?? 0}
+                                    </strong>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] text-text-muted block">Total Produtos</span>
+                                    <strong className="text-base text-indigo-600 font-mono">
+                                        {multiStockSummary?.total_produtos_catalogo ?? 0}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {syncMultiStockResult && (
+                    <div
+                        className={`p-4 rounded-xl border text-xs space-y-2 ${
+                            syncMultiStockResult.success
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 font-bold">
+                                {syncMultiStockResult.success ? <Check className="w-4 h-4 text-emerald-500 shrink-0" /> : <AlertCircle className="w-4 h-4 text-brand-danger shrink-0" />}
+                                {syncMultiStockResult.message} ({syncMultiStockResult.execution_time_seconds}s)
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setSyncMultiStockResult(null)}
+                                className="text-[11px] font-bold underline cursor-pointer shrink-0"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                        {syncMultiStockResult.success && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-500/20 text-[11px]">
+                                <div>
+                                    <strong>Stelseg (Secundário):</strong> {syncMultiStockResult.stelseg_secundario?.vinculados} vinculados, {syncMultiStockResult.stelseg_secundario?.criados} criados.
+                                </div>
+                                <div>
+                                    <strong>Stelmat (Novos):</strong> {syncMultiStockResult.stelmat_novos?.vinculados} vinculados, {syncMultiStockResult.stelmat_novos?.criados} criados.
+                                </div>
+                                <div>
+                                    <strong>Serviços:</strong> {syncMultiStockResult.servicos_erp?.vinculados} vinculados, {syncMultiStockResult.servicos_erp?.criados} criados.
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {syncFormasResult && (
                     <div

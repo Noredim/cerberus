@@ -297,6 +297,7 @@ class SalesTeam(Base):
     numero_proposta = Column(Integer, default=1, nullable=False)
     ativo = Column(Boolean, default=True, nullable=False)
     permite_venda_express = Column(Boolean, default=False, nullable=False)
+    utiliza_apenas_itens_erp = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

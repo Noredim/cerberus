@@ -49,12 +49,27 @@ class OpportunityKitService:
                     "uf_destino": "",
                     "custo_unit_final": Decimal("0.0"),
                 }
-            if product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
-                custo_base = product.inside_cached_custo
+            # Prioridade de custo ERP multi-empresa
+            inside_cost = None
+            if hasattr(product, "inside_stocks") and product.inside_stocks:
+                stocks_by_emp = {str(s.empresa_erp): s for s in product.inside_stocks if s.custo and float(s.custo) > 0}
+                if "2" in stocks_by_emp:
+                    inside_cost = stocks_by_emp["2"].custo
+                elif "1" in stocks_by_emp:
+                    inside_cost = stocks_by_emp["1"].custo
+
+            if not inside_cost and product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
+                inside_cost = product.inside_cached_custo
+
+            if inside_cost and float(inside_cost) > 0:
+                custo_base = inside_cost
+                is_erp_item = True
             else:
                 custo_base = getattr(product, "vlr_referencia_revenda", 0) if considerar_st_ou_difal == "ST" else getattr(product, "vlr_referencia_uso_consumo", 0)
+                is_erp_item = False
+
             tipo = product.tipo or "MERCADORIA"
-            difal_val = Decimal("0.0") if (tipo in ["SERVICO", "LICENCA"] or considerar_st_ou_difal != "DIFAL" or (product.codigo_service and product.inside_cached_custo)) else Decimal(getattr(product, "vlr_referencia_difal", 0) or 0)
+            difal_val = Decimal("0.0") if (tipo in ["SERVICO", "LICENCA"] or considerar_st_ou_difal != "DIFAL" or is_erp_item) else Decimal(getattr(product, "vlr_referencia_difal", 0) or 0)
             return {
                 "cost": Decimal(custo_base or 0),
                 "tipo": tipo,
@@ -1397,6 +1412,27 @@ class OpportunityKitService:
                     )
                 )
                 query = query.filter(public_cond | match_team_cond)
+
+                # Regra: Se a equipe utiliza apenas itens ERP, o kit não pode conter itens sem correlação ERP
+                from src.modules.companies.models import SalesTeam
+                team = self.db.query(SalesTeam).filter(SalesTeam.id == st_uuid).first()
+                if team and getattr(team, "utiliza_apenas_itens_erp", False):
+                    from src.modules.opportunity_kits.models import OpportunityKitItem
+                    from src.modules.products.models import ProductInsideStock, Product
+                    unlinked_item_exists = exists().where(
+                        and_(
+                            OpportunityKitItem.kit_id == OpportunityKit.id,
+                            OpportunityKitItem.product_id != None,
+                            ~exists().where(ProductInsideStock.product_id == OpportunityKitItem.product_id),
+                            ~exists().where(
+                                and_(
+                                    Product.id == OpportunityKitItem.product_id,
+                                    Product.codigo_service != None
+                                )
+                            )
+                        )
+                    )
+                    query = query.filter(~unlinked_item_exists)
 
         if current_user:
             from src.modules.users.models import UserRoleEnum

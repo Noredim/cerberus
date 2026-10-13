@@ -1872,8 +1872,20 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
 
     # Inside ERP Priority Cost: If product is integrated and has Inside cost, use it as default
     # and bypass entry ST/DIFAL calculations (already considered final acquisition cost).
-    if product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
+    custo_inside = None
+    if hasattr(product, "inside_stocks") and product.inside_stocks:
+        stocks_by_emp = {str(s.empresa_erp): s for s in product.inside_stocks if s.custo and float(s.custo) > 0}
+        if "2" in stocks_by_emp:
+            custo_inside = float(stocks_by_emp["2"].custo)
+        elif "1" in stocks_by_emp:
+            custo_inside = float(stocks_by_emp["1"].custo)
+        elif len(product.inside_stocks) > 0 and product.inside_stocks[0].custo:
+            custo_inside = float(product.inside_stocks[0].custo)
+
+    if not custo_inside and product.codigo_service and product.inside_cached_custo and float(product.inside_cached_custo) > 0:
         custo_inside = float(product.inside_cached_custo)
+
+    if custo_inside is not None and custo_inside > 0:
         uso_consumo = tipo.upper() == "USO_CONSUMO"
         return {
             "base_unitario": custo_inside,

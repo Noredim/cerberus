@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck, FileText, Zap } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Users, CheckCircle, XCircle, UserCheck, FileText, Zap, Layers } from 'lucide-react';
 import { api } from '../../../services/api';
 
 interface EligibleUser {
@@ -45,6 +45,7 @@ interface SalesTeam {
     numero_proposta?: number;
     ativo: boolean;
     permite_venda_express?: boolean;
+    utiliza_apenas_itens_erp?: boolean;
     members: TeamMember[];
     policies: TeamPolicy[];
 }
@@ -102,6 +103,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
             numero_proposta: 1,
             ativo: true,
             permite_venda_express: false,
+            utiliza_apenas_itens_erp: false,
             members: [],
             policies: []
         });
@@ -114,6 +116,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
             nomenclatura_orcamento: team.nomenclatura_orcamento || '',
             numero_proposta: team.numero_proposta ?? 1,
             permite_venda_express: team.permite_venda_express ?? false,
+            utiliza_apenas_itens_erp: team.utiliza_apenas_itens_erp ?? false,
             members: [...team.members],
             policies: [...team.policies]
         });
@@ -149,6 +152,7 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
             numero_proposta: Number(editingTeam.numero_proposta) || 1,
             ativo: editingTeam.ativo,
             permite_venda_express: Boolean(editingTeam.permite_venda_express),
+            utiliza_apenas_itens_erp: Boolean(editingTeam.utiliza_apenas_itens_erp),
             members: editingTeam.members.map(m => ({
                 user_id: m.user_id,
                 cargo: m.cargo
@@ -283,6 +287,12 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                                                             Venda Express
                                                         </span>
                                                     )}
+                                                    {t.utiliza_apenas_itens_erp && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                                            <Layers className="w-3 h-3 text-blue-500" />
+                                                            Apenas Itens ERP
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                                                     t.ativo ? 'bg-emerald-500/10 text-emerald-600' : 'bg-text-muted/10 text-text-muted'
@@ -400,6 +410,30 @@ export function SalesTeamsTab({ companyId, isReadOnly }: Props) {
                             disabled={isReadOnly}
                             onChange={(e) => setEditingTeam({ ...editingTeam, permite_venda_express: e.target.checked })}
                             className="w-5 h-5 rounded border-border text-amber-500 focus:ring-amber-500 cursor-pointer"
+                        />
+                    </div>
+
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-500/15 rounded-lg text-blue-600">
+                                <Layers className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <label htmlFor="utiliza_apenas_itens_erp" className="text-sm font-bold text-text-primary cursor-pointer">
+                                    Utiliza Apenas Itens ERP
+                                </label>
+                                <p className="text-xs text-text-muted">
+                                    Restringe a seleção de kits e produtos desta equipe a itens obrigatoriamente correlacionados com o Inside ERP (priorizando Estoque Secundário para Stelseg e Estoque Novos para Stelmat).
+                                </p>
+                            </div>
+                        </div>
+                        <input
+                            type="checkbox"
+                            id="utiliza_apenas_itens_erp"
+                            checked={editingTeam.utiliza_apenas_itens_erp ?? false}
+                            disabled={isReadOnly}
+                            onChange={(e) => setEditingTeam({ ...editingTeam, utiliza_apenas_itens_erp: e.target.checked })}
+                            className="w-5 h-5 rounded border-border text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
                     </div>
 

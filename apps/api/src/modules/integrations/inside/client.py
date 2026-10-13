@@ -255,6 +255,7 @@ class InsideEstoqueClient:
         nome: Optional[str] = None,
         cod_produto: Optional[str] = None,
         tipo_estoque: Optional[str] = None,
+        empresa_id: Optional[str] = None,
     ) -> Tuple[int, Optional[Any], int, Optional[str]]:
         """Consulta produtos, estoques, custos e preços na API de tempo real."""
         target_url = self._get_target_url()
@@ -270,11 +271,12 @@ class InsideEstoqueClient:
                 if response.is_success:
                     data = response.json()
                     if isinstance(data, list):
-                        # Filtrar por empresa se configurada
-                        if self.empresa_id:
-                            data = [d for d in data if str(d.get("empresa")) == str(self.empresa_id)]
-                        # Filtrar por tipo de estoque se solicitado
-                        target_tipo = (tipo_estoque or self.tipo_padrao or "").upper()
+                        # Filtrar por empresa se configurada (ou permitir "TODAS")
+                        target_empresa = empresa_id if empresa_id is not None else self.empresa_id
+                        if target_empresa and str(target_empresa).upper() != "TODAS":
+                            data = [d for d in data if str(d.get("empresa")) == str(target_empresa)]
+                        # Filtrar por tipo de estoque se solicitado (ou permitir "TODOS")
+                        target_tipo = (tipo_estoque if tipo_estoque is not None else (self.tipo_padrao or "")).upper()
                         if target_tipo and target_tipo != "TODOS":
                             data = [d for d in data if str(d.get("tipoEstoque", "")).upper() == target_tipo]
                         # Filtrar por codProduto se fornecido

@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from uuid import UUID
 from datetime import datetime, timezone
 import unicodedata
@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 
 from src.modules.companies.models import Company, CompanyInsideConfig
 from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem
-from src.modules.products.models import Product
+from src.modules.products.models import Product, ProductInsideStock
 from src.modules.customers.models import Customer
 from src.modules.professionals.models import Professional
 from src.modules.payment_methods.models import FormaPagamento, FormaPagamentoParcela
@@ -235,6 +235,55 @@ class InsideIntegrationService:
             error=error_msg,
         )
 
+    KNOWN_BRANDS = [
+        ("INTELBRAS", "INTELBRAS"),
+        ("HIKVISION", "HIKVISION"),
+        ("TP-LINK", "TP-LINK"),
+        ("TPLINK", "TP-LINK"),
+        ("CAMBIUM", "CAMBIUM"),
+        ("MIKROTIK", "MIKROTIK"),
+        ("PPA", "PPA"),
+        ("JFL", "JFL"),
+        ("SYSTIMAX", "SYSTIMAX"),
+        ("SEAGATE", "SEAGATE"),
+        ("WESTERN DIGITAL", "WESTERN DIGITAL"),
+        ("WD", "WESTERN DIGITAL"),
+        ("MOURA", "MOURA"),
+        ("APC", "APC"),
+        ("ELGIN", "ELGIN"),
+        ("CISER", "CISER"),
+        ("CORTAG", "CORTAG"),
+        ("VONDER", "VONDER"),
+        ("BESTFER", "BESTFER"),
+        ("GAYA", "GAYA"),
+        ("PRATIK", "PRATIK"),
+        ("KAISE", "KAISE"),
+        ("MEGATRON", "MEGATRON"),
+        ("FIBERHOME", "FIBERHOME"),
+        ("MAXMETAL", "MAXMETAL"),
+        ("PANTANEIRO", "PANTANEIRO"),
+        ("INCA", "INCA"),
+        ("JOMARCA", "JOMARCA"),
+        ("SYLC", "SYLC"),
+        ("RUIJIE", "RUIJIE"),
+        ("TOSHIBA", "TOSHIBA"),
+        ("TOSCHIBA", "TOSHIBA"),
+        ("LENOVO", "LENOVO"),
+        ("MOTOROLA", "MOTOROLA"),
+        ("QUALITRONIX", "QUALITRONIX"),
+    ]
+
+    @staticmethod
+    def extract_brand_manufacturer(desc: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+        if not desc:
+            return None, None
+        d_upper = desc.upper()
+        for brand_key, brand_name in InsideIntegrationService.KNOWN_BRANDS:
+            pattern = r'\b' + re.escape(brand_key) + r'\b'
+            if re.search(pattern, d_upper):
+                return brand_name, brand_name
+        return None, None
+
     @staticmethod
     def consultar_estoque_realtime(
         db: Session,
@@ -255,7 +304,12 @@ class InsideIntegrationService:
                 status_code=status.HTTP_502_BAD_GATEWAY if status_code == 0 else status_code,
                 detail=f"Erro ao consultar API de estoque: {error_msg or 'Resposta inválida do servidor'}"
             )
-        return data if isinstance(data, list) else [data]
+        items = data if isinstance(data, list) else [data]
+        for it in items:
+            marca, fab = InsideIntegrationService.extract_brand_manufacturer(it.get("descricao"))
+            it["marca"] = marca
+            it["fabricante"] = fab
+        return items
 
     @staticmethod
     def list_logs(
@@ -992,6 +1046,7 @@ class InsideIntegrationService:
         sku = prod_service._generate_sku(tenant_id)
 
         now = datetime.now(timezone.utc)
+        marca, fab = InsideIntegrationService.extract_brand_manufacturer(data.get("descricao"))
         new_product = Product(
             tenant_id=tenant_id,
             company_id=company_id,
@@ -999,6 +1054,8 @@ class InsideIntegrationService:
             codigo_service=cod_produto,
             nome=data.get("descricao", f"PRODUTO INSIDE {cod_produto}").strip().upper()[:300],
             descricao=data.get("descricao"),
+            marca=marca,
+            fabricante=fab,
             tipo="EQUIPAMENTO",
             finalidade="REVENDA",
             unidade="UN",
@@ -1021,4 +1078,416 @@ class InsideIntegrationService:
             "codigo_service": new_product.codigo_service,
             "custo": float(new_product.inside_cached_custo or 0),
             "saldo": float(new_product.inside_cached_saldo or 0),
+        }
+
+    @staticmethod
+    def get_multi_stock_summary(
+        db: Session,
+        company_id: UUID,
+    ) -> Dict[str, Any]:
+        """Retorna o resumo estatístico dos estoques correlacionados e posições de ERP."""
+        from sqlalchemy import func as sa_func
+
+        # Totais de product_inside_stocks agrupados por (empresa_erp, tipo_estoque)
+        stock_groups = db.query(
+            ProductInsideStock.empresa_erp,
+            ProductInsideStock.tipo_estoque,
+            sa_func.count(ProductInsideStock.id).label("total_itens"),
+            sa_func.sum(ProductInsideStock.saldo).label("saldo_total"),
+            sa_func.count(sa_func.nullif(ProductInsideStock.saldo <= 0, True)).label("com_saldo_positivo"),
+        ).join(Product, Product.id == ProductInsideStock.product_id).filter(
+            Product.company_id == company_id
+        ).group_by(
+            ProductInsideStock.empresa_erp,
+            ProductInsideStock.tipo_estoque
+        ).all()
+
+        stocks_summary = {}
+        for row in stock_groups:
+            key = f"empresa_{row.empresa_erp}_{row.tipo_estoque.lower().replace(' ', '_')}"
+            stocks_summary[key] = {
+                "empresa_erp": row.empresa_erp,
+                "tipo_estoque": row.tipo_estoque,
+                "total_itens": row.total_itens or 0,
+                "saldo_total": float(row.saldo_total or 0),
+                "com_saldo_positivo": row.com_saldo_positivo or 0,
+            }
+
+        total_produtos = db.query(sa_func.count(Product.id)).filter(
+            Product.company_id == company_id,
+            Product.tipo != "SERVICO"
+        ).scalar() or 0
+
+        total_servicos = db.query(sa_func.count(Product.id)).filter(
+            Product.company_id == company_id,
+            Product.tipo == "SERVICO"
+        ).scalar() or 0
+
+        produtos_vinculados = db.query(sa_func.count(sa_func.distinct(ProductInsideStock.product_id))).join(
+            Product, Product.id == ProductInsideStock.product_id
+        ).filter(
+            Product.company_id == company_id
+        ).scalar() or 0
+
+        servicos_erp_vinculados = db.query(sa_func.count(Product.id)).filter(
+            Product.company_id == company_id,
+            Product.tipo == "SERVICO",
+            Product.codigo_service != None
+        ).scalar() or 0
+
+        # Última sincronização registrada
+        last_sync = db.query(sa_func.max(ProductInsideStock.last_sync_at)).join(
+            Product, Product.id == ProductInsideStock.product_id
+        ).filter(
+            Product.company_id == company_id
+        ).scalar()
+
+        return {
+            "stocks": stocks_summary,
+            "total_produtos_catalogo": total_produtos,
+            "total_servicos_catalogo": total_servicos,
+            "produtos_com_vinculo_erp": produtos_vinculados,
+            "servicos_com_vinculo_erp": servicos_erp_vinculados,
+            "last_sync_at": last_sync.isoformat() if last_sync else None,
+        }
+
+    @staticmethod
+    def sync_multi_stock_complete(
+        db: Session,
+        company_id: UUID,
+        user_id: Optional[UUID] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executa a sincronização completa e correlação em 3 fases:
+        1. Empresa 02 (Stelseg) - Tipo 'ESTOQUE SECUNDARIO' (primário)
+        2. Empresa 01 (Stelmat) - Tipo 'NOVOS'
+        3. Serviços do ERP (Ambiente A) -> Criados em products como tipo='SERVICO' e categoria='SERVIÇOS ERP'
+        """
+        import time
+        from difflib import SequenceMatcher
+        from src.modules.products.service import ProductService
+
+        start_time = time.perf_counter()
+        now = datetime.now(timezone.utc)
+
+        # 1. Obter empresa e tenant
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+        tenant_id = company.tenant_id
+
+        # 2. Obter clientes da integração
+        estoque_client = InsideIntegrationService.get_estoque_client(db, company_id, allow_inactive=False)
+        servico_client = InsideIntegrationService.get_client(db, company_id, target_env="SERVICOS", allow_inactive=True)
+
+        prod_service = ProductService(db)
+
+        def _norm(text: str) -> str:
+            if not text:
+                return ""
+            t = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+            t = re.sub(r'[^a-zA-Z0-9]', ' ', t.upper())
+            return ' '.join(t.split())
+
+        # 3. Carregar todos os produtos existentes na memória para consultas O(1)
+        products = db.query(Product).filter(Product.company_id == company_id).all()
+        prods_by_id: Dict[UUID, Product] = {p.id: p for p in products}
+        prods_by_cod_service: Dict[int, Product] = {p.codigo_service: p for p in products if p.codigo_service}
+        prods_by_norm: Dict[str, Product] = {_norm(p.nome): p for p in products if p.nome}
+
+        # Carregar registros existentes de ProductInsideStock
+        existing_stocks = db.query(ProductInsideStock).join(Product, Product.id == ProductInsideStock.product_id).filter(
+            Product.company_id == company_id
+        ).all()
+        stocks_by_key: Dict[Tuple[UUID, str, str], ProductInsideStock] = {
+            (s.product_id, str(s.empresa_erp), str(s.tipo_estoque).upper()): s for s in existing_stocks
+        }
+        prods_by_erp_code: Dict[Tuple[str, int], Product] = {
+            (str(s.empresa_erp), s.cod_produto_erp): prods_by_id[s.product_id]
+            for s in existing_stocks if s.product_id in prods_by_id
+        }
+
+        def _find_or_create_product_for_item(
+            item_data: Dict[str, Any],
+            empresa_erp: str,
+            target_tipo_estoque: str,
+            created_counter_ref: List[int],
+            linked_counter_ref: List[int]
+        ) -> Product:
+            cod_str = str(item_data.get("codProduto", "")).strip()
+            cod_int = int(cod_str) if cod_str.isdigit() else None
+            desc = str(item_data.get("descricao", "")).strip()
+            desc_norm = _norm(desc)
+
+            matched_product = None
+
+            # 1. Procura por vínculo prévio de estoque ERP
+            if cod_int and (empresa_erp, cod_int) in prods_by_erp_code:
+                matched_product = prods_by_erp_code[(empresa_erp, cod_int)]
+            # 2. Procura por codigo_service
+            elif cod_int and cod_int in prods_by_cod_service:
+                matched_product = prods_by_cod_service[cod_int]
+            # 3. Procura por nome normalizado exato
+            elif desc_norm and desc_norm in prods_by_norm:
+                matched_product = prods_by_norm[desc_norm]
+            else:
+                # 4. Procura por similaridade de texto (>= 0.85)
+                best_ratio = 0.0
+                best_p = None
+                for p in prods_by_id.values():
+                    if p.tipo == "SERVICO":
+                        continue
+                    p_norm = _norm(p.nome)
+                    r = SequenceMatcher(None, desc_norm, p_norm).ratio()
+                    if r > best_ratio:
+                        best_ratio = r
+                        best_p = p
+                if best_ratio >= 0.85:
+                    matched_product = best_p
+
+            custo_val = float(item_data.get("custo") or 0.0)
+            saldo_val = float(item_data.get("saldo") or 0.0)
+            preco_val = float(item_data.get("preco") or 0.0)
+            cod_est = str(item_data.get("codEstoque", ""))
+
+            if matched_product:
+                linked_counter_ref[0] += 1
+                # Atualizar dados do produto legado/ativo se aplicável
+                if matched_product.codigo_service is None and cod_int:
+                    matched_product.codigo_service = cod_int
+                    prods_by_cod_service[cod_int] = matched_product
+
+                # Atualiza cache geral da tabela products se for empresa 1 (Stelmat) ou se não tiver ainda
+                if empresa_erp == "1" or not matched_product.inside_cached_saldo:
+                    matched_product.inside_cached_saldo = saldo_val
+                    matched_product.inside_cached_custo = custo_val
+                    matched_product.inside_cached_preco = preco_val
+                    matched_product.inside_last_sync_at = now
+                    matched_product.inside_cached_raw = item_data
+            else:
+                # Criar produto novo no Cerberus
+                created_counter_ref[0] += 1
+                sku = prod_service._generate_sku(tenant_id)
+                marca, fab = InsideIntegrationService.extract_brand_manufacturer(desc)
+                matched_product = Product(
+                    tenant_id=tenant_id,
+                    company_id=company_id,
+                    codigo=sku,
+                    codigo_service=cod_int,
+                    nome=desc.upper()[:300] if desc else f"PRODUTO ERP {cod_str}",
+                    descricao=desc,
+                    marca=marca,
+                    fabricante=fab,
+                    tipo="EQUIPAMENTO",
+                    finalidade="REVENDA",
+                    categoria="PRODUTOS ERP",
+                    unidade="UN",
+                    ativo=True,
+                    inside_cached_custo=custo_val,
+                    inside_cached_saldo=saldo_val,
+                    inside_cached_preco=preco_val,
+                    inside_cached_raw=item_data,
+                    inside_last_sync_at=now,
+                )
+                db.add(matched_product)
+                db.flush() # Gera ID
+
+                # Atualiza os caches em memória
+                prods_by_id[matched_product.id] = matched_product
+                if cod_int:
+                    prods_by_cod_service[cod_int] = matched_product
+                if desc_norm:
+                    prods_by_norm[desc_norm] = matched_product
+
+            # Upsert na tabela product_inside_stocks
+            stock_key = (matched_product.id, empresa_erp, target_tipo_estoque.upper())
+            if stock_key in stocks_by_key:
+                stock_record = stocks_by_key[stock_key]
+                stock_record.saldo = saldo_val
+                stock_record.custo = custo_val
+                stock_record.preco = preco_val
+                stock_record.cod_estoque = cod_est
+                stock_record.cod_produto_erp = cod_int or 0
+                stock_record.last_sync_at = now
+                stock_record.raw_data = item_data
+            else:
+                stock_record = ProductInsideStock(
+                    product_id=matched_product.id,
+                    empresa_erp=empresa_erp,
+                    tipo_estoque=target_tipo_estoque.upper(),
+                    cod_estoque=cod_est,
+                    cod_produto_erp=cod_int or 0,
+                    saldo=saldo_val,
+                    custo=custo_val,
+                    preco=preco_val,
+                    last_sync_at=now,
+                    raw_data=item_data,
+                )
+                db.add(stock_record)
+                stocks_by_key[stock_key] = stock_record
+
+            if cod_int:
+                prods_by_erp_code[(empresa_erp, cod_int)] = matched_product
+
+            return matched_product
+
+        # =========================================================================
+        # FASE 1: Empresa 02 (STELSEG) - ESTOQUE SECUNDARIO
+        # =========================================================================
+        created_stelseg = [0]
+        linked_stelseg = [0]
+        stelseg_items: List[Dict[str, Any]] = []
+        try:
+            # Consulta direta na API da porta 44923 sem filtros de empresa/tipo para termos todo o universo de estoques
+            status_code, raw_data, lat, err = estoque_client.consultar(tipo_estoque="TODOS", empresa_id="TODAS")
+            if status_code == 200 and isinstance(raw_data, list):
+                stelseg_items = [
+                    d for d in raw_data 
+                    if str(d.get("empresa")) == "2" and "SEC" in str(d.get("tipoEstoque", "")).upper()
+                ]
+            for it in stelseg_items:
+                _find_or_create_product_for_item(
+                    item_data=it,
+                    empresa_erp="2",
+                    target_tipo_estoque="ESTOQUE SECUNDARIO",
+                    created_counter_ref=created_stelseg,
+                    linked_counter_ref=linked_stelseg,
+                )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro durante a sincronização do Estoque Secundário Stelseg: {str(e)}"
+            )
+
+        # =========================================================================
+        # FASE 2: Empresa 01 (STELMAT) - NOVOS
+        # =========================================================================
+        created_stelmat = [0]
+        linked_stelmat = [0]
+        stelmat_items: List[Dict[str, Any]] = []
+        try:
+            if status_code == 200 and isinstance(raw_data, list):
+                stelmat_items = [
+                    d for d in raw_data 
+                    if str(d.get("empresa")) == "1" and str(d.get("tipoEstoque", "")).upper() in ["NOVOS", "NOVO"]
+                ]
+            for it in stelmat_items:
+                _find_or_create_product_for_item(
+                    item_data=it,
+                    empresa_erp="1",
+                    target_tipo_estoque="NOVOS",
+                    created_counter_ref=created_stelmat,
+                    linked_counter_ref=linked_stelmat,
+                )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erro durante a sincronização do Estoque Novos Stelmat: {str(e)}"
+            )
+
+        # =========================================================================
+        # FASE 3: SERVIÇOS DO ERP (Ambiente A) -> Categoria 'SERVIÇOS ERP', tipo='SERVICO'
+        # =========================================================================
+        created_services = 0
+        linked_services = 0
+        total_services_erp = 0
+        try:
+            # Lista serviços paginados (tamanho 100)
+            st_serv, serv_data, lat_serv, err_serv = servico_client.listar_servicos(pagina=1, tamanho_pagina=200)
+            if st_serv == 200 and serv_data:
+                raw_inner = serv_data.get("data") if isinstance(serv_data, dict) else serv_data
+                if isinstance(raw_inner, dict):
+                    serv_list = raw_inner.get("itens") or raw_inner.get("data") or raw_inner.get("items") or []
+                elif isinstance(raw_inner, list):
+                    serv_list = raw_inner
+                else:
+                    serv_list = []
+                total_services_erp = len(serv_list)
+
+                # Mapa de serviços existentes na tabela products
+                services_in_db = db.query(Product).filter(
+                    Product.company_id == company_id,
+                    Product.tipo == "SERVICO"
+                ).all()
+                srv_by_code: Dict[int, Product] = {p.codigo_service: p for p in services_in_db if p.codigo_service}
+                srv_by_norm: Dict[str, Product] = {_norm(p.nome): p for p in services_in_db if p.nome}
+
+                for s_item in serv_list:
+                    cod_serv = s_item.get("codServico")
+                    desc_serv = str(s_item.get("descricao", "")).strip()
+                    desc_serv_norm = _norm(desc_serv)
+                    custo_serv = float(s_item.get("custo") or 0.0)
+                    preco_serv = float(s_item.get("valorUnitario") or 0.0)
+
+                    matched_service = None
+                    if cod_serv and cod_serv in srv_by_code:
+                        matched_service = srv_by_code[cod_serv]
+                    elif desc_serv_norm in srv_by_norm:
+                        matched_service = srv_by_norm[desc_serv_norm]
+
+                    if matched_service:
+                        linked_services += 1
+                        matched_service.codigo_service = cod_serv
+                        matched_service.inside_cached_custo = custo_serv
+                        matched_service.inside_cached_preco = preco_serv
+                        matched_service.inside_last_sync_at = now
+                        matched_service.inside_cached_raw = s_item
+                    else:
+                        created_services += 1
+                        sku = prod_service._generate_sku(tenant_id)
+                        new_srv = Product(
+                            tenant_id=tenant_id,
+                            company_id=company_id,
+                            codigo=sku,
+                            codigo_service=cod_serv,
+                            nome=desc_serv.upper()[:300] if desc_serv else f"SERVIÇO ERP {cod_serv}",
+                            descricao=desc_serv,
+                            tipo="SERVICO",
+                            finalidade="REVENDA",
+                            categoria="SERVIÇOS ERP",
+                            unidade="UN",
+                            ativo=True,
+                            inside_cached_custo=custo_serv,
+                            inside_cached_saldo=0.0,
+                            inside_cached_preco=preco_serv,
+                            inside_cached_raw=s_item,
+                            inside_last_sync_at=now,
+                        )
+                        db.add(new_srv)
+                        srv_by_code[cod_serv] = new_srv
+                        srv_by_norm[desc_serv_norm] = new_srv
+
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            # Se a API de serviços falhar ou não estiver configurada, não aborta os estoques já salvos
+            print(f"[WARN] Sincronização de serviços do Inside falhou: {e}")
+
+        total_elapsed = round(time.perf_counter() - start_time, 2)
+
+        return {
+            "success": True,
+            "message": "Sincronização e correlação multi-empresa concluída com sucesso.",
+            "execution_time_seconds": total_elapsed,
+            "stelseg_secundario": {
+                "total_erp": len(stelseg_items),
+                "vinculados": linked_stelseg[0],
+                "criados": created_stelseg[0],
+                "saldo_total": sum(float(i.get("saldo") or 0.0) for i in stelseg_items),
+            },
+            "stelmat_novos": {
+                "total_erp": len(stelmat_items),
+                "vinculados": linked_stelmat[0],
+                "criados": created_stelmat[0],
+                "saldo_total": sum(float(i.get("saldo") or 0.0) for i in stelmat_items),
+            },
+            "servicos_erp": {
+                "total_erp": total_services_erp,
+                "vinculados": linked_services,
+                "criados": created_services,
+            },
         }
