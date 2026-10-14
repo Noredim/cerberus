@@ -5,11 +5,12 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
 # Import models
-from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, RentalBudgetItem, SalesBudgetApproval
+from src.modules.sales_budgets.models import SalesBudget, SalesBudgetItem, RentalBudgetItem, SalesBudgetApproval, SalesBudgetPurchaseBudget
 from src.modules.purchase_budgets.models import PurchaseBudget, PurchaseBudgetItem
 from src.modules.opportunity_kits.models import OpportunityKit, OpportunityKitItem
 from src.modules.opportunity_kits.service import OpportunityKitService
@@ -539,7 +540,14 @@ class OpportunitiesReportService:
 
         # 2. Fetch associated Purchase Budgets (Supplier Budgets)
         purchase_budgets = db.query(PurchaseBudget).filter(
-            PurchaseBudget.sales_budget_id == opportunity_id,
+            or_(
+                PurchaseBudget.sales_budget_id == opportunity_id,
+                PurchaseBudget.id.in_(
+                    db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                        SalesBudgetPurchaseBudget.sales_budget_id == opportunity_id
+                    )
+                )
+            ),
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
 
@@ -1430,7 +1438,14 @@ class OpportunitiesReportService:
 
         # 2. Fetch associated Purchase Budgets (Supplier Budgets)
         purchase_budgets = db.query(PurchaseBudget).filter(
-            PurchaseBudget.sales_budget_id == opportunity_id,
+            or_(
+                PurchaseBudget.sales_budget_id == opportunity_id,
+                PurchaseBudget.id.in_(
+                    db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                        SalesBudgetPurchaseBudget.sales_budget_id == opportunity_id
+                    )
+                )
+            ),
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
         # Sort by created_at descending to prioritize the latest budgets when matching names/terms
@@ -3175,7 +3190,14 @@ class OpportunitiesReportService:
 
         # 2. Fetch associated Purchase Budgets (Supplier Budgets)
         purchase_budgets = db.query(PurchaseBudget).filter(
-            PurchaseBudget.sales_budget_id == opportunity_id,
+            or_(
+                PurchaseBudget.sales_budget_id == opportunity_id,
+                PurchaseBudget.id.in_(
+                    db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                        SalesBudgetPurchaseBudget.sales_budget_id == opportunity_id
+                    )
+                )
+            ),
             PurchaseBudget.tenant_id == current_user.tenant_id
         ).all()
 

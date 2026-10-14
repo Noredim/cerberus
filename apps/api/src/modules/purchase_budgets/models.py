@@ -44,6 +44,14 @@ class PurchaseBudget(Base):
     licitacao = relationship("Licitacao", back_populates="purchase_budgets")
     items = relationship("PurchaseBudgetItem", back_populates="budget", cascade="all, delete-orphan")
     negotiations = relationship("PurchaseBudgetNegotiation", back_populates="budget", cascade="all, delete-orphan")
+    linked_sales_budgets = relationship("SalesBudgetPurchaseBudget", back_populates="purchase_budget", cascade="all, delete-orphan")
+
+    @property
+    def linked_sales_budget_ids(self):
+        ids = [link.sales_budget_id for link in self.linked_sales_budgets] if self.linked_sales_budgets else []
+        if self.sales_budget_id and self.sales_budget_id not in ids:
+            ids.append(self.sales_budget_id)
+        return ids
 
     @property
     def supplier_nome_fantasia(self):

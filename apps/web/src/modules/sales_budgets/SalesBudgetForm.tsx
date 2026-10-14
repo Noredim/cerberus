@@ -868,8 +868,11 @@ export function SalesBudgetForm() {
       
       const resAvail = await api.get('/purchase-budgets', { params: { limit: 500 } });
       const allBudgets = Array.isArray(resAvail.data) ? resAvail.data : (resAvail.data.items || []);
-      // Show all budgets that are not already linked to the current sales budget
-      const available = allBudgets.filter((b: any) => b.sales_budget_id !== id);
+      // Show all budgets that are not already linked to THIS current sales budget
+      const available = allBudgets.filter((b: any) => {
+        const linkedIds = Array.isArray(b.linked_sales_budget_ids) ? b.linked_sales_budget_ids : [];
+        return !linkedIds.includes(id) && b.sales_budget_id !== id;
+      });
       setAvailablePurchaseBudgets(available);
     } catch (err) {
       console.error('Failed to load purchase budgets:', err);
@@ -895,8 +898,8 @@ export function SalesBudgetForm() {
   const handleUnlinkPurchaseBudget = async (pbId: string) => {
     if (!window.confirm("Deseja realmente desvincular este orçamento de compra da oportunidade?")) return;
     try {
-      await api.patch(`/purchase-budgets/${pbId}/link-sales-budget`, null, {
-        params: { sales_budget_id: null }
+      await api.patch(`/purchase-budgets/${pbId}/unlink-sales-budget`, null, {
+        params: { sales_budget_id: id }
       });
       await loadPurchaseBudgetsData();
       alert("Orçamento de compra desvinculado com sucesso!");

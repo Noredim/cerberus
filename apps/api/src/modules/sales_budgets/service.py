@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, literal_column
+from sqlalchemy import func, literal_column, or_
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any, Tuple
 from uuid import UUID
@@ -1913,8 +1913,16 @@ def calculate_product_cost_composition(db: Session, product_id: str, tenant_id: 
     ref_budget_id = None
     if sales_budget_id:
         # Query across all purchase budgets linked to this opportunity that contain the product
+        from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
         linked_item = db.query(PurchaseBudgetItem).join(PurchaseBudget).filter(
-            PurchaseBudget.sales_budget_id == sales_budget_id,
+            or_(
+                PurchaseBudget.sales_budget_id == sales_budget_id,
+                PurchaseBudget.id.in_(
+                    db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                        SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id
+                    )
+                )
+            ),
             PurchaseBudget.tenant_id == tenant_id,
             PurchaseBudgetItem.product_id == product_id
         ).first()
@@ -2664,8 +2672,16 @@ def get_opportunity_dre(db: Session, tenant_id: str, opportunity_id: UUID, compa
     kits = db.query(OpportunityKit).filter(OpportunityKit.id.in_(kit_ids)).all() if kit_ids else []
     
     import datetime
+    from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
     purchase_budgets = db.query(PurchaseBudget).filter(
-        PurchaseBudget.sales_budget_id == opportunity_id,
+        or_(
+            PurchaseBudget.sales_budget_id == opportunity_id,
+            PurchaseBudget.id.in_(
+                db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                    SalesBudgetPurchaseBudget.sales_budget_id == opportunity_id
+                )
+            )
+        ),
         PurchaseBudget.tenant_id == tenant_id
     ).all()
     purchase_budgets = sorted(purchase_budgets, key=lambda x: getattr(x, "created_at", None) or datetime.datetime.min, reverse=True)

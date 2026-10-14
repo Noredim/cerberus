@@ -173,7 +173,14 @@ export function PurchaseBudgetSearchModal({
                       onMouseLeave={handleRowMouseLeave}
                     >
                       <td className="px-4 py-3.5 font-medium text-text-primary">
-                        Nº {budget.numero_orcamento || 'Sem Número'}
+                        <div className="flex items-center gap-2">
+                          <span>Nº {budget.numero_orcamento || 'Sem Número'}</span>
+                          {((budget.linked_sales_budget_ids && budget.linked_sales_budget_ids.length > 0) || budget.sales_budget_id) ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-normal">
+                              Compartilhado
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-text-secondary">
                         {budget.supplier_nome_fantasia || budget.supplier_nome || budget.vendedor_nome || 'Sem Fornecedor'}

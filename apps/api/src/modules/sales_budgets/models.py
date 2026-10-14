@@ -6,6 +6,7 @@ from sqlalchemy.sql import func
 from src.core.base import Base
 import src.modules.professionals.models
 import src.modules.payment_methods.models
+import src.modules.purchase_budgets.models
 
 
 class SalesBudget(Base):
@@ -91,6 +92,18 @@ class SalesBudget(Base):
     approvals = relationship("SalesBudgetApproval", back_populates="budget", cascade="all, delete-orphan")
     commercial_policy = relationship("CommercialPolicy")
     sales_team = relationship("SalesTeam")
+    linked_purchase_budgets = relationship("SalesBudgetPurchaseBudget", back_populates="sales_budget", cascade="all, delete-orphan")
+
+
+class SalesBudgetPurchaseBudget(Base):
+    __tablename__ = "sales_budget_purchase_budgets"
+
+    sales_budget_id = Column(UUID(as_uuid=True), ForeignKey("sales_budgets.id", ondelete="CASCADE"), primary_key=True, index=True)
+    purchase_budget_id = Column(UUID(as_uuid=True), ForeignKey("purchase_budgets.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+
+    sales_budget = relationship("SalesBudget", back_populates="linked_purchase_budgets")
+    purchase_budget = relationship("PurchaseBudget", back_populates="linked_sales_budgets")
 
 
 class SalesBudgetResponsavel(Base):

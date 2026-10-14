@@ -120,10 +120,18 @@ def _calc_margem_venda(items, rental_items, db: Session = None) -> tuple[float, 
                     
         return (total_lucro, total_venda)
 
-    budget = items[0].budget
     from src.modules.purchase_budgets.models import PurchaseBudget
+    from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+    from sqlalchemy import or_
     purchase_budgets = db.query(PurchaseBudget).filter(
-        PurchaseBudget.sales_budget_id == budget.id,
+        or_(
+            PurchaseBudget.sales_budget_id == budget.id,
+            PurchaseBudget.id.in_(
+                db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                    SalesBudgetPurchaseBudget.sales_budget_id == budget.id
+                )
+            )
+        ),
         PurchaseBudget.tenant_id == budget.tenant_id
     ).all()
 

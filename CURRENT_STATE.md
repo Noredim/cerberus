@@ -12,10 +12,17 @@
 - **Migração `a1b2c3d4e602_add_inside_multi_stock_and_team_erp_flag.py`:** 
   - Adiciona a tabela `product_inside_stocks` com chave única composta `(product_id, empresa_erp, tipo_estoque)` para armazenar posições simultâneas de estoque (Empresa 01 Novos e Empresa 02 Secundário).
   - Adiciona a flag booleana `utiliza_apenas_itens_erp` na tabela `company_sales_teams`.
+- **Migração `a1b2c3d4e603_add_sales_budget_purchase_budgets_table.py`:**
+  - Criação da tabela associativa `sales_budget_purchase_budgets` (M:N) com chaves estrangeiras `(sales_budget_id, purchase_budget_id)` e backfill automático de vínculos preexistentes.
+  - Permite vincular um mesmo orçamento de compra (cotação de fornecedor) a múltiplos orçamentos de venda/propostas sem desvincular ou sobrescrever a referência na proposta principal.
 
 ---
 
 ## 2. Backend (FastAPI & Integrações)
+- **Módulo Orçamentos de Compra & Venda (`purchase_budgets` & `sales_budgets`):**
+  - Associação Many-to-Many (M:N) ativa entre propostas de venda (`sales_budgets`) e cotações de fornecedor (`purchase_budgets`).
+  - Endpoints dedicados `PATCH /purchase-budgets/{id}/link-sales-budget` e `PATCH /purchase-budgets/{id}/unlink-sales-budget`.
+  - Consultas em relatórios ([`reports.py`](file:///Users/noredim/Documents/projetos/cerberus/apps/api/src/modules/sales_budgets/reports.py)) e cálculo dinâmico de custo de produtos ([`service.py`](file:///Users/noredim/Documents/projetos/cerberus/apps/api/src/modules/sales_budgets/service.py)) utilizam a tabela associativa com fallback para `sales_budget_id` original.
 - **Módulo Inside ERP (`apps/api/src/modules/integrations/inside`):**
   - Cliente `InsideEstoqueClient` com suporte a consultas irrestritas multi-empresa e multi-estoque (`empresa_id="TODAS"`, `tipo_estoque="TODOS"`).
   - Sincronização multi-empresa completa em 3 fases (`sync_multi_stock_complete`):
@@ -35,6 +42,10 @@
 ---
 
 ## 3. Frontend (React + Vite + CoreUI Theme)
+- **Vinculação de Orçamentos de Compra (`SalesBudgetForm.tsx` & `PurchaseBudgetSearchModal.tsx`):**
+  - Suporte a vinculação compartilhada sem desvincular de propostas anteriores.
+  - A modal de busca permite vincular cotações que já estão em outras propostas, identificando-as com badge "Compartilhado".
+  - Ação de desvincular remove o vínculo exclusivamente da proposta atual.
 - **Aba Equipes de Vendas (`SalesTeamsTab.tsx`):**
   - Toggle e visualização da flag `utiliza_apenas_itens_erp` ("Utiliza Apenas Itens ERP") nos modais de criação/edição e cards das equipes.
 - **Painel de Controle Inside ERP (`InsideIntegrationTab.tsx`):**
@@ -50,4 +61,5 @@
 
 ## 4. Ambiente de Produção & Infraestrutura
 - Gateway Nginx atualizado e roteando requisições para `web` e `api`.
-- Migrações sincronizadas e aplicadas no PostgreSQL.
+- Migrações sincronizadas e aplicadas no PostgreSQL até `a1b2c3d4e603`.
+

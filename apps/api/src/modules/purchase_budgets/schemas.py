@@ -155,6 +155,7 @@ class PurchaseBudgetOut(PurchaseBudgetBase):
     supplier_nome_fantasia: Optional[str] = None
     supplier_cnpj: Optional[str] = None
     valor_total: Decimal = Field(default=0, max_digits=15, decimal_places=4)
+    linked_sales_budget_ids: List[UUID] = []
 
     class Config:
         from_attributes = True

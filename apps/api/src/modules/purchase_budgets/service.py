@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from uuid import UUID
 from datetime import datetime
 from copy import deepcopy
@@ -41,7 +42,17 @@ class PurchaseBudgetService:
         if supplier_id:
             query = query.filter(PurchaseBudget.supplier_id == supplier_id)
         if sales_budget_id:
-            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+            from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+            query = query.filter(
+                or_(
+                    PurchaseBudget.sales_budget_id == sales_budget_id,
+                    PurchaseBudget.id.in_(
+                        db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                            SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id
+                        )
+                    )
+                )
+            )
         if licitacao_id:
             query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
         query = PurchaseBudgetService._apply_search_filter(query, q)
@@ -55,7 +66,17 @@ class PurchaseBudgetService:
         if supplier_id:
             query = query.filter(PurchaseBudget.supplier_id == supplier_id)
         if sales_budget_id:
-            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+            from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+            query = query.filter(
+                or_(
+                    PurchaseBudget.sales_budget_id == sales_budget_id,
+                    PurchaseBudget.id.in_(
+                        db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                            SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id
+                        )
+                    )
+                )
+            )
         if licitacao_id:
             query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
         query = PurchaseBudgetService._apply_search_filter(query, q)
@@ -104,7 +125,17 @@ class PurchaseBudgetService:
             PurchaseBudget.tenant_id == tenant_id
         )
         if sales_budget_id:
-            query = query.filter(PurchaseBudget.sales_budget_id == sales_budget_id)
+            from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+            query = query.filter(
+                or_(
+                    PurchaseBudget.sales_budget_id == sales_budget_id,
+                    PurchaseBudget.id.in_(
+                        db.query(SalesBudgetPurchaseBudget.purchase_budget_id).filter(
+                            SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id
+                        )
+                    )
+                )
+            )
         elif licitacao_id:
             query = query.filter(PurchaseBudget.licitacao_id == licitacao_id)
         # If sales_budget_id is None, we do not filter by sales_budget_id,
@@ -345,6 +376,12 @@ class PurchaseBudgetService:
         )
         db.add(db_budget)
         db.flush() # To get ID
+        if data.sales_budget_id:
+            from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+            db.add(SalesBudgetPurchaseBudget(
+                sales_budget_id=data.sales_budget_id,
+                purchase_budget_id=db_budget.id
+            ))
         for item_data in data.items:
             # We calculate totals just in case
             totals = PurchaseBudgetService.calculate_item_totals(db_budget.frete_tipo, float(db_budget.frete_percent), db_budget.ipi_calculado, item_data.model_dump())
@@ -403,6 +440,17 @@ class PurchaseBudgetService:
         db_budget.frete_percent = data.frete_percent
         db_budget.ipi_calculado = data.ipi_calculado
         db_budget.sales_budget_id = data.sales_budget_id
+        if data.sales_budget_id:
+            from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+            existing_link = db.query(SalesBudgetPurchaseBudget).filter(
+                SalesBudgetPurchaseBudget.sales_budget_id == data.sales_budget_id,
+                SalesBudgetPurchaseBudget.purchase_budget_id == db_budget.id
+            ).first()
+            if not existing_link:
+                db.add(SalesBudgetPurchaseBudget(
+                    sales_budget_id=data.sales_budget_id,
+                    purchase_budget_id=db_budget.id
+                ))
         db_budget.licitacao_id = data.licitacao_id
         db_budget.dolar_orcamento = data.dolar_orcamento
         db_budget.valor_conversao = data.valor_conversao
@@ -925,10 +973,14 @@ class PurchaseBudgetService:
         budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, company_id)
         
         # 1. Check direct link to SalesBudget (Oportunidade)
-        if budget.sales_budget_id:
-            from src.modules.sales_budgets.models import SalesBudget
-            sb = db.query(SalesBudget).filter(SalesBudget.id == budget.sales_budget_id).first()
-            opp_name = (sb.numero_orcamento or sb.titulo) if sb else str(budget.sales_budget_id)
+        from src.modules.sales_budgets.models import SalesBudget, SalesBudgetPurchaseBudget
+        linked_sb_entry = db.query(SalesBudgetPurchaseBudget).filter(
+            SalesBudgetPurchaseBudget.purchase_budget_id == budget.id
+        ).first()
+        linked_sb_id = budget.sales_budget_id or (linked_sb_entry.sales_budget_id if linked_sb_entry else None)
+        if linked_sb_id:
+            sb = db.query(SalesBudget).filter(SalesBudget.id == linked_sb_id).first()
+            opp_name = (sb.numero_orcamento or sb.titulo) if sb else str(linked_sb_id)
             raise HTTPException(
                 status_code=400,
                 detail=f"Não é possível a exclusão porque a oportunidade {opp_name} está com produtos vinculados da cotação"
@@ -1005,8 +1057,29 @@ class PurchaseBudgetService:
     def link_sales_budget(db: Session, tenant_id: str, company_id: UUID, budget_id: UUID, sales_budget_id: Optional[UUID]) -> PurchaseBudget:
         budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, str(company_id))
         
-        old_sales_budget_id = budget.sales_budget_id
-        budget.sales_budget_id = sales_budget_id
+        from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+        if sales_budget_id:
+            # Check or add junction table entry (Many-to-Many without overwriting other proposals)
+            link = db.query(SalesBudgetPurchaseBudget).filter(
+                SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id,
+                SalesBudgetPurchaseBudget.purchase_budget_id == budget_id
+            ).first()
+            if not link:
+                link = SalesBudgetPurchaseBudget(
+                    sales_budget_id=sales_budget_id,
+                    purchase_budget_id=budget_id
+                )
+                db.add(link)
+            
+            # If primary sales_budget_id is unset, set it
+            if not budget.sales_budget_id:
+                budget.sales_budget_id = sales_budget_id
+        else:
+            # Full unlink request across all proposals
+            db.query(SalesBudgetPurchaseBudget).filter(
+                SalesBudgetPurchaseBudget.purchase_budget_id == budget_id
+            ).delete()
+            budget.sales_budget_id = None
         
         from src.modules.payment_methods.service import PaymentMethodsService
         PaymentMethodsService.sync_purchase_budget_planning(db, budget)
@@ -1014,20 +1087,53 @@ class PurchaseBudgetService:
         db.commit()
         db.refresh(budget)
         
-        # Sync reference prices for the new budget link
-        PurchaseBudgetService._update_product_reference_prices(db, budget)
-        
-        # If there was an old sales budget, sync reference prices for that one too
-        if old_sales_budget_id and old_sales_budget_id != sales_budget_id:
+        # Sync reference prices for the newly linked budget
+        if sales_budget_id:
+            PurchaseBudgetService._update_product_reference_prices(db, budget)
             product_ids = {item.product_id for item in budget.items}
             for pid in product_ids:
                 PurchaseBudgetService.sync_product_reference_prices(
                     db,
                     str(pid),
                     tenant_id,
-                    sales_budget_id=old_sales_budget_id,
+                    sales_budget_id=sales_budget_id,
                     licitacao_id=budget.licitacao_id
                 )
+        
+        db.commit()
+        db.refresh(budget)
+        return budget
+
+    @staticmethod
+    def unlink_sales_budget(db: Session, tenant_id: str, company_id: UUID, budget_id: UUID, sales_budget_id: UUID) -> PurchaseBudget:
+        budget = PurchaseBudgetService.get_budget_by_id(db, tenant_id, budget_id, str(company_id))
+        
+        from src.modules.sales_budgets.models import SalesBudgetPurchaseBudget
+        db.query(SalesBudgetPurchaseBudget).filter(
+            SalesBudgetPurchaseBudget.sales_budget_id == sales_budget_id,
+            SalesBudgetPurchaseBudget.purchase_budget_id == budget_id
+        ).delete()
+        
+        if budget.sales_budget_id == sales_budget_id:
+            # Point primary sales_budget_id to another linked sales budget if one exists
+            remaining = db.query(SalesBudgetPurchaseBudget).filter(
+                SalesBudgetPurchaseBudget.purchase_budget_id == budget_id
+            ).first()
+            budget.sales_budget_id = remaining.sales_budget_id if remaining else None
+        
+        db.commit()
+        db.refresh(budget)
+        
+        # Recalculate reference prices for the unlinked sales budget
+        product_ids = {item.product_id for item in budget.items}
+        for pid in product_ids:
+            PurchaseBudgetService.sync_product_reference_prices(
+                db,
+                str(pid),
+                tenant_id,
+                sales_budget_id=sales_budget_id,
+                licitacao_id=budget.licitacao_id
+            )
         
         db.commit()
         db.refresh(budget)
